@@ -10,6 +10,7 @@ import { allSourcesInside, dropGuard, hitPane, type PaneRects } from "./hitTest"
 import { dfsPanes, type LayoutNode } from "./layoutTree";
 import { transfer } from "./operations";
 import { useLayout } from "../stores/layout";
+import { useSettings } from "../stores/settings";
 import { useUi } from "../stores/ui";
 import { useDnd } from "../stores/dnd";
 
@@ -50,6 +51,18 @@ function hitAt(cssX: number, cssY: number): { paneId: string; onTabbar: boolean 
 }
 
 async function handleDrop(paths: string[], cssX: number, cssY: number) {
+  // 落在暂存区（侧边栏下半）：路径入库即完成，不进入窗格传输（Explorer 拖入同管线）。
+  // 必须先于窗格命中判定——暂存区不在任何 [data-pane-id] 内。
+  const overShelf = document
+    .elementFromPoint(cssX, cssY)
+    ?.closest<HTMLElement>("[data-shelf]");
+  if (overShelf) {
+    const added = useSettings.getState().addShelf(paths);
+    useUi
+      .getState()
+      .toast(added ? `已暂存 ${added} 项` : "这些项已在暂存区（或暂存区已满）");
+    return;
+  }
   const hit = hitAt(cssX, cssY);
   // 落在边栏/顶栏/沟槽等非窗格区域：忽略
   if (!hit) return;

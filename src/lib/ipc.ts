@@ -226,6 +226,8 @@ export interface Settings {
   recentSearches: string[];
   /** 导航后按路径记忆选中集（回到该目录自动恢复；Ctrl+A/Esc 等显式操作不受影响） */
   rememberSelection: boolean;
+  /** 暂存区（侧边栏下半）：临时拖放的文件/文件夹路径，跨会话保留；去重与上限见 lib/shelf.ts */
+  staging: string[];
   /** 全盘搜索索引模式（NTFS MFT/USN，需提权守护进程；默认关闭） */
   nameIndex: { enabled: boolean };
 }
@@ -303,6 +305,7 @@ export const DEFAULT_SETTINGS: Settings = {
   recentFolders: [],
   recentSearches: [],
   rememberSelection: true,
+  staging: [],
   nameIndex: { enabled: false },
 };
 
@@ -467,8 +470,10 @@ export const api = {
     cmd<Record<string, string>>("get_file_icons", { paths }),
   showContextMenu: (paths: string[]) =>
     cmd<void>("show_context_menu", { paths }),
+  /** 返回落点效果："copy"/"move"；"drop" = 已放置但落点未回写 effect（WebView2 网页落点）；
+   *  "none" = 未放置（拖拽取消/落在无效目标） */
   startDrag: (paths: string[]) =>
-    cmd<"copy" | "move" | "none">("start_drag", { paths }),
+    cmd<"copy" | "move" | "drop" | "none">("start_drag", { paths }),
   /** settings.json 缺失/解析失败时后端返回 null（stores/settings 以 DEFAULT_SETTINGS 兜底） */
   getSettings: () => cmd<Partial<Settings> | null>("get_settings"),
   saveSettings: (s: Settings) => cmd<void>("save_settings", { json: s }),

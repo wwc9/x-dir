@@ -919,6 +919,18 @@ export function FileList({
           },
         };
       }
+      case "shelfAdd": {
+        const paths = selectedPaths();
+        return {
+          label: "添加到暂存区",
+          action: () => {
+            const added = useSettings.getState().addShelf(paths);
+            useUi.getState().toast(
+              added ? `已暂存 ${added} 项` : "这些项已在暂存区（或暂存区已满）",
+            );
+          },
+        };
+      }
       case "sysMenu":
         return {
           label: "更多系统选项（Shift+右键）",

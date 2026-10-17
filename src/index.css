@@ -671,9 +671,10 @@ button:focus-visible {
   width: 18px;
   height: 18px;
 }
-/* 方案列表滚动区：卡片本体不滚动（拖拽把手骑在沟槽上），滚动收在这里（同导航树 .np-tree-rows） */
+/* 方案列表滚动区：卡片本体不滚动（拖拽把手骑在沟槽上），滚动收在这里（同导航树 .np-tree-rows）；
+   与下方暂存区（.np-shelf）各占边栏一半 */
 .np-side-scroll {
-  flex: 1;
+  flex: 1 1 50%;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
@@ -916,6 +917,95 @@ body.np-col-resizing .np-menued-grip::after {
 .np-side-empty {
   padding: 8px 8px 4px;
   line-height: 1.6;
+}
+/* ── 暂存区（侧边栏下半，2026-10-17）：临时拖放文件/文件夹，用到时拖出到目标窗格 ──
+   拖入 = OLE 落点命中 [data-shelf]（oleDispatch 前置分流，Explorer 拖入同管线）；
+   拖出 = 行拖起 startDrag，落窗格即移动。与布局方案列表各占边栏一半（flex 1 1 50%）。 */
+.np-shelf {
+  flex: 1 1 50%;
+  min-height: 104px;
+  display: flex;
+  flex-direction: column;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--np-hairline);
+}
+/* OLE 拖拽悬停：淡染底 + 强调色虚线框，提示"松手即暂存" */
+.np-shelf.on {
+  background: var(--np-hover);
+  outline: 1px dashed var(--np-accent-border);
+  outline-offset: -1px;
+  border-radius: var(--np-radius);
+}
+.np-shelf-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.np-shelf-count {
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-surface-2);
+  font-size: var(--np-font-sm);
+  line-height: 16px;
+  text-align: center;
+  color: var(--np-muted);
+}
+.np-shelf-empty {
+  padding: 8px 8px 4px;
+  line-height: 1.6;
+}
+.np-shelf-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.np-shelf-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--np-row-h);
+  padding: 0 8px;
+  border-radius: var(--np-radius);
+  color: var(--np-fg);
+  cursor: grab;
+  user-select: none;
+}
+.np-shelf-row:hover {
+  background: var(--np-hover);
+}
+.np-shelf-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.np-shelf-del {
+  flex: 0 0 auto;
+  display: flex;
+  padding: 1px;
+  border: 0;
+  background: transparent;
+  color: var(--np-muted);
+  opacity: 0;
+  cursor: pointer;
+}
+.np-shelf-row:hover .np-shelf-del {
+  opacity: 0.7;
+}
+.np-shelf-del:hover {
+  opacity: 1;
+  color: var(--np-danger);
+}
+.np-shelf .np-side-add:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.np-shelf .np-side-add:disabled:hover {
+  background: transparent;
 }
 .np-fav-remove {
   display: inline-flex;

@@ -260,6 +260,10 @@ pub fn start(paths: &[String], app: AppHandle) -> Result<String, String> {
             let r = match effect.0 {
                 e if e == DROPEFFECT_COPY.0 => "copy",
                 e if e == DROPEFFECT_MOVE.0 => "move",
+                // WebView2 的 DropTarget 落到网页上时不回写 effect 标志（实测
+                // effect=NONE 且 hr=DRAGDROP_S_DROP），但 drop 确实发生——
+                // 单独区分"已放置"，供暂存区等调用方判定"已取走"
+                _ if hr == DRAGDROP_S_DROP => "drop",
                 _ => "none",
             };
             log::info!("OLE start_drag 完成: effect={r} hr=0x{:08X}", hr.0 as u32);

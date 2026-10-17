@@ -77,6 +77,7 @@ export const BUILTIN_FNS: BuiltinFn[] = [
   // ── 标记与系统 ──
   { key: "colorTag", label: "颜色标记", group: "标记与系统", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
   { key: "addFavorite", label: "添加到收藏夹", group: "标记与系统", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "dir" }) },
+  { key: "shelfAdd", label: "添加到暂存区", group: "标记与系统", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
   { key: "sysMenu", label: "更多系统选项", group: "标记与系统", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
   { key: "openTerminal", label: "在终端打开", group: "标记与系统", area: "sel", supportsSel: true, supportsBlank: true, cond: C({}) },
   // ── 整理 ──

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Inbox,
   PanelLeftClose,
   PanelLeftOpen,
   Save,
   SaveAll,
+  Trash2,
   X,
 } from "lucide-react";
 
@@ -15,8 +17,12 @@ import {
   type LayoutNode,
   type Preset,
 } from "../lib/layoutTree";
+import { fileIcon } from "../lib/fileIcons";
+import { fileNameOf } from "../lib/path";
+import { shelfEntryIsDir } from "../lib/shelf";
 import { randomSchemeName } from "../lib/schemeName";
 import { DENSITY } from "../lib/tokens";
+import { useDnd } from "../stores/dnd";
 import { useLayout } from "../stores/layout";
 import { useSettings } from "../stores/settings";
 import { confirmDialog, useUi } from "../stores/ui";
@@ -111,6 +117,106 @@ export function PresetPicker() {
       <div className="np-layouthint">
         预设之外，每个窗格可继续 ──/│ 递归分裂成任意混合布局
       </div>
+    </div>
+  );
+}
+
+/** 暂存区（侧边栏下半）：临时拖放文件/文件夹，用到时拖出到目标窗格。
+ *  拖入 = OLE 落点分流（oleDispatch 命中 [data-shelf] 即入库，Explorer 拖入同管线）；
+ *  拖出 = 行拖起走同一 startDrag 管线，落窗格即移动，effect ≠ none 视为已取走并移出暂存。 */
+function Shelf() {
+  const items = useSettings((s) => s.staging);
+  const point = useDnd((s) => s.point);
+  const ref = useRef<HTMLDivElement>(null);
+  const [over, setOver] = useState(false);
+
+  // OLE 拖拽悬停高亮：dnd store 推 CSS 坐标，与自身矩形判定
+  useEffect(() => {
+    if (!point || !ref.current) {
+      setOver(false);
+      return;
+    }
+    const r = ref.current.getBoundingClientRect();
+    setOver(
+      point.x >= r.left && point.x <= r.right && point.y >= r.top && point.y <= r.bottom,
+    );
+  }, [point]);
+
+  function armRowDrag(e: React.MouseEvent, path: string) {
+    if (e.button !== 0) return;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const onMove = (ev: MouseEvent) => {
+      if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5) return;
+      cleanup();
+      api
+        .startDrag([path])
+        .then((effect) => {
+          if (effect !== "none") useSettings.getState().removeShelf(path);
+        })
+        .catch((err) => useUi.getState().toast(String(err), "error"));
+    };
+    const onUp = () => cleanup();
+    const cleanup = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  return (
+    <div ref={ref} className={`np-shelf${over ? " on" : ""}`} data-shelf>
+      <div className="np-side-h">
+        <span className="np-shelf-title">
+          <AppIcon icon={Inbox} size={DENSITY.iconSm} />
+          暂存区
+          {items.length > 0 && <span className="np-shelf-count">{items.length}</span>}
+        </span>
+        <div className="np-side-actions">
+          <button
+            className="np-side-add"
+            title="清空暂存区"
+            disabled={!items.length}
+            onClick={() => useSettings.getState().clearShelf()}
+          >
+            <AppIcon icon={Trash2} size={DENSITY.iconSm} />
+          </button>
+        </div>
+      </div>
+      {items.length === 0 ? (
+        <div className="np-shelf-empty">
+          把文件/文件夹拖到这里暂存，
+          <br />
+          用时再拖到目标文件夹。
+        </div>
+      ) : (
+        <div className="np-shelf-list">
+          {items.map((p) => {
+            const name = fileNameOf(p);
+            const spec = fileIcon(name, shelfEntryIsDir(p));
+            return (
+              <div
+                key={p.toLowerCase()}
+                className="np-shelf-row"
+                title={p}
+                onMouseDown={(e) => armRowDrag(e, p)}
+              >
+                <AppIcon icon={spec.icon} size={DENSITY.iconMd} colorVar={spec.colorVar} />
+                <span className="np-shelf-name">{name}</span>
+                <button
+                  className="np-shelf-del"
+                  title="移出暂存区"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={() => useSettings.getState().removeShelf(p)}
+                >
+                  <AppIcon icon={X} size={DENSITY.iconXs} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -378,6 +484,8 @@ export function Sidebar() {
           </div>
         )}
       </div>
+
+      <Shelf />
 
       <div className="np-side-resize" onMouseDown={startResize} title="拖动调整宽度" />
     </aside>

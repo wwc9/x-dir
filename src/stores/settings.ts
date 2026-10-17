@@ -4,6 +4,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { api, DEFAULT_SETTINGS, THIS_PC, type Settings } from "../lib/ipc";
 import { clampGsPreviewW, sanitizeColWidths, sanitizeGsColWidths } from "../lib/columns";
 import { fileNameOf } from "../lib/path";
+import { shelfAdd, shelfRemove } from "../lib/shelf";
 import {
   builtinToolbarEntry,
   defaultMenuEntries,
@@ -21,6 +22,10 @@ interface SettingsStore extends Settings {
   addFavorite(path: string, name?: string): void;
   removeFavorite(path: string): void;
   setTagged(path: string, color: Settings["colorTags"][string] | null): void;
+  /** 暂存区：追加（去重 + 上限截断），返回实际新增数（0 = 全部重复或已满） */
+  addShelf(paths: string[]): number;
+  removeShelf(path: string): void;
+  clearShelf(): void;
 }
 
 function toPlain(s: SettingsStore): Settings {
@@ -54,6 +59,7 @@ function toPlain(s: SettingsStore): Settings {
     recentFolders: s.recentFolders,
     recentSearches: s.recentSearches,
     rememberSelection: s.rememberSelection,
+    staging: s.staging,
     nameIndex: s.nameIndex,
   };
 }
@@ -207,6 +213,10 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     }
     // 地址框固定常驻（不可移除、可排序）：任何来源的配置都保证存在
     merged.toolbarEntries = ensureToolbarAddr(merged.toolbarEntries ?? []);
+    // 暂存区：旧档缺字段发空数组；脏数据（非字符串项）过滤
+    merged.staging = Array.isArray(merged.staging)
+      ? merged.staging.filter((x): x is string => typeof x === "string")
+      : [];
     migrateLegacyPrefs(merged, saved ?? {});
     set({ ...merged, loaded: true });
     applyTheme(get().theme);
@@ -239,5 +249,20 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
       delete colorTags[path];
     }
     get().update({ colorTags });
+  },
+
+  addShelf(paths) {
+    if (!paths.length) return 0;
+    const r = shelfAdd(get().staging, paths);
+    if (r.added) get().update({ staging: r.items });
+    return r.added;
+  },
+
+  removeShelf(path) {
+    get().update({ staging: shelfRemove(get().staging, path) });
+  },
+
+  clearShelf() {
+    get().update({ staging: [] });
   },
 }));
