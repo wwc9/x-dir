@@ -53,6 +53,7 @@ export const BUILTIN_FNS: BuiltinFn[] = [
   // ── 新建与选择 ──
   { key: "newFolder", label: "新建文件夹", group: "新建与选择", area: "blank", supportsSel: true, supportsBlank: true, cond: C({}) },
   { key: "newFile", label: "新建文本文件", group: "新建与选择", area: "blank", supportsSel: true, supportsBlank: true, cond: C({}) },
+  { key: "newFolders", label: "批量新建文件夹", group: "新建与选择", area: "blank", supportsSel: true, supportsBlank: true, cond: C({}) },
   // 新建 = 子菜单聚合（文件夹 / 文本 / 常用办公格式），子项执行器在 FileList
   { key: "new", label: "新建", group: "新建与选择", area: "blank", supportsSel: true, supportsBlank: true, cond: C({}) },
   { key: "selectAll", label: "全选", group: "新建与选择", area: "blank", supportsSel: true, supportsBlank: true, cond: C({}) },
@@ -85,6 +86,7 @@ export const BUILTIN_FNS: BuiltinFn[] = [
   { key: "extract", label: "解压到此处", group: "整理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "zip,7z" }) },
   { key: "organizeBy", label: "按规则归类", group: "整理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2 }) },
   { key: "findDuplicates", label: "查找重复文件", group: "整理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "dir", maxCount: 1 }) },
+  { key: "findEmpty", label: "清理空文件/空文件夹", group: "整理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "dir", maxCount: 1 }) },
   { key: "dirSizes", label: "空间分析", group: "整理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "dir", maxCount: 1 }) },
   { key: "compareFolders", label: "文件夹比较", group: "整理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "dir", minCount: 2 }) },
   // ── PDF ──
@@ -109,6 +111,7 @@ export const BUILTIN_FNS: BuiltinFn[] = [
   // ── 表格与文本 ──
   { key: "csvConvert", label: "编码转换", group: "表格与文本", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "csv,tsv,txt,md,log" }) },
   { key: "csvMerge", label: "CSV 合并", group: "表格与文本", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2, exts: "csv,tsv" }) },
+  { key: "xlsxMerge", label: "Excel 合并", group: "表格与文本", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2, exts: "xlsx,xlsm,xls,xlsb,ods" }) },
   { key: "textMerge", label: "文本合并", group: "表格与文本", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2, exts: "txt,md,log" }) },
   { key: "exportList", label: "导出文件清单", group: "表格与文本", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
 ];

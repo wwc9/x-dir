@@ -45,7 +45,13 @@ export type DialogSpec =
   | { type: "imgWatermark"; entries: FileEntry[] }
   | { type: "imgConvert"; entries: FileEntry[] }
   | { type: "imgResize"; entries: FileEntry[] }
-  | { type: "imgMontage"; entries: FileEntry[] };
+  | { type: "imgMontage"; entries: FileEntry[] }
+  /** 空文件/空文件夹清理（右键"清理空文件/空文件夹"，2026-10-17）：扫描后勾删 */
+  | { type: "emptyScan"; dir: string }
+  /** 批量新建文件夹（右键"批量新建文件夹"，2026-10-17）：名单/序号模板预演后创建 */
+  | { type: "newFolders"; dir: string; existing: string[] }
+  /** Excel 合并（右键"Excel 合并"，2026-10-17）：模式 + 输出名一次成形 */
+  | { type: "xlsxMerge"; count: number };;
 
 /** 提示弹窗语义级别：info=主操作、warn=警示、danger=不可逆/错误 */
 export type DialogKind = "info" | "warn" | "danger";

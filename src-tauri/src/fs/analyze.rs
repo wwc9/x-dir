@@ -158,6 +158,64 @@ pub fn dir_sizes(dir: &str) -> Vec<DirSizeEntry> {
     out
 }
 
+/// 空文件/空文件夹扫描结果：0 字节文件与无子项的目录分列返回
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct EmptyScan {
+    pub empty_files: Vec<String>,
+    pub empty_dirs: Vec<String>,
+    pub scanned: u64,
+}
+
+/// 空文件/空文件夹扫描：递归遍历（跳过符号链接），
+/// 文件按字节数 == 0 判空；目录按 read_dir 无子项判字面空
+/// （只含空子目录的父目录不算，语义直观且删除时不会误带走未勾选项）
+pub fn scan_empty(root: &str) -> EmptyScan {
+    fn walk(dir: &str, root: &str, out: &mut EmptyScan) {
+        if out.scanned >= MAX_FILES as u64 {
+            return;
+        }
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return;
+        };
+        let mut child_count = 0u64;
+        for entry in rd.flatten() {
+            if out.scanned >= MAX_FILES as u64 {
+                return;
+            }
+            let Ok(ft) = entry.file_type() else { continue };
+            if ft.is_symlink() {
+                child_count += 1;
+                continue;
+            }
+            child_count += 1;
+            let p = entry.path().to_string_lossy().into_owned();
+            if ft.is_dir() {
+                out.scanned += 1;
+                walk(&p, root, out);
+            } else if let Ok(m) = std::fs::metadata(&p) {
+                out.scanned += 1;
+                if m.len() == 0 {
+                    out.empty_files.push(p);
+                }
+            }
+        }
+        // 顶层根目录自身不计入空目录判定（用户选它就是要清理它内部）
+        if child_count == 0 && dir != root {
+            out.empty_dirs.push(dir.to_string());
+        }
+    }
+    let mut out = EmptyScan {
+        empty_files: vec![],
+        empty_dirs: vec![],
+        scanned: 0,
+    };
+    walk(root, root, &mut out);
+    out.empty_files.sort();
+    out.empty_dirs.sort();
+    out
+}
+
 #[derive(serde::Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct RelItem {
@@ -357,6 +415,32 @@ mod tests {
         assert_eq!(r.differ.len(), 1);
         assert_eq!(r.differ[0].rel, "diff.txt");
         assert_eq!(r.same, 1);
+    }
+
+    #[test]
+    fn scan_empty_finds_zero_files_and_literal_empty_dirs() {
+        let dir = tempdir();
+        // 空文件两个（根 + 子目录）、非空文件一个
+        std::fs::write(join(&dir, "e1.txt"), b"").unwrap();
+        let sub = join(&dir, "sub");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(join(&sub, "e2.bin"), b"").unwrap();
+        std::fs::write(join(&sub, "full.txt"), b"x").unwrap();
+        // 字面空目录
+        std::fs::create_dir_all(join(&dir, "void")).unwrap();
+        // 只含空子目录的父目录 ≠ 空目录
+        let outer = join(&dir, "outer");
+        std::fs::create_dir_all(join(&outer, "inner")).unwrap();
+        let r = scan_empty(&dir);
+        assert_eq!(
+            r.empty_files,
+            vec![join(&dir, "e1.txt"), join(&sub, "e2.bin")]
+        );
+        assert_eq!(
+            r.empty_dirs,
+            vec![join(&dir, "outer\\inner"), join(&dir, "void")]
+        );
+        assert!(r.scanned >= 6);
     }
 
     fn join(dir: &str, name: &str) -> String {

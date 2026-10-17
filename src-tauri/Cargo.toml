@@ -76,6 +76,7 @@ image = { version = "0.25", default-features = false, features = [
 oxipng = "9"
 color_quant = "1"
 kamadak-exif = "0.6"
+rust_xlsxwriter = "0.99.1"
 
 # Windows 专属：关闭 WebView2 浏览器加速键（F5/Ctrl+R 重载、Ctrl+F 查找栏、
 # Ctrl+P 打印、F12 DevTools——全局快捷键由前端 lib/keyboard.ts 全权路由），

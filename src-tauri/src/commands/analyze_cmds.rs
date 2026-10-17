@@ -2,7 +2,7 @@
 //! 扫描可能秒级耗时：经 tauri::async_runtime 的阻塞线程池执行，不占主线程。
 
 use super::files::AppError;
-use crate::fs::analyze::{self, CompareResult, DirSizeEntry, DupGroup};
+use crate::fs::analyze::{self, CompareResult, DirSizeEntry, DupGroup, EmptyScan};
 use crate::fs::entry::path_exists;
 
 fn require_dir(dir: &str) -> Result<(), AppError> {
@@ -17,6 +17,15 @@ fn require_dir(dir: &str) -> Result<(), AppError> {
 pub async fn find_duplicates(dir: String) -> Result<Vec<DupGroup>, AppError> {
     require_dir(&dir)?;
     tauri::async_runtime::spawn_blocking(move || analyze::find_duplicates(&dir))
+        .await
+        .map_err(|e| AppError::new("E_JOB_FAILED", format!("扫描失败：{e}")))
+}
+
+/// 空文件/空文件夹扫描（0 字节文件 + 字面空目录）
+#[tauri::command]
+pub async fn scan_empty(dir: String) -> Result<EmptyScan, AppError> {
+    require_dir(&dir)?;
+    tauri::async_runtime::spawn_blocking(move || analyze::scan_empty(&dir))
         .await
         .map_err(|e| AppError::new("E_JOB_FAILED", format!("扫描失败：{e}")))
 }

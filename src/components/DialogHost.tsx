@@ -17,7 +17,12 @@ import { typeName } from "../lib/fileIcons";
 import { api, type FileEntry } from "../lib/ipc";
 import { DEFAULT_RULE, pickRenames, planRenames, type RenameRule } from "../lib/batchRename";
 import { AppIcon, ic } from "./AppIcon";
-import { CompareDialog, DirSizeDialog, DuplicateDialog } from "./AnalyzeDialogs";
+import {
+  CompareDialog,
+  DirSizeDialog,
+  DuplicateDialog,
+  EmptyScanDialog,
+} from "./AnalyzeDialogs";
 import {
   CompressDialog,
   ConvertDialog,
@@ -26,6 +31,7 @@ import {
   WatermarkDialog,
 } from "./ImgDialogs";
 import { NpSelect } from "./NpSelect";
+import { NewFoldersDialog, XlsxMergeDialog } from "./ToolsDialogs";
 import { DENSITY } from "../lib/tokens";
 import { useUi, type DialogKind, type DialogSpec } from "../stores/ui";
 
@@ -69,7 +75,13 @@ export function DialogHost() {
               ? "文件夹比较"
               : dialog?.type === "batchRename"
                 ? "批量重命名"
-                : dialog?.type === "imgCompress"
+                : dialog?.type === "emptyScan"
+                  ? "空文件清理"
+                  : dialog?.type === "newFolders"
+                    ? "批量新建文件夹"
+                    : dialog?.type === "xlsxMerge"
+                      ? "Excel 合并"
+                      : dialog?.type === "imgCompress"
                   ? "图片压缩"
                   : dialog?.type === "imgWatermark"
                     ? "图片水印"
@@ -102,7 +114,8 @@ export function DialogHost() {
         width:
           dialog?.type === "duplicates" ||
           dialog?.type === "dirsizes" ||
-          dialog?.type === "compare"
+          dialog?.type === "compare" ||
+          dialog?.type === "emptyScan"
             ? "min(680px, 92vw)"
             : dialog?.type.startsWith("img")
               ? "min(560px, 92vw)"
@@ -174,6 +187,22 @@ export function DialogHost() {
 
       {dialog?.type === "batchRename" && (
         <BatchRenameDialog dialog={dialog} onDone={(v) => resolve(v)} />
+      )}
+
+      {dialog?.type === "emptyScan" && (
+        <EmptyScanDialog dir={dialog.dir} onDone={close} />
+      )}
+
+      {dialog?.type === "newFolders" && (
+        <NewFoldersDialog
+          dir={dialog.dir}
+          existing={dialog.existing}
+          onDone={(v) => resolve(v)}
+        />
+      )}
+
+      {dialog?.type === "xlsxMerge" && (
+        <XlsxMergeDialog count={dialog.count} onDone={(v) => resolve(v)} />
       )}
 
       {dialog?.type === "imgCompress" && (

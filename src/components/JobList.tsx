@@ -24,6 +24,7 @@ import {
   Scissors,
   Stamp,
   Table,
+  TableProperties,
   Trash2,
   X,
 } from "lucide-react";
@@ -53,6 +54,7 @@ const MODE_ICONS: Record<JobMode, typeof Copy> = {
   convertenc: Replace,
   mergecsv: Table,
   mergetexts: Merge,
+  mergexlsx: TableProperties,
   zip: Archive,
   extract: ArchiveRestore,
   imgcompress: Minimize2,

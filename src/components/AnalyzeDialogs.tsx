@@ -9,6 +9,7 @@ import {
   type CompareResult,
   type DirSizeEntry,
   type DupGroup,
+  type EmptyScan,
 } from "../lib/ipc";
 import { formatSize } from "../lib/format";
 import { fileNameOf, joinPath } from "../lib/path";
@@ -114,6 +115,111 @@ export function DuplicateDialog({ dir, onDone }: { dir: string; onDone(): void }
               关闭
             </Button>
             <Button size="small" intent="danger" disabled={!sel.size} onClick={del}>
+              删除选中（回收站）
+            </Button>
+          </>
+        }
+      />
+    </>
+  );
+}
+
+/** 空文件/空文件夹清理：分两组展示（默认全选），删除走回收站；
+ *  空文件夹只列字面空目录（只含空子目录的父目录不算），整组勾选不会误删内容 */
+export function EmptyScanDialog({ dir, onDone }: { dir: string; onDone(): void }) {
+  const [scan, setScan] = useState<EmptyScan | null>(null);
+  const [error, setError] = useState("");
+  const [sel, setSel] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    let live = true;
+    api.scanEmpty(dir).then(
+      (r) => {
+        if (!live) return;
+        setScan(r);
+        setSel(new Set([...r.emptyFiles, ...r.emptyDirs]));
+      },
+      (e) => live && setError(String(e)),
+    );
+    return () => {
+      live = false;
+    };
+  }, [dir]);
+
+  const toggle = (p: string) =>
+    setSel((s) => {
+      const n = new Set(s);
+      if (n.has(p)) n.delete(p);
+      else n.add(p);
+      return n;
+    });
+
+  const del = () => {
+    const paths = [...sel];
+    onDone();
+    if (paths.length) void deletePaths(paths, false); // 弹窗内已确认，跳过二次确认
+  };
+
+  const section = (title: string, paths: string[]) =>
+    paths.length > 0 && (
+      <div>
+        <div className="np-dup-head">
+          <span>{title}</span>
+          <span className="np-cell-muted">{paths.length} 项</span>
+        </div>
+        {paths.map((p) => (
+          <Checkbox
+            key={p}
+            className="np-dup-row"
+            checked={sel.has(p)}
+            onChange={() => toggle(p)}
+            labelElement={
+              <span className="np-ellipsis" title={p}>
+                {fileNameOf(p)}
+                <span className="np-cell-muted">
+                  {" "}
+                  · {p.slice(dir.length + 1) || p}
+                </span>
+              </span>
+            }
+          />
+        ))}
+      </div>
+    );
+
+  const total = (scan?.emptyFiles.length ?? 0) + (scan?.emptyDirs.length ?? 0);
+
+  return (
+    <>
+      <DialogBody>
+        {error ? (
+          <div className="np-list-error">扫描失败：{error}</div>
+        ) : !scan ? (
+          <Loading text="正在扫描空文件与空文件夹…" />
+        ) : !total ? (
+          <div className="np-list-empty">没有发现空文件或空文件夹</div>
+        ) : (
+          <div className="np-dup-list">
+            <div className="np-dialog-muted">
+              共扫描 {scan.scanned} 项，勾选要清理的 {sel.size} 项（删除到回收站）
+            </div>
+            {section("空文件（0 字节）", scan.emptyFiles)}
+            {section("空文件夹", scan.emptyDirs)}
+          </div>
+        )}
+      </DialogBody>
+      <DialogFooter
+        actions={
+          <>
+            <Button size="small" onClick={onDone}>
+              关闭
+            </Button>
+            <Button
+              size="small"
+              intent="danger"
+              disabled={!sel.size}
+              onClick={del}
+            >
               删除选中（回收站）
             </Button>
           </>

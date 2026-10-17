@@ -207,6 +207,26 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
       expect(keys.has(key)).toBe(true);
     }
   });
+
+  it("2026-10-17 工具箱三件已注册（批量建夹/空文件清理/Excel 合并）并带合理默认条件", () => {
+    const keys = new Set(BUILTIN_FNS.map((f) => f.key));
+    for (const key of ["newFolders", "findEmpty", "xlsxMerge"]) {
+      expect(keys.has(key)).toBe(true);
+    }
+    // 批量建夹 = 空白处语境（与 newFolder 同区）
+    expect(builtinByKey("newFolders")?.supportsBlank).toBe(true);
+    // 空文件清理与查重同款：单目录入场
+    expect(builtinByKey("findEmpty")?.cond).toMatchObject({
+      target: "dir",
+      maxCount: 1,
+    });
+    // Excel 合并：≥2 个表格文件，读取口径对齐 calamine
+    expect(builtinByKey("xlsxMerge")?.cond).toMatchObject({
+      target: "file",
+      minCount: 2,
+      exts: "xlsx,xlsm,xls,xlsb,ods",
+    });
+  });
 });
 
 describe("扩展名解析（parseExts）", () => {

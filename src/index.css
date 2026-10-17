@@ -3500,3 +3500,28 @@ body.np-col-resizing * {
 .np-bren-new.is-same {
   color: var(--np-muted);
 }
+
+/* 批量新建文件夹的多行名单（2026-10-17）：统一填充式输入配方——
+   surface-2 凹陷常态无描边、聚焦 surface + ring，同 np-nav / np-gsearch-input */
+.np-textarea {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  padding: var(--np-gutter) calc(var(--np-gutter) + 2px);
+  background: var(--np-surface-2);
+  border: none;
+  border-radius: var(--np-radius-lg);
+  color: var(--np-fg);
+  font-size: var(--np-font-ui);
+  line-height: 1.6;
+  font-family: inherit;
+  outline: none;
+  margin-bottom: var(--np-gutter);
+}
+.np-textarea:focus {
+  background: var(--np-surface);
+  box-shadow: var(--np-ring);
+}
+.np-textarea::placeholder {
+  color: var(--np-muted);
+}

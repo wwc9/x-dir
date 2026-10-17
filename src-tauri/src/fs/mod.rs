@@ -7,3 +7,4 @@ pub mod path;
 pub mod search;
 pub mod sort;
 pub mod textops;
+pub mod xlsx;

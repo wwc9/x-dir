@@ -94,6 +94,37 @@ pub fn merge_texts(
     })
 }
 
+/// Excel 工作簿合并（calamine 读 → rust_xlsxwriter 写 .xlsx；mode ∈ sheets/rows）
+#[tauri::command]
+pub fn merge_xlsx(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    paths: Vec<String>,
+    output: String,
+    mode: String,
+) -> Result<JobId, AppError> {
+    if paths.len() < 2 {
+        return Err(AppError::new("E_INVALID_NAME", "合并至少需要 2 个文件"));
+    }
+    reject_exists(&paths)?;
+    validate_output(&output)?;
+    if !output.to_ascii_lowercase().ends_with(".xlsx") {
+        return Err(AppError::new("E_INVALID_NAME", "输出文件名须为 .xlsx"));
+    }
+    let mode = crate::fs::xlsx::XlsxMergeMode::parse(&mode)
+        .ok_or_else(|| AppError::new("E_INVALID_NAME", format!("未知合并模式：{mode}")))?;
+    Ok(JobId {
+        job_id: state.jobs.enqueue(
+            JobKind::MergeXlsx { mode, output },
+            paths,
+            None,
+            Policy::Skip,
+            false,
+            app,
+        ),
+    })
+}
+
 /// 压缩为 zip（文件平铺、文件夹递归含顶层目录；同名覆盖）
 #[tauri::command]
 pub fn zip_files(

@@ -39,6 +39,7 @@ export type JobMode =
   | "convertenc"
   | "mergecsv"
   | "mergetexts"
+  | "mergexlsx"
   | "zip"
   | "extract"
   | "imgcompress"

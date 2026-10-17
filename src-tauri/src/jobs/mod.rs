@@ -15,7 +15,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::fs::entry::path_exists;
 use crate::fs::path::{file_name_of, is_same_volume, join_name, parent_of, to_extended};
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct FailItem {
     pub path: String,
@@ -103,6 +103,11 @@ pub enum JobKind {
     },
     /// 压缩为 zip（文件平铺、文件夹递归含顶层目录）→ output
     ZipFiles {
+        output: String,
+    },
+    /// Excel 工作簿合并（calamine 读 → rust_xlsxwriter 写 .xlsx）→ output
+    MergeXlsx {
+        mode: crate::fs::xlsx::XlsxMergeMode,
         output: String,
     },
     /// 解压 zip/7z：每包解到 <dest>/<包名>/ 子目录（dest 走 enqueue 的 dest 参数）
@@ -547,6 +552,25 @@ impl JobManager {
                     crate::fs::textops::run_zip(
                         &sources,
                         output,
+                        &cancel,
+                        &mut prog,
+                        &mut em,
+                        &mut failed,
+                    );
+                }
+                JobKind::MergeXlsx { mode, output } => {
+                    if let Some(par) = parent_of(output) {
+                        dirty_dirs.push(par);
+                    }
+                    for s in &sources {
+                        if let Some(par) = parent_of(s) {
+                            dirty_dirs.push(par);
+                        }
+                    }
+                    crate::fs::xlsx::merge_xlsx(
+                        &sources,
+                        output,
+                        *mode,
                         &cancel,
                         &mut prog,
                         &mut em,

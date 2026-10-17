@@ -373,6 +373,61 @@ export async function mergeTexts(entries: FileEntry[], dir: string): Promise<voi
   }
 }
 
+/** 批量新建文件夹（右键"批量新建文件夹"）：对话框预演（lib/folderBatch 纯函数）
+ *  → api.createDirs；Rust 端与磁盘重名自动 "(2)"，名单内重名/非法名逐条报错 */
+export async function createFolders(
+  dir: string,
+  existing: string[],
+  onDone: () => void,
+): Promise<void> {
+  const names = await useUi.getState().openDialog<string[] | null>({
+    type: "newFolders",
+    dir,
+    existing,
+  });
+  if (!names?.length) return;
+  try {
+    const r = await api.createDirs(dir, names);
+    onDone();
+    if (r.failed.length) {
+      const f = r.failed[0];
+      useUi
+        .getState()
+        .toast(
+          `${r.failed.length} 个名称未能创建：${f.name}（${f.message}）`,
+          "error",
+        );
+    } else {
+      useUi.getState().toast(`已创建 ${r.created.length} 个文件夹`);
+    }
+  } catch (e) {
+    useUi.getState().toast(`创建失败：${String(e)}`, "error");
+  }
+}
+
+/** Excel 合并（按选中序）：np-seg 选模式 + 输出名 → 任务引擎（mergexlsx） */
+export async function mergeXlsx(entries: FileEntry[], dir: string): Promise<void> {
+  const plan = await useUi.getState().openDialog<
+    { mode: "sheets" | "rows"; name: string } | null
+  >({ type: "xlsxMerge", count: entries.length });
+  if (!plan) return;
+  const trimmed = plan.name.trim();
+  const output = joinPath(
+    dir,
+    trimmed.toLowerCase().endsWith(".xlsx") ? trimmed : `${trimmed}.xlsx`,
+  );
+  try {
+    const { jobId } = await api.mergeXlsx(
+      entries.map((e) => e.path),
+      output,
+      plan.mode,
+    );
+    useJobs.getState().register(jobId, "mergexlsx", dir, [dir]);
+  } catch (e) {
+    useUi.getState().toast(`合并失败：${String(e)}`, "error");
+  }
+}
+
 /** 压缩为 zip（文件平铺、文件夹递归含顶层目录；同名覆盖） */
 export async function zipEntries(entries: FileEntry[], dir: string): Promise<void> {
   const name = await useUi.getState().openDialog<string | null>({

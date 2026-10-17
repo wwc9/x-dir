@@ -153,6 +153,19 @@ export interface CompareResult {
   same: number;
 }
 
+/** 空文件/空文件夹扫描结果（0 字节文件 + 无子项目录） */
+export interface EmptyScan {
+  emptyFiles: string[];
+  emptyDirs: string[];
+  scanned: number;
+}
+
+/** 批量新建文件夹回执（created = 实际路径，与磁盘重名时自动 "(2)" 递增） */
+export interface CreateDirsResult {
+  created: string[];
+  failed: { name: string; message: string }[];
+}
+
 export interface DriveInfo {
   letter: string;
   label: string;
@@ -530,6 +543,10 @@ export const api = {
   /** 文本合并（空行分隔）→ output（UTF-8 BOM） */
   mergeTexts: (paths: string[], output: string) =>
     cmd<{ jobId: number }>("merge_texts", { paths, output }),
+  /** Excel 工作簿合并（calamine 读 → rust_xlsxwriter 写 .xlsx）；
+   *  mode ∈ "sheets"（每源表一张目标表）| "rows"（纵向拼接去重复表头） */
+  mergeXlsx: (paths: string[], output: string, mode: "sheets" | "rows") =>
+    cmd<{ jobId: number }>("merge_xlsx", { paths, output, mode }),
   /** 压缩为 zip（文件平铺、文件夹递归含顶层目录） */
   zipFiles: (paths: string[], output: string) =>
     cmd<{ jobId: number }>("zip_files", { paths, output }),
@@ -538,6 +555,11 @@ export const api = {
     cmd<{ jobId: number }>("extract_archives", { sources, destDir }),
   /** 重复文件查找（SHA-256 指纹） */
   findDuplicates: (dir: string) => cmd<DupGroup[]>("find_duplicates", { dir }),
+  /** 空文件/空文件夹扫描（0 字节文件 + 字面空目录） */
+  scanEmpty: (dir: string) => cmd<EmptyScan>("scan_empty", { dir }),
+  /** 批量新建文件夹（与磁盘重名自动 "(2)"；名单内重名/非法名逐条报错不中断） */
+  createDirs: (parentDir: string, names: string[]) =>
+    cmd<CreateDirsResult>("create_dirs", { parentDir, names }),
   /** 目录体积分析（直接子项） */
   dirSizes: (dir: string) => cmd<DirSizeEntry[]>("dir_sizes", { dir }),
   /** 双文件夹比较（相对路径对齐） */

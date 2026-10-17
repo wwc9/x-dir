@@ -28,6 +28,7 @@ import {
   compressPdfs,
   convertEncoding,
   createEntry,
+  createFolders,
   deletePaths,
   exportListing,
   exportOfficeText,
@@ -41,6 +42,7 @@ import {
   mergeCsvs,
   mergePdfs,
   mergeTexts,
+  mergeXlsx,
   officeToPdf,
   extractArchives,
   organizeEntries,
@@ -1001,6 +1003,8 @@ export function FileList({
         };
       case "csvMerge":
         return { label: "CSV 合并…", action: () => void mergeCsvs(sel, path) };
+      case "xlsxMerge":
+        return { label: "Excel 合并…", action: () => void mergeXlsx(sel, path) };
       case "textMerge":
         return { label: "文本合并…", action: () => void mergeTexts(sel, path) };
       case "exportList":
@@ -1035,6 +1039,12 @@ export function FileList({
               .getState()
               .openDialog({ type: "duplicates", dir: entry0.path }),
         };
+      case "findEmpty":
+        return {
+          label: "清理空文件/空文件夹",
+          action: () =>
+            void useUi.getState().openDialog({ type: "emptyScan", dir: entry0.path }),
+        };
       case "dirSizes":
         return {
           label: "空间分析",
@@ -1061,6 +1071,16 @@ export function FileList({
         return { label: "新建文件夹", action: () => createEntry(path, "dir", forceBump) };
       case "newFile":
         return { label: "新建文本文件", action: () => createEntry(path, "file", forceBump) };
+      case "newFolders":
+        return {
+          label: "批量新建文件夹…",
+          action: () =>
+            void createFolders(
+              path,
+              entries.map((e2) => e2.name),
+              forceBump,
+            ),
+        };
       // 「新建」子菜单：文件夹 + 常用格式（0 字节文件与资源管理器 NullFile 同轨，
       // Office/WPS 打开时按新文档处理）
       case "new":

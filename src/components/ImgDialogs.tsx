@@ -7,10 +7,11 @@ import { Button, ButtonGroup, DialogBody, DialogFooter, InputGroup, Switch } fro
 import { MONTAGE_MAX, montageGrid } from "../lib/imgOps";
 import { NpSelect } from "./NpSelect";
 
-/** np-seg 分段快选（同 SettingsPanel 用法：active = accent 填充） */
+/** np-seg 分段快选（同 SettingsPanel 用法：active = accent 填充）。
+ *  2026-10-17 起导出共用（工具箱新对话框同款，避免跨文件复制） */
 // 泛型不带 extends 约束：TS6 下联合约束会让推断回退到约束本身，
 // setState 直传时整体变宽（实测，见体检记录）；无约束则 value 站稳定全流程
-function Seg<T>({
+export function Seg<T>({
   value,
   options,
   onChange,

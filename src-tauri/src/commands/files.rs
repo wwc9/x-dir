@@ -9,11 +9,11 @@ use std::path::Path;
 use crate::AppState;
 use crate::fs::entry::{name_exists_ci, path_exists};
 use crate::fs::path::{
-    file_name_of, is_valid_name, join_name, parent_of, same_name_ci, to_extended,
+    file_name_of, is_valid_name, join_name, norm_key, parent_of, same_name_ci, to_extended,
 };
 use crate::fs::sort::{DirPage, SortDir, SortKey, SortSpec, build_page};
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct AppError {
     pub code: String,
@@ -180,6 +180,71 @@ pub fn create_file(parent_dir: String, name: String) -> Result<String, AppError>
     Ok(p)
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateDirFail {
+    pub name: String,
+    pub message: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateDirsResult {
+    /// 实际创建路径（与磁盘重名时自动 "(2)" 递增，可能异于请求名）
+    pub created: Vec<String>,
+    pub failed: Vec<CreateDirFail>,
+}
+
+/// 批量新建文件夹：逐个创建。与磁盘已有项重名自动 (2)（与冲突"保留两者"
+/// 同一套 available_name）；名单内重名（大小写不敏感）与非法名逐条报错不中断。
+/// 轻量同步命令（mkdir 毫秒级），不入任务引擎；上限 500。
+#[tauri::command]
+pub fn create_dirs(parent_dir: String, names: Vec<String>) -> Result<CreateDirsResult, AppError> {
+    if names.is_empty() {
+        return Err(AppError::new("E_INVALID_NAME", "名单为空"));
+    }
+    if names.len() > 500 {
+        return Err(AppError::new("E_INVALID_NAME", "一次最多创建 500 个文件夹"));
+    }
+    if !path_exists(&parent_dir) {
+        return Err(AppError::new(
+            "E_NOT_FOUND",
+            format!("目录不存在：{parent_dir}"),
+        ));
+    }
+    let mut res = CreateDirsResult {
+        created: vec![],
+        failed: vec![],
+    };
+    let mut seen = std::collections::HashSet::new();
+    for req in &names {
+        let name = req.trim();
+        if !is_valid_name(name) {
+            res.failed.push(CreateDirFail {
+                name: req.clone(),
+                message: "名称含非法字符或为 Windows 保留名".into(),
+            });
+            continue;
+        }
+        if !seen.insert(norm_key(name)) {
+            res.failed.push(CreateDirFail {
+                name: name.to_string(),
+                message: "名单内重名".into(),
+            });
+            continue;
+        }
+        let target = crate::jobs::pick::available_name(&join_name(&parent_dir, name));
+        match fs::create_dir(to_extended(&target)) {
+            Ok(()) => res.created.push(target),
+            Err(e) => res.failed.push(CreateDirFail {
+                name: name.to_string(),
+                message: e.to_string(),
+            }),
+        }
+    }
+    Ok(res)
+}
+
 #[tauri::command]
 pub fn open_item(path: String) -> Result<(), AppError> {
     if !path_exists(&path) {
@@ -187,4 +252,63 @@ pub fn open_item(path: String) -> Result<(), AppError> {
     }
     tauri_plugin_opener::open_path(Path::new(&path), None::<&str>)
         .map_err(|e| AppError::new("E_UNSUPPORTED", e.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    fn tempdir() -> String {
+        let d = std::env::temp_dir().join(format!(
+            "xdir-files-{}-{}",
+            std::process::id(),
+            SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+        ));
+        std::fs::create_dir_all(&d).unwrap();
+        d.to_string_lossy().into_owned()
+    }
+
+    #[test]
+    fn create_dirs_dedups_and_sideloads_existing() {
+        let dir = tempdir();
+        std::fs::create_dir_all(join_name(&dir, "已有")).unwrap();
+        let r = create_dirs(
+            dir.clone(),
+            vec![
+                "甲".into(),
+                "乙".into(),
+                "已有".into(), // 与磁盘重名 → 已有 (2)
+                "甲".into(),   // 名单内重名（大小写不敏感语义）→ 报错不中断
+                "ab".into(),
+                "AB".into(),  // 名单内大小写冲突
+                "con".into(), // Windows 保留名 → 报错不中断
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            r.created,
+            vec![
+                join_name(&dir, "甲"),
+                join_name(&dir, "乙"),
+                join_name(&dir, "已有 (2)"),
+                join_name(&dir, "ab"),
+            ]
+        );
+        assert_eq!(r.failed.len(), 3);
+        assert_eq!(r.failed[0].name, "甲");
+        assert_eq!(r.failed[0].message, "名单内重名");
+        assert_eq!(r.failed[1].name, "AB");
+        assert_eq!(r.failed[2].name, "con");
+        // 磁盘实况与回执一致
+        assert!(path_exists(&join_name(&dir, "已有 (2)")));
+        assert!(!path_exists(&join_name(&dir, "con")));
+    }
+
+    #[test]
+    fn create_dirs_rejects_empty_and_missing_parent() {
+        let dir = tempdir();
+        assert!(create_dirs(dir.clone(), vec![]).is_err());
+        assert!(create_dirs(join_name(&dir, "不存在"), vec!["a".into()]).is_err());
+    }
 }
