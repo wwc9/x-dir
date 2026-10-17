@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>外置描边渲染验证</title>
+<style>
+  body { background:#e9ecf1; padding:30px; font-family:system-ui,"Segoe UI",sans-serif; }
+  .canvas { background:#e9ecf1; padding:16px; display:flex; gap:12px; }
+  .card { flex:1; height:260px; background:#fff;
+    border:1px solid #d6dbe2; border-radius:14px;
+    display:flex; align-items:center; justify-content:center;
+    color:#8a93a0; font-size:12px; }
+  .card.active-outline { border-color:#8fadde;
+    outline:3px solid #8fadde; }
+  .gutter { width:12px; flex:0 0 12px; background:transparent; }
+  .info { margin-top:14px; color:#66707e; }
+</style>
+</head>
+<body>
+  <div class="canvas">
+    <div class="card">未激活窗格</div>
+    <div class="gutter"></div>
+    <div class="card active-outline">激活窗格（1px 边框 + 3px 外置 outline）</div>
+    <div class="gutter"></div>
+    <div class="card">未激活窗格</div>
+  </div>
+  <div class="info">中间卡片的 3px 外置描边应完整显示在 12px 沟槽内（不被分隔条遮挡）。若可见 → outline 方案成立。</div>
+</body>
+</html>

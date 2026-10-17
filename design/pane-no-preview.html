@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>窗格序号展示方案对比（6 选 1）</title>
+<style>
+  /* ── 与 src/index.css 同源 token（浅色） ── */
+  :root {
+    --np-bg: #e9ecf1;
+    --np-surface: #ffffff;
+    --np-surface-2: #f0f2f5;
+    --np-border: #d6dbe2;
+    --np-hairline: rgba(16, 24, 40, 0.06);
+    --np-fg: #171d26;
+    --np-muted: #66707e;
+    --np-accent: #3574f0;
+    --np-accent-fg: #ffffff;
+    --np-sel: rgba(53, 116, 240, 0.12);
+    --np-radius: 6px;
+    --np-radius-pane: 14px;
+    --np-gutter: 8px;
+    --np-nav-h: 34px;
+    --np-status-h: 24px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 32px 48px;
+    background: var(--np-bg);
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: var(--np-fg);
+  }
+  h1 { font-size: 17px; margin: 0 0 6px; }
+  .lead { font-size: 12.5px; color: var(--np-muted); margin: 0 0 22px; line-height: 1.7; }
+  .lead b { color: var(--np-fg); }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(420px, 1fr)); gap: 22px; }
+  @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--np-surface);
+    border-radius: var(--np-radius-pane);
+    padding: 16px 18px 18px;
+    box-shadow: 0 12px 32px rgba(20, 28, 40, 0.14);
+  }
+  .card h2 { font-size: 13.5px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  .card h2 .tag {
+    font-size: 10.5px; font-weight: 600; color: var(--np-accent);
+    background: var(--np-sel); border-radius: 999px; padding: 2px 8px;
+  }
+  .desc { font-size: 12px; color: var(--np-muted); line-height: 1.65; margin: 8px 0 0; }
+  .desc b { color: var(--np-fg); }
+
+  /* ── 迷你窗格：导航栏(34px) + 状态条(24px)，与实机同密度 ── */
+  .pane {
+    position: relative;
+    margin-top: 12px;
+    border: 1px solid var(--np-border);
+    border-radius: 10px;
+    background: var(--np-surface);
+    overflow: visible;
+  }
+  .navbar {
+    height: var(--np-nav-h);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    border-bottom: 1px solid var(--np-hairline);
+    font-size: 13px;
+  }
+  .navbar .addr {
+    flex: 1; height: 24px; display: flex; align-items: center;
+    background: var(--np-surface-2); border-radius: var(--np-radius);
+    padding: 0 10px; font-size: 12px; color: var(--np-muted);
+  }
+  .navbar .winbtns { display: flex; gap: 6px; color: var(--np-muted); font-size: 11px; }
+  .pstatus {
+    height: var(--np-status-h);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    font-size: 11px;
+    color: var(--np-muted);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .pane.is-active .navbar .addr { background: color-mix(in srgb, var(--np-accent) 9%, var(--np-surface)); }
+
+  /* 2× 放大核对条：zoom 由 Chromium 原生渲染，文字清晰 */
+  .zoombox {
+    margin-top: 10px;
+    background: var(--np-surface-2);
+    border-radius: 8px;
+    padding: 10px 10px 12px;
+    overflow: hidden;
+  }
+  .zoombox .pstatus { zoom: 2; padding: 0 8px; }
+
+  /* ── 方案 A：纯文字 · 中点分隔 ── */
+  .a-no { color: var(--np-fg); font-weight: 600; }
+  .is-active .a-no { color: var(--np-accent); }
+  .a-dot { margin: 0 6px; color: color-mix(in srgb, var(--np-muted) 55%, transparent); }
+
+  /* ── 方案 B：纯文字 · 竖线分隔 ── */
+  .b-sep {
+    display: inline-block; width: 1px; height: 10px;
+    background: var(--np-border); margin: 0 9px; vertical-align: -1px;
+  }
+  .b-no { color: var(--np-fg); font-weight: 600; }
+  .is-active .b-no { color: var(--np-accent); }
+
+  /* ── 方案 C：井号编号 ── */
+  .c-hash { color: color-mix(in srgb, var(--np-muted) 70%, transparent); margin-right: 0; }
+  .c-no { color: var(--np-fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .is-active .c-no { color: var(--np-accent); }
+
+  /* ── 方案 D：状态条左分段（flex 精确居中）── */
+  .d-seg { display: flex; align-items: center; flex: 0 0 auto; margin-right: 7px; }
+  .d-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 15px; height: 15px; padding: 0 4px;
+    border-radius: var(--np-radius);
+    background: var(--np-surface-2);
+    color: var(--np-muted);
+    font-size: 10.5px; line-height: 1; font-weight: 600;
+  }
+  .is-active .d-badge { background: var(--np-sel); color: var(--np-accent); }
+
+  /* ── 方案 E：窗格左上角角标 ── */
+  .e-tab {
+    position: absolute; top: 0; left: 12px; transform: translateY(-50%);
+    z-index: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 20px; height: 18px; padding: 0 7px;
+    border-radius: 999px;
+    background: var(--np-surface);
+    border: 1px solid var(--np-border);
+    color: var(--np-muted);
+    font-size: 10.5px; font-weight: 600; line-height: 1;
+    box-shadow: 0 2px 6px rgba(20, 28, 40, 0.08);
+  }
+  .is-active .e-tab {
+    background: var(--np-accent); border-color: var(--np-accent); color: var(--np-accent-fg);
+  }
+  .e-pane .navbar { padding-left: 46px; }
+
+  /* ── 方案 F：导航栏右端序号 pill ── */
+  .f-pill {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 18px; height: 18px; padding: 0 5px;
+    border-radius: 999px;
+    background: var(--np-surface-2);
+    color: var(--np-muted);
+    font-size: 10.5px; font-weight: 600; line-height: 1;
+  }
+  .is-active .f-pill { background: var(--np-accent); color: var(--np-accent-fg); }
+</style>
+</head>
+<body>
+  <h1>窗格序号展示方案对比（6 选 1）</h1>
+  <p class="lead">
+    每张卡上半是 <b>1:1 实机密度</b>的迷你窗格（导航栏 34px / 状态条 24px / 字号 11px），
+    下半灰盒是同一状态条的 <b>2× 放大</b>，用于核对序号与文字的中线对齐。
+    深色卡片 = <b>活动窗格</b>形态。对齐机制标注在各卡说明里——
+    <b>方案 A/B/C 为纯文本行内排版，天然永不错位</b>；<b>方案 D 用 flex 分段精确居中</b>（当前徽标观感的工程修正版）。
+  </p>
+
+  <div class="grid">
+    <!-- ── 方案 A ── -->
+    <div class="card">
+      <h2>方案 A · 纯文字 + 中点分隔 <span class="tag">推荐 · 最简</span></h2>
+      <p class="desc">序号就是状态条文字流的一部分（同字号加粗），<b>与后续文字同基线，物理上不可能错位</b>；活动窗格序号变强调色。最克制，零新增元素。</p>
+      <div class="pane is-active">
+        <div class="navbar"><div class="addr">E:\</div><div class="winbtns">⋯ ✕</div></div>
+        <div class="pstatus"><span class="a-no">3</span><span class="a-dot">·</span>Σ 3 个对象 · 选中 1 项 (908.9 KB)</div>
+      </div>
+      <div class="pane">
+        <div class="navbar"><div class="addr">E:\AI</div><div class="winbtns">⋯ ✕</div></div>
+        <div class="pstatus"><span class="a-no">4</span><span class="a-dot">·</span>Σ 22 个对象</div>
+      </div>
+      <div class="zoombox"><div class="pstatus"><span class="a-no">3</span><span class="a-dot">·</span>Σ 3 个对象 · 选中 1 项 (908.9 KB)</div></div>
+    </div>
+
+    <!-- ── 方案 B ── -->
+    <div class="card">
+      <h2>方案 B · 纯文字 + 竖线分隔</h2>
+      <p class="desc">同方案 A 的文本行内排版，分隔改用 1px 竖线，分组感更强一点。竖线是唯一图形元素（固定 10px 高、垂直居中于文字），同样<b>不会错位</b>。</p>
+      <div class="pane is-active">
+        <div class="navbar"><div class="addr">E:\</div><div class="winbtns">⋯ ✕</div></div>
+        <div class="pstatus"><span class="b-no">3</span><span class="b-sep"></span>Σ 3 个对象 · 选中 1 项 (908.9 KB)</div>
+      </div>
+      <div class="pane">
+        <div class="navbar"><div class="addr">E:\AI</div><div class="winbtns">⋯ ✕</div></div>
+        <div class="pstatus"><span class="b-no">4</span><span class="b-sep"></span>Σ 22 个对象</div>
+      </div>
+      <div class="zoombox"><div class="pstatus"><span class="b-no">3</span><span class="b-sep"></span>Σ 3 个对象 · 选中 1 项 (908.9 KB)</div></div>
+    </div>
+
+    <!-- ── 方案 C ── -->
+    <div class="card">
+      <h2>方案 C · 井号编号 <span class="tag">已选用 · 井号间距 0</span></h2>
+      <p class="desc">「#3」开发工具风格，井号弱化为灰、数字加粗，与后文以中点分隔。纯文本行内排版，<b>同样零错位</b>；识别度比裸数字高。</p>
+      <div class="pane is-active">
+        <div class="navbar"><div class="addr">E:\</div><div class="winbtns">⋯ ✕</div></div>
+        <div class="pstatus"><span class="c-hash">#</span><span class="c-no">3</span><span class="a-dot">·</span>Σ 3 个对象 · 选中 1 项 (908.9 KB)</div>
+      </div>
+      <div class="pane">
+        <div class="navbar"><div class="addr">E:\AI</div><div class="winbtns">⋯ ✕</div></div>
+        <div class="pstatus"><span class="c-hash">#</span><span class="c-no">4</span><span class="a-dot">·</span>Σ 22 个对象</div>
+      </div>
+      <div class="zoombox"><div class="pstatus"><span class="c-hash">#</span><span class="c-no">3</span><span class="a-dot">·</span>Σ 3 个对象 · 选中 1 项 (908.9 KB)</div></div>
+    </div>
+
+    <!-- ── 方案 D ── -->
+    <div class="card">
+      <h2>方案 D · 状态条左分段徽标 <span class="tag">保留现观感 · 修对齐</span></h2>
+      <p class="desc">保留现在的圆角小徽标，但不再塞进文字流里靠 vertical-align 硬调——<b>状态条改为 flex，徽标是独立子项，与文字行各自垂直居中，圆心严格同线</b>。这是对当前样式的工程修正。</p>
+      <div class="pane is-active">
+        <div class="navbar"><div class="addr">E:\</div><div class="winbtns">⋯ ✕</div></div>
+        <div class="pstatus"><span class="d-seg"><span class="d-badge">3</span></span>Σ 3 个对象 · 选中 1 项 (908.9 KB)</div>
+      </div>
+      <div class="pane">
+        <div class="navbar"><div class="addr">E:\AI</div><div class="winbtns">⋯ ✕</div></div>
+        <div class="pstatus"><span class="d-seg"><span class="d-badge">4</span></span>Σ 22 个对象</div>
+      </div>
+      <div class="zoombox"><div class="pstatus"><span class="d-seg"><span class="d-badge">3</span></span>Σ 3 个对象 · 选中 1 项 (908.9 KB)</div></div>
+    </div>
+
+    <!-- ── 方案 E ── -->
+    <div class="card">
+      <h2>方案 E · 窗格左上角角标</h2>
+      <p class="desc">序号离开状态条，做成<b>骑在窗格左上边缘的小圆牌</b>（Q-Dir / Total Commander 式），活动窗格实心强调色。状态条只剩纯文字；窗格多了"编号标签"的方位感。</p>
+      <div class="pane is-active">
+        <span class="e-tab">3</span>
+        <div class="navbar"><div class="addr">E:\</div><div class="winbtns">⋯ ✕</div></div>
+        <div class="pstatus">Σ 3 个对象 · 选中 1 项 (908.9 KB)</div>
+      </div>
+      <div class="pane">
+        <span class="e-tab">4</span>
+        <div class="navbar"><div class="addr">E:\AI</div><div class="winbtns">⋯ ✕</div></div>
+        <div class="pstatus">Σ 22 个对象</div>
+      </div>
+      <div class="zoombox"><div class="pstatus">Σ 3 个对象 · 选中 1 项 (908.9 KB)</div></div>
+    </div>
+
+    <!-- ── 方案 F ── -->
+    <div class="card">
+      <h2>方案 F · 导航栏右端序号 pill</h2>
+      <p class="desc">序号做成 <b>18px 小 pill 放在窗格导航栏右端</b>（紧挨 ⋯ 菜单），活动窗格实心强调色；状态条保持纯文字。优点是不占状态条空间、视线随导航栏找窗格。</p>
+      <div class="pane is-active">
+        <div class="navbar"><div class="addr">E:\</div><span class="f-pill">3</span><div class="winbtns">⋯ ✕</div></div>
+        <div class="pstatus">Σ 3 个对象 · 选中 1 项 (908.9 KB)</div>
+      </div>
+      <div class="pane">
+        <div class="navbar"><div class="addr">E:\AI</div><span class="f-pill">4</span><div class="winbtns">⋯ ✕</div></div>
+        <div class="pstatus">Σ 22 个对象</div>
+      </div>
+      <div class="zoombox"><div class="pstatus">Σ 3 个对象 · 选中 1 项 (908.9 KB)</div></div>
+    </div>
+  </div>
+</body>
+</html>

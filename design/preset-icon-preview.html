@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>布局预设按钮 · 图标选型预览 · x-dir</title>
+<!-- 与 design/view-icon-preview.html 同源：lucide UMD + 实装 14px/2px 描边渲染 -->
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<style>
+  /* —— 取值与 src/index.css 的 --np-* token 一致（浅/深各一套）—— */
+  :root {
+    --bg:#e9ecf1; --surface:#ffffff; --surface2:#f0f2f5; --border:#d6dbe2;
+    --fg:#171d26; --muted:#66707e; --accent:#3574f0;
+    --hover:rgba(26,33,41,.055); --sel:rgba(53,116,240,.12); --radius:6px;
+    --hairline:rgba(16,24,40,.06);
+  }
+  body.dark {
+    --bg:#131519; --surface:#1b1e23; --surface2:#24282f; --border:#3a414b;
+    --fg:#e8eaed; --muted:#8b929c; --accent:#5c9dff;
+    --hover:rgba(255,255,255,.055); --sel:rgba(92,157,255,.16);
+    --hairline:rgba(255,255,255,.08);
+  }
+  * { box-sizing:border-box; margin:0; }
+  body {
+    background:var(--bg); color:var(--fg); padding:28px;
+    font-family:system-ui,"Segoe UI","Microsoft YaHei",sans-serif; font-size:13px;
+    transition:background .2s;
+  }
+  h1 { font-size:18px; margin-bottom:4px; }
+  .sub { color:var(--muted); margin-bottom:16px; }
+  .bar { display:flex; gap:10px; align-items:center; margin-bottom:22px; }
+  .bar button {
+    border:0; border-radius:var(--radius); background:var(--surface2); color:var(--fg);
+    padding:5px 12px; font-size:12px; cursor:pointer;
+  }
+  .bar button:hover { background:var(--hover); }
+  .bar .tip { color:var(--muted); font-size:12px; }
+
+  .opt {
+    background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    padding:16px 18px; margin-bottom:16px;
+  }
+  .opt-h { display:flex; align-items:baseline; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+  .opt-h b { font-size:14px; }
+  .opt-h .name { color:var(--muted); font-size:12px; font-family:Consolas,monospace; }
+  .opt-h .tag { font-size:11px; padding:2px 8px; border-radius:99px; }
+  .opt-h .tag.cur { background:var(--sel); color:var(--accent); }
+  .opt-h .tag.rec { background:var(--accent); color:#fff; }
+  .opt-h .why { color:var(--muted); font-size:12px; width:100%; }
+
+  .cols { display:flex; gap:18px; flex-wrap:wrap; align-items:flex-start; }
+
+  /* —— 模拟侧边栏第二排（22×22 钮 · 图标 14px，与实装一致）—— */
+  .mock {
+    background:var(--surface); border:1px solid var(--border); border-radius:8px;
+    overflow:hidden; width:156px;
+  }
+  .mock .h { padding:6px 6px 2px; color:var(--muted); font-size:11px; }
+  .mock .actions {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:0 4px 6px; border-bottom:1px solid var(--hairline);
+  }
+  .mock .item {
+    display:flex; align-items:center; gap:6px; padding:5px 6px;
+    color:var(--fg); font-size:12px;
+  }
+  .mock .item .chip { width:20px; height:20px; border:1px solid var(--accent);
+    border-radius:3px; background:var(--sel); }
+
+  .abtn {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:22px; height:22px; border:0; border-radius:var(--radius);
+    background:transparent; color:var(--muted); cursor:pointer; flex:0 0 auto;
+  }
+  .abtn:hover { background:var(--hover); color:var(--accent); }
+  .abtn:active { background:var(--sel); color:var(--accent); }
+  .abtn.cand { outline:1px dashed var(--accent); outline-offset:1px; }
+  .abtn svg { width:14px; height:14px; }
+
+  .states { display:flex; flex-direction:column; gap:8px; }
+  .states .st { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; }
+  .states .chip22 {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:22px; height:22px; border-radius:var(--radius);
+  }
+  .states .chip22.rest { background:transparent; color:var(--muted); }
+  .states .chip22.hov  { background:var(--hover); color:var(--accent); }
+  .states .chip22.act  { background:var(--sel); color:var(--accent); }
+  .states .chip22 svg { width:14px; height:14px; }
+
+  /* —— 弹层打开小样（4×4 描线瓷砖缩微）—— */
+  .drop {
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    box-shadow:0 12px 32px rgba(20,28,40,.14); padding:8px;
+    display:grid; grid-template-columns:repeat(4, 1fr); gap:4px; width:196px;
+  }
+  body.dark .drop { box-shadow:0 16px 40px rgba(0,0,0,.5); }
+  .tile { display:flex; flex-direction:column; align-items:center; gap:3px;
+    padding:5px 2px; border-radius:var(--radius); color:var(--muted); font-size:10px; }
+  .tile:hover { background:var(--hover); }
+  .mini { width:22px; height:22px; border:1.5px solid var(--accent); border-radius:4px;
+    position:relative; overflow:hidden; }
+  .mini i { position:absolute; background:var(--accent); }
+  .mini .v { top:0; bottom:0; width:1.5px; }
+  .mini .hline { left:0; right:0; height:1.5px; }
+
+  .zoom { display:flex; align-items:flex-end; gap:14px; color:var(--muted); font-size:11px; }
+  .zoom .z { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .zoom .zchip { display:inline-flex; color:var(--fg); }
+</style>
+</head>
+<body>
+  <h1>侧边栏「布局预设」按钮 · 图标 6 方案</h1>
+  <div class="sub">按钮 22×22 · 图标 sm 14px · 2px 描边（AGENTS §4.5 档位制）；点击弹出 16 种预设描线瓷砖弹层</div>
+  <div class="bar">
+    <button id="theme">切换深 / 浅色</button>
+    <span class="tip">虚线框 = 候选按钮位置；每方案含「侧边栏实装 · 三态 · 弹层上下文 · 放大对照」</span>
+  </div>
+
+  <!-- 方案模板由 JS 生成 -->
+  <div id="list"></div>
+
+  <script>
+    const OPTIONS = [
+      { icon: "layout-grid", name: "LayoutGrid", tag: "cur",
+        why: "现行方案。四等分方块 = 网格直觉；但与「图标视图」菜单项（LayoutGrid）同形，且四等分只是 16 种预设里的一种，以偏概全" },
+      { icon: "layout-template", name: "LayoutTemplate", tag: "rec",
+        why: "虚线占位的模板语义——「预设」的直译；形状概括任意分割布局，不偏向某个具体预设" },
+      { icon: "layout-dashboard", name: "LayoutDashboard", tag: "",
+        why: "不等分面板组合，经典「仪表盘布局」；形似侧边栏+主区，但容易联想到应用骨架而非预设清单" },
+      { icon: "grid-3x3", name: "Grid3x3", tag: "",
+        why: "九宫格描线，直接呼应预设弹层里的九宫格；但同样以单一预设代言全部，且与图标视图网格混淆面更大" },
+      { icon: "panels-top-left", name: "PanelsTopLeft", tag: "",
+        why: "左上面板组合，「窗格」语义清晰；曾用于视图切换选型（被否），挪到这里表意反而更准" },
+      { icon: "square-stack", name: "SquareStack", tag: "",
+        why: "叠层 = 「多套方案收藏」，强调这是可整组应用的预设库；布局属性最弱，纯按钮语境下略抽象" },
+    ];
+
+    const MINIS = [
+      [null],                                        // 单格
+      [["v","33%"]],                                 // 两栏
+      [["hline","50%"]],                             // 两行
+      [["v","33%"],["hline","50%"]],                 // 四宫格
+    ];
+    const miniHTML = (idx) => {
+      const parts = MINIS[idx].filter(Boolean).map(([cls, pos]) => {
+        const style = cls === "v" ? `left:${pos}` : `top:${pos}`;
+        return `<i class="${cls}" style="${style}"></i>`;
+      }).join("");
+      return `<span class="mini">${parts}</span>`;
+    };
+
+    document.getElementById("list").innerHTML = OPTIONS.map((o, i) => `
+      <div class="opt">
+        <div class="opt-h">
+          <b>方案 ${"ABCDEF"[i]} · ${o.name}</b><span class="name">${o.icon}</span>
+          ${o.tag === "cur" ? '<span class="tag cur">现行方案</span>' : ""}
+          ${o.tag === "rec" ? '<span class="tag rec">推荐</span>' : ""}
+          <span class="why">${o.why}</span>
+        </div>
+        <div class="cols">
+          <div class="mock">
+            <div class="h">布局方案</div>
+            <div class="actions">
+              <button class="abtn"><i data-lucide="save"></i></button>
+              <button class="abtn"><i data-lucide="save-all"></i></button>
+              <button class="abtn cand"><i data-lucide="${o.icon}"></i></button>
+              <button class="abtn"><i data-lucide="panel-left-close"></i></button>
+            </div>
+            <div class="item"><span class="chip"></span>默认方案</div>
+            <div class="item" style="color:var(--muted)"><span class="chip" style="background:transparent;border-color:var(--border)"></span>晚风</div>
+          </div>
+          <div class="states">
+            <div class="st"><span class="chip22 rest"><i data-lucide="${o.icon}"></i></span>rest 常态</div>
+            <div class="st"><span class="chip22 hov"><i data-lucide="${o.icon}"></i></span>hover 悬停</div>
+            <div class="st"><span class="chip22 act"><i data-lucide="${o.icon}"></i></span>active 按下</div>
+          </div>
+          <div class="drop">
+            ${[0,1,2,3].map((k) => `
+              <div class="tile">${miniHTML(k)}预设</div>`).join("")}
+          </div>
+          <div class="zoom">
+            <span class="z"><span class="zchip"><i data-lucide="${o.icon}"></i></span>14</span>
+            <span class="z"><span class="zchip" style="transform:scale(1.5);transform-origin:bottom"><i data-lucide="${o.icon}"></i></span>×1.5</span>
+            <span class="z"><span class="zchip" style="transform:scale(2);transform-origin:bottom"><i data-lucide="${o.icon}"></i></span>×2</span>
+          </div>
+        </div>
+      </div>`).join("");
+
+    lucide.createIcons({ attrs: { width: 14, height: 14, "stroke-width": 2 } });
+    document.getElementById("theme").onclick = () => document.body.classList.toggle("dark");
+  </script>
+</body>
+</html>

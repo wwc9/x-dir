@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>窗格视图切换按钮 · 图标选型预览 · x-dir</title>
+<!-- 与 design/icon-preview.html 同源：lucide UMD + 真实 16px/2px 描边渲染 -->
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<style>
+  /* —— 取值与 src/index.css 的 --np-* token 一致（浅/深各一套）—— */
+  :root {
+    --bg:#e9ecf1; --surface:#ffffff; --surface2:#f0f2f5; --border:#d6dbe2;
+    --fg:#171d26; --muted:#66707e; --accent:#3574f0;
+    --hover:rgba(26,33,41,.055); --sel:rgba(53,116,240,.12); --radius:6px;
+  }
+  body.dark {
+    --bg:#131519; --surface:#1b1e23; --surface2:#24282f; --border:#3a414b;
+    --fg:#e8eaed; --muted:#8b929c; --accent:#5c9dff;
+    --hover:rgba(255,255,255,.055); --sel:rgba(92,157,255,.16);
+  }
+  * { box-sizing:border-box; margin:0; }
+  body {
+    background:var(--bg); color:var(--fg); padding:28px;
+    font-family:system-ui,"Segoe UI","Microsoft YaHei",sans-serif; font-size:13px;
+    transition:background .2s;
+  }
+  h1 { font-size:18px; margin-bottom:4px; }
+  .sub { color:var(--muted); margin-bottom:16px; }
+  .bar { display:flex; gap:10px; align-items:center; margin-bottom:22px; }
+  .bar button {
+    border:0; border-radius:var(--radius); background:var(--surface2); color:var(--fg);
+    padding:5px 12px; font-size:12px; cursor:pointer;
+  }
+  .bar button:hover { background:var(--hover); }
+  .bar .tip { color:var(--muted); font-size:12px; }
+
+  /* —— 方案卡片 —— */
+  .opt {
+    background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    padding:16px 18px; margin-bottom:16px;
+  }
+  .opt-h { display:flex; align-items:baseline; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+  .opt-h b { font-size:14px; }
+  .opt-h .name { color:var(--muted); font-size:12px; font-family:Consolas,monospace; }
+  .opt-h .tag { font-size:11px; padding:2px 8px; border-radius:99px; }
+  .opt-h .tag.cur { background:var(--sel); color:var(--accent); }
+  .opt-h .tag.rec { background:var(--accent); color:#fff; }
+  .opt-h .why { color:var(--muted); font-size:12px; width:100%; }
+
+  .cols { display:flex; gap:18px; flex-wrap:wrap; align-items:flex-start; }
+
+  /* —— 模拟窗格导航栏（与 Pane.tsx 结构/尺寸一致）—— */
+  .mock {
+    background:var(--surface); border:1px solid var(--border); border-radius:8px;
+    overflow:hidden; min-width:340px;
+  }
+  .mock .nav {
+    display:flex; align-items:center; gap:2px; padding:4px 6px;
+    border-bottom:1px solid var(--border);
+  }
+  .mock .addr {
+    flex:1; min-width:120px; background:var(--surface2); border-radius:var(--radius);
+    padding:3px 10px; color:var(--muted); font-size:12px; margin:0 4px;
+  }
+  .mock .filter {
+    width:76px; background:var(--surface2); border-radius:var(--radius);
+    padding:3px 10px; color:var(--muted); font-size:12px;
+  }
+  .mock .rows { padding:5px 8px 7px; }
+  .mock .row { display:flex; align-items:center; gap:8px; height:24px; color:var(--muted); font-size:12px; }
+  .mock .row i { color:var(--accent); }
+
+  /* —— 按钮三态（点击态 = 仅底色变化，无描边，与全局规则一致）—— */
+  .nbtn {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:28px; height:28px; border:0; border-radius:var(--radius);
+    background:transparent; color:var(--muted); cursor:pointer; flex:0 0 auto;
+  }
+  .nbtn:hover { background:var(--hover); color:var(--fg); }
+  .nbtn:active { background:var(--sel); color:var(--accent); }
+  .nbtn.cand { outline:1px dashed var(--accent); outline-offset:1px; }
+
+  .states { display:flex; flex-direction:column; gap:8px; }
+  .states .st { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; }
+  .states .chip {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:28px; height:28px; border-radius:var(--radius);
+  }
+  .states .chip.rest { background:transparent; color:var(--muted); }
+  .states .chip.hov  { background:var(--hover); color:var(--fg); }
+  .states .chip.act  { background:var(--sel); color:var(--accent); }
+  .states .chip svg, .nbtn svg { width:16px; height:16px; }
+
+  /* —— 下拉展开小样 —— */
+  .dropwrap { display:flex; align-items:center; gap:10px; }
+  .drop {
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    box-shadow:0 12px 32px rgba(20,28,40,.14); padding:4px; width:150px;
+  }
+  body.dark .drop { box-shadow:0 16px 40px rgba(0,0,0,.5); }
+  .drop .mi {
+    display:flex; align-items:center; gap:8px; padding:4px 8px; border-radius:var(--radius);
+    color:var(--fg); font-size:12px;
+  }
+  .drop .mi svg { width:14px; height:14px; color:var(--muted); }
+  .drop .mi:hover { background:var(--hover); }
+  .drop .mi.on { background:var(--sel); color:var(--accent); }
+  .drop .mi.on svg { color:var(--accent); }
+  .zoom { display:flex; align-items:flex-end; gap:14px; color:var(--muted); font-size:11px; }
+  .zoom .z { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .zoom .chip { display:inline-flex; color:var(--fg); }
+  .pro { margin-top:10px; font-size:12px; color:var(--muted); line-height:1.7; }
+  .pro b { color:var(--fg); font-weight:600; }
+</style>
+</head>
+<body>
+  <h1>窗格视图切换按钮 · 图标 4 方案</h1>
+  <div class="sub">触发器 = 下拉（Eye/候选图标 + 点击弹菜单选 视图类型）；图标一律 16px · 2px 描边 · currentColor，按钮 28×28 · 圆角 6px · 点击仅底色反馈</div>
+  <div class="bar">
+    <button id="theme">切换深 / 浅色</button>
+    <span class="tip">虚线框 = 候选按钮位置；每个方案含「导航栏实装 · 按钮三态 · 下拉展开 · 放大对照」</span>
+  </div>
+
+  <!-- ═══════════ 方案 A ═══════════ -->
+  <div class="opt">
+    <div class="opt-h">
+      <b>方案 A · 眼睛</b><span class="name">Eye</span><span class="tag cur">现行方案</span>
+      <span class="why">"查看/预览"语义直白，零学习成本；但"眼睛"更常被理解为预览/显隐开关，与"视图类型"的关联偏弱</span>
+    </div>
+    <div class="cols">
+      <div class="mock">
+        <div class="nav">
+          <button class="nbtn"><i data-lucide="corner-left-up"></i></button>
+          <button class="nbtn"><i data-lucide="folder-plus"></i></button>
+          <button class="nbtn"><i data-lucide="refresh-cw"></i></button>
+          <button class="nbtn cand"><i data-lucide="eye"></i></button>
+          <span class="addr">E:\Code\AIProject\x-dir</span>
+          <span class="filter">*.ts</span>
+          <button class="nbtn"><i data-lucide="square-terminal"></i></button>
+          <button class="nbtn"><i data-lucide="columns-2"></i></button>
+          <button class="nbtn"><i data-lucide="rows-2"></i></button>
+          <button class="nbtn"><i data-lucide="x"></i></button>
+        </div>
+        <div class="rows">
+          <div class="row"><i data-lucide="folder"></i>src</div>
+          <div class="row"><i data-lucide="file-text"></i>package.json</div>
+        </div>
+      </div>
+      <div class="states">
+        <div class="st"><span class="chip rest"><i data-lucide="eye"></i></span>rest 常态</div>
+        <div class="st"><span class="chip hov"><i data-lucide="eye"></i></span>hover 悬停</div>
+        <div class="st"><span class="chip act"><i data-lucide="eye"></i></span>active 按下</div>
+      </div>
+      <div class="dropwrap">
+        <div class="drop">
+          <div class="mi"><i data-lucide="list"></i>列表视图</div>
+          <div class="mi on"><i data-lucide="rows-3"></i>详细信息视图</div>
+          <div class="mi"><i data-lucide="layout-grid"></i>图标视图</div>
+        </div>
+      </div>
+      <div class="zoom">
+        <span class="z"><span class="chip"><i data-lucide="eye"></i></span>16</span>
+        <span class="z"><span class="chip" style="transform:scale(1.5);transform-origin:bottom"><i data-lucide="eye"></i></span>×1.5</span>
+        <span class="z"><span class="chip" style="transform:scale(2);transform-origin:bottom"><i data-lucide="eye"></i></span>×2</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ 方案 B ═══════════ -->
+  <div class="opt">
+    <div class="opt-h">
+      <b>方案 B · 列表布局</b><span class="name">LayoutList</span><span class="tag rec">推荐</span>
+      <span class="why">列表 + 分组语义，与 Windows 资源管理器"视图"概念最贴近；下拉里三个视图都是"内容的排布方式"，此图标概括最准</span>
+    </div>
+    <div class="cols">
+      <div class="mock">
+        <div class="nav">
+          <button class="nbtn"><i data-lucide="corner-left-up"></i></button>
+          <button class="nbtn"><i data-lucide="folder-plus"></i></button>
+          <button class="nbtn"><i data-lucide="refresh-cw"></i></button>
+          <button class="nbtn cand"><i data-lucide="layout-list"></i></button>
+          <span class="addr">E:\Code\AIProject\x-dir</span>
+          <span class="filter">*.ts</span>
+          <button class="nbtn"><i data-lucide="square-terminal"></i></button>
+          <button class="nbtn"><i data-lucide="columns-2"></i></button>
+          <button class="nbtn"><i data-lucide="rows-2"></i></button>
+          <button class="nbtn"><i data-lucide="x"></i></button>
+        </div>
+        <div class="rows">
+          <div class="row"><i data-lucide="folder"></i>src</div>
+          <div class="row"><i data-lucide="file-text"></i>package.json</div>
+        </div>
+      </div>
+      <div class="states">
+        <div class="st"><span class="chip rest"><i data-lucide="layout-list"></i></span>rest 常态</div>
+        <div class="st"><span class="chip hov"><i data-lucide="layout-list"></i></span>hover 悬停</div>
+        <div class="st"><span class="chip act"><i data-lucide="layout-list"></i></span>active 按下</div>
+      </div>
+      <div class="dropwrap">
+        <div class="drop">
+          <div class="mi"><i data-lucide="list"></i>列表视图</div>
+          <div class="mi on"><i data-lucide="rows-3"></i>详细信息视图</div>
+          <div class="mi"><i data-lucide="layout-grid"></i>图标视图</div>
+        </div>
+      </div>
+      <div class="zoom">
+        <span class="z"><span class="chip"><i data-lucide="layout-list"></i></span>16</span>
+        <span class="z"><span class="chip" style="transform:scale(1.5);transform-origin:bottom"><i data-lucide="layout-list"></i></span>×1.5</span>
+        <span class="z"><span class="chip" style="transform:scale(2);transform-origin:bottom"><i data-lucide="layout-list"></i></span>×2</span>
+      </div>
+    </div>
+    <div class="pro"><b>优点</b>：语义最贴合"视图 = 内容排布"；形状与菜单内三项（List / Rows3 / LayoutGrid）同族，层次清晰。<b>风险</b>：与"列表视图"单项图标（List）有一定相似度，需靠下拉菜单消歧。</div>
+  </div>
+
+  <!-- ═══════════ 方案 C ═══════════ -->
+  <div class="opt">
+    <div class="opt-h">
+      <b>方案 C · 左上面板</b><span class="name">PanelsTopLeft</span>
+      <span class="why">"面板组合"语义，强调窗格内容的呈现骨架；与左侧边栏的布局预设图标（描线分割风格）气质同源</span>
+    </div>
+    <div class="cols">
+      <div class="mock">
+        <div class="nav">
+          <button class="nbtn"><i data-lucide="corner-left-up"></i></button>
+          <button class="nbtn"><i data-lucide="folder-plus"></i></button>
+          <button class="nbtn"><i data-lucide="refresh-cw"></i></button>
+          <button class="nbtn cand"><i data-lucide="panels-top-left"></i></button>
+          <span class="addr">E:\Code\AIProject\x-dir</span>
+          <span class="filter">*.ts</span>
+          <button class="nbtn"><i data-lucide="square-terminal"></i></button>
+          <button class="nbtn"><i data-lucide="columns-2"></i></button>
+          <button class="nbtn"><i data-lucide="rows-2"></i></button>
+          <button class="nbtn"><i data-lucide="x"></i></button>
+        </div>
+        <div class="rows">
+          <div class="row"><i data-lucide="folder"></i>src</div>
+          <div class="row"><i data-lucide="file-text"></i>package.json</div>
+        </div>
+      </div>
+      <div class="states">
+        <div class="st"><span class="chip rest"><i data-lucide="panels-top-left"></i></span>rest 常态</div>
+        <div class="st"><span class="chip hov"><i data-lucide="panels-top-left"></i></span>hover 悬停</div>
+        <div class="st"><span class="chip act"><i data-lucide="panels-top-left"></i></span>active 按下</div>
+      </div>
+      <div class="dropwrap">
+        <div class="drop">
+          <div class="mi"><i data-lucide="list"></i>列表视图</div>
+          <div class="mi on"><i data-lucide="rows-3"></i>详细信息视图</div>
+          <div class="mi"><i data-lucide="layout-grid"></i>图标视图</div>
+        </div>
+      </div>
+      <div class="zoom">
+        <span class="z"><span class="chip"><i data-lucide="panels-top-left"></i></span>16</span>
+        <span class="z"><span class="chip" style="transform:scale(1.5);transform-origin:bottom"><i data-lucide="panels-top-left"></i></span>×1.5</span>
+        <span class="z"><span class="chip" style="transform:scale(2);transform-origin:bottom"><i data-lucide="panels-top-left"></i></span>×2</span>
+      </div>
+    </div>
+    <div class="pro"><b>优点</b>：与布局体系（分割/窗格）视觉语言统一，识别为"呈现方式"很快。<b>风险</b>：与窗格分裂（Columns2/Rows2）和布局预设（LayoutGrid→已移入侧边栏）语义有重叠，用户可能误以为是再分裂一个窗格。</div>
+  </div>
+
+  <!-- ═══════════ 方案 D ═══════════ -->
+  <div class="opt">
+    <div class="opt-h">
+      <b>方案 D · 列表收拢</b><span class="name">ListCollapse</span>
+      <span class="why">"多种列表形态收拢到一处"，自带下拉收纳暗示；小尺寸下箭头语义可能弱化成普通列表</span>
+    </div>
+    <div class="cols">
+      <div class="mock">
+        <div class="nav">
+          <button class="nbtn"><i data-lucide="corner-left-up"></i></button>
+          <button class="nbtn"><i data-lucide="folder-plus"></i></button>
+          <button class="nbtn"><i data-lucide="refresh-cw"></i></button>
+          <button class="nbtn cand"><i data-lucide="list-collapse"></i></button>
+          <span class="addr">E:\Code\AIProject\x-dir</span>
+          <span class="filter">*.ts</span>
+          <button class="nbtn"><i data-lucide="square-terminal"></i></button>
+          <button class="nbtn"><i data-lucide="columns-2"></i></button>
+          <button class="nbtn"><i data-lucide="rows-2"></i></button>
+          <button class="nbtn"><i data-lucide="x"></i></button>
+        </div>
+        <div class="rows">
+          <div class="row"><i data-lucide="folder"></i>src</div>
+          <div class="row"><i data-lucide="file-text"></i>package.json</div>
+        </div>
+      </div>
+      <div class="states">
+        <div class="st"><span class="chip rest"><i data-lucide="list-collapse"></i></span>rest 常态</div>
+        <div class="st"><span class="chip hov"><i data-lucide="list-collapse"></i></span>hover 悬停</div>
+        <div class="st"><span class="chip act"><i data-lucide="list-collapse"></i></span>active 按下</div>
+      </div>
+      <div class="dropwrap">
+        <div class="drop">
+          <div class="mi"><i data-lucide="list"></i>列表视图</div>
+          <div class="mi on"><i data-lucide="rows-3"></i>详细信息视图</div>
+          <div class="mi"><i data-lucide="layout-grid"></i>图标视图</div>
+        </div>
+      </div>
+      <div class="zoom">
+        <span class="z"><span class="chip"><i data-lucide="list-collapse"></i></span>16</span>
+        <span class="z"><span class="chip" style="transform:scale(1.5);transform-origin:bottom"><i data-lucide="list-collapse"></i></span>×1.5</span>
+        <span class="z"><span class="chip" style="transform:scale(2);transform-origin:bottom"><i data-lucide="list-collapse"></i></span>×2</span>
+      </div>
+    </div>
+    <div class="pro"><b>优点</b>：暗示"多种视图收纳于此"，与下拉行为自洽。<b>风险</b>： Collapse 字面是"折叠侧栏/分组"，语义有歧义；16px 下箭头细节偏弱。若担心表达力，可在按钮右侧追加 2px 间隙的 ChevronDown(10px) 组合使用。</div>
+  </div>
+
+  <script>
+    lucide.createIcons({ attrs: { width: 16, height: 16, "stroke-width": 2 } });
+    // 下拉菜单内的图标统一 14px
+    document.querySelectorAll(".drop i, .drop svg").forEach((el) => {
+      el.setAttribute("width", 14); el.setAttribute("height", 14);
+    });
+    document.getElementById("theme").onclick = () => document.body.classList.toggle("dark");
+  </script>
+</body>
+</html>

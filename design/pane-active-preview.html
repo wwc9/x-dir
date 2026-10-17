@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>窗格激活样式 · x-dir 方案预览</title>
+<style>
+  /* ── token：与 src/index.css 保持一致（明/暗两套）── */
+  :root {
+    --np-bg:#e9ecf1; --np-surface:#ffffff; --np-surface-2:#f0f2f5;
+    --np-border:#d6dbe2; --np-hairline:rgba(16,24,40,.06);
+    --np-fg:#171d26; --np-muted:#66707e;
+    --np-accent:#3574f0; --np-accent-fg:#ffffff;
+    --np-sel:rgba(53,116,240,.12);
+    --np-accent-border:color-mix(in srgb, var(--np-accent) 45%, var(--np-border));
+    --c-folder:#d6a01a; --c-code:#2997b8; --c-text:#8a93a0;
+    --c-pdf:#d1434b; --c-image:#4586f0; --c-audio:#a45aa4; --c-archive:#e07817;
+    --r:6px; --r-pane:12px; --gutter:12px;
+  }
+  body.dark {
+    --np-bg:#131519; --np-surface:#1b1e23; --np-surface-2:#24282f;
+    --np-border:#3a414b; --np-hairline:rgba(255,255,255,.08);
+    --np-fg:#e8eaed; --np-muted:#8b929c;
+    --np-accent:#5c9dff; --np-accent-fg:#0d1117;
+    --np-sel:rgba(92,157,255,.16);
+    --np-accent-border:color-mix(in srgb, var(--np-accent) 55%, var(--np-border));
+    --c-folder:#e5a922; --c-code:#43c1dc; --c-text:#8b929c;
+    --c-pdf:#f27073; --c-image:#79a9ff; --c-audio:#c47ec7; --c-archive:#ef9b2d;
+  }
+  * { box-sizing:border-box; margin:0; }
+  body {
+    background:var(--np-bg); color:var(--np-fg); padding:28px 32px 48px;
+    font-family:system-ui,"Segoe UI","Microsoft YaHei",sans-serif; font-size:13px;
+    max-width:1060px; margin:0 auto;
+  }
+  h1 { font-size:18px; margin-bottom:6px; }
+  .sub { color:var(--np-muted); margin-bottom:6px; line-height:1.7; }
+  .sub b { color:var(--np-fg); }
+  .sub .kbd {
+    font:11px/1 Consolas,monospace; border:1px solid var(--np-border);
+    border-radius:4px; padding:2px 5px; color:var(--np-fg); background:var(--np-surface);
+  }
+  #themeBtn {
+    float:right; font:inherit; font-size:12px; padding:4px 12px; cursor:pointer;
+    border:1px solid var(--np-border); border-radius:99px; background:var(--np-surface);
+    color:var(--np-muted);
+  }
+  #themeBtn:hover { color:var(--np-fg); border-color:var(--np-muted); }
+
+  /* ── 方案卡片 ── */
+  .set {
+    background:var(--np-surface); border:1px solid var(--np-border);
+    border-radius:10px; padding:16px; margin-top:18px;
+  }
+  .set-h { display:flex; align-items:baseline; gap:10px; margin-bottom:4px; flex-wrap:wrap; }
+  .set-h b { font-size:14px; }
+  .set-h .meta { color:var(--np-muted); font-size:12px; }
+  .set-h .tag {
+    font-size:11px; padding:2px 8px; border-radius:99px;
+    background:var(--np-surface-2); color:var(--np-muted); border:1px solid var(--np-border);
+  }
+  .set-h .tag.cur { background:var(--np-accent); color:var(--np-accent-fg); border-color:transparent; }
+  .notes { display:grid; gap:3px; margin:10px 2px 12px; font-size:12px; line-height:1.6; color:var(--np-muted); }
+  .notes .pro { color:var(--np-fg); }
+  .notes .pro::before { content:"＋ "; color:var(--np-accent); font-weight:600; }
+  .notes .con::before { content:"－ "; color:var(--np-danger,#d1434b); font-weight:600; }
+  .notes .impl::before { content:"⚙ "; }
+
+  /* ── 演示画布：bg 画布 + 双窗格 ── */
+  .canvas {
+    background:var(--np-bg); border:1px solid var(--np-hairline); border-radius:8px;
+    padding:var(--gutter); display:flex; gap:var(--gutter); height:252px;
+  }
+  .pane {
+    flex:1; min-width:0; display:flex; flex-direction: column;
+    background:var(--np-surface); border:1px solid var(--np-border);
+    border-radius:var(--r-pane); cursor:pointer; user-select:none;
+    font-size:12px; transition:box-shadow .15s, border-color .15s, background .15s;
+  }
+  .nav {
+    display:flex; align-items:center; gap:6px; padding:5px 8px; flex:0 0 auto;
+    border-bottom:1px solid var(--np-hairline); color:var(--np-muted);
+    transition:background .15s;
+  }
+  .nav .addr {
+    flex:1; min-width:0; background:var(--np-surface-2); border-radius:var(--r);
+    padding:3px 10px; color:var(--np-fg); overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; transition:box-shadow .15s;
+  }
+  .tabs { display:flex; gap:4px; padding:5px 8px 0; flex:0 0 auto; }
+  .tab {
+    padding:2px 10px; border-radius:var(--r); background:var(--np-surface-2);
+    color:var(--np-muted); font-size:11px; max-width:150px; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap;
+  }
+  .rows { flex:1; min-height:0; padding:2px 4px 4px; }
+  .row {
+    display:flex; align-items:center; gap:8px; height:26px;
+    padding:0 8px; border-radius:var(--r);
+  }
+  .row:hover { background:var(--np-sel); }
+  .row .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:flex; gap:8px; align-items:center; }
+  .row .sz { color:var(--np-muted); font-size:11px; flex:0 0 auto; }
+  .fi { width:13px; height:13px; flex:0 0 auto; }
+  .pstatus {
+    display:flex; justify-content:space-between; padding:2px 12px 5px; flex:0 0 auto;
+    color:var(--np-muted); font-size:11px;
+  }
+
+  /* ══ 方案 0 · 现状（1px 染色边框 + 3px 外描边）══ */
+  .s0 .pane.on { border-color:var(--np-accent-border); outline:3px solid var(--np-accent-border); }
+
+  /* ══ 方案 1 · 细描边 + 柔光 ══ */
+  .s1 .pane.on {
+    border-color:var(--np-accent);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--np-accent) 22%, transparent),
+      0 0 14px 1px color-mix(in srgb, var(--np-accent) 30%, transparent);
+  }
+
+  /* ══ 方案 2 · 导航栏染色 ══ */
+  .s2 .pane.on { border-color:var(--np-accent-border); }
+  .s2 .pane.on .nav {
+    background:color-mix(in srgb, var(--np-accent) 9%, var(--np-surface));
+    border-bottom-color:color-mix(in srgb, var(--np-accent) 22%, transparent);
+  }
+  .s2 .pane.on .nav .btn { color:var(--np-accent); }
+  .s2 .pane.on .tab { background:color-mix(in srgb, var(--np-accent) 14%, var(--np-surface-2)); color:var(--np-accent); }
+
+  /* ══ 方案 3 · 非活动降维（tmux 式）══ */
+  .s3 .pane { position:relative; }
+  .s3 .pane:not(.on)::after {
+    content:""; position:absolute; inset:0; border-radius:inherit;
+    background:color-mix(in srgb, var(--np-bg) 52%, transparent);
+    pointer-events:none;
+  }
+
+  /* ══ 方案 4 · 背景微差 ══ */
+  .s4 .pane { background:color-mix(in srgb, var(--np-surface) 55%, var(--np-bg)); }
+  .s4 .pane .tab, .s4 .pane .addr { background:color-mix(in srgb, var(--np-surface-2) 70%, var(--np-bg)); }
+  .s4 .pane.on { background:var(--np-surface); border-color:color-mix(in srgb, var(--np-fg) 22%, transparent); }
+  .s4 .pane.on .tab, .s4 .pane.on .addr { background:var(--np-surface-2); }
+
+  /* ══ 方案 5 · 顶边强调条 ══ */
+  .s5 .pane { position:relative; }
+  .s5 .pane.on::before {
+    content:""; position:absolute; top:0; left:0; right:0; height:3px;
+    background:var(--np-accent); border-radius:var(--r-pane) var(--r-pane) 0 0; z-index:1;
+  }
+
+  /* ══ 方案 6 · 窗格编号徽章（Ctrl+1..9 联动）══ */
+  .s6 .pane { position:relative; border-color:var(--np-border); }
+  .s6 .pane .badge {
+    position:absolute; top:6px; right:8px; z-index:2;
+    min-width:16px; height:16px; border-radius:99px; text-align:center;
+    font-size:10px; line-height:16px; padding:0 4px;
+    background:color-mix(in srgb, var(--np-fg) 7%, transparent); color:var(--np-muted);
+    transition:background .15s, color .15s;
+  }
+  .s6 .pane.on { border-color:var(--np-accent-border); }
+  .s6 .pane.on .badge { background:var(--np-accent); color:var(--np-accent-fg); font-weight:600; }
+
+  footer { margin-top:22px; color:var(--np-muted); font-size:12px; line-height:1.8; }
+</style>
+</head>
+<body>
+
+<button id="themeBtn">🌓 切换明 / 暗主题</button>
+<h1>窗格激活样式 · 六个候选方案</h1>
+<p class="sub">
+  现状是 <b>方案 0</b>：激活窗格 = 1px 染色边框 + 3px 外描边（<span class="kbd">.np-pane-active</span>），
+  整圈约 4px 的强调环——醒目但视觉重量大，且圆角处叠加后显得更厚。<br>
+  每张卡片是同一个双窗格片段：<b>点击任意窗格可切换激活态</b>，直接对比各方案的切换观感。取值全部来自 np-* token。
+</p>
+
+<section class="set s0">
+  <div class="set-h"><span class="tag cur">现状对照</span><b>方案 0 · 染色粗描边</b><span class="meta">1px 染色边框 + 3px outline 外描边</span></div>
+  <div class="notes">
+    <div class="pro">醒目、语义直白；outline 画在外侧，窗格内部尺寸零变化</div>
+    <div class="con">视觉重量大；圆角处 4px 线叠加显厚；与分隔条指示线、拖放高亮同时出现时"线太多"</div>
+    <div class="impl">index.css 现状：.np-pane-active { border-color + outline: 3px }</div>
+  </div>
+  <div class="canvas"></div>
+</section>
+
+<section class="set s1">
+  <div class="set-h"><span class="tag">推荐候选</span><b>方案 1 · 细描边 + 柔光</b><span class="meta">1px accent 边框 + 柔和外晕，无硬边加粗</span></div>
+  <div class="notes">
+    <div class="pro">保留"边框 = 激活"的直觉，视觉重量约为现状一半；柔光沿圆角自然扩散，角落不再"叠厚"</div>
+    <div class="con">深色主题下柔光对比略弱，需按主题调外晕浓度；与拖放高亮（内描边）要错开色阶</div>
+    <div class="impl">.np-pane-active 改为 border-color: var(--np-accent)，outline 换 box-shadow 两层（1px 22% + 14px 30%）</div>
+  </div>
+  <div class="canvas"></div>
+</section>
+
+<section class="set s2">
+  <div class="set-h"><span class="tag">推荐候选</span><b>方案 2 · 导航栏染色</b><span class="meta">激活落在窗格头部（导航栏 + 标签），边框只轻微染</span></div>
+  <div class="notes">
+    <div class="pro">"导航/地址栏属于本窗格"的语义刚好被染色强调；列表区零干扰；浏览器活动标签的既有直觉</div>
+    <div class="con">极窄窗格的导航栏面积小、辨识度下降；染色层与导航栏 hairline 底边需协调</div>
+    <div class="impl">.np-pane-active .np-nav { background: mix(accent 9%, surface) } + 导航图标转 accent</div>
+  </div>
+  <div class="canvas"></div>
+</section>
+
+<section class="set s3">
+  <div class="set-h"><span class="tag">哲学契合</span><b>方案 3 · 非活动降维</b><span class="meta">tmux 式：不点亮活动格，而是给非活动格盖一层灰纱</span></div>
+  <div class="notes">
+    <div class="pro">最贴合"tmux 式自由分割"的产品定位；窗格越多对比越强（10 格时最明显）；活动窗格完全无装饰</div>
+    <div class="con">非活动格里的选中高亮、文件类型色也一起变灰，扫读性下降；明暗主题要分别调纱的浓度</div>
+    <div class="impl">.np-pane:not(.np-pane-active)::after { background: mix(bg 52%, transparent) }，pointer-events:none</div>
+  </div>
+  <div class="canvas"></div>
+</section>
+
+<section class="set s4">
+  <div class="set-h"><span class="tag">最安静</span><b>方案 4 · 背景微差</b><span class="meta">非活动格底色掺入画布灰，活动格纯白 + 边框加深，全程无彩色</span></div>
+  <div class="notes">
+    <div class="pro">整窗只有"选中行 + 文件类型色"有颜色，层次最干净；暗色主题同样成立</div>
+    <div class="con">反馈最弱，新用户可能找不到焦点窗格；低对比屏幕上边框微差不可辨</div>
+    <div class="impl">非活动 .np-pane { background: mix(surface 55%, bg) }；活动格 surface + 边框色加深一档</div>
+  </div>
+  <div class="canvas"></div>
+</section>
+
+<section class="set s5">
+  <div class="set-h"><span class="tag">实现最简</span><b>方案 5 · 顶边强调条</b><span class="meta">顶边 3px accent 色条，左右底边保持中性 1px</span></div>
+  <div class="notes">
+    <div class="pro">IDE / 终端用户最熟悉的"活动标签"语言；只碰顶边直线，完全避开左右圆角的加粗问题</div>
+    <div class="con">上下分割布局中，上格底边与下格色条只隔一条沟槽，需实测是否打架</div>
+    <div class="impl">.np-pane-active::before { position:absolute; top:0; height:3px; background:accent }（绝对定位，零布局位移）</div>
+  </div>
+  <div class="canvas"></div>
+</section>
+
+<section class="set s6">
+  <div class="set-h"><span class="tag">功能联动</span><b>方案 6 · 窗格编号徽章</b><span class="meta">右上角编号徽章 = <span class="kbd">Ctrl+1..9</span> 的 DFS 序号，激活时点亮</span></div>
+  <div class="notes">
+    <div class="pro">把激活指示和"Ctrl+数字聚焦第 N 窗格"快捷键合为一体，可发现性最好；非激活格保留淡编号，快捷键随时可见</div>
+    <div class="con">角落元素要与导航按钮、标签条错位；.np-pane 有 overflow:hidden，实际落地需放内部或调整裁剪</div>
+    <div class="impl">徽章绝对定位 top:6px right:8px；非激活 = 灰底淡字，激活 = accent 底 + accent-fg 字，配 1px 染色边框</div>
+  </div>
+  <div class="canvas"></div>
+</section>
+
+<footer>
+  对比建议：方案 1 / 5 适合做默认（改动小、不打架）；方案 3 最有产品个性，适合做成设置项；
+  方案 6 可与任意方案叠加（编号徽章本身不占用边框语义）。<br>
+  本页为静态设计稿，交互仅"点击切换激活 + 主题切换"；落地时取值须回到 src/index.css 的 np-* token。
+</footer>
+
+<script>
+const SVG_FOLDER = '<svg class="fi" viewBox="0 0 16 16"><path fill="currentColor" d="M1.5 3.75A1.25 1.25 0 0 1 2.75 2.5h3.1l1.3 1.6h4.1A1.25 1.25 0 0 1 12.5 5.35V12A1.25 1.25 0 0 1 11.25 13.25H2.75A1.25 1.25 0 0 1 1.5 12Z"/></svg>';
+const SVG_FILE   = '<svg class="fi" viewBox="0 0 16 16"><path fill="currentColor" d="M3.25 2A.75.75 0 0 1 4 1.25h5.3L12.75 4.7V14a.75.75 0 0 1-.75.75H4A.75.75 0 0 1 3.25 14Zm6.05.35V4.7h2.35Z"/></svg>';
+const TYPE_COLOR = { folder:"var(--c-folder)", code:"var(--c-code)", text:"var(--c-text)",
+                     pdf:"var(--c-pdf)", image:"var(--c-image)", audio:"var(--c-audio)", archive:"var(--c-archive)" };
+
+const FILES_A = [
+  ["folder","src","—"], ["folder","src-tauri","—"], ["folder","design","—"],
+  ["code","main.rs","4.1 KB"], ["code","App.tsx","8.6 KB"],
+  ["text","package.json","927 B"],
+];
+const FILES_B = [
+  ["archive","x-dir_v0.1.0_portable.zip","4.4 MB"],
+  ["pdf","2026年度审计报告.pdf","2.8 MB"],
+  ["image","截图 2026-10-10.png","482 KB"],
+  ["audio","demo.mp3","5.2 MB"],
+  ["text","会议纪要.docx","36 KB"],
+];
+
+function paneHTML(path, files, tabName) {
+  const rows = files.map(([t,n,s]) =>
+    `<div class="row"><span class="nm" style="color:${TYPE_COLOR[t]}">${t==="folder"?SVG_FOLDER:SVG_FILE}<span style="color:var(--np-fg)">${n}</span></span><span class="sz">${s}</span></div>`
+  ).join("");
+  return `<div class="pane">
+    <div class="nav"><span class="btn">‹</span><span class="btn">›</span><span class="btn">↑</span><span class="btn">⟳</span><span class="addr">${path}</span><span class="btn">▦</span></div>
+    <div class="tabs"><span class="tab">${tabName} ×</span><span class="tab" style="background:transparent;padding:2px 6px">＋</span></div>
+    <div class="rows">${rows}</div>
+    <div class="pstatus"><span>Σ ${files.length} 个对象 · 可用 659 GB</span><span>28px 行高</span></div>
+  </div>`;
+}
+
+document.querySelectorAll(".set").forEach((set, i) => {
+  const canvas = set.querySelector(".canvas");
+  canvas.innerHTML =
+    paneHTML("E:\\Code\\x-dir", FILES_A, "x-dir") +
+    paneHTML("C:\\Users\\PRIME\\Downloads", FILES_B, "Downloads");
+  const panes = canvas.querySelectorAll(".pane");
+  panes[0].classList.add("on");
+  if (set.classList.contains("s6")) {           // 方案 6：编号徽章 = Ctrl+N 序号
+    panes.forEach((p, n) => {
+      const b = document.createElement("span");
+      b.className = "badge"; b.textContent = n + 1;
+      p.appendChild(b);
+    });
+  }
+  panes.forEach(p => p.addEventListener("click", () => {
+    panes.forEach(q => q.classList.remove("on"));
+    p.classList.add("on");
+  }));
+});
+
+document.getElementById("themeBtn").addEventListener("click", () => {
+  document.body.classList.toggle("dark");
+});
+</script>
+</body>
+</html>

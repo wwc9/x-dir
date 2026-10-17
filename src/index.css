@@ -1,0 +1,3412 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ══════════════════════════════════════════════════════════════
+   x-dir 设计 Token（唯一取值来源，AGENTS.md §组件标准规范）
+   视觉语言：极简现代 —— 无框卡片、填充式输入、pill 标签、内嵌圆角高亮
+   规则：组件内禁止硬编码颜色/字号/间距/行高/圆角，一律引用本文件变量。
+   ══════════════════════════════════════════════════════════════ */
+:root {
+  /* —— 色板（浅色，中性冷灰 + 单一强调色）—— */
+  --np-bg: #e9ecf1;
+  --np-surface: #ffffff;
+  --np-surface-2: #f0f2f5;
+  --np-border: #d6dbe2;
+  --np-hairline: rgba(16, 24, 40, 0.06);
+  --np-fg: #171d26;
+  --np-muted: #66707e;
+  --np-accent: #3574f0;
+  --np-accent-fg: #ffffff;
+  --np-hover: rgba(26, 33, 41, 0.055);
+  --np-sel: rgba(53, 116, 240, 0.12);
+  --np-danger: #d1434b;
+  --np-danger-fg: #ffffff;
+  --np-shadow: 0 12px 32px rgba(20, 28, 40, 0.14);
+  /* 遮罩：所有 Dialog/Overlay backdrop 全局唯一浓度（.dark 另声明） */
+  --np-overlay: rgba(15, 22, 34, 0.35);
+  --np-accent-border: color-mix(in srgb, var(--np-accent) 45%, var(--np-border));
+  /* 焦点/激活淡染描边统一配方：输入框聚焦、NpSelect 开态、行内重命名共用
+     （由 accent 派生，.dark 无需重声明） */
+  --np-ring: 0 0 0 2px color-mix(in srgb, var(--np-accent) 45%, transparent);
+  /* 滚动条（由 --np-fg 派生，明暗主题自动适配，无需在 .dark 重声明） */
+  --np-scrollbar: color-mix(in srgb, var(--np-fg) 22%, transparent);
+  --np-scrollbar-hover: color-mix(in srgb, var(--np-fg) 45%, transparent);
+
+  /* —— 文件类型图标色 —— */
+  --np-icon-folder: #d6a01a;
+  --np-icon-drive: #3574f0;
+  --np-icon-code: #2997b8;
+  --np-icon-image: #4586f0;
+  --np-icon-audio: #a45aa4;
+  --np-icon-video: #cc6b70;
+  --np-icon-text: #8a93a0;
+  --np-icon-pdf: #d1434b;
+  --np-icon-table: #2e9e5b;
+  --np-icon-archive: #e07817;
+  --np-icon-exe: #7d64d8;
+  --np-icon-doc: #3c6fb8;
+  --np-icon-slide: #cf6a3f;
+  --np-icon-font: #b4568d;
+  --np-icon-generic: #8a93a0;
+
+  /* —— 密度（文件管理器紧凑规范）—— */
+  --np-font-ui: 13px;
+  --np-font-sm: 11px;
+  --np-row-h: 28px;
+  --np-head-h: 26px;
+  --np-nav-h: 34px;
+  --np-tab-h: 24px;
+  --np-status-h: 24px;
+  --np-cell-w-list: 190px;
+  /* 图标四档（AGENTS §4.5，与 lib/tokens.ts DENSITY.icon* 同名同值） */
+  --np-icon-xs: 12px;
+  --np-icon-sm: 14px;
+  --np-icon-md: 16px;
+  --np-icon-lg: 20px;
+  --np-realicon: 18px;
+  /* 控件高（按钮/输入/NpSelect 触发钮统一基准，与 Blueprint small 档同值） */
+  --np-ctl-h: 24px;
+
+  /* —— V2 颜色标记（红橙黄绿蓝紫，文字可读的取值）—— */
+  --np-tag-red: #c93840;
+  --np-tag-orange: #c06f16;
+  --np-tag-yellow: #9a7c0a;
+  --np-tag-green: #23834c;
+  --np-tag-blue: #3574f0;
+  --np-tag-purple: #7d64d8;
+
+  /* —— 形状 —— */
+  --np-radius: 6px;
+  --np-radius-lg: 10px;
+  --np-radius-xl: 12px;
+  --np-radius-pane: 14px;
+  /* 全圆角（pill/圆点/分隔线端头），禁止再写 99px/999px 裸值 */
+  --np-radius-pill: 999px;
+  --np-gap: 4px;
+  --np-gutter: 8px;
+
+  /* —— 弹窗尺寸 —— */
+  --np-dialog-w: 460px;
+  /* 设置：左导航 + 内容页双栏（§4.7） */
+  /* 设置弹窗尺寸：桌面常规档；经 min() 在小窗口自动收缩（永不溢出窗口） */
+  /* 快速预览浮层（Quick Look 式大版式） */
+  --np-pv-w: min(880px, 86vw);
+  --np-pv-h: min(600px, 78vh);
+}
+
+.dark,
+html.bp6-dark {
+  /* —— 色板（深色，中性炭灰）—— */
+  --np-bg: #131519;
+  --np-surface: #1b1e23;
+  --np-surface-2: #24282f;
+  --np-border: #3a414b;
+  --np-fg: #e8eaed;
+  --np-muted: #8b929c;
+  --np-accent: #5c9dff;
+  --np-accent-fg: #0d1117;
+  --np-hover: rgba(255, 255, 255, 0.055);
+  --np-sel: rgba(92, 157, 255, 0.16);
+  --np-danger: #f27073;
+  --np-danger-fg: #14161a;
+  --np-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  /* 深色遮罩换纯黑、浓度略高于浅色（0.35），压得住深色界面 */
+  --np-overlay: rgba(0, 0, 0, 0.45);
+  --np-hairline: rgba(255, 255, 255, 0.08);
+  --np-accent-border: color-mix(in srgb, var(--np-accent) 55%, var(--np-border));
+
+  --np-icon-folder: #e5a922;
+  --np-icon-drive: #5c9dff;
+  --np-icon-code: #43c1dc;
+  --np-icon-image: #79a9ff;
+  --np-icon-audio: #c47ec7;
+  --np-icon-video: #ef8085;
+  --np-icon-text: #8b929c;
+  --np-icon-pdf: #f27073;
+  --np-icon-table: #3bb074;
+  --np-icon-archive: #ef9b2d;
+  --np-icon-exe: #a08df5;
+  --np-icon-doc: #7fa8e3;
+  --np-icon-slide: #e8926b;
+  --np-icon-font: #d982ab;
+  --np-icon-generic: #8b929c;
+
+  /* 深色下的标记色整体提亮 */
+  --np-tag-red: #f27073;
+  --np-tag-orange: #ef9b2d;
+  --np-tag-yellow: #d9c04a;
+  --np-tag-green: #3bb074;
+  --np-tag-blue: #5c9dff;
+  --np-tag-purple: #a08df5;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--np-bg);
+  color: var(--np-fg);
+  font-family: system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-size: var(--np-font-ui);
+  overflow: hidden;
+}
+
+/* 胶囊滚动条：常态隐形，悬停滚动区域或正在滚动时浮现。
+   显隐统一由 lib/autoScrollbar.ts 打 .np-scrolling 驱动（class 变化会触发
+   滚动条伪元素重绘；祖先 :hover 变化在 Chromium 中不会，故不用 CSS :hover）；
+   Chromium 不支持滚动条伪元素过渡，显隐为瞬时切换 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: var(--np-radius-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+.np-scrolling::-webkit-scrollbar-thumb {
+  background: var(--np-scrollbar);
+}
+/* 指针直接落在拇指上（紧抓取区）：加深提示可拖动 */
+::-webkit-scrollbar-thumb:hover {
+  background: var(--np-scrollbar-hover);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Blueprint 对齐覆盖（只动圆角/底色/描边，值全部来自 token）
+   ══════════════════════════════════════════════════════════════ */
+.bp6-menu {
+  border-radius: var(--np-radius-lg);
+  padding: 4px;
+  background: var(--np-surface);
+  box-shadow: var(--np-shadow);
+}
+.bp6-menu-item {
+  border-radius: var(--np-radius);
+}
+/* 分段选择（§4.3：Blueprint ButtonGroup 现成件，激活态 = accent 填充）：
+   surface-2 轨道 + pill 段块，未激活段文字 muted、悬停浮现；设置/搜索等通用 */
+.np-seg {
+  gap: 2px;
+  padding: 2px;
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius-pill);
+}
+.np-seg .bp6-button {
+  min-height: calc(var(--np-ctl-h) - 4px);
+  padding: 1px 10px;
+  border-radius: var(--np-radius-pill);
+  font-size: var(--np-font-ui);
+  color: var(--np-muted);
+}
+.np-seg .bp6-button:hover {
+  background-color: var(--np-hover);
+  color: var(--np-fg);
+}
+.np-seg .bp6-button.bp6-active,
+.np-seg .bp6-button.bp6-active:hover,
+/* Blueprint v6 自带 .bp6-button-group.bp6-minimal .bp6-button.bp6-active（0-4-0）
+   会压过上面的 0-3-0 规则，此处以 0-5-0 双类写法保证 accent 填充生效 */
+.bp6-button-group.np-seg .bp6-button.bp6-active.bp6-active,
+.bp6-button-group.np-seg .bp6-button.bp6-active.bp6-active:hover {
+  background-color: var(--np-accent);
+  background-image: none;
+  color: var(--np-accent-fg);
+}
+/* Popover 面板统一（菜单 / 布局选择器 / 设置面板 / 地址历史等共用一张"脸"）：
+   与 .bp6-menu 同款 surface 卡片 + 大圆角 + np 阴影，深浅主题随 token 自适应 */
+.bp6-popover {
+  border-radius: var(--np-radius-lg);
+  box-shadow: var(--np-shadow);
+}
+.bp6-popover .bp6-popover-content {
+  background: var(--np-surface);
+  border-radius: var(--np-radius-lg);
+}
+/* 遮罩统一（2026-10-13 定案）：所有 Dialog/Overlay backdrop 走 --np-overlay 全局唯一浓度，
+   覆写 Blueprint 默认 rgba(17,20,24,0.7)；快速预览不再单独覆写 */
+.bp6-overlay-backdrop {
+  background: var(--np-overlay);
+}
+/* ═══ 弹层统一规范（2026-10-12 定案）：所有浮层面板一张"脸" ═══
+   面板 = --np-surface 底 + --np-radius-xl(Dialog)/--np-radius-lg(浮层) + --np-shadow；
+   Dialog 三段 header/body/footer 全部透明（覆写 Blueprint 白头灰身默认值），
+   footer 以 --np-hairline 分隔；输入框/内嵌列表用 --np-surface-2 作凹陷层级，
+   不算面板底色；菜单/Popover/Toast/地址补全/右键菜单共用同款 surface 卡片 */
+.bp6-dialog {
+  background: var(--np-surface);
+  border-radius: var(--np-radius-xl);
+  box-shadow: var(--np-shadow);
+  overflow: hidden;
+}
+.bp6-dark .bp6-dialog {
+  background: var(--np-surface);
+}
+.bp6-dialog-header {
+  background: transparent;
+  box-shadow: none;
+  border-bottom: none;
+  padding: 14px 16px 2px;
+}
+.bp6-dark .bp6-dialog-header {
+  background: transparent;
+  box-shadow: none;
+}
+/* 头部元素图标（icon={ic(...)}）：v6 对元素图标走 cloneElement 返回裸 SVG、
+   不包 .bp6-icon，官方 margin 规则失效（§4.3 InputGroup leftIcon 同源问题）。
+   图标与标题间距对齐顶栏品牌位（logo margin 2px + 顶栏 gap 4px = 6px） */
+.bp6-dialog-header > svg {
+  flex: 0 0 auto;
+  margin-right: 6px;
+}
+.bp6-dialog-body {
+  background: transparent;
+}
+.bp6-dialog-footer {
+  background: transparent;
+  margin: 0;
+  border-top: 1px solid var(--np-hairline);
+  padding: 8px 16px 12px;
+}
+.bp6-dark .bp6-dialog-footer {
+  background: transparent;
+}
+.bp6-button:not([class*="bp6-intent-"]) {
+  border-radius: var(--np-radius);
+}
+/* 弹窗按钮统一（2026-10-15 定案，§4.7）：Blueprint intent 默认琥珀/蓝实心不在
+   「中性灰 + 单一强调色」语言内，全局压回 token——主操作 = accent 实心，
+   危险操作 = danger 实心，圆角/文字色走 token（悬停以 fg 混色微调明暗，明暗主题通用） */
+.bp6-button.bp6-intent-primary,
+.bp6-dark .bp6-button.bp6-intent-primary {
+  background: var(--np-accent);
+  color: var(--np-accent-fg);
+  border-radius: var(--np-radius);
+}
+.bp6-button.bp6-intent-primary:hover,
+.bp6-dark .bp6-button.bp6-intent-primary:hover {
+  background: color-mix(in srgb, var(--np-accent) 92%, var(--np-fg));
+}
+.bp6-button.bp6-intent-danger,
+.bp6-dark .bp6-button.bp6-intent-danger {
+  background: var(--np-danger);
+  color: var(--np-danger-fg);
+  border-radius: var(--np-radius);
+}
+.bp6-button.bp6-intent-danger:hover,
+.bp6-dark .bp6-button.bp6-intent-danger:hover {
+  background: color-mix(in srgb, var(--np-danger) 92%, var(--np-fg));
+}
+/* NpSelect 触发钮（components/NpSelect.tsx，二级页面统一规范 §4.7）：
+   填充式与输入框同语言——surface-2 底、无描边、--np-ctl-h 高、6px 圆角；
+   打开态 = surface 底 + accent 淡染描边，箭头旋转 180° */
+.np-select {
+  min-height: var(--np-ctl-h);
+  background-color: var(--np-surface-2);
+  box-shadow: none;
+  color: var(--np-fg);
+  font-size: var(--np-font-ui);
+  transition: background-color 0.15s;
+}
+.np-select:hover {
+  background-color: var(--np-hover);
+}
+.np-select.is-open {
+  background-color: var(--np-surface);
+  box-shadow: var(--np-ring);
+}
+/* NpSelect 触发钮箭头：muted + 开态旋转 180°，同语义单源 */
+.np-select .np-select-chev {
+  display: inline-flex;
+  align-items: center;
+  color: var(--np-muted);
+  transition: transform 0.15s;
+}
+.np-select.is-open .np-select-chev {
+  transform: rotate(180deg);
+}
+/* InputGroup 左侧自定义元素槽（leftElement → .bp6-input-left-container）：
+   Blueprint 的 margin/居中规则只认 .bp6-icon 包裹，ic() 渲染的裸 SVG 需自行对齐；
+   InputGroup 会测量容器宽并给输入框加 padding-left，故内边距写在这里 */
+.bp6-input-group > .bp6-input-left-container {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding-inline: var(--np-gutter);
+  color: var(--np-muted);
+}
+/* 功能图标统一档（AGENTS §4.5 三档）：chrome 按钮图标一律 fg（继承），
+   显式钉死防 Blueprint 默认文字色漂移；激活 accent 由活动窗格规则更高优先级覆盖 */
+.np-titlebar .bp6-button,
+.np-nav .bp6-button,
+.np-sidebar .bp6-button,
+.np-tabbar .bp6-button {
+  color: var(--np-fg);
+}
+/* 主题切换圆形扩散（2026-10-15 定案）：View Transitions 承载浅/深切换，
+   关闭默认交叉淡化，clip-path 圆形揭示动画在 stores/settings 的
+   setThemeWithFx 内以触发点为圆心驱动；减少动效偏好时 JS 侧直切不走此路径 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+/* 全局按钮焦点态（2026-10-12 修订定案）：所有按钮（Blueprint .bp6-button 与
+   自绘 button）:focus / :focus-visible 一律不画描边——鼠标点击不得残留焦点框。
+   此前用 :focus:not(:focus-visible) 抑制，但 Chromium 的 focus-visible 启发式
+   在脚本回流焦点/连续交互时会误匹配（实测交换钮点选目标后残留蓝环），
+   故不再依赖该伪类；键盘可达性由控件自身的激活/悬停态承担 */
+.bp6-button:focus,
+.bp6-button:focus-visible,
+button:focus,
+button:focus-visible {
+  outline: none;
+}
+/* Toast 独立窗口已移除（2026-10-15 定案）：全部提示经 useUi.toast 路由为
+   灵动岛回执（error→fail 6s / 其余→ok 4s），样式见 .np-island 段 */
+.bp6-input {
+  border-radius: var(--np-radius);
+}
+/* 填充式输入：导航栏内的输入框常态无边框，聚焦才亮描边 */
+.np-nav .bp6-input-group .bp6-input {
+  background: var(--np-surface-2);
+  box-shadow: none;
+  border-radius: var(--np-radius);
+  color: var(--np-fg);
+}
+.np-nav .bp6-input-group .bp6-input:focus {
+  background: var(--np-surface);
+  box-shadow: var(--np-ring);
+}
+/* 激活窗格：地址栏提亮为表面色——在导航栏的强调色淡染上形成层次，
+   非激活窗格保持灰底填充以弱化层级 */
+.np-pane-active .np-nav .np-addr .bp6-input {
+  background: var(--np-surface);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   组件样式类（全部引用上方 token，禁止出现裸色值/像素值）
+   ══════════════════════════════════════════════════════════════ */
+.np-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* ═══ 统一基方（2026-10-14 收敛）：三类高频小样式的单一声明源 ═══
+   各成员类只补自己的布局/间距/状态差异，禁止再复写基方声明 */
+/* 空态文案：小字 + muted */
+.np-side-empty,
+.np-set-rules-empty,
+.np-list-empty,
+.np-pv-none,
+.np-menued-empty {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+/* 辅助说明小字：小字 + muted（加重/间距在各成员自带） */
+.np-cell-muted,
+.np-set-desc,
+.np-set-hint,
+.np-set-group-title,
+.np-gsearch-hist-label,
+.np-gsearch-status,
+.np-kbd-plus,
+.np-pv-fallback-note,
+.np-menued-clabel,
+.np-job-pct,
+.np-bren-k {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+/* pill 胶囊：全圆角 + 小字（底色/内边距/悬停语义在各成员自带，§4.7） */
+.np-zoompill,
+.np-pv-badge,
+.np-gsearch-chip,
+.np-gsearch-idx,
+.np-pv-sheet-chip,
+.np-menued-chip {
+  border-radius: var(--np-radius-pill);
+  font-size: var(--np-font-sm);
+}
+
+/* ═══ 应用外壳（2026-10-11 改版）：自绘顶栏 + 左侧边栏 + 内容区 ═══
+   去系统标题栏（decorations:false），顶栏 = 工具栏 + 拖拽区 + 窗口控制合一行；
+   左侧边栏 = 布局方案（工作区）保存与快速切换；全部为浮于 --np-bg 画布的圆角卡片 */
+.np-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: var(--np-gutter);
+  gap: var(--np-gutter);
+}
+.np-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: var(--np-gutter);
+}
+.np-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* 自绘顶栏（原全局工具栏 + 窗口控制合并为一行；空隙区可拖拽移动窗口） */
+.np-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  height: 40px;
+  padding: 0 6px 0 10px;
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  border-radius: var(--np-radius-pane);
+}
+.np-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 2px;
+  flex: 0 0 auto;
+}
+.np-title {
+  font-weight: 600;
+  margin-right: 10px;
+  flex: 0 0 auto;
+}
+.np-drag {
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* 顶栏灵动岛（2026-10-15）：中央动态信息位，默认回落活动窗格路径。
+   通道与优先级仲裁在 lib/island（纯函数）；pill 常态 surface-2 底 muted 小字，
+   live 通道（任务/模式/搜索）accent，回执 ok=accent / fail=danger / info=muted */
+.np-island {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: var(--np-ctl-h);
+  padding: 3px 16px;
+  border: 0;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-surface-2);
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.np-island.is-clickable {
+  cursor: pointer;
+}
+.np-island.is-clickable:hover {
+  background: var(--np-hover);
+  color: var(--np-fg);
+}
+/* 默认路径态：事件透传给外层拖拽区（disabled 会吞事件导致岛中央拖不动窗口） */
+.np-island.is-static {
+  pointer-events: none;
+}
+.np-island.is-live,
+.np-island.is-ok {
+  color: var(--np-accent);
+}
+.np-island.is-fail {
+  color: var(--np-danger);
+}
+.np-island.is-clickable.is-live:hover,
+.np-island.is-clickable.is-ok:hover {
+  color: var(--np-accent);
+}
+.np-island.is-clickable.is-fail:hover {
+  color: var(--np-danger);
+}
+/* 迷你进度条（岛任务通道）：track = hover 底、fill = accent；
+   确定态宽度 = 百分比（width 过渡让进度事件间平滑滑动）；
+   不确定态（排队/无总量）来回扫动 + 降透明，避免静置死条 */
+.np-island-bar {
+  display: inline-block;
+  width: 72px;
+  height: 6px;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-hover);
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.np-island-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-accent);
+  transition: width 0.3s ease;
+}
+.np-island-bar.is-und > span {
+  opacity: 0.45;
+  animation: np-island-sweep 1.2s ease-in-out infinite;
+}
+@keyframes np-island-sweep {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(286%);
+  }
+}
+/* 默认路径态的选中后缀（辅助小字，与主文字拉开一档） */
+.np-island-sel {
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+}
+.np-winbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--np-radius);
+  background: transparent;
+  /* 功能图标三档（AGENTS §4.5）：窗口控制钮与其余顶栏图标统一 fg，
+     不再用 muted 第三种灰；危险档仅 close hover */
+  color: var(--np-fg);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.np-winbtn:hover {
+  background: var(--np-hover);
+  color: var(--np-fg);
+}
+.np-winbtn-close:hover {
+  background: var(--np-danger);
+  color: var(--np-danger-fg);
+}
+/* 界面缩放指示 pill（顶栏右缘、窗口控制钮左侧；常显，点击重置 100%） */
+.np-zoompill {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 0;
+  background: var(--np-surface-2);
+  color: var(--np-muted);
+  cursor: pointer;
+}
+.np-zoompill:hover {
+  background: var(--np-hover);
+  color: var(--np-fg);
+}
+
+/* 左侧边栏：布局方案（工作区）列表；右缘可拖拽调宽，可折叠成窄条 */
+.np-sidebar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 156px;
+  min-height: 0;
+  padding: 8px;
+  gap: 2px;
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  border-radius: var(--np-radius-pane);
+  /* visible：拖拽把手需探出面板边缘（骑在沟槽上）不能被裁切，长列表滚动收进 .np-side-scroll */
+  overflow: visible;
+}
+.np-sidebar-collapsed {
+  flex: 0 0 52px;
+  padding: 8px 6px;
+  align-items: center;
+  gap: 6px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+/* 折叠态的方案按钮：竖排 = 缩略图 + 名称首字，激活亮底 */
+.np-side-mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  width: 40px;
+  padding: 5px 2px 4px;
+  border: 0;
+  border-radius: var(--np-radius);
+  background: transparent;
+  cursor: pointer;
+}
+.np-side-mini:hover {
+  background: var(--np-hover);
+}
+.np-side-mini.on {
+  background: var(--np-sel);
+}
+.np-side-mini .np-side-char {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--np-font-sm);
+  line-height: 1.2;
+  color: var(--np-muted);
+}
+.np-side-mini.on .np-side-char {
+  color: var(--np-accent);
+}
+.np-side-mini .np-side-thumb {
+  width: 18px;
+  height: 18px;
+}
+/* 方案列表滚动区：卡片本体不滚动（拖拽把手骑在沟槽上），滚动收在这里（同导航树 .np-tree-rows） */
+.np-side-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+/* 侧边栏/导航树拖拽把手：与窗格分隔条（.np-sep-v）同语言——
+   骑在面板与沟槽边界上的 6px 热区内居中一条 2px 细竖线（线落在 8px 沟槽正中），
+   平时隐形，悬停/拖拽浮现强调色 */
+.np-side-resize,
+.np-tree-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -7px;
+  width: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+  z-index: 5;
+}
+/* ═══ 拖拽条统一规范（2026-10-14 定案）：所有面板/栏宽拖拽条一张"脸" ═══
+   隐形沟槽 + 悬停/拖拽浮现 2px 强调色细线（--np-accent-border），端头 pill；
+   竖把手线全高、横把手线全宽。唯一特例 = 表头列宽把手 .np-col-grip
+   （常显发丝线，2026-10-12 定案：把手必须可见可发现）。
+   拖拽态驱动各随其库/脚本（视觉统一、驱动不统一）：窗格分隔条 data-separator、
+   侧栏/树 .np-side-resizing、全盘搜索/菜单编辑器 body.np-col-resizing */
+.np-side-resize::before,
+.np-tree-resize::before,
+.np-sep-v::after,
+.np-sep-h::after,
+.np-gsearch-split::after,
+.np-menued-grip::after {
+  content: "";
+  border-radius: var(--np-radius-pill);
+  background: transparent;
+  transition: background 0.15s;
+}
+/* 竖向 2px 全高线：侧栏/树把手、窗格竖分隔、全盘搜索预览分隔、菜单编辑器栏宽 */
+.np-side-resize::before,
+.np-tree-resize::before,
+.np-sep-v::after,
+.np-gsearch-split::after,
+.np-menued-grip::after {
+  width: 2px;
+  height: 100%;
+}
+/* 横向全宽 2px 线：窗格横分隔 */
+.np-sep-h::after {
+  width: 100%;
+  height: 2px;
+}
+.np-side-resize:hover::before,
+.np-side-resize.np-side-resizing::before,
+.np-tree-resize:hover::before,
+.np-tree-resize.np-side-resizing::before,
+.np-sep-v:hover::after,
+.np-sep-v[data-separator="hover"]::after,
+.np-sep-v[data-separator="active"]::after,
+.np-sep-v[data-separator="focus"]::after,
+.np-sep-h:hover::after,
+.np-sep-h[data-separator="hover"]::after,
+.np-sep-h[data-separator="active"]::after,
+.np-sep-h[data-separator="focus"]::after,
+.np-gsearch-split:hover::after,
+body.np-col-resizing .np-gsearch-split::after,
+.np-menued-grip:hover::after,
+.np-menued-grip:active::after,
+body.np-col-resizing .np-menued-grip::after {
+  background: var(--np-accent-border);
+}
+
+/* 导航树（全局共用目录树；位于侧边栏右侧，可拖宽，AGENTS §4.3） */
+.np-navtree {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  min-height: 0;
+  padding: 8px;
+  gap: 2px;
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  border-radius: var(--np-radius-pane);
+  /* visible：拖拽把手需探出面板边缘 3px（骑在面板与沟槽边界上），不能被裁切 */
+  overflow: visible;
+}
+.np-tree-rows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 2px 4px;
+}
+.np-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: var(--np-row-h);
+  margin: 0 2px;
+  padding: 0 6px;
+  /* 行间细缝：与列表行同款（透明上下边框 + padding-box 裁切） */
+  border-block: 1px solid transparent;
+  background-clip: padding-box;
+  border-radius: var(--np-radius);
+  cursor: default;
+  user-select: none;
+  overflow: hidden;
+}
+.np-tree-row:hover {
+  background-color: var(--np-hover);
+}
+.np-tree-row.on {
+  background-color: color-mix(in srgb, var(--np-accent) 14%, var(--np-surface));
+  color: var(--np-accent);
+}
+/* 定位高亮（窗格点击行 → 树联动）：比激活档更淡，文字保持前景色 */
+.np-tree-row.loc {
+  background-color: color-mix(in srgb, var(--np-accent) 8%, var(--np-surface));
+}
+.np-tree-chev {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--np-radius);
+  color: var(--np-muted);
+  cursor: pointer;
+}
+.np-tree-chev:hover {
+  color: var(--np-fg);
+  background: var(--np-hover);
+}
+.np-tree-chev.open {
+  color: var(--np-fg);
+}
+.np-tree-chev.open svg {
+  transform: rotate(90deg);
+}
+.np-tree-ic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+}
+.np-tree-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.np-side-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  padding: 2px 4px 2px 6px;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  flex: 0 0 auto;
+}
+/* 标题行右端操作组：保存 / 另存为新方案 / 折叠（2026-10-12 自第二行并入标题行，
+   与导航树头同构，两卡标题行高随之对齐） */
+.np-side-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.np-side-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: var(--np-radius);
+  background: transparent;
+  color: var(--np-muted);
+  cursor: pointer;
+}
+.np-side-add:hover {
+  background: var(--np-hover);
+  color: var(--np-accent);
+}
+.np-side-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--np-radius);
+  color: var(--np-fg);
+  cursor: default;
+  user-select: none;
+}
+.np-side-item:hover {
+  background: var(--np-hover);
+}
+.np-side-item.on {
+  background: var(--np-sel);
+  color: var(--np-accent);
+}
+/* 左侧方案缩略图：SVG 像素对齐渲染（components/Sidebar.tsx MiniTreeSvg），
+   单元格取 currentColor（accent），缝隙透出卡片底色，整数矩形保证锐利 */
+.np-side-thumb {
+  display: flex;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  color: var(--np-accent);
+}
+.np-side-svg {
+  display: block;
+}
+.np-side-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.np-side-del {
+  flex: 0 0 auto;
+  display: flex;
+  padding: 1px;
+  border: 0;
+  background: transparent;
+  color: var(--np-muted);
+  opacity: 0;
+  cursor: pointer;
+}
+.np-side-item:hover .np-side-del {
+  opacity: 0.7;
+}
+.np-side-del:hover {
+  opacity: 1;
+  color: var(--np-danger);
+}
+.np-side-empty {
+  padding: 8px 8px 4px;
+  line-height: 1.6;
+}
+.np-fav-remove {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 12px;
+  color: var(--np-muted);
+}
+.np-fav-remove:hover {
+  color: var(--np-danger);
+}
+/* ═══ 创意工坊整页（np-menupage）：占满顶栏以下区域（替换侧栏+窗格区），
+   单张便签卡片 = 头部行（返回钮）+ 内容滚动区（MenuEditor + 命令模板）。
+   面板高度以顶栏下方实际空间为准（min-height: 0 钳制 flex 条目的内容最小尺寸），
+   页面本体不滚动：功能库/启用菜单超出部分在各自列表内部滚动；
+   .np-menupage-body 的 overflow-y 仅兜底命令模板极多/窗口极矮的情形。
+   设置已回归 Dialog 浮窗（.np-settingsdlg），不再使用整页壳层 ═══ */
+.np-menupage {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--np-surface);
+  border-radius: var(--np-radius-xl);
+  overflow: hidden;
+}
+.np-menupage-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--np-gutter);
+  height: var(--np-nav-h);
+  padding: 0 6px 0 14px;
+  border-bottom: 1px solid var(--np-hairline);
+}
+/* 返回钮：两个整页（定制/全盘搜索）共用，加大命中区方便点击（2026-10-16 定案） */
+.np-menupage-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--np-gutter);
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  border-radius: var(--np-radius);
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+  cursor: pointer;
+}
+.np-menupage-back:hover {
+  background: var(--np-hover);
+}
+.np-menupage-title {
+  font-size: var(--np-font-ui);
+  color: var(--np-muted);
+}
+/* 工具栏行：勾选居左、↑↓ 靠右 */
+.np-set-rule-spacer {
+  flex: 1;
+}
+.np-menupage-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 16px 10px;
+  overflow-y: auto;
+}
+/* 设置浮窗（Dialog）：宽屏双栏（导航 + 内容页），高度钳制防撑满全屏 */
+.np-settingsdlg .bp6-dialog-body {
+  padding: 4px 0 10px;
+}
+.np-settingsdlg .np-settings {
+  height: min(520px, 66vh);
+}
+.np-settings {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+}
+.np-settings-nav {
+  flex: 0 0 auto;
+  width: 148px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 10px 4px 0;
+  border-right: 1px solid var(--np-hairline);
+}
+.np-settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  border-radius: var(--np-radius);
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+  cursor: pointer;
+  text-align: left;
+}
+.np-settings-nav-item:hover {
+  background: var(--np-hover);
+}
+.np-settings-nav-item.is-on {
+  background: var(--np-sel);
+  color: var(--np-accent);
+}
+.np-settings-page {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 2px 2px 2px 14px;
+}
+
+/* 设置行：左侧 标题+说明、右侧控件；相邻行以 hairline 分隔 */
+.np-set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--np-hairline);
+}
+.np-set-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.np-set-label {
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+}
+.np-set-sort {
+  display: flex;
+  gap: 4px;
+}
+/* 着色规则编辑区：surface-2 凹陷面板（§4.7 内嵌列表层级） */
+.np-set-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius-lg);
+  padding: 8px;
+  margin: 2px 0 6px;
+}
+.np-set-rules-empty {
+  padding: 6px 2px;
+}
+.np-set-rule {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.np-set-rule .bp6-input-group {
+  flex: 1;
+  min-width: 0;
+}
+.np-rule-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--np-radius-pill);
+  flex: 0 0 auto;
+}
+.np-rule-del {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--np-muted);
+  cursor: pointer;
+  padding: 2px 3px;
+  border-radius: var(--np-radius);
+}
+.np-rule-del:hover {
+  color: var(--np-danger);
+  background: var(--np-hover);
+}
+
+/* V2 真实图标 / 缩略图（尺寸走 token，禁裸值）；
+   np-icon-slot = 图标预留位：真实图标未到位前保持行高稳定，到位后淡入；
+   文件行的 Lucide 兜底图标与真实图标同尺寸（--np-realicon，CSS 覆盖属性宽高） */
+.np-row > svg.lucide {
+  width: var(--np-realicon);
+  height: var(--np-realicon);
+}
+.np-realicon {
+  width: var(--np-realicon);
+  height: var(--np-realicon);
+  object-fit: contain;
+  flex: 0 0 auto;
+  transition: opacity 0.15s ease;
+}
+.np-icon-slot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--np-realicon);
+  height: var(--np-realicon);
+  flex: 0 0 auto;
+}
+.np-icon-slot .np-realicon {
+  position: absolute;
+  inset: 0;
+}
+/* V2 颜色标记：名称前的圆点（名称文字色由内联 var(--np-tag-*) 提供） */
+.np-tagdot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--np-radius-pill);
+  margin-right: 5px;
+  vertical-align: baseline;
+}
+
+/* V2 递归搜索（2026-10-15 改浮层）：锚在搜索键正下方，不占导航栏布局；
+   点击本窗格以外区域自动退出（Pane 内 mousedown 监听） */
+.np-search-anchor {
+  position: relative;
+}
+.np-search-pop {
+  position: absolute;
+  /* 锚在导航栏底缘下方（left 由 Pane 实测搜索键位置下发） */
+  top: calc(100% + 6px);
+  z-index: 40;
+  width: 260px;
+}
+.np-search-pop .np-search {
+  width: 100%;
+  margin: 0;
+  /* 浮层卡片规格：surface 底 + 投影（弹层统一规范） */
+  box-shadow: var(--np-shadow);
+}
+
+/* V2 地址栏自动补全下拉（锚在导航栏下方；与菜单/Popover 同款 surface 卡片） */
+.np-sugg {
+  position: absolute;
+  top: 100%;
+  left: 100px;
+  right: 140px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--np-surface);
+  border-radius: var(--np-radius-lg);
+  box-shadow: var(--np-shadow);
+}
+.np-sugg-item {
+  padding: 4px 8px;
+  border-radius: var(--np-radius);
+  font-size: var(--np-font-sm);
+  color: var(--np-fg);
+  cursor: pointer;
+}
+.np-sugg-item:hover,
+.np-sugg-item.on {
+  background: var(--np-sel);
+  color: var(--np-accent);
+}
+
+/* 视图过滤条（Ctrl+E，2026-10-15）：标签条与列表之间的一条窄带，仅过滤态渲染。
+   输入经 Rust 端 nameFilter 就地收窄（不递归）；右侧实时匹配数 */
+.np-filterbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--np-ctl-h);
+  margin: 2px 8px;
+  padding: 0 8px;
+  flex: 0 0 auto;
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius);
+  color: var(--np-muted);
+}
+.np-filter-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--np-fg);
+  font-size: var(--np-font-ui);
+}
+.np-filter-input::placeholder {
+  color: var(--np-muted);
+}
+.np-filter-count {
+  flex: 0 0 auto;
+  font-size: var(--np-font-sm);
+  font-variant-numeric: tabular-nums;
+}
+/* 统一基方（空态/辅助小字/pill 胶囊段）：悬停淡染的小圆钮 */
+.np-filter-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--np-muted);
+  cursor: pointer;
+  border-radius: var(--np-radius-pill);
+  padding: 1px 3px;
+}
+.np-filter-clear:hover {
+  color: var(--np-danger);
+  background: var(--np-hover);
+}
+
+/* 首字母跳转回显 pill（type-ahead）：悬于状态条右上角，Esc/停顿超时即消失 */
+.np-typeahead {
+  position: absolute;
+  right: 12px;
+  bottom: calc(var(--np-status-h) + 4px);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 70%;
+  padding: 2px 8px;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  box-shadow: var(--np-shadow);
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+  pointer-events: none;
+}
+.np-typeahead-buf {
+  color: var(--np-accent);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 地址栏面包屑（非聚焦态覆盖层）：层级段可点跳转，空白处点击进入编辑。
+   :focus-within 隐藏覆盖层，输入框原生聚焦态（--np-ring 淡染）自然接管 */
+.np-addrwrap {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  margin: 0 2px;
+}
+.np-addrwrap .np-addr {
+  flex: 1;
+  margin: 0;
+}
+.np-addr-crumbs {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 0 8px;
+  overflow: hidden;
+  /* Explorer 口径：自左向右排（此电脑 › 盘符 › 目录 › 尾箭头）；
+     放不下由折叠态（"…" + 末 3 段）兜底，末段再放不下就地省略号（不裁右缘） */
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius);
+  cursor: text;
+  font-size: var(--np-font-ui);
+}
+.np-addrwrap:focus-within .np-addr-crumbs {
+  display: none;
+}
+.np-crumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 160px;
+  flex: 0 0 auto;
+  border: none;
+  outline: none;
+  background: none;
+  padding: 1px 4px;
+  border-radius: var(--np-radius);
+  color: var(--np-fg);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.np-crumb:hover {
+  background: var(--np-hover);
+  color: var(--np-accent);
+}
+/* 末段（当前文件夹）是唯一可收缩的段：极端窄窗格时就地省略号而非裁切 */
+.np-crumb-last {
+  flex: 0 1 auto;
+}
+/* "…" 折叠按钮（点击弹出被隐藏的上级目录）与层间箭头按钮（np-crumb-tail，
+   分隔与子文件夹下拉二合一，替代纯分隔符） */
+.np-crumb-more {
+  padding: 1px 6px;
+  color: var(--np-muted);
+}
+.np-crumb-more:hover {
+  color: var(--np-accent);
+}
+/* 尾箭头：下拉当前文件夹的直接子文件夹（Explorer Win11 式深入导航） */
+.np-crumb-tail {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  border: none;
+  outline: none;
+  background: none;
+  padding: 1px 3px;
+  border-radius: var(--np-radius);
+  color: color-mix(in srgb, var(--np-muted) 70%, transparent);
+  cursor: pointer;
+}
+.np-crumb-tail:hover {
+  color: var(--np-accent);
+  background: var(--np-hover);
+}
+
+/* 搜索结果"位置"列 */
+.np-col-loc {
+  width: var(--np-colw-loc, 160px);
+  flex: 0 0 auto;
+}
+@container (max-width: 479px) {
+  .np-pane .np-col-loc {
+    display: none;
+  }
+}
+
+/* --bench 模式 FPS 角标（验收读数，仅基准模式渲染） */
+.np-bench-fps {
+  position: fixed;
+  top: var(--np-gutter);
+  right: var(--np-gutter);
+  z-index: 99;
+  padding: 4px 10px;
+  border-radius: var(--np-radius);
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  color: var(--np-accent);
+  font-size: var(--np-font-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 布局预设选择面板（侧边栏弹出，16 种 = 4×4；瓷砖图标与方案缩略图同源描线） */
+.np-layoutpicker {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 10px;
+}
+.np-layouttile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+  font-family: inherit;
+  border-radius: var(--np-radius);
+  cursor: pointer;
+}
+.np-layouttile:hover {
+  background: var(--np-hover);
+  color: var(--np-fg);
+}
+.np-layouttile .np-side-thumb {
+  width: 28px;
+  height: 28px;
+}
+.np-layouthint {
+  grid-column: 1 / -1;
+  padding: 4px 2px 0;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  border-top: 1px solid var(--np-border);
+  margin-top: 4px;
+  padding-top: 8px;
+}
+
+/* 窗格（便签卡片：浅灰画布上平铺白色大圆角卡片，纯靠沟槽分隔；
+   分隔条 = 隐形沟槽，悬停/拖拽时中心浮现一根 2px 强调色细线） */
+.np-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  border-radius: var(--np-radius-pane);
+  /* 尺寸容器：窄窗格时经下方 @container 分档收纳导航栏，给地址/标签让位 */
+  container-type: inline-size;
+}
+/* "更多"收纳菜单入口（wrapper div）：有按钮被收纳的档位显形（见下方容器查询） */
+.np-nav-more {
+  display: none;
+}
+/* 窄窗格渐进收纳（纯 CSS 断点，零 JS；档位互斥、宽度越窄越精简）。
+   预算：图标钮槽位 ≈26px，地址栏 = 窗格宽 − 常驻钮，各档保底 ≥140px：
+   ① <300px 极简档：只留 地址栏 + 关闭
+   ② 300–429px：+ 上一级/新建/刷新/视图 + "更多"（中频/低频组全在菜单里）
+   ③ 430–499px：+ 搜索/横向分裂/纵向分裂/交换（np-nav-mid-wide，中频组）
+   ④ ≥500px 全量：+ 复制路径/收藏/在终端打开（np-nav-only-wide，低频组） */
+@container (max-width: 499px) {
+  .np-nav-only-wide {
+    display: none;
+  }
+  .np-nav-more {
+    display: block;
+  }
+}
+@container (max-width: 429px) {
+  .np-nav-mid-wide {
+    display: none;
+  }
+}
+@container (max-width: 299px) {
+  .np-nav-mid {
+    display: none;
+  }
+  .np-nav-more {
+    display: none;
+  }
+}
+/* 激活指示 = 导航栏染色（2026-10-11 定案，design/pane-active-preview.html 方案 2）：
+   窗格边框保持中性、不再描边；导航栏染 accent 淡色 + 图标转 accent */
+.np-pane-active .np-nav {
+  background: color-mix(in srgb, var(--np-accent) 9%, var(--np-surface));
+  border-bottom-color: color-mix(in srgb, var(--np-accent) 22%, transparent);
+}
+.np-pane-active .np-nav .bp6-button:not(:disabled) {
+  color: var(--np-accent);
+}
+.np-pane-active .np-tab-on {
+  background: color-mix(in srgb, var(--np-accent) 14%, var(--np-surface-2));
+  color: var(--np-accent);
+}
+/* 窗格交换选择模式：候选窗格内侧强调色虚线环 + pointer，提示"点我换位"；
+   源窗格由交换按钮的 active 态标识，不画环。outline 不占布局、随圆角裁切 */
+.np-pane.np-swap-pick {
+  cursor: pointer;
+  outline: 1px dashed var(--np-accent-border);
+  outline-offset: -3px;
+}
+/* 分隔条 = 隐形沟槽；悬停/拖拽时仅显示一根 2px 细线（不遮窗格边框） */
+.np-separator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  /* 库在拖拽开始时脚本聚焦分隔条（支持方向键微调），脚本 focus 必触发
+     Chromium UA 焦点环（2px + 2px offset），会压在两侧窗格边框上；
+     焦点反馈由下方 [data-separator="focus"] 的 2px 指示线承担 */
+  outline: none;
+}
+.np-sep-v { width: var(--np-gutter); align-self: stretch; }
+.np-sep-h { height: var(--np-gutter); align-self: stretch; }
+/* 分隔条细线配方与悬停/拖拽着色走上方「拖拽条统一规范」段；库 v4 的
+   悬停/拖拽驱动是 data-separator 状态属性，旧版 data-resize-handle-state 已不存在 */
+.np-nav {
+  position: relative; /* V2 自动补全下拉的定位锚 */
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  min-height: var(--np-nav-h);
+  border-bottom: 1px solid var(--np-hairline);
+  transition: background-color 0.15s, border-color 0.15s;
+  /* 兜底：收纳档位之外仍溢出时横向优雅裁切（不撑破卡片）；
+     用 clip 保持纵向可见——np-sugg 下拉 absolute 锚在本栏下方，hidden 会把它裁没 */
+  overflow-x: clip;
+}
+/* 导航栏按钮紧凑化：去掉 Blueprint 默认的 8px 左外边距，收窄水平内边距 */
+.np-nav .bp6-button {
+  margin-left: 0;
+  padding: 4px 5px;
+  min-width: 0;
+  min-height: 24px;
+}
+.np-addr {
+  flex: 1;
+  min-width: 0;
+  margin: 0 2px;
+}
+/* 顶栏历史菜单：完整路径展示，超宽省略 */
+.np-hist-menu {
+  max-width: 480px;
+}
+.np-hist-menu .bp6-menu-item .bp6-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 标签条（pill 风格，无边框） */
+.np-tabbar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 8px 2px;
+}
+.np-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 170px;
+  min-width: 0;
+  padding: 2px 10px;
+  height: var(--np-tab-h);
+  border-radius: var(--np-radius);
+  color: var(--np-muted);
+  cursor: default;
+  font-size: var(--np-font-sm);
+}
+.np-tab:hover {
+  background: var(--np-hover);
+}
+.np-tab-on {
+  background: var(--np-surface-2);
+  color: var(--np-fg);
+}
+.np-tab-close {
+  margin-left: auto;
+  opacity: 0;
+  border-radius: var(--np-radius);
+  padding: 0 2px;
+}
+.np-tab:hover .np-tab-close,
+.np-tab-on .np-tab-close {
+  opacity: 0.6;
+}
+.np-tab-close:hover {
+  opacity: 1;
+  color: var(--np-danger);
+}
+
+/* 列表（内嵌圆角高亮行） */
+/* 表头横滚 clip：列宽自然宽超出窗格时表头随 .np-rows 横向滚动（onScroll 平移
+   transform，lib/columns 自然宽与 min-width 下发），裁掉超出卡片的部分；不压缩 */
+.np-head-clip {
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.np-head {
+  display: flex;
+  align-items: center;
+  /* 表头与行共用同一套列宽/间距（行=4容器+2margin+8padding=14；gap 同为 7），
+     ::before 占住行首图标位（16px），使每列标题与该列内容左缘对齐；
+     右侧 24 = 14 + 10 滚动条槽（.np-rows scrollbar-gutter: stable 恒定占位） */
+  gap: 7px;
+  padding: 0 24px 0 14px;
+  height: var(--np-head-h);
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  flex: 0 0 auto;
+}
+.np-head::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 16px;
+}
+.np-head-c {
+  position: relative;
+  white-space: nowrap;
+  /* button 在 Chromium 默认文字居中，必须显式回左对齐 */
+  text-align: left;
+}
+.np-head > span {
+  position: relative;
+}
+.np-head-c:hover {
+  color: var(--np-fg);
+}
+/* 列宽拖拽把手：骑在列间 7px 沟槽上，常显发丝细线（2026-10-12 定案：把手必须
+   可见可发现），悬停/拖拽转强调色；双击复位 */
+.np-col-grip {
+  position: absolute;
+  top: 0;
+  right: -7px;
+  bottom: 0;
+  width: 9px;
+  cursor: col-resize;
+  z-index: 1;
+}
+.np-col-grip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: var(--np-radius-pill);
+  background: var(--np-hairline);
+  transition: background 0.15s;
+}
+.np-col-grip:hover::after {
+  background: var(--np-accent-border);
+}
+body.np-col-resizing,
+body.np-col-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+/* 窄窗格（如 3×3）逐级收起详情列：表头与行用同一组 np-col-* 类，隐藏自动对齐。
+   名称列可压缩兜底（flex-shrink），永不隐藏（配合下方 nowrap 与 np-scroll-x 横滚兜底） */
+@container (max-width: 479px) {
+  .np-pane .np-col-type {
+    display: none;
+  }
+}
+@container (max-width: 379px) {
+  .np-pane .np-col-mtime {
+    display: none;
+  }
+}
+@container (max-width: 299px) {
+  .np-pane .np-col-size {
+    display: none;
+  }
+}
+.np-rows {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  /* 恒定预留纵向滚动条槽：滚动条出现/消失时列不再横跳，表头右缘始终对齐（补 10px） */
+  scrollbar-gutter: stable;
+  padding: 0 4px 6px;
+}
+/* 仅当详情列在窄窗格中真正放不下时才启用横向滚动（窗格列表 / 全盘搜索列表同款） */
+.np-rows.np-scroll-x,
+.np-gsearch-list.np-scroll-x {
+  overflow-x: auto;
+}
+.np-drop-hover {
+  box-shadow: color-mix(in srgb, var(--np-accent) 70%, transparent) 0 0 0 2px inset;
+  border-radius: var(--np-radius);
+}
+/* 框选橡皮筋（虚拟内容层内绝对定位）：强调色细描边 + 极淡填充，不吃指针事件 */
+.np-marquee {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--np-accent) 60%, transparent);
+  background: color-mix(in srgb, var(--np-accent) 10%, transparent);
+}
+.np-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 2px;
+  padding: 0 8px;
+  /* 行间细缝：上下 1px 透明边框占位 + background-clip: padding-box——
+     底色纵向缩 1px（相邻选中行留极细空白），横向铺满整行
+     （左侧超出图标一截、圆角完整；content-box 会连左右 padding 一起裁掉） */
+  border-block: 1px solid transparent;
+  background-clip: padding-box;
+  height: var(--np-row-h);
+  border-radius: var(--np-radius);
+  cursor: default;
+  user-select: none;
+  /* 行内容（如图标格）超出虚拟行高时裁在本行内，不与下一行互相叠压 */
+  overflow: hidden;
+}
+/* 注意：状态底色必须用 background-color 长写——background 简写会把
+   background-clip: padding-box 重置回 border-box，选中行就会重新粘连铺满 */
+.np-row:hover {
+  background-color: var(--np-hover);
+}
+.np-row.is-sel {
+  background-color: var(--np-sel);
+  color: var(--np-accent);
+}
+.np-name {
+  flex: 0 1 auto;
+  width: var(--np-colw-name, 240px);
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+}
+.np-name > span,
+.np-row > .np-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.np-row.is-sel .np-cell-muted {
+  color: var(--np-accent);
+  opacity: 0.85;
+}
+/* 详情列宽：实际值由 stores/columns 经根节点 --np-colw-* 变量下发（表头拖拽可调），
+   var 回退值 = 历史默认宽。省略/隐藏规则必须挂在 .np-rows 下（仅行内单元格）——
+   若命中表头按钮，overflow:hidden 会把骑在列缝上的拖拽把手裁掉。
+   全盘搜索列表（.np-gsearch-list）行内单元格同理，表头 .np-gsearch-head 不挂 */
+.np-rows .np-col-mtime,
+.np-rows .np-col-type,
+.np-rows .np-col-size,
+.np-rows .np-col-loc,
+.np-gsearch-list .np-col-loc,
+.np-gsearch-list .np-col-size,
+.np-gsearch-list .np-col-type {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.np-col-mtime {
+  width: var(--np-colw-mtime, 130px);
+  flex: 0 0 auto;
+}
+/* 名称列：与 mtime/type/size 同一变量体系。flex-shrink 允许窄窗格压缩让位
+   （配合上方逐级隐藏列兜底），宽窗格定宽——拖名称把手即改 --np-colw-name */
+.np-col-name {
+  width: var(--np-colw-name, 240px);
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.np-col-type {
+  width: var(--np-colw-type, 110px);
+  flex: 0 0 auto;
+}
+.np-col-size {
+  width: var(--np-colw-size, 80px);
+  flex: 0 0 auto;
+}
+.np-list-error {
+  padding: 12px;
+  font-size: var(--np-font-sm);
+  color: var(--np-danger);
+}
+.np-list-empty {
+  padding: 16px;
+  text-align: center;
+}
+.np-rename {
+  flex: 1;
+  min-width: 0;
+  /* 标准控件高（--np-ctl-h）：28px 行内居中，激活描边四周恰好留 2px 余量 */
+  height: var(--np-ctl-h);
+  padding: 0 6px;
+  border: none;
+  /* 实底表面：不被选中行的蓝染透色干扰，字段轮廓始终清晰 */
+  background: var(--np-surface);
+  color: var(--np-fg);
+  font: inherit;
+  outline: none;
+  border-radius: var(--np-radius);
+  box-shadow: var(--np-ring);
+}
+/* 编辑态放行裁剪：np-name 的 ellipsis overflow 会把激活描边左右两端削平 */
+.np-name:has(.np-rename) {
+  overflow: visible;
+}
+
+/* 状态条（融入背景，无分隔线） */
+.np-pstatus {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px;
+  height: var(--np-status-h);
+  align-items: center;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  flex: 0 0 auto;
+}
+/* 窗格序号标志（状态条左端 = 窗格左下角）：小圆角数字牌，活动窗格转强调色 */
+/* 窗格序号（方案 C · 井号编号）：纯文本行内排版，与后文同基线，不存在错位。
+   # 弱化灰、数字加粗（tabular-nums）；活动窗格数字转强调色（# 保持灰） */
+.np-pane-no {
+  color: var(--np-fg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+.np-pane-hash {
+  color: color-mix(in srgb, var(--np-muted) 70%, transparent);
+}
+.np-pane-active .np-pane-no {
+  color: var(--np-accent);
+}
+.np-pane-dot {
+  margin: 0 6px;
+  color: color-mix(in srgb, var(--np-muted) 55%, transparent);
+}
+
+/* 对话框辅助 */
+.np-dialog-muted {
+  color: var(--np-muted);
+  margin-bottom: 6px;
+}
+.np-dialog-error {
+  color: var(--np-danger);
+  margin-top: 6px;
+  font-size: var(--np-font-sm);
+}
+.np-conflict-list {
+  max-height: 160px;
+  overflow: auto;
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius);
+  padding: 8px;
+  margin-bottom: 8px;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-conflict-radios {
+  margin-top: 8px;
+}
+.np-conflict-remember {
+  margin-top: 8px;
+}
+
+/* ── 目录分析对话框（重复文件 / 空间分析 / 文件夹比较，§4.7 内嵌列表）── */
+.np-dup-list,
+.np-cmp-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--np-gutter);
+  max-height: 340px;
+  overflow-y: auto;
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius-lg);
+  padding: var(--np-gutter);
+}
+.np-dup-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--np-gutter);
+  padding: 2px 2px 0;
+}
+.np-dup-row {
+  min-height: var(--np-row-h);
+  margin-bottom: 0;
+}
+/* 体积条：名称左、比例条中、项数与数值右（TreeSize 式一行读全） */
+.np-dsiz-head {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gutter);
+  margin-bottom: var(--np-gutter);
+}
+.np-dsiz-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--np-ctl-h);
+  height: var(--np-ctl-h);
+  border: 0;
+  background: transparent;
+  border-radius: var(--np-radius);
+  color: var(--np-fg);
+  cursor: pointer;
+}
+.np-dsiz-back:hover {
+  background: var(--np-hover);
+}
+.np-dsiz-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 340px;
+  overflow-y: auto;
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius-lg);
+  padding: var(--np-gap);
+}
+.np-dsiz-row {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gutter);
+  height: var(--np-row-h);
+  padding: 0 var(--np-gap);
+  border-radius: var(--np-radius);
+}
+.np-dsiz-row:hover {
+  background: var(--np-hover);
+}
+.np-dsiz-name {
+  flex: 0 1 auto;
+  width: 40%;
+  min-width: 0;
+}
+.np-dsiz-name.is-dir {
+  color: var(--np-accent);
+  cursor: pointer;
+}
+.np-dsiz-bar {
+  flex: 1;
+  height: 8px;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-surface);
+  overflow: hidden;
+}
+.np-dsiz-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--np-accent);
+  opacity: 0.55;
+}
+.np-dsiz-files {
+  flex: 0 0 auto;
+  min-width: 48px;
+  text-align: right;
+}
+.np-dsiz-size {
+  flex: 0 0 auto;
+  min-width: 72px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.np-props {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.np-prop-row {
+  display: flex;
+  gap: 8px;
+  font-size: var(--np-font-sm);
+}
+.np-prop-key {
+  width: 64px;
+  flex: 0 0 auto;
+  color: var(--np-muted);
+}
+.np-prop-val {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ═══ 全盘搜索整页（Everything 式，components/GlobalSearch.tsx）═══
+   2026-10-16 定案弃浮窗：np-gsearchpage 占满顶栏以下内容区（替换侧栏+窗格区）。
+   2026-10-16 四次定案：边框语言与主界面窗格一致（surface 卡 + 1px border +
+   radius-pane，页面本体无额外内边距），结果/预览区不再是 sunken 灰卡——
+   平铺 surface + 发丝线分隔，切换主界面/搜索页无差异感。
+   头部行 = 返回钮 + 标题 + 搜索框（定宽 480，不再拉满）+ 历史 chips（右侧收纳） */
+.np-gsearchpage {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  border-radius: var(--np-radius-pane);
+  overflow: hidden;
+}
+.np-gsearchpage-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--np-gutter);
+  /* 与定制页头部同高（np-menupage-head），两整页标题排布一致（2026-10-16 定案） */
+  height: var(--np-nav-h);
+  padding: 0 12px;
+  border-bottom: 1px solid var(--np-hairline);
+}
+.np-gsearchpage-head .np-gsearch-input {
+  flex: 0 1 auto;
+  width: 480px;
+}
+.np-gsearchpage-head .np-gsearch-history {
+  margin-left: auto;
+}
+/* 结果+预览主区：吃掉页面余高（面板高度 = 顶栏以下实际空间） */
+.np-gsearchpage .np-gsearch-main {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+/* 单行紧凑控制条（2026-10-16 五次定案；七次定案重排）：搜索框行首（定宽 360）+
+   类型/结果过滤/上限靠左成组，预览开关驻右；窄窗 flex-wrap 兜底换行 */
+.np-gsearch-filters {
+  flex-wrap: wrap;
+  row-gap: var(--np-gap);
+}
+.np-gsearch-filters .np-gsearch-input {
+  flex: 0 1 auto;
+  width: 360px;
+}
+/* 搜索框：填充式——常态 surface-2，聚焦 surface 底 + accent 淡染描边（同 np-select 开态） */
+.np-gsearch-input {
+  flex: 0 0 auto;
+}
+.np-gsearch-input .bp6-input {
+  background: var(--np-surface-2);
+  box-shadow: none;
+  font-size: var(--np-font-ui);
+}
+.np-gsearch-input .bp6-input:focus {
+  background: var(--np-surface);
+  box-shadow: var(--np-ring);
+}
+/* 主区：结果 panel（表头 + 虚拟列表一张 sunken 卡片）+ 分隔条 + 预览面板
+   （页面模式：主区 flex-1 吃掉余高，panel/预览拉伸铺满） */
+.np-gsearch-main {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  min-height: 0;
+}
+/* 分隔条：隐形沟槽（自身即 panel/preview 间距），悬停/拖拽以强调色轻染 */
+.np-gsearch-split {
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: 13px;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* 细线配方与悬停/拖拽着色走上方「拖拽条统一规范」段（线为全高，与窗格分隔条同款） */
+.np-gsearch-panel {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+  overflow: hidden;
+}
+/* 表头：对齐算术同 .np-head——行内单元格左缘 = padding4+margin2+padding8=14，
+   ::before 补 16px 图标槽 + gap7，右缘 padding24 再补滚动条槽 10 */
+.np-gsearch-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: var(--np-head-h);
+  padding: 0 24px 0 14px;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  border-bottom: 1px solid var(--np-hairline);
+}
+.np-gsearch-head::before {
+  content: "";
+  width: 16px;
+  flex: 0 0 auto;
+}
+.np-gsearch-hc {
+  position: relative;
+  white-space: nowrap;
+}
+/* 列头排序按钮：继承表头小字灰，悬停正文色，激活 accent + 方向箭头 */
+.np-gsearch-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.np-gsearch-sort:hover {
+  color: var(--np-fg);
+}
+.np-gsearch-sort.is-active {
+  color: var(--np-accent);
+}
+.np-gsearch-list {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding: var(--np-gap) var(--np-gap) 6px;
+}
+/* 内嵌预览面板：与结果 panel 同款 sunken 卡片（宽由 settings 内联下发），slim 头部 + PreviewBody */
+.np-gsearch-pv {
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+  border-left: 1px solid var(--np-hairline);
+  overflow: hidden;
+}
+.np-gsearch-pv-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+  height: var(--np-nav-h);
+  padding: 0 6px 0 10px;
+  border-bottom: 1px solid var(--np-hairline);
+}
+.np-gsearch-pv-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: var(--np-font-ui);
+}
+.np-gsearch-pv .np-pv-badge {
+  background: var(--np-surface);
+}
+.np-gsearch-pv-spacer {
+  flex: 1;
+}
+/* 预览开关钮：激活 = accent（§4.5 功能图标激活档） */
+.np-gsearch .np-gsearch-pv-toggle.bp6-active {
+  color: var(--np-accent);
+}
+.np-gsearch-status {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--np-gutter);
+  height: var(--np-status-h);
+  padding: 0 12px;
+  border-top: 1px solid var(--np-hairline);
+}
+.np-gsearch-status-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* 索引模式控制组（IndexModeBar）：状态 chip + 常驻开关；点击 chip 弹层看各卷进度。
+   dot 语义：accent = 守护运行中 / muted = 未开启 / danger = 已开启但守护离线 */
+.np-gsearch-idxwrap {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--np-gap);
+}
+.np-gsearch-idxwrap .bp6-switch {
+  display: inline-flex;
+  align-items: center;
+  height: var(--np-ctl-h);
+  margin: 0;
+}
+.np-gsearch-idxwrap .bp6-switch .bp6-control-indicator {
+  margin-top: 0;
+}
+.np-gsearch-idx {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  color: var(--np-muted);
+  background: var(--np-surface-2);
+  cursor: pointer;
+}
+.np-gsearch-idx:hover {
+  background: var(--np-hover);
+  color: var(--np-fg);
+}
+.np-gsearch-idx-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-muted);
+  flex: 0 0 auto;
+}
+/* 阶段着色：off/starting = muted，building/ready = accent（building 叠脉冲），
+   down/error = danger */
+.np-gsearch-idx-building .np-gsearch-idx-dot,
+.np-gsearch-idx-ready .np-gsearch-idx-dot {
+  background: var(--np-accent);
+}
+.np-gsearch-idx-building .np-gsearch-idx-dot {
+  animation: np-idx-pulse 1.2s ease-in-out infinite;
+}
+@keyframes np-idx-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+.np-gsearch-idx-down .np-gsearch-idx-dot,
+.np-gsearch-idx-error .np-gsearch-idx-dot {
+  background: var(--np-danger);
+}
+.np-gsearch-idx-pop {
+  width: 320px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--np-gutter);
+  font-size: var(--np-font-ui);
+}
+.np-gsearch-idx-title {
+  color: var(--np-fg);
+}
+/* 各卷建索引进度行：状态小图标 + 盘符 + 条目数/错误（每卷一行） */
+.np-gsearch-idx-vols {
+  display: flex;
+  flex-direction: column;
+  gap: var(--np-gap);
+  font-size: var(--np-font-sm);
+  color: var(--np-fg);
+}
+.np-gsearch-idx-vol {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--np-gap);
+  min-height: 16px;
+}
+.np-gsearch-idx-vol-letter {
+  color: var(--np-muted);
+}
+.np-gsearch-idx-vol-text {
+  min-width: 0;
+}
+.np-gsearch-idx-hint {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+/* 查询语法速查弹层（搜索框右端 ? 按钮）：表面卡片 + 键位 pill 行 */
+.np-gsearch-help {
+  width: 320px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--np-gap);
+  font-size: var(--np-font-sm);
+}
+.np-gsearch-help-title {
+  color: var(--np-fg);
+}
+/* 帮助触发钮：搜索框右端，弱化为辅助灰（悬停正文色） */
+.np-gsearch-help-btn {
+  color: var(--np-muted);
+}
+.np-gsearch-help-btn:hover {
+  color: var(--np-fg);
+}
+.np-gsearch-help-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--np-gutter);
+}
+.np-gsearch-help-row .np-kbd {
+  flex: 0 0 auto;
+  min-width: 96px;
+  text-align: center;
+}
+.np-gsearch-help-desc {
+  color: var(--np-muted);
+  min-width: 0;
+}
+/* 分段选择走通用 .np-seg（Blueprint 对齐覆盖段）；此处不再单独覆写 */
+.np-gsearch-sep {
+  flex: 0 0 auto;
+  width: 1px;
+  height: var(--np-ctl-h);
+  background: var(--np-hairline);
+}
+/* 过滤行：类型 / 范围分段 + 结果二次过滤框 + 排序与上限选择 */
+.np-gsearch-rowfilter {
+  flex: 0 1 auto;
+  width: 170px;
+  min-width: 0;
+}
+/* 结果过滤框：统一填充式输入配方（AGENTS §4.3，同 np-gsearch-input/np-nav）——
+   常态 surface-2 无描边，聚焦 surface + accent 淡染 ring */
+.np-gsearch-rowfilter .bp6-input {
+  background: var(--np-surface-2);
+  box-shadow: none;
+  font-size: var(--np-font-ui);
+}
+.np-gsearch-rowfilter .bp6-input:focus {
+  background: var(--np-surface);
+  box-shadow: var(--np-ring);
+}
+.np-gsearch-filters {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--np-gutter);
+  padding: var(--np-gap) 12px;
+  border-bottom: 1px solid var(--np-hairline);
+}
+.np-gsearch-filter-spacer {
+  flex: 1;
+}
+/* 搜索历史 chips（空查询时展示）：可点 pill，悬停 muted→fg（与缩放 pill 同语言） */
+.np-gsearch-history {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--np-gap);
+  min-width: 0;
+  overflow: hidden;
+}
+.np-gsearch-hist-label {
+  margin-right: 2px;
+}
+.np-gsearch-chip {
+  border: none;
+  padding: 2px 10px;
+  color: var(--np-muted);
+  background: var(--np-surface-2);
+  cursor: pointer;
+}
+.np-gsearch-chip:hover {
+  background: var(--np-hover);
+  color: var(--np-fg);
+}
+/* 空态：lg 档示意图标（§4.5）+ 说明文字，居中悬浮在结果区 */
+.np-gsearch-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--np-gutter);
+  height: 100%;
+}
+.np-spin {
+  display: inline-flex;
+  animation: np-spin 0.9s linear infinite;
+}
+@keyframes np-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* 命中高亮（名称子串；勾选态不加粗不改行高） */
+.np-hl {
+  background: none;
+  color: var(--np-accent);
+  font-weight: 600;
+  padding: 0;
+}
+/* 设置面板提示小字（索引模式说明 / 规则说明） */
+.np-set-hint {
+  line-height: 1.6;
+  padding-top: 6px;
+}
+
+/* 快捷键清单页：分组标题 + 键位 pill（kbd = surface-2 填充式，§4.7） */
+.np-set-group-title {
+  font-weight: 600;
+  padding: 10px 0 2px;
+}
+.np-kbds {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gutter);
+  flex: 0 0 auto;
+}
+.np-kbd-combo {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+}
+.np-kbd {
+  display: inline-flex;
+  align-items: center;
+  min-width: 18px;
+  padding: 2px 5px;
+  border-radius: var(--np-radius);
+  background: var(--np-surface-2);
+  border: 1px solid var(--np-hairline);
+  font-family: inherit;
+  font-size: var(--np-font-sm);
+  color: var(--np-fg);
+}
+
+/* ═══ 快速预览浮层（Quick Look 模型，V2）：非阻断式大版式，Space/Esc/↑↓ 闭环 ═══ */
+/* 遮罩轻染（非阻断式：四周仍见列表），面板 = 标准 np-dialog 卡片 */
+.np-pv {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.np-pv-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--np-hairline);
+  flex: none;
+}
+.np-pv-name {
+  font-size: var(--np-font-ui);
+  font-weight: 600;
+  min-width: 0;
+}
+.np-pv-badge {
+  flex: none;
+  color: var(--np-muted);
+  background: var(--np-surface-2);
+  padding: 1px 8px;
+}
+.np-pv-head-spacer {
+  flex: 1;
+}
+/* 删除钮 hover 危险色（§4.5 图标颜色三档：危险 = 删除类动作） */
+.np-pv-head .np-pv-danger:hover {
+  color: var(--np-danger);
+}
+.np-pv-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--np-surface-2);
+  display: flex;
+}
+/* PreviewBody 空态（未选中条目，全盘搜索面板） */
+.np-pv-none {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.np-pv-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-top: 1px solid var(--np-hairline);
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  flex: none;
+}
+.np-pv-foot-spacer {
+  flex: 1;
+}
+.np-pv-pos {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 图片：满幅画布居中，滚轮缩放/拖拽平移在组件内实现 */
+.np-pv-zoomwrap {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  cursor: grab;
+}
+.np-pv-zoomwrap:active {
+  cursor: grabbing;
+}
+.np-pv-img {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  max-width: none;
+  user-select: none;
+}
+
+/* 媒体：视频满幅等比，音频居中竖排 */
+.np-pv-media {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  object-fit: contain;
+  background: var(--np-bg);
+}
+.np-pv-audio {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--np-icon-audio);
+}
+.np-pv-audio audio {
+  width: min(420px, 80%);
+}
+
+/* 文本/Markdown/office：surface 卡片内嵌于 surface-2 画布 */
+.np-pv-doc {
+  flex: 1;
+  min-width: 0;
+  margin: 10px auto;
+  width: min(760px, 100% - 20px);
+  background: var(--np-surface);
+  border-radius: var(--np-radius-lg);
+  padding: 14px 16px;
+}
+.np-pv-pre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--np-font-ui);
+  line-height: 1.6;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  color: var(--np-fg);
+  user-select: text;
+}
+.np-pv-sec {
+  padding: 8px 0;
+}
+.np-pv-sec + .np-pv-sec {
+  border-top: 1px solid var(--np-hairline);
+}
+.np-pv-sec-title {
+  margin: 0 0 6px;
+  font-size: var(--np-font-sm);
+  font-weight: 600;
+  color: var(--np-accent);
+}
+.np-pv-empty {
+  padding: 10px 0;
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+}
+.np-pv-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Markdown 正文（净化后 HTML 的最小排版） */
+.np-md {
+  font-size: var(--np-font-ui);
+  line-height: 1.7;
+  color: var(--np-fg);
+  user-select: text;
+  overflow-wrap: anywhere;
+}
+.np-md h1,
+.np-md h2,
+.np-md h3,
+.np-md h4 {
+  margin: 12px 0 6px;
+  line-height: 1.3;
+}
+.np-md h1:first-child,
+.np-md h2:first-child,
+.np-md h3:first-child {
+  margin-top: 0;
+}
+.np-md p {
+  margin: 6px 0;
+}
+.np-md ul,
+.np-md ol {
+  margin: 6px 0;
+  padding-left: 22px;
+}
+.np-md code {
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius-pill);
+  padding: 1px 6px;
+  font-size: var(--np-font-sm);
+  font-family: Consolas, "Cascadia Mono", monospace;
+}
+.np-md pre {
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius);
+  padding: 10px 12px;
+  overflow: auto;
+}
+.np-md pre code {
+  background: none;
+  padding: 0;
+}
+.np-md blockquote {
+  margin: 6px 0;
+  padding: 2px 12px;
+  border-left: 3px solid var(--np-border);
+  color: var(--np-muted);
+}
+.np-md a {
+  color: var(--np-accent);
+}
+.np-md img {
+  max-width: 100%;
+}
+.np-md table {
+  border-collapse: collapse;
+  margin: 8px 0;
+}
+.np-md th,
+.np-md td {
+  border: 1px solid var(--np-border);
+  padding: 3px 8px;
+  font-size: var(--np-font-sm);
+}
+
+/* 表格预览：虚拟网格铺满 + 顶部 sheet 切换条（chips） */
+.np-pv-sheet {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--np-surface);
+}
+.np-pv-sheet-tabs {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--np-hairline);
+  background: var(--np-surface-2);
+  overflow-x: auto;
+}
+.np-pv-sheet-chip {
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+  padding: 2px 10px;
+  border-radius: var(--np-radius-pill);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.np-pv-sheet-chip:hover {
+  background: var(--np-surface-2);
+  color: var(--np-fg);
+}
+.np-pv-sheet-chip.is-active {
+  background: var(--np-sel);
+  color: var(--np-accent);
+  font-weight: 600;
+}
+.np-pv-sheet-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.np-pv-sheet-scroll .np-pv-empty {
+  padding: 14px;
+}
+.np-pv-sheet-inner {
+  position: relative;
+  min-width: 100%;
+}
+.np-pv-sheet-row {
+  display: grid;
+  font-size: var(--np-font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.np-pv-sheet-row:nth-child(even) {
+  background: var(--np-surface-2);
+}
+.np-pv-sheet-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 8px;
+  line-height: var(--np-row-h);
+  border-right: 1px solid var(--np-hairline);
+  color: var(--np-fg);
+}
+
+/* 压缩包清单：虚拟行列表（图标 + 名称 + 大小） */
+.np-pv-ar {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: auto;
+  background: var(--np-surface);
+}
+.np-pv-ar-inner {
+  position: relative;
+  min-width: 100%;
+}
+.np-pv-ar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+}
+.np-pv-ar-row > span:first-of-type {
+  flex: 1;
+  min-width: 0;
+  user-select: text;
+}
+.np-pv-ar-row.is-dir {
+  color: var(--np-muted);
+}
+.np-pv-ar-size {
+  flex: none;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 字体字样 */
+.np-pv-font {
+  user-select: text;
+}
+.np-pv-font-hero {
+  font-size: 48px;
+  line-height: 1.25;
+  margin-bottom: 12px;
+  overflow-wrap: anywhere;
+}
+.np-pv-font-row {
+  font-size: var(--np-font-ui);
+  line-height: 2;
+  overflow-wrap: anywhere;
+}
+
+/* PDF：独立滚动容器 + 页卡片列（虚拟化，只画可见页） */
+.np-pv-pdf {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: auto;
+}
+.np-pv-pdf-inner {
+  position: relative;
+  width: min(820px, 100% - 20px);
+  margin: 0 auto;
+}
+.np-pv-pdf-page {
+  background: var(--np-surface);
+  border-radius: var(--np-radius);
+  overflow: hidden;
+}
+.np-pv-pdf-page canvas {
+  display: block;
+}
+
+/* 兜底卡：居中元信息 + 动作 */
+.np-pv-fallback {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  text-align: center;
+}
+.np-pv-fallback-name {
+  font-size: var(--np-font-ui);
+  font-weight: 600;
+  max-width: 100%;
+}
+.np-pv-fallback-rows {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 14px;
+  font-size: var(--np-font-sm);
+  margin-top: 4px;
+}
+.np-pv-k {
+  color: var(--np-muted);
+  text-align: right;
+}
+.np-pv-fallback-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.np-pv-btn {
+  height: var(--np-ctl-h);
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--np-radius);
+  background: var(--np-surface-2);
+  color: var(--np-fg);
+  font-size: var(--np-font-sm);
+  cursor: pointer;
+}
+.np-pv-btn:hover {
+  background: var(--np-hover);
+}
+/* ═══ 任务进度（灵动岛展开面板，2026-10-15 从旧左下角 JobCenter 并入）：
+   面板 = 浮层规范（surface + shadow，§4.7）锚定岛下方，任务卡走 Blueprint 进度条 ═══ */
+/* 岛容器：面板定位锚（相对 span 包住 pill 与展开面板） */
+.np-island-wrap {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+.np-island-jobs {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  /* 高于内容区与普通浮层；低于对话框/预览 overlay */
+  z-index: 50;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.np-job-icon {
+  display: inline-flex;
+  color: var(--np-fg);
+  flex: 0 0 auto;
+}
+.np-job-label {
+  font-size: var(--np-font-ui);
+  white-space: nowrap;
+}
+.np-job-pct {
+  flex: 0 0 auto;
+  min-width: 28px;
+  text-align: right;
+}
+.np-joblist {
+  display: flex;
+  flex-direction: column;
+  min-width: 280px;
+  max-width: 360px;
+  padding: var(--np-gutter);
+  gap: var(--np-gutter);
+  border-radius: var(--np-radius-lg);
+  background: var(--np-surface);
+  border: 1px solid var(--np-hairline);
+  box-shadow: var(--np-shadow);
+}
+.np-job-row {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gutter);
+}
+.np-job-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.np-job-line {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gutter);
+  min-width: 0;
+}
+.np-job-file {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-job-row .np-job-bar {
+  height: 6px;
+}
+.np-job-cancel {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--np-radius);
+  color: var(--np-muted);
+  flex: 0 0 auto;
+}
+.np-job-cancel:hover {
+  background: var(--np-hover);
+  color: var(--np-danger);
+}
+
+/* ═══ 右键菜单编辑器（设置 → 右键菜单）：双栏 = 启用列表 / 功能库 ═══
+   拖拽为 Pointer 手动实现（Tauri Windows 禁页面内 HTML5 DnD）：
+   条目上 = 插到它前（顶边 accent 指示线），ghost 跟手 */
+.np-menued-row.is-drop-target {
+  box-shadow: inset 0 2px 0 var(--np-accent);
+}
+.np-menued-ghost {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+  max-width: 220px;
+  padding: 2px var(--np-gutter);
+  border-radius: var(--np-radius);
+  background: var(--np-surface);
+  border: 1px solid var(--np-hairline);
+  box-shadow: var(--np-shadow);
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+  pointer-events: none;
+}
+.np-menued {
+  display: flex;
+  flex-direction: column;
+  gap: var(--np-gutter);
+  margin-bottom: var(--np-gutter);
+  /* 占满工坊页剩余高度，给两栏区一个确定高度（列表内部滚动的前提）；
+     min-height 兜底：窗口极矮时编辑器不再压缩，转由 np-menupage-body 滚动 */
+  flex: 1 1 auto;
+  min-height: 320px;
+}
+.np-menued-cols {
+  display: grid;
+  /* 列宽由组件内联样式驱动（左栏定宽 + 把手沟槽 + 右栏自适应）；
+     单行 minmax(0,1fr) 把两栏钳在本区剩余高度内（面板高度 = 顶栏下方实际空间），
+     功能库/启用菜单内容超出时在各自列表内部滚动 */
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
+}
+/* 两栏间拖宽把手：走「拖拽条统一规范」（隐形沟槽 + 2px 强调色细线，
+   替换旧整块 28% 强调色染色）；::before 向两侧各扩 3px 热区 */
+.np-menued-grip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+}
+.np-menued-grip::before {
+  content: "";
+  position: absolute;
+  inset: 0 -3px;
+}
+.np-menued-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--np-gutter);
+  min-width: 0;
+  min-height: 0;
+  padding: var(--np-gutter);
+  border-radius: var(--np-radius-lg);
+  background: var(--np-surface-2);
+}
+/* 面板标题（窗格工具栏 / 启用菜单 / 功能库三行头统一，2026-10-15 定案）：
+   13px 正文色、不加粗（与行内控件同档同重），行高以 --np-ctl-h 对齐 */
+.np-menued-title {
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+}
+/* 工具栏区标题行：标题占左、「重置为默认方案」钮居右（排版语言同功能库标题行） */
+.np-menued-toolhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--np-gutter);
+  min-height: var(--np-ctl-h);
+}
+/* 功能库标题与搜索框同行：标题占左、搜索占满剩余宽 */
+.np-menued-libhead {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gutter);
+  min-height: var(--np-ctl-h);
+}
+/* 功能库标题行（2026-10-15 A+B 改版）：标题 + 计数 + 定宽搜索 + 未启用开关 +
+   启用面图例单行收纳（原库底条上移，flex-wrap 兜底窄窗） */
+.np-menued-libcount {
+  flex: 0 0 auto;
+  padding: 0 7px;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-surface);
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+}
+.np-menued-libhead {
+  flex-wrap: wrap;
+}
+/* 行内控件字号与标题同档（13px 正文档）：Blueprint 小按钮/开关默认字号不齐 */
+.np-menued-libhead .bp6-switch,
+.np-menued-headrow .bp6-button,
+.np-menued-toolhead .bp6-button {
+  font-size: var(--np-font-ui);
+}
+/* 开关垂直对齐（2026-10-15）：Blueprint .bp6-control 默认 block + 8px 下边距，
+   轨道另带针对默认行高的 -3px 上移——两者叠加使开关在垂直居中标题行里整体偏高，
+   此处压平：24px 行内 flex 居中 + 清零微调 */
+.np-menued-libhead .bp6-switch {
+  display: inline-flex;
+  align-items: center;
+  height: var(--np-ctl-h);
+  margin: 0;
+}
+.np-menued-libhead .bp6-switch .bp6-control-indicator {
+  margin-top: 0;
+}
+.np-menued-libhead .np-menued-search {
+  flex: 0 0 auto;
+  width: 160px;
+}
+.np-menued-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--np-gap);
+  color: var(--np-muted);
+  margin-left: auto;
+}
+/* 「启用菜单」标题行：标题居左，清空 / 重置为默认方案居右（动作归属各自卡片，
+   2026-10-15 定案取代编辑器页脚横条） */
+.np-menued-headrow {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gutter);
+  min-height: var(--np-ctl-h);
+}
+.np-menued-headacts {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+  margin-left: auto;
+}
+/* 功能库搜索框：统一填充式输入配方（同 np-nav / np-gsearch-input）——
+   surface-2 常态、聚焦 surface + --np-ring；面板同为 surface-2，常态以
+   hairline 内描边保底边界清晰度（§4.1 阴影兜底），聚焦浮出 */
+.np-menued-libhead .np-menued-search .bp6-input {
+  background: var(--np-surface-2);
+  box-shadow: inset 0 0 0 1px var(--np-hairline);
+  font-size: var(--np-font-ui);
+}
+.np-menued-libhead .np-menued-search .bp6-input:focus {
+  background: var(--np-surface);
+  box-shadow: var(--np-ring);
+}
+.np-menued-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* 撑满面板剩余高度，超出内部滚动（生效前提：上游 np-menued/np-menued-cols
+     给出确定高度）；空菜单时投放区不至于一小条 */
+  flex: 1 1 auto;
+  min-height: 0;
+  user-select: none;
+  overflow-y: auto;
+  background: var(--np-surface);
+  border-radius: var(--np-radius);
+  padding: var(--np-gap);
+}
+/* 窗格工具栏编辑条带：横放在两栏上方，模拟窗格实际导航栏（np-nav）的样子——
+   同高同内边距同 2px 间距；图标方钮 + 地址框占位同排；
+   插入指示 = 左缘竖线（横向插入语义），展开条件 = accent 淡染描边（--np-ring） */
+.np-menued-toolzone {
+  /* 恒定自然高度、禁止收缩：两栏区（flex: 1）吸收剩余空间，条带不被挤压裁切 */
+  flex: 0 0 auto;
+}
+.np-menued-tbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: var(--np-nav-h);
+  padding: 0 6px;
+  border-radius: var(--np-radius);
+  background: var(--np-surface);
+  user-select: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.np-menued-tbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--np-gap);
+  flex: 0 0 auto;
+  height: var(--np-ctl-h);
+  padding: 0 var(--np-gap);
+  border-radius: var(--np-radius);
+  color: var(--np-fg);
+  font-size: var(--np-font-ui);
+  cursor: grab;
+}
+.np-menued-tbtn:hover {
+  background: var(--np-hover);
+}
+.np-menued-tbtn:active {
+  cursor: grabbing;
+}
+/* 地址框占位（固定条目）：填充式控件观感（surface-2 凹陷层级，§4.7）。
+   宽度 = 图标 + 标题文本的自适应内容宽（不 growth、不定宽） */
+.np-menued-taddr {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+  flex: 0 0 auto;
+  height: var(--np-ctl-h);
+  padding: 0 var(--np-gap);
+  border-radius: var(--np-radius);
+  background: var(--np-surface-2);
+  color: var(--np-muted);
+  cursor: grab;
+}
+.np-menued-tbtn.is-drag,
+.np-menued-taddr.is-drag {
+  opacity: 0.4;
+}
+.np-menued-tbtn.is-on,
+.np-menued-taddr.is-on {
+  box-shadow: var(--np-ring);
+}
+.np-menued-tbtn.is-drop-target,
+.np-menued-taddr.is-drop-target {
+  box-shadow: inset 2px 0 0 var(--np-accent);
+}
+.np-menued-cond-name {
+  margin-bottom: var(--np-gap);
+}
+/* 工具栏启用条件未满足：按钮置灰（叠加 Blueprint disabled 的降透明度） */
+.np-nav .np-tool-off {
+  opacity: 0.4;
+}
+/* 库底过滤条已上移并入功能库标题行（2026-10-15 定案），图例样式见 libhead 段 */
+.np-menued-item {
+  display: flex;
+  flex-direction: column;
+}
+.np-menued-row {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+  min-height: var(--np-row-h);
+  padding: 0 var(--np-gap);
+  border-radius: var(--np-radius);
+  color: var(--np-fg);
+  cursor: grab;
+}
+.np-menued-row:hover {
+  background: var(--np-hover);
+}
+.np-menued-row.is-drag {
+  opacity: 0.4;
+}
+.np-menued-exp {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--np-radius);
+  color: var(--np-muted);
+  flex: 0 0 auto;
+}
+.np-menued-exp:hover {
+  color: var(--np-fg);
+}
+.np-menued-label {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--np-font-ui);
+}
+.np-menued-empty {
+  padding: var(--np-gutter);
+}
+/* ── 功能库主体（2026-10-15 A+B 改版定案）：左分组目录（点击平滑跳转 +
+   scrollspy 高亮跟随）+ 右胶囊墙（内容恒全量，跳转只移动视口不裁剪）── */
+.np-menued-libbody {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: var(--np-gutter);
+  flex: 1 1 auto;
+  min-height: 0;
+  user-select: none;
+}
+.np-menued-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--np-surface);
+  border-radius: var(--np-radius-lg);
+  padding: var(--np-gap);
+}
+.np-menued-ritem {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+  min-height: var(--np-ctl-h);
+  padding: 0 var(--np-gutter);
+  border-radius: var(--np-radius);
+  font: inherit;
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+  text-align: left;
+}
+.np-menued-ritem:hover {
+  background: var(--np-hover);
+}
+/* 目录激活 = accent 填充（np-seg 同源语言），计数徽标反白 */
+.np-menued-ritem.is-on {
+  background: var(--np-accent);
+  color: var(--np-accent-fg);
+}
+.np-menued-ritem em {
+  font-style: normal;
+  margin-left: auto;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  background: var(--np-surface-2);
+  padding: 0 6px;
+  border-radius: var(--np-radius-pill);
+  min-width: 18px;
+  text-align: center;
+}
+.np-menued-ritem.is-on em {
+  background: color-mix(in srgb, var(--np-accent-fg) 22%, transparent);
+  color: var(--np-accent-fg);
+}
+.np-menued-wallwrap {
+  /* position: 簇 offsetTop 的坐标基准（scrollspy 与目录跳转都按容器内偏移计算） */
+  position: relative;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--np-surface);
+  border-radius: var(--np-radius-lg);
+  padding: var(--np-gap);
+}
+.np-menued-cluster {
+  padding: var(--np-gap) 2px 2px;
+}
+.np-menued-clabel {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: var(--np-gap) var(--np-gap) 6px;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-menued-clabel b {
+  color: var(--np-fg);
+}
+.np-menued-wall {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+/* 功能库条目 = 胶囊（pill 圆角 + surface-2 凹陷面，§4.1 便签语言）：
+   拖拽语义 grab 光标 + 悬停 accent 轻染描边表达 */
+.np-menued-librow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--np-gap);
+  min-width: 0;
+  height: var(--np-ctl-h);
+  padding: 0 9px;
+  border-radius: var(--np-radius-pill);
+  color: var(--np-fg);
+  font-size: var(--np-font-ui);
+  cursor: grab;
+  background: var(--np-surface-2);
+  border: 1px solid var(--np-hairline);
+  white-space: nowrap;
+}
+.np-menued-librow:hover {
+  border-color: var(--np-accent-border);
+  background: var(--np-surface);
+}
+.np-menued-librow:active {
+  cursor: grabbing;
+}
+/* 启用面徽章（2026-10-15 二次定案，取代圆点）：accent 淡染方徽 + 语义图标
+   （Menu = 已入右键菜单 / PanelTop = 已入窗格工具栏），形状+悬停说明双通道辨识；
+   库底图例与胶囊徽章同语义单源 */
+.np-menued-marks {
+  display: inline-flex;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+.np-menued-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--np-icon-md);
+  height: var(--np-icon-md);
+  border-radius: var(--np-radius);
+  background: var(--np-sel);
+  color: var(--np-accent);
+}
+.np-menued-ghost.is-remove {
+  color: var(--np-danger);
+  border-color: color-mix(in srgb, var(--np-danger) 45%, transparent);
+}
+/* 条件编辑浮层（锚定条目的 PopoverNext 内容，2026-10-14 定案取代内联折叠展开：
+   不推移列表/条带布局，窄栏与横排条带通用）——surface 卡片 + 阴影（弹层统一规范） */
+.np-menued-cond {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  border-radius: var(--np-radius-lg);
+  background: var(--np-surface);
+  box-shadow: var(--np-shadow);
+  width: 340px;
+}
+/* 方案 A 分段快选行：标签列定宽 + np-seg / 输入控件 */
+.np-menued-frow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.np-menued-frow > .np-menued-clabel {
+  width: 56px;
+  flex: 0 0 auto;
+  margin: 0;
+  font-weight: 400;
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+}
+/* 条件字段网格：标签在控件上方（caption 式），宽度自适应换行 */
+.np-menued-cond-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 12px;
+}
+.np-menued-cfield {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.np-menued-cfield .bp6-input-group {
+  width: 100%;
+}
+.np-menued-crange {
+  display: flex;
+  gap: var(--np-gap);
+}
+.np-menued-crange .np-select {
+  flex: 1;
+  min-width: 0;
+}
+/* 条件人话预览：hairline 分隔 + info 图标，实时回显条件含义 */
+.np-menued-cprev {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--np-hairline);
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-menued-chip {
+  flex: 0 0 auto;
+  max-width: 90px;
+  color: var(--np-muted);
+  background: var(--np-surface-2);
+  padding: 0 var(--np-gap);
+  /* 条件摘要恒展示四个（位置/对象/数量/类型），长扩展名列表省略收窄 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* ── 批量重命名对话框（np-bren）── */
+.np-bren-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--np-gutter);
+  margin-bottom: var(--np-gutter);
+}
+.np-bren-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--np-gutter);
+  min-width: 0;
+}
+.np-bren-field > .bp6-input-group {
+  width: 120px;
+}
+.np-bren-k {
+  flex: 0 0 auto;
+}
+/* 预览列表：surface-2 凹陷层级（§4.7），行高走 --np-row-h */
+.np-bren-preview {
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius-lg);
+  padding: var(--np-gutter);
+  margin-bottom: var(--np-gutter);
+}
+.np-bren-row {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gutter);
+  height: var(--np-row-h);
+  font-size: var(--np-font-ui);
+}
+.np-bren-old {
+  flex: 1 1 45%;
+  min-width: 0;
+  color: var(--np-muted);
+}
+.np-bren-arrow {
+  flex: 0 0 auto;
+  color: var(--np-muted);
+}
+.np-bren-new {
+  flex: 1 1 55%;
+  min-width: 0;
+}
+.np-bren-new.is-chg {
+  color: var(--np-accent);
+}
+.np-bren-new.is-err {
+  color: var(--np-danger);
+}
+.np-bren-new.is-same {
+  color: var(--np-muted);
+}

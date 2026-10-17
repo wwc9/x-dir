@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>启用条件编辑 · 布局位置三套方案</title>
+<style>
+  :root {
+    --canvas: #eef0f3;
+    --surface: #ffffff;
+    --surface2: #f3f5f8;
+    --hairline: #e2e5ea;
+    --text: #1f2530;
+    --muted: #7a828e;
+    --accent: #3574f0;
+    --accent-weak: rgba(53, 116, 240, 0.10);
+    --accent-line: rgba(53, 116, 240, 0.45);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px clamp(16px, 4vw, 56px) 64px;
+    background: var(--canvas); color: var(--text);
+    font: 13px/1.65 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  header h1 { font-size: 18px; margin: 0 0 6px; }
+  header p { margin: 0 0 8px; color: var(--muted); }
+  .sample-note {
+    display: inline-block; margin-top: 4px; padding: 3px 10px; border-radius: 999px;
+    background: var(--accent-weak); color: #2b62c9; font-size: 12px;
+  }
+  main { display: grid; gap: 30px; margin-top: 24px; max-width: 1120px; }
+  section h2 { font-size: 15px; margin: 0 0 2px; }
+  section h2 .tag-no {
+    display: inline-block; margin-right: 8px; padding: 1px 8px; border-radius: 999px;
+    background: var(--text); color: #fff; font-size: 11px; vertical-align: 1px;
+  }
+  .pc { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; }
+  .pc b { color: var(--text); font-weight: 600; }
+
+  /* ══ 工坊页面 mock 公共件 ══ */
+  .ws {
+    background: var(--surface); border-radius: 14px; padding: 12px;
+    box-shadow: 0 1px 2px rgba(31, 37, 48, 0.05), 0 8px 24px rgba(31, 37, 48, 0.06);
+  }
+  .ws-strip {
+    display: flex; align-items: center; gap: 6px; min-height: 34px;
+    padding: 0 8px; background: var(--surface2); border-radius: 10px; margin-bottom: 10px;
+  }
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px;
+    border-radius: 8px; font-size: 12.5px; cursor: pointer; white-space: nowrap;
+  }
+  .pill:hover { background: rgba(31, 37, 48, 0.06); }
+  .pill.on { box-shadow: 0 0 0 2px var(--accent-line); }
+  .pill .ic { font-style: normal; opacity: 0.75; }
+  .pill-fixed { background: var(--surface2); color: var(--muted); cursor: grab; }
+  .ws-cols { display: grid; gap: 10px; }
+  .pane { background: var(--surface2); border-radius: 12px; padding: 8px; min-width: 0; }
+  .pane-title { font-weight: 600; font-size: 12.5px; margin: 2px 4px 8px; }
+  .mrow {
+    display: flex; align-items: center; gap: 5px; min-height: 28px; padding: 0 6px;
+    border-radius: 8px; cursor: pointer; background: var(--surface);
+    border: 1px solid transparent; margin-bottom: 3px; overflow: hidden;
+  }
+  .mrow:hover { border-color: var(--accent-line); }
+  .mrow.sel { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(53, 116, 240, 0.14); }
+  .mrow .nm { flex: 0 0 auto; }
+  .chip {
+    padding: 0 7px; border-radius: 999px; background: rgba(31, 37, 48, 0.06);
+    color: var(--muted); font-size: 11px; white-space: nowrap;
+  }
+  .chip.fix { color: #9a6b00; background: rgba(202, 144, 22, 0.14); }
+  .chev { margin-left: auto; color: var(--muted); font-size: 10px; }
+  .footer { display: flex; justify-content: space-between; margin-top: 10px; color: var(--muted); }
+  .footer .lnk { cursor: pointer; }
+  .footer .lnk:hover { color: var(--text); }
+
+  /* ══ 分段选择器 ══ */
+  .seg { display: inline-flex; background: #e9ecf1; border-radius: 999px; padding: 2px; }
+  .seg button {
+    border: 0; background: transparent; padding: 3px 11px; border-radius: 999px;
+    font: inherit; font-size: 12px; color: #5a6270; cursor: pointer; white-space: nowrap;
+  }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .frow { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; flex-wrap: wrap; }
+  .frow > .flabel { width: 56px; flex: 0 0 auto; color: var(--muted); font-size: 11px; }
+  .tinput {
+    flex: 1 1 90px; min-width: 80px; border: 1px solid var(--hairline); border-radius: 8px;
+    padding: 3px 9px; font: inherit; font-size: 12px; color: var(--muted);
+    background: var(--surface2);
+  }
+  .preview {
+    display: flex; align-items: center; gap: 6px; margin-top: 10px; padding-top: 9px;
+    border-top: 1px solid var(--hairline); color: var(--muted); font-size: 12px;
+  }
+  .preview .ic { color: var(--accent); font-style: normal; }
+
+  /* ══ 方案 1：第三栏详情 ══ */
+  .cols-1 { grid-template-columns: 216px minmax(0, 1fr) 268px; }
+  .detail-pane .seg { flex-wrap: wrap; }
+
+  /* ══ 方案 2：底部属性栏 ══ */
+  .cols-2 { grid-template-columns: 216px minmax(0, 1fr); }
+  .inspector {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    background: var(--surface); border-radius: 12px; padding: 9px 14px; margin-top: 10px;
+    box-shadow: 0 1px 2px rgba(31, 37, 48, 0.05);
+  }
+  .inspector .who { font-weight: 600; flex: 0 0 auto; }
+  .inspector .who small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; }
+  .inspector .frow { margin: 0; }
+  .inspector .preview { border: 0; margin: 0 0 0 auto; padding: 0; }
+
+  /* ══ 方案 3：右栏切换编辑视图 ══ */
+  .cols-3 { grid-template-columns: 216px minmax(0, 1fr); }
+  .detail-view .back {
+    display: inline-flex; align-items: center; gap: 6px; margin-bottom: 10px;
+    padding: 3px 10px; border-radius: 8px; border: 1px solid var(--hairline);
+    background: var(--surface); font: inherit; font-size: 12px; cursor: pointer;
+  }
+  .detail-view .back:hover { border-color: var(--accent-line); }
+  .lib-view .mrow .go { margin-left: auto; color: var(--muted); font-size: 11px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>启用条件编辑 · 布局位置三套方案</h1>
+  <p>控件沿用方案 A 分段快选；此处只对比「编辑器放在哪里」。三套均支持：点启用菜单条目或工具栏条目 → 编辑器即时填充。</p>
+  <span class="sample-note">示例统一为「PDF 合并」：选中时 · 仅文件 · ≥ 2 项 · pdf</span>
+</header>
+<main>
+  <!-- ═══════════ 方案 1 ═══════════ -->
+  <section>
+    <h2><span class="tag-no">方案 1</span>常驻第三栏（Master-Detail）</h2>
+    <p class="pc"><b>优点：</b>编辑器位置固定、随时可见，列表不被推挤，浏览与编辑同屏；<b>代价：</b>多占一栏宽度（功能库三列网格顺势收窄），窗口较窄时局促。</p>
+    <div class="ws">
+      <div class="ws-strip" data-fill>
+        <span class="pill on">⊞ 新建文件夹</span>
+        <span class="pill">地址框（固定）</span>
+        <span class="pill">复制路径</span>
+        <span class="pill" data-name="PDF 合并">⇉ PDF 合并</span>
+      </div>
+      <div class="ws-cols cols-1">
+        <div class="pane">
+          <div class="pane-title">启用菜单</div>
+          <div class="mrow"><span class="nm">🗑 删除</span><span class="chip fix">固定</span><span class="chip">选中时</span><span class="chev">›</span></div>
+          <div class="mrow sel" data-name="PDF 合并"><span class="nm">⇉ PDF 合并</span><span class="chip">选中时</span><span class="chip">仅文件</span><span class="chip">≥ 2</span><span class="chip">pdf</span><span class="chev">›</span></div>
+          <div class="mrow"><span class="nm">📋 复制</span><span class="chip fix">固定</span><span class="chip">选中时</span><span class="chev">›</span></div>
+          <div class="mrow"><span class="nm">📝 重命名</span><span class="chip fix">固定</span><span class="chip">选中时</span><span class="chip">1 项</span><span class="chev">›</span></div>
+        </div>
+        <div class="pane">
+          <div class="pane-title">功能库</div>
+          <div class="mrow"><span class="nm">📄 在新标签打开</span></div>
+          <div class="mrow"><span class="nm">🗑 删除</span></div>
+          <div class="mrow"><span class="nm">📋 复制</span></div>
+          <div class="mrow"><span class="nm">✂ 剪切</span></div>
+        </div>
+        <div class="pane detail-pane">
+          <div class="pane-title">启用条件 · <span data-who>PDF 合并</span></div>
+          <div class="frow"><span class="flabel">启用时机</span>
+            <span class="seg" data-seg><button>总是</button><button class="on">选中时</button><button>未选中时</button></span>
+          </div>
+          <div class="frow"><span class="flabel">对象类型</span>
+            <span class="seg" data-seg><button>不限</button><button class="on">仅文件</button><button>仅文件夹</button></span>
+          </div>
+          <div class="frow"><span class="flabel">选中数量</span>
+            <span class="seg" data-seg><button>不限</button><button>恰好 1 项</button><button class="on">≥ 2 项</button><button>自定义…</button></span>
+          </div>
+          <div class="frow"><span class="flabel">文件类型</span>
+            <span class="tinput">pdf, txt</span>
+          </div>
+          <div class="preview"><i class="ic">ⓘ</i>选中条目时显示 · 仅文件 · 至少 2 项 · 类型 pdf</div>
+        </div>
+      </div>
+      <div class="footer"><span class="lnk">清空</span><span class="lnk">重置为预设 ▾</span></div>
+    </div>
+  </section>
+
+  <!-- ═══════════ 方案 2 ═══════════ -->
+  <section>
+    <h2><span class="tag-no">方案 2</span>底部属性栏（水平 Inspector）</h2>
+    <p class="pc"><b>优点：</b>水平空间充裕、全部字段单行排开零折叠，位置固定可预期（类设计软件属性栏）；<b>代价：</b>编辑目标在上方列表时视线垂直移动，需要靠「对象名」标识当前编辑目标。</p>
+    <div class="ws">
+      <div class="ws-strip" data-fill>
+        <span class="pill on">⊞ 新建文件夹</span>
+        <span class="pill">地址框（固定）</span>
+        <span class="pill">复制路径</span>
+        <span class="pill" data-name="PDF 合并">⇉ PDF 合并</span>
+      </div>
+      <div class="ws-cols cols-2">
+        <div class="pane">
+          <div class="pane-title">启用菜单</div>
+          <div class="mrow"><span class="nm">🗑 删除</span><span class="chip fix">固定</span><span class="chip">选中时</span><span class="chev">›</span></div>
+          <div class="mrow sel" data-name="PDF 合并"><span class="nm">⇉ PDF 合并</span><span class="chip">选中时</span><span class="chip">仅文件</span><span class="chip">≥ 2</span><span class="chip">pdf</span><span class="chev">›</span></div>
+          <div class="mrow"><span class="nm">📋 复制</span><span class="chip fix">固定</span><span class="chip">选中时</span><span class="chev">›</span></div>
+          <div class="mrow"><span class="nm">📝 重命名</span><span class="chip fix">固定</span><span class="chip">选中时</span><span class="chip">1 项</span><span class="chev">›</span></div>
+        </div>
+        <div class="pane">
+          <div class="pane-title">功能库</div>
+          <div class="mrow"><span class="nm">📄 在新标签打开</span></div>
+          <div class="mrow"><span class="nm">🗑 删除</span></div>
+          <div class="mrow"><span class="nm">📋 复制</span></div>
+          <div class="mrow"><span class="nm">✂ 剪切</span></div>
+        </div>
+      </div>
+      <div class="inspector">
+        <span class="who">启用条件<small><span data-who>PDF 合并</span></small></span>
+        <span class="frow"><span class="flabel">时机</span>
+          <span class="seg" data-seg><button>总是</button><button class="on">选中时</button><button>未选中时</button></span>
+        </span>
+        <span class="frow"><span class="flabel">对象</span>
+          <span class="seg" data-seg><button>不限</button><button class="on">仅文件</button><button>仅文件夹</button></span>
+        </span>
+        <span class="frow"><span class="flabel">数量</span>
+          <span class="seg" data-seg><button>不限</button><button>1 项</button><button class="on">≥ 2</button><button>自定义</button></span>
+        </span>
+        <span class="frow"><span class="flabel">类型</span>
+          <span class="tinput" style="flex: 0 1 110px">pdf, txt</span>
+        </span>
+        <span class="preview"><i class="ic">ⓘ</i>选中条目时显示 · 仅文件 · 至少 2 项</span>
+      </div>
+      <div class="footer"><span class="lnk">清空</span><span class="lnk">重置为预设 ▾</span></div>
+    </div>
+  </section>
+
+  <!-- ═══════════ 方案 3 ═══════════ -->
+  <section>
+    <h2><span class="tag-no">方案 3</span>右栏切换编辑视图（Detail-over-Library）</h2>
+    <p class="pc"><b>优点：</b>不新增任何栏，复用功能库的整栏宽度（字段可两列铺开），编辑沉浸感最强；<b>代价：</b>编辑时看不到功能库，来回切换多一步（点「完成」返回）。</p>
+    <div class="ws">
+      <div class="ws-strip" data-fill>
+        <span class="pill on">⊞ 新建文件夹</span>
+        <span class="pill">地址框（固定）</span>
+        <span class="pill">复制路径</span>
+        <span class="pill" data-name="PDF 合并">⇉ PDF 合并</span>
+      </div>
+      <div class="ws-cols cols-3">
+        <div class="pane">
+          <div class="pane-title">启用菜单</div>
+          <div class="mrow"><span class="nm">🗑 删除</span><span class="chip fix">固定</span><span class="chip">选中时</span><span class="chev">›</span></div>
+          <div class="mrow sel" data-edit><span class="nm">⇉ PDF 合并</span><span class="chip">选中时</span><span class="chip">仅文件</span><span class="chip">≥ 2</span><span class="chip">pdf</span><span class="chev">›</span></div>
+          <div class="mrow"><span class="nm">📋 复制</span><span class="chip fix">固定</span><span class="chip">选中时</span><span class="chev">›</span></div>
+          <div class="mrow"><span class="nm">📝 重命名</span><span class="chip fix">固定</span><span class="chip">选中时</span><span class="chip">1 项</span><span class="chev">›</span></div>
+        </div>
+        <div class="pane detail-view" id="p3detail">
+          <button class="back">← 返回功能库</button>
+          <div class="pane-title">启用条件 · <span data-who>PDF 合并</span></div>
+          <div class="frow"><span class="flabel">启用时机</span>
+            <span class="seg" data-seg><button>总是</button><button class="on">选中时</button><button>未选中时</button></span>
+          </div>
+          <div class="frow"><span class="flabel">对象类型</span>
+            <span class="seg" data-seg><button>不限</button><button class="on">仅文件</button><button>仅文件夹</button></span>
+          </div>
+          <div class="frow"><span class="flabel">选中数量</span>
+            <span class="seg" data-seg><button>不限</button><button>恰好 1 项</button><button class="on">≥ 2 项</button><button>自定义…</button></span>
+          </div>
+          <div class="frow"><span class="flabel">文件类型</span>
+            <span class="tinput">pdf, txt</span>
+          </div>
+          <div class="preview"><i class="ic">ⓘ</i>选中条目时显示 · 仅文件 · 至少 2 项 · 类型 pdf</div>
+        </div>
+      </div>
+      <div class="footer"><span class="lnk">清空</span><span class="lnk">重置为预设 ▾</span></div>
+    </div>
+  </section>
+</main>
+
+<script>
+  // 分段选择：组内单击切换
+  document.querySelectorAll("[data-seg]").forEach((seg) => {
+    seg.addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      seg.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
+      b.classList.add("on");
+    });
+  });
+  // 点条目 / 工具栏 pill：选中态 + 各详情标题联动（演示用）
+  document.querySelectorAll("section").forEach((sec) => {
+    const whos = sec.querySelectorAll("[data-who]");
+    const pick = (name) => {
+      sec.querySelectorAll(".mrow, .pill").forEach((x) => x.classList.remove("sel", "on"));
+      whos.forEach((w) => (w.textContent = name));
+    };
+    sec.querySelectorAll("[data-name]").forEach((el) => {
+      el.addEventListener("click", () => {
+        pick(el.dataset.name);
+        el.classList.add(el.classList.contains("pill") ? "on" : "sel");
+      });
+    });
+    sec.querySelectorAll("[data-edit]").forEach((el) => {
+      el.addEventListener("click", () => {
+        pick(el.dataset.name || el.querySelector(".nm").textContent.trim());
+        el.classList.add("sel");
+        sec.querySelector("#p3detail").style.display = "";
+      });
+    });
+  });
+  // 方案 3：返回功能库 = 右栏切回占位视图
+  const back = document.querySelector("#p3detail .back");
+  back.addEventListener("click", () => {
+    const pane = document.getElementById("p3detail");
+    pane.innerHTML =
+      '<div class="pane-title">功能库</div>' +
+      '<div class="mrow"><span class="nm">📄 在新标签打开</span><span class="go">拖入左侧启用</span></div>' +
+      '<div class="mrow"><span class="nm">🗑 删除</span></div>' +
+      '<div class="mrow"><span class="nm">📋 复制</span></div>' +
+      '<div class="mrow"><span class="nm">✂ 剪切</span></div>' +
+      '<div class="mrow"><span class="nm">⇉ PDF 合并</span><span class="go">点条目编辑条件</span></div>';
+  });
+</script>
+</body>
+</html>

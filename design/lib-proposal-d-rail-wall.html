@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>功能库展示 · 方案 A+B「组航胶囊墙」</title>
+<script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+  /* ══ x-dir 设计 token 镜像（src/index.css :root）══ */
+  :root {
+    --np-bg: #e9ecf1; --np-surface: #ffffff; --np-surface-2: #f0f2f5;
+    --np-border: #d6dbe2; --np-hairline: rgba(16, 24, 40, 0.06);
+    --np-fg: #171d26; --np-muted: #66707e; --np-accent: #3574f0;
+    --np-accent-line: color-mix(in srgb, var(--np-accent) 45%, transparent);
+    --np-ring: 0 0 0 2px color-mix(in srgb, var(--np-accent) 45%, transparent);
+    --np-hover: rgba(26, 33, 41, 0.055); --np-sel: rgba(53, 116, 240, 0.12);
+    --np-radius: 6px; --np-radius-lg: 10px; --np-radius-pill: 999px;
+    --np-gap: 4px; --np-gutter: 8px;
+    --np-font-ui: 13px; --np-font-sm: 11px;
+  }
+  * { box-sizing: border-box; }
+  button { font: inherit; border: 0; background: none; padding: 0; cursor: pointer; }
+  button:focus, button:focus-visible, input:focus, input:focus-visible { outline: none; }
+  body {
+    margin: 0; padding: 28px clamp(16px, 4vw, 56px) 64px;
+    background: var(--np-bg); color: var(--np-fg);
+    font: 13px/1.65 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  header h1 { font-size: 18px; margin: 0 0 6px; }
+  header h1 .tag {
+    display: inline-block; margin-right: 8px; padding: 1px 10px; border-radius: var(--np-radius-pill);
+    background: var(--np-fg); color: #fff; font-size: 12px; vertical-align: 2px;
+  }
+  header p { margin: 0; color: var(--np-muted); }
+  .jump { margin-top: 8px; font-size: 12px; color: var(--np-muted); }
+  .jump a { color: var(--np-accent); text-decoration: none; margin-right: 12px; }
+  .jump a:hover { text-decoration: underline; }
+
+  /* ══ 面板 mock ══ */
+  .stage { margin-top: 20px; width: min(780px, 100%); }
+  .panel {
+    display: flex; flex-direction: column; gap: var(--np-gutter);
+    background: var(--np-surface-2); border-radius: 14px; padding: var(--np-gutter);
+  }
+  .phead { display: flex; align-items: center; gap: var(--np-gutter); }
+  .ptitle { font-weight: 600; flex: 0 0 auto; }
+  .pcount {
+    flex: 0 0 auto; padding: 0 7px; border-radius: var(--np-radius-pill);
+    background: var(--np-surface); color: var(--np-muted); font-size: var(--np-font-sm);
+  }
+  .search { position: relative; flex: 0 0 auto; width: 160px; margin-left: auto; }
+  .search svg, .search .glyph-fallback {
+    position: absolute; left: 8px; top: 50%; translate: 0 -50%;
+    width: 12px; height: 12px; color: var(--np-muted); pointer-events: none;
+  }
+  .search .glyph-fallback { font-size: 10px; text-align: center; line-height: 1; }
+  .search input {
+    width: 100%; height: 24px; padding: 0 8px 0 26px;
+    font: inherit; font-size: var(--np-font-ui); color: var(--np-fg);
+    background: var(--np-surface-2); border: 0; border-radius: var(--np-radius);
+    box-shadow: inset 0 0 0 1px var(--np-hairline);
+  }
+  .search input::placeholder { color: var(--np-muted); }
+  .search input:focus { background: var(--np-surface); box-shadow: var(--np-ring); }
+
+  /* A+B 混合体：左组航目录（跳转定位）+ 右胶囊墙（内容恒全量，滚动浏览） */
+  .hbody { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: var(--np-gutter); height: 520px; }
+  .rail {
+    display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow-y: auto;
+    background: var(--np-surface); border-radius: var(--np-radius-lg); padding: var(--np-gap);
+    user-select: none;
+  }
+  .rail::-webkit-scrollbar { width: 8px; }
+  .rail::-webkit-scrollbar-thumb {
+    background: rgba(23, 29, 38, 0.22); border-radius: var(--np-radius-pill);
+    border: 2px solid transparent; background-clip: content-box;
+  }
+  .ritem {
+    display: flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 8px;
+    border-radius: var(--np-radius); font-size: var(--np-font-ui); color: var(--np-fg); text-align: left;
+  }
+  .ritem:hover { background: var(--np-hover); }
+  .ritem.on { background: var(--np-accent); color: #fff; }
+  .ritem em {
+    font-style: normal; margin-left: auto; font-size: var(--np-font-sm);
+    color: var(--np-muted); background: var(--np-surface-2);
+    padding: 0 6px; border-radius: var(--np-radius-pill); min-width: 18px; text-align: center;
+  }
+  .ritem.on em { background: rgba(255, 255, 255, 0.22); color: #fff; }
+  .railhint {
+    margin-top: auto; padding: 6px 8px 2px; border-top: 1px solid var(--np-hairline);
+    font-size: var(--np-font-sm); color: var(--np-muted);
+  }
+
+  .wallwrap {
+    min-height: 0; overflow-y: auto; scroll-behavior: smooth;
+    background: var(--np-surface); border-radius: var(--np-radius-lg); padding: var(--np-gap);
+    user-select: none;
+  }
+  .wallwrap::-webkit-scrollbar { width: 8px; }
+  .wallwrap::-webkit-scrollbar-thumb {
+    background: rgba(23, 29, 38, 0.22); border-radius: var(--np-radius-pill);
+    border: 2px solid transparent; background-clip: content-box;
+  }
+  .cluster { padding: 6px 2px 2px; scroll-margin: 4px; }
+  .clabel {
+    display: flex; align-items: baseline; gap: 6px;
+    padding: 4px 4px 6px; font-size: var(--np-font-sm); color: var(--np-muted);
+  }
+  .clabel b { font-weight: 600; color: var(--np-fg); }
+  .wall { display: flex; flex-wrap: wrap; gap: 5px; }
+  .fpill {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 26px; padding: 0 10px; border-radius: var(--np-radius-pill);
+    background: var(--np-surface-2); border: 1px solid var(--np-hairline);
+    font-size: 12px; color: var(--np-fg); cursor: grab; white-space: nowrap;
+  }
+  .fpill:hover { border-color: var(--np-accent-line); background: var(--np-surface); }
+  .fpill:active { cursor: grabbing; }
+  .fpill svg, .fpill .glyph-fallback { width: 13px; height: 13px; color: var(--np-fg); }
+  .fpill .glyph-fallback { font-size: 10px; text-align: center; }
+  .dots { display: inline-flex; gap: 3px; margin-left: 1px; }
+  .dots i { width: 5px; height: 5px; border-radius: var(--np-radius-pill); }
+  .d-m { background: var(--np-accent); }
+  .d-t { background: color-mix(in srgb, var(--np-fg) 55%, transparent); }
+  .empty { padding: var(--np-gutter); font-size: var(--np-font-sm); color: var(--np-muted); }
+
+  .pfoot { display: flex; align-items: center; justify-content: space-between; gap: var(--np-gutter); flex: 0 0 auto; }
+  .switch { display: inline-flex; align-items: center; gap: 6px; font-size: var(--np-font-sm); color: var(--np-muted); cursor: pointer; }
+  .switch input { accent-color: var(--np-accent); }
+  .pfoot .hint { font-size: var(--np-font-sm); color: var(--np-muted); }
+
+  /* ══ 优缺点卡 ══ */
+  .pc { display: grid; grid-template-columns: 1fr 1fr; gap: var(--np-gutter); margin-top: 14px; width: min(780px, 100%); }
+  .pc > div { background: var(--np-surface); border-radius: var(--np-radius-lg); padding: 10px 12px; font-size: 12.5px; }
+  .pc b { display: block; margin-bottom: 4px; font-size: var(--np-font-sm); }
+  .pc .good b { color: #23834c; } .pc .bad b { color: #c06f16; }
+  .pc ul { margin: 0; padding-left: 18px; color: var(--np-muted); }
+  .legend { margin-top: 10px; display: flex; gap: 14px; align-items: center; font-size: 12px; color: var(--np-muted); width: min(780px, 100%); }
+  .legend .dots { transform: translateY(1px); }
+  .note { margin-top: 6px; width: min(780px, 100%); font-size: 12px; color: var(--np-muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="tag">方案 A+B</span>组航胶囊墙</h1>
+  <p>取 A 的目录跳转 + B 的胶囊展示：左栏 = 分组目录（名称 + 计数，点击平滑滚动定位到该组，滚动时高亮跟随），右栏 = 胶囊墙（内容恒全量可见，跳转只移动视口不裁剪内容）。</p>
+  <div class="jump">其他方案：<a href="lib-proposal-a-anchor.html">方案 A · 分组锚点速览</a><a href="lib-proposal-b-chipwall.html">方案 B · 胶囊墙</a><a href="lib-proposal-c-rail.html">方案 C · 组航分栏</a></div>
+</header>
+
+<section class="stage">
+  <div class="panel">
+    <div class="phead">
+      <span class="ptitle">功能库</span>
+      <span class="pcount" id="count">52</span>
+      <span class="search">
+        <i data-lucide="search" data-label="搜"></i>
+        <input id="q" placeholder="搜索功能" spellcheck="false" />
+      </span>
+    </div>
+    <div class="hbody">
+      <nav class="rail" id="rail"></nav>
+      <div class="wallwrap" id="wallwrap"></div>
+    </div>
+    <div class="pfoot">
+      <label class="switch"><input type="checkbox" id="onlyUnused" />只展示未启用的功能</label>
+      <span class="hint">拖入左侧菜单或上方工具栏启用 · 仅拖拽添加</span>
+    </div>
+  </div>
+</section>
+
+<div class="legend">
+  启用面图例：<span class="dots"><i class="d-m"></i></span> 已入右键菜单
+  <span class="dots"><i class="d-t"></i></span> 已入窗格工具栏
+  <span class="dots"><i class="d-m"></i><i class="d-t"></i></span> 两面启用
+</div>
+<div class="pc">
+  <div class="good">
+    <b>✓ 优点</b>
+    <ul>
+      <li>两案所长：B 的一屏总览 + A 的一跳直达，目录恒定可见</li>
+      <li>跳转 = 滚动定位而非过滤，上下文不丢；scrollspy 高亮随滚动跟随</li>
+      <li>目录计数 = 库容量地图，功能扩容后导航依然成立</li>
+    </ul>
+  </div>
+  <div class="bad">
+    <b>✗ 代价</b>
+    <ul>
+      <li>多一列目录占宽 ~130px，窄窗格挤压胶囊换行</li>
+      <li>胶囊启用点语义 + 目录高亮，两处状态需要一眼可分</li>
+    </ul>
+  </div>
+</div>
+<p class="note">示意原型 · 数据与图标取自当前功能库（52 项 · 11 组）；图标经 lucide CDN 加载，离线时以首字母占位。试试：点左栏「整理」跳转、滚动画看到高亮跟随、搜索「pdf」看过滤。</p>
+
+<script>
+const GROUPS = ["文件","剪贴板","新建与选择","视图","窗格协作","窗格工具","标记与系统","整理","PDF","办公","表格与文本"];
+const FNS = [
+  ["open","打开","external-link","文件","单选",1,0],
+  ["openTab","在新标签打开","app-window","文件","文件夹 · 单选",1,0],
+  ["rename","重命名","text-cursor-input","文件","单选",1,0],
+  ["batchRename","批量重命名","list-ordered","文件","≥ 2 项",0,0],
+  ["delete","删除","trash-2","文件","选中项",1,0],
+  ["deletePerm","永久删除","trash","文件","选中项",0,0],
+  ["properties","属性","info","文件","单选",1,0],
+  ["cut","剪切","scissors","剪贴板","选中项",1,0],
+  ["copy","复制","copy","剪贴板","选中项",1,0],
+  ["paste","粘贴","clipboard-paste","剪贴板","总是",1,0],
+  ["copyPath","复制路径","clipboard-copy","剪贴板","选中/空白",0,1],
+  ["copyName","复制名称","type","剪贴板","选中项",0,0],
+  ["newFolder","新建文件夹","folder-plus","新建与选择","空白处",1,1],
+  ["newFile","新建文本文件","file-plus","新建与选择","空白处",1,0],
+  ["selectAll","全选","list-checks","新建与选择","空白处",1,0],
+  ["reverseSelect","反向选择","arrow-up-down","新建与选择","空白处",0,0],
+  ["refresh","刷新","rotate-cw","视图","总是",1,1],
+  ["toggleHidden","切换隐藏文件","eye","视图","空白处",0,0],
+  ["copyToPane","复制到窗格","arrow-right-to-line","窗格协作","选中项",1,0],
+  ["moveToPane","移动到窗格","arrow-left-right","窗格协作","选中项",1,0],
+  ["up","上一级","corner-left-up","窗格工具","恒可用",0,1],
+  ["view","视图类型","layout-list","窗格工具","恒可用",0,1],
+  ["addr","地址框","rectangle-horizontal","窗格工具","恒可用 · 固定",0,1],
+  ["search","搜索当前文件夹","search","窗格工具","恒可用",0,1],
+  ["splitH","横向分裂","columns-2","窗格工具","恒可用",0,1],
+  ["splitV","纵向分裂","rows-2","窗格工具","恒可用",0,1],
+  ["swap","交换窗格","arrow-left-right","窗格工具","恒可用",0,1],
+  ["colorTag","颜色标记","paintbrush","标记与系统","选中项",1,0],
+  ["addFavorite","添加到收藏夹","star","标记与系统","文件夹",0,1],
+  ["sysMenu","更多系统选项","list","标记与系统","选中项",1,0],
+  ["openTerminal","在终端打开","terminal","标记与系统","选中/空白",0,1],
+  ["zipHere","压缩为 zip","archive","整理","选中项",0,0],
+  ["extract","解压到此处","archive-restore","整理","zip / 7z",0,0],
+  ["organizeBy","按规则归类","folder-input","整理","文件 · ≥ 2",0,0],
+  ["findDuplicates","查找重复文件","layers","整理","文件夹 · 单选",0,0],
+  ["dirSizes","空间分析","hard-drive","整理","文件夹 · 单选",0,0],
+  ["compareFolders","文件夹比较","git-compare","整理","文件夹 · ≥ 2",0,0],
+  ["pdfMerge","PDF 合并","files","PDF","≥ 2 · pdf",1,0],
+  ["pdfSplit","PDF 拆分为单页","file-output","PDF","pdf · 单文件",1,0],
+  ["pdfExtract","PDF 提取页","file-down","PDF","pdf · 单文件",0,0],
+  ["pdfRemove","PDF 删除页","file-minus","PDF","pdf · 单文件",0,0],
+  ["pdfRotate","PDF 旋转","rotate-cw","PDF","pdf · 单文件",0,0],
+  ["pdfCompress","PDF 轻压缩","minimize-2","PDF","pdf",0,0],
+  ["pdfWatermark","PDF 加水印","droplets","PDF","pdf",1,0],
+  ["imgToPdf","图片合并转 PDF","images","办公","png / jpg",0,0],
+  ["officeToPdf","转为 PDF","file-text","办公","office 文档",0,0],
+  ["officeClean","清理隐私属性","eraser","办公","OOXML",0,0],
+  ["officeToTxt","导出文本 TXT","file-type","办公","文档 / 表格",0,0],
+  ["csvConvert","编码转换","replace","表格与文本","文本 / 表格",0,0],
+  ["csvMerge","CSV 合并","table","表格与文本","≥ 2 · csv",0,0],
+  ["textMerge","文本合并","merge","表格与文本","≥ 2 · 文本",0,0],
+  ["exportList","导出文件清单","clipboard-list","表格与文本","选中项",0,0],
+];
+
+let curGroup = "文件"; // scrollspy 高亮（跟随滚动 / 点击即时置位）
+let jumping = false;   // 点击跳转的平滑滚动期间挂起 spy，落定后恢复
+const $ = (id) => document.getElementById(id);
+
+function dots(m, t) {
+  let h = "";
+  if (m) h += `<i class="d-m" title="已启用 · 右键菜单"></i>`;
+  if (t) h += `<i class="d-t" title="已启用 · 窗格工具栏"></i>`;
+  return h ? `<span class="dots">${h}</span>` : "";
+}
+
+function renderRail() {
+  $("rail").innerHTML = GROUPS.map((g) => {
+    const n = FNS.filter((r) => r[3] === g).length;
+    return `<button class="ritem ${g === curGroup ? "on" : ""}" data-g="${g}">${g}<em>${n}</em></button>`;
+  }).join("") + `<div class="railhint">点击跳转到分组</div>`;
+}
+
+function visibleRows() {
+  const q = $("q").value.trim().toLowerCase();
+  const onlyUnused = $("onlyUnused").checked;
+  return FNS.filter(([, label, , , , m, t]) =>
+    (!onlyUnused || (!m && !t)) && (!q || label.toLowerCase().includes(q)));
+}
+
+function renderWall() {
+  const rows = visibleRows();
+  $("count").textContent = rows.length;
+  const wrap = $("wallwrap");
+  if (!rows.length) {
+    wrap.innerHTML = `<div class="empty">无匹配功能</div>`;
+    return;
+  }
+  let html = "";
+  for (const g of GROUPS) {
+    const items = rows.filter((r) => r[3] === g);
+    if (!items.length) continue;
+    html += `<div class="cluster" data-g="${g}"><div class="clabel"><b>${g}</b><span>${items.length}</span></div><div class="wall">`;
+    html += items.map(([key, label, icon, , cond, m, t]) =>
+      `<span class="fpill" title="${label} · ${cond}（拖入菜单或工具栏）">` +
+      `<i data-lucide="${icon}" data-label="${label[0]}"></i>${label}${dots(m, t)}</span>`
+    ).join("");
+    html += `</div></div>`;
+  }
+  wrap.innerHTML = html;
+  mountIcons();
+  // 过滤后当前组可能被滤掉：高亮落到第一个可见组（spy 基准随之复位）
+  const first = wrap.querySelector(".cluster");
+  if (first && first.dataset.g !== curGroup) {
+    curGroup = first.dataset.g;
+    renderRail();
+  }
+}
+
+function render() {
+  renderWall();
+  renderRail();
+}
+
+// scrollspy：滚动时以「视口顶部触及的最新簇」为当前组；跳转动画期间挂起
+$("wallwrap").addEventListener("scroll", () => {
+  if (jumping) return;
+  const wrap = $("wallwrap");
+  const top = wrap.scrollTop + 24;
+  let cur = null;
+  for (const c of wrap.querySelectorAll(".cluster")) {
+    if (c.offsetTop <= top) cur = c.dataset.g;
+  }
+  if (cur && cur !== curGroup) {
+    curGroup = cur;
+    renderRail();
+  }
+});
+
+$("rail").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-g]");
+  if (!b) return;
+  curGroup = b.dataset.g;
+  renderRail();
+  const cluster = $("wallwrap").querySelector(`.cluster[data-g="${b.dataset.g}"]`);
+  if (!cluster) return; // 搜索/过滤后该组为空：仅置高亮
+  jumping = true;
+  $("wallwrap").scrollTo({ top: cluster.offsetTop - 4, behavior: "smooth" });
+  setTimeout(() => { jumping = false; }, 600);
+});
+
+$("q").addEventListener("input", renderWall);
+$("onlyUnused").addEventListener("change", renderWall);
+
+function mountIcons() {
+  if (window.lucide && lucide.createIcons) lucide.createIcons();
+  document.querySelectorAll("i[data-lucide]").forEach((el) => {
+    const s = document.createElement("span");
+    s.className = "glyph-fallback";
+    s.textContent = el.dataset.label || "?";
+    el.replaceWith(s);
+  });
+}
+render();
+</script>
+</body>
+</html>

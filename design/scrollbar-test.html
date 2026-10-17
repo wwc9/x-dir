@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<!-- 滚动条自动隐藏验证页（不参与构建）：
+     复刻 index.css 滚动条规则 + autoScrollbar.ts 逻辑（滚动/悬停都由 .np-scrolling 驱动）。 -->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --np-fg: #171d26;
+    --np-scrollbar: color-mix(in srgb, var(--np-fg) 22%, transparent);
+    --np-scrollbar-hover: color-mix(in srgb, var(--np-fg) 45%, transparent);
+  }
+  body { margin: 0; background: #e9ecf1; font-family: system-ui; }
+  .np-rows {
+    width: 400px; height: 300px; margin: 20px;
+    background: #ffffff; border-radius: 14px;
+    overflow-y: auto; overflow-x: hidden;
+    padding: 0 4px 6px;
+  }
+  .tall { height: 5000px; }
+  .wide { width: 5000px; height: 20px; }
+  .hscroll { height: 200px; overflow-y: hidden; overflow-x: auto; }
+
+  ::-webkit-scrollbar { width: 10px; height: 8px; }
+  ::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 99px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner { background: transparent; }
+  .np-scrolling::-webkit-scrollbar-thumb { background: var(--np-scrollbar); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--np-scrollbar-hover); }
+</style>
+</head>
+<body>
+  <div class="np-rows" id="v"><div class="tall"></div></div>
+  <div class="np-rows hscroll" id="h"><div class="wide"></div></div>
+  <script>
+    const HIDE_MS = 3000; // 测试页放宽，保证截图落在显示窗口内
+    const timers = new WeakMap();
+    let hoverChain = [];
+    const isScrollable = (el) => el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth;
+    const show = (el) => {
+      el.classList.add("np-scrolling");
+      const t = timers.get(el);
+      if (t !== undefined) { clearTimeout(t); timers.delete(el); }
+    };
+    const hide = (el) => { if (hoverChain.includes(el)) return; el.classList.remove("np-scrolling"); };
+    const hideLater = (el) => {
+      const prev = timers.get(el);
+      if (prev !== undefined) clearTimeout(prev);
+      timers.set(el, setTimeout(() => hide(el), HIDE_MS));
+    };
+    document.addEventListener("scroll", (e) => {
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      show(t); hideLater(t);
+    }, { capture: true, passive: true });
+    document.addEventListener("pointerover", (e) => {
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      const next = [];
+      for (let el = t; el; el = el.parentElement) {
+        if (isScrollable(el)) { next.push(el); show(el); }
+      }
+      for (const el of hoverChain) if (!next.includes(el)) hideLater(el);
+      hoverChain = next;
+    }, true);
+    document.addEventListener("pointerout", (e) => {
+      if (e.relatedTarget) return;
+      for (const el of hoverChain) hideLater(el);
+      hoverChain = [];
+    }, true);
+  </script>
+</body>
+</html>

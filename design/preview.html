@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>x-dir · 界面预览</title>
+<style>
+  :root {
+    --bg:#0b0f14; --surface:#151a21; --surface2:#1d242e; --border:#2a3340;
+    --fg:#e5e7eb; --muted:#9ca3af; --accent:#3b82f6; --hover:rgba(255,255,255,.07);
+    --sel:rgba(59,130,246,.22);
+  }
+  html.light {
+    --bg:#eef1f5; --surface:#ffffff; --surface2:#e3e7ee; --border:#cfd6e0;
+    --fg:#1f2937; --muted:#6b7280; --accent:#2563eb; --hover:rgba(0,0,0,.06);
+    --sel:rgba(37,99,235,.18);
+  }
+  * { box-sizing:border-box; margin:0; }
+  html,body,#root { height:100%; }
+  body {
+    background:var(--bg); color:var(--fg); font-size:13px; overflow:hidden;
+    font-family:system-ui,"Segoe UI","Microsoft YaHei",sans-serif;
+    user-select:none;
+  }
+  #root { display:flex; flex-direction:column; }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:var(--border); border-radius:5px; }
+  ::-webkit-scrollbar-thumb:hover { background:var(--muted); }
+
+  /* ── 标题栏 ── */
+  .titlebar {
+    display:flex; align-items:center; gap:8px; height:34px; padding:0 10px;
+    background:var(--surface); border-bottom:1px solid var(--border); flex:0 0 auto;
+  }
+  .logo { width:16px; height:16px; border-radius:4px; background:linear-gradient(135deg,var(--accent),#8b5cf6); }
+  .titlebar b { font-size:12.5px; }
+  .titlebar .ver { color:var(--muted); font-size:11px; }
+  .winbtns { margin-left:auto; display:flex; gap:2px; }
+  .winbtns span { width:30px; height:24px; display:grid; place-items:center; border-radius:4px; color:var(--muted); cursor:default; }
+  .winbtns span:hover { background:var(--hover); color:var(--fg); }
+
+  /* ── 全局工具栏 ── */
+  .toolbar {
+    display:flex; align-items:center; gap:2px; padding:3px 8px;
+    background:var(--surface); border-bottom:1px solid var(--border); flex:0 0 auto; position:relative;
+  }
+  .tbtn { border:0; background:transparent; color:var(--fg); font:inherit; font-size:12px;
+    padding:3px 8px; border-radius:4px; cursor:pointer; }
+  .tbtn:hover { background:var(--hover); }
+  .spacer { flex:1; }
+  .dropdown { position:relative; }
+  .menu {
+    position:absolute; top:calc(100% + 4px); left:0; z-index:50; min-width:150px;
+    background:var(--surface); border:1px solid var(--border); border-radius:6px;
+    padding:4px; box-shadow:0 8px 24px rgba(0,0,0,.35); display:none;
+  }
+  .dropdown.open .menu { display:block; }
+  .menu button {
+    display:flex; width:100%; border:0; background:transparent; color:var(--fg);
+    font:inherit; font-size:12px; padding:5px 8px; border-radius:4px; cursor:pointer; text-align:left;
+  }
+  .menu button:hover { background:var(--hover); }
+  .menu .sep { border-top:1px solid var(--border); margin:4px 0; }
+
+  /* ── 窗格区 ── */
+  .panes {
+    flex:1; min-height:0; display:grid; gap:4px; padding:4px;
+  }
+  .panes[data-preset="1x1"] { grid-template:1fr / 1fr; }
+  .panes[data-preset="1x2"] { grid-template:1fr / 1fr 1fr; }
+  .panes[data-preset="2x2"] { grid-template:1fr 1fr / 1fr 1fr; }
+  .pane { display:none; }
+  .panes[data-preset="1x1"] .pane:nth-child(1),
+  .panes[data-preset="1x2"] .pane:nth-child(-n+2),
+  .panes[data-preset="2x2"] .pane { display:flex; }
+
+  .pane {
+    flex-direction:column; min-width:0; min-height:0; overflow:hidden;
+    background:var(--surface); border:1px solid var(--border); border-radius:6px;
+  }
+  .pane.active { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+
+  .nav { display:flex; align-items:center; gap:2px; padding:3px 6px; border-bottom:1px solid var(--border); }
+  .nbtn { border:0; background:transparent; color:var(--fg); font-size:12px; padding:2px 6px; border-radius:4px; cursor:pointer; }
+  .nbtn:hover:not(:disabled) { background:var(--hover); }
+  .nbtn:disabled { opacity:.3; cursor:default; }
+  .addr {
+    flex:1; min-width:0; margin:0 4px; padding:2.5px 8px; font:inherit; font-size:12px;
+    color:var(--fg); background:var(--bg); border:1px solid var(--border); border-radius:4px; outline:none;
+  }
+  .addr:focus { border-color:var(--accent); }
+  .addr.bad { border-color:#ef4444; }
+  select.view {
+    font:inherit; font-size:11px; color:var(--fg); background:var(--bg);
+    border:1px solid var(--border); border-radius:4px; padding:2px; outline:none; cursor:pointer;
+  }
+
+  .tabs { display:flex; align-items:flex-end; gap:2px; padding:2px 6px 0; background:var(--surface2);
+    border-bottom:1px solid var(--border); }
+  .tab { display:flex; align-items:center; gap:6px; max-width:170px; padding:3px 8px;
+    border:1px solid transparent; border-bottom:0; border-radius:6px 6px 0 0;
+    color:var(--muted); cursor:pointer; font-size:12px; }
+  .tab:hover { background:var(--hover); }
+  .tab.on { background:var(--surface); border-color:var(--border); color:var(--fg); }
+  .tab .x { opacity:.4; } .tab .x:hover { opacity:1; color:#ef4444; }
+  .tab .x { margin-left:auto; }
+  .newtab { border:0; background:transparent; color:var(--muted); cursor:pointer; padding:2px 6px; font-size:13px; }
+  .newtab:hover { color:var(--fg); }
+
+  /* ── 列表 ── */
+  .head, .row { display:flex; align-items:center; gap:8px; padding:0 10px; }
+  .head { height:24px; font-size:11px; color:var(--muted); border-bottom:1px solid var(--border); flex:0 0 auto; }
+  .head .c { cursor:pointer; }
+  .head .c:hover { color:var(--fg); }
+  .rows { flex:1; overflow:auto; padding:2px 0; }
+  .row { height:28px; cursor:default; }
+  .row:hover { background:var(--hover); }
+  .row.sel { background:var(--sel); color:var(--accent); }
+  .row .name { flex:1; min-width:0; display:flex; align-items:center; gap:7px; overflow:hidden; }
+  .row .name span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row .mtime, .row .type, .row .size { flex:0 0 auto; font-size:11px; color:var(--muted); }
+  .row.sel .mtime, .row.sel .type, .row.sel .size { color:var(--accent); opacity:.8; }
+  .mtime { width:130px; } .type { width:110px; } .size { width:80px; text-align:right; }
+  .list .rows { display:grid; grid-auto-rows:28px; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); }
+  .list .row { width:auto; }
+  .list .row .name span { flex:1; }
+  .icons .rows { display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:4px; padding:6px; }
+  .icons .row { flex-direction:column; justify-content:center; height:96px; gap:6px; padding:4px; }
+  .icons .row .name { flex-direction:column; text-align:center; }
+  .icons .row .name span { max-width:90px; text-align:center; font-size:11.5px; }
+  .icons .head { display:none; }
+  .cap { width:90px; height:5px; background:var(--surface2); border-radius:3px; overflow:hidden; margin-left:6px; }
+  .cap i { display:block; height:100%; background:var(--accent); border-radius:3px; }
+
+  .pstatus {
+    display:flex; justify-content:space-between; gap:8px; padding:3px 10px;
+    border-top:1px solid var(--border); font-size:11px; color:var(--muted); flex:0 0 auto;
+  }
+
+  /* ── 全局状态栏 ── */
+  .gstatus {
+    display:flex; align-items:center; gap:10px; height:26px; padding:0 10px;
+    background:var(--surface); border-top:1px solid var(--border); font-size:11px; color:var(--muted); flex:0 0 auto;
+  }
+  .bar { flex:1; max-width:320px; height:5px; background:var(--surface2); border-radius:3px; overflow:hidden; }
+  .bar i { display:block; height:100%; width:45%; background:var(--accent); border-radius:3px; transition:width .4s; }
+  .xjob { cursor:pointer; } .xjob:hover { color:#ef4444; }
+
+  svg.ic { width:15px; height:15px; flex:0 0 auto; }
+  .toast {
+    position:fixed; right:14px; bottom:36px; z-index:99; padding:8px 14px; font-size:12px;
+    background:var(--surface); border:1px solid var(--border); border-radius:6px;
+    box-shadow:0 8px 24px rgba(0,0,0,.35); opacity:0; transition:opacity .25s;
+  }
+  .toast.show { opacity:1; }
+</style>
+</head>
+<body>
+<div id="root">
+  <div class="titlebar">
+    <div class="logo"></div><b>x-dir</b><span class="ver">v0.1.0 · 界面预览（静态假数据）</span>
+    <div class="winbtns"><span>─</span><span>□</span><span>✕</span></div>
+  </div>
+
+  <div class="toolbar">
+    <div class="dropdown" data-dd>
+      <button class="tbtn">布局预设 ▾</button>
+      <div class="menu" data-menu="preset">
+        <button data-preset="1x1">1 × 1</button>
+        <button data-preset="1x2">1 × 2</button>
+        <button data-preset="2x2">2 × 2</button>
+        <button data-preset="2x3" disabled title="预览仅含 4 个窗格">2 × 3</button>
+      </div>
+    </div>
+    <div class="dropdown" data-dd>
+      <button class="tbtn">新建 ▾</button>
+      <div class="menu"><button data-toast="已创建：新建文件夹（预览演示）">文件夹</button><button data-toast="已创建：新建文本文件.txt（预览演示）">文本文件</button></div>
+    </div>
+    <div class="dropdown" data-dd>
+      <button class="tbtn">★ 收藏夹 ▾</button>
+      <div class="menu">
+        <button data-nav="C:\Users\PRIME\Desktop">桌面</button>
+        <button data-nav="C:\Users\PRIME\Documents">文档</button>
+        <button data-nav="C:\Users\PRIME\Downloads">下载</button>
+        <div class="sep"></div>
+        <button data-nav="E:\Code">E:\Code</button>
+        <button data-nav="E:\Tools">E:\Tools</button>
+      </div>
+    </div>
+    <div class="dropdown" data-dd>
+      <button class="tbtn">工作区 ▾</button>
+      <div class="menu">
+        <button data-toast="已保存当前布局为「我的工作区」（预览演示）">＋ 保存当前布局…</button>
+        <div class="sep"></div>
+        <button data-toast="已加载工作区「四窗格·审计」（预览演示）">四窗格·审计</button>
+        <button data-toast="已加载工作区「双栏对比」（预览演示）">双栏对比</button>
+      </div>
+    </div>
+    <div class="dropdown" data-dd>
+      <button class="tbtn">⚙ ▾</button>
+      <div class="menu">
+        <button data-theme="light">浅色主题</button>
+        <button data-theme="dark">深色主题</button>
+        <div class="sep"></div>
+        <button data-toast="显示隐藏文件：开（预览演示）">显示隐藏文件</button>
+        <button data-toast="删除前确认：开（预览演示）">删除前确认</button>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <span style="font-size:11px;color:var(--muted)">单击聚焦窗格 · 双击进入文件夹 · 点列头排序</span>
+  </div>
+
+  <div class="panes" data-preset="2x2" id="panes"></div>
+
+  <div class="gstatus">
+    <span id="gtext">就绪</span>
+    <div class="bar" id="gbar" style="display:none"><i></i></div>
+    <span class="xjob" id="gx" style="display:none" title="取消任务">✕</span>
+    <span style="margin-left:auto">x-dir v0.1.0 · MVP 预览</span>
+  </div>
+</div>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path fill="currentColor" d="M4 4h5l2 2h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/></symbol>
+    <symbol id="i-drive" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="9" rx="2" fill="currentColor"/><rect x="5" y="13.5" width="8" height="1.6" rx=".8" fill="var(--surface)"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path fill="currentColor" d="M13 2H6a1 1 0 0 0-1 1v18a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8zm0 0v6h6" opacity=".9"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path fill="currentColor" d="M8 6l-5 6 5 6 1.6-1.6L6.2 12l3.4-4.4zM16 6l-1.6 1.6L17.8 12l-3.4 4.4L16 18l5-6z"/></symbol>
+    <symbol id="i-img" viewBox="0 0 24 24"><path fill="currentColor" d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2 12l3-4 2.5 3L15 10l4 7H5z"/></symbol>
+    <symbol id="i-zip" viewBox="0 0 24 24"><path fill="currentColor" d="M13 2H6a1 1 0 0 0-1 1v18a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8zm0 0v6h6M11 4h2v2h-2zm0 3h2v2h-2zm0 3h2v2h-2z"/></symbol>
+    <symbol id="i-exe" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" fill="currentColor"/><path d="M8 12.5l2.5 2.5L16 9.5" stroke="var(--surface)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-md" viewBox="0 0 24 24"><path fill="currentColor" d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm2 11h2v-4l2 2 2-2v4h2v-7h-2l-2 2-2-2H6zm11 0l3-3.5h-2V9h-2v3.5h-2z"/></symbol>
+  </defs>
+</svg>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ───────────── 假数据（E: 列表来自真实机器） ───────────── */
+const DRIVES = [
+  { name:"系统 (C:)", path:"C:\\", type:"本地磁盘", total:493, free:225 },
+  { name:"软件 (D:)", path:"D:\\", type:"本地磁盘", total:300, free:182 },
+  { name:"文件 (E:)", path:"E:\\", type:"本地磁盘", total:1107, free:659 },
+];
+const F = (name, size, mtime) => ({ d:false, name, size, mtime });
+const D = (name, mtime) => ({ d:true, name, size:0, mtime });
+
+const FS = {
+  "C:\\": [
+    D("PerfLogs","2024/3/10 09:00"), D("Program Files","2026/7/2 10:14"),
+    D("Program Files (x86)","2026/5/1 18:22"), D("Users","2025/11/30 21:03"),
+    D("Windows","2026/9/18 07:45"),
+    F("pagefile.sys", 8589934592, "2026/10/9 22:01"),
+  ],
+  "C:\\Users\\PRIME": [
+    D("Desktop","2026/9/30 20:11"), D("Documents","2026/8/14 09:41"),
+    D("Downloads","2026/10/8 23:57"), D("Music","2025/4/12 15:02"),
+    D("Pictures","2026/6/18 12:30"), D("Videos","2025/9/1 19:08"),
+    D(".cargo","2025/10/5 14:22"), D("source","2026/7/22 22:11"),
+    F("NTUSER.DAT", 12582912, "2026/10/10 00:02"),
+  ],
+  "C:\\Users\\PRIME\\Desktop": [
+    D("审计项目","2026/9/21 16:40"), D("截图","2026/10/9 21:12"),
+    F("待办.md", 1842, "2026/10/9 08:30"), F("x-dir-设计稿.png", 482304, "2026/10/9 23:55"),
+  ],
+  "C:\\Users\\PRIME\\Downloads": [
+    F("x-dir_v0.1.0_portable.zip", 4613734, "2026/10/10 00:29"),
+    F("WebView2Runtime.exe", 185000000, "2026/9/2 11:00"),
+    F("年度审计报告模板.docx", 884736, "2026/8/20 15:12"),
+    F("rustup-init.exe", 14233600, "2026/10/10 00:15"),
+  ],
+  "D:\\": [
+    D("Dev","2025/6/1 10:00"), D("Games","2026/3/15 20:45"),
+    D("Installers","2026/9/12 13:07"), D("Media","2025/12/25 19:30"),
+    D("VMs","2025/4/17 22:21"),
+    F("readme.txt", 356, "2024/1/1 00:00"),
+  ],
+  "D:\\Dev": [
+    D("go1.22","2025/6/2 09:10"), D("jdk-21","2025/6/2 09:12"), D("nodejs","2026/8/1 10:00"),
+    F("build-tools.7z", 421000000, "2026/5/4 11:11"),
+  ],
+  "E:\\": [
+    D(".pnpm-store","2026/8/7 22:21"), D("AI","2025/4/12 13:35"),
+    D("BaiduNetdiskDownload","2026/8/29 10:04"), D("Business","2025/4/12 17:11"),
+    D("Code","2026/7/22 22:11"), D("FocuSee","2026/7/5 22:27"),
+    D("Job","2025/4/12 15:02"), D("Life","2026/5/23 15:15"),
+    D("NVIDIA Corporation","2025/12/9 22:33"), D("Program Files","2025/8/4 0:59"),
+    D("QQMusicCache","2026/7/29 22:38"), D("Study","2025/4/12 18:50"),
+    D("tmp","2026/9/24 11:06"), D("tmpauditcube-install","2026/7/17 20:35"),
+    D("Tools","2025/4/12 15:00"), D("Users","2026/7/19 17:23"),
+    D("Virtual_Machines","2025/4/17 22:21"), D("wwc","2025/4/12 15:09"),
+    D("wwcnote","2026/9/29 11:45"),
+    F("x-dir_v0.1.0_portable.zip", 4613734, "2026/10/10 00:29"),
+    F("工作日志.md", 20481, "2026/10/9 23:59"),
+    F("架构图-布局引擎.png", 184320, "2026/10/8 17:40"),
+  ],
+  "E:\\Code": [
+    D("x-dir","2026/10/10 00:29"), D("auditcube","2026/7/17 20:35"),
+    D("wwcai","2026/9/29 11:45"), D("sandbox","2026/6/1 09:00"),
+    F(".gitignore", 42, "2026/6/1 09:00"),
+  ],
+  "E:\\Code\\x-dir": [
+    D("src","2026/10/10 00:20"), D("src-tauri","2026/10/10 00:22"),
+    D("tools","2026/10/9 23:10"),
+    F("REQUIREMENTS.md", 27648, "2026/10/10 00:29"),
+    F("package.json", 1024, "2026/10/9 23:58"),
+  ],
+  "E:\\Tools": [
+    D("everything","2025/4/12 15:00"), D("totalcmd","2025/4/12 15:00"),
+    D("qdir","2026/7/1 10:00"), D("winscp","2025/8/20 14:14"),
+  ],
+};
+const THIS_PC = "::{ThisPC}";
+
+/* ───────────── 图标 ───────────── */
+function iconOf(e) {
+  if (e.drive) return "i-drive";
+  if (e.d) return "i-folder";
+  const n = e.name.toLowerCase();
+  if (/\.(png|jpe?g|gif|webp|bmp|svg)$/.test(n)) return "i-img";
+  if (/\.(zip|7z|rar|tar|gz)$/.test(n)) return "i-zip";
+  if (/\.(exe|msi|bat)$/.test(n)) return "i-exe";
+  if (/\.(md|txt|log|json|rs|ts|js|py|toml)$/.test(n)) return /\.(md|txt|log)$/.test(n) ? "i-md" : "i-code";
+  return "i-file";
+}
+const ICON_COLOR = { "i-folder":"#f59e0b","i-drive":"#60a5fa","i-code":"#22d3ee","i-img":"#38bdf8","i-zip":"#fb923c","i-exe":"#a3e635","i-md":"#94a3b8","i-file":"#94a3b8" };
+function iconSvg(e) {
+  const id = iconOf(e);
+  return `<svg class="ic" style="color:${ICON_COLOR[id]}"><use href="#${id}"/></svg>`;
+}
+function fmtSize(n) {
+  if (n === 0 || n == null) return "—";
+  const u = ["B","KB","MB","GB","TB"]; let i = 0, v = n;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  return (i === 0 ? v : v.toFixed(1)) + " " + u[i];
+}
+function typeName(e) {
+  if (e.drive) return e.type || "本地磁盘";
+  if (e.d) return "文件夹";
+  const m = e.name.match(/\.([^.]+)$/);
+  return m ? m[1].toUpperCase() + " 文件" : "文件";
+}
+
+/* ───────────── 窗格状态 ───────────── */
+const panes = [
+  { id:"p1", tabs:[THIS_PC], active:0, hist:[THIS_PC], hi:0, view:"details", sort:{key:"name",dir:"asc"}, sel:new Set() },
+  { id:"p2", tabs:["D:\\"], active:0, hist:["D:\\"], hi:0, view:"details", sort:{key:"name",dir:"asc"}, sel:new Set() },
+  { id:"p3", tabs:["C:\\Users\\PRIME","C:\\"], active:0, hist:["C:\\Users\\PRIME"], hi:0, view:"details", sort:{key:"name",dir:"asc"}, sel:new Set() },
+  { id:"p4", tabs:["E:\\"], active:0, hist:["E:\\"], hi:0, view:"details", sort:{key:"name",dir:"asc"}, sel:new Set() },
+];
+let activePane = "p4";
+const P = (id) => panes.find((p) => p.id === id);
+const curPath = (p) => p.hist[p.hi] ?? p.tabs[p.active];
+
+function listing(path) {
+  if (path === THIS_PC) {
+    return DRIVES.map((d) => ({ ...d, d:true, drive:true, size:d.total * 1024 ** 3 }));
+  }
+  return FS[path] || [];
+}
+function parentOf(path) {
+  const t = path.replace(/\\+$/, "");
+  const i = t.lastIndexOf("\\");
+  if (i <= 0) return null;
+  return i <= 2 ? t.slice(0, 2) + "\\" : t.slice(0, i);
+}
+function titleOf(path) {
+  if (path === THIS_PC) return "此电脑";
+  return path.replace(/\\+$/, "").split("\\").pop() || path;
+}
+
+/* ───────────── 渲染 ───────────── */
+const root = document.getElementById("panes");
+function renderAll() {
+  root.innerHTML = panes.map((p) => `
+    <div class="pane ${p.id === activePane ? "active" : ""}" data-pane="${p.id}">
+      <div class="nav">
+        <button class="nbtn" data-act="back" ${p.hi <= 0 ? "disabled" : ""} title="后退">◀</button>
+        <button class="nbtn" data-act="fwd" ${p.hi >= p.hist.length - 1 ? "disabled" : ""} title="前进">▶</button>
+        <button class="nbtn" data-act="up" ${parentOf(curPath(p)) ? "" : "disabled"} title="上级">▲</button>
+        <button class="nbtn" data-act="refresh" title="刷新">⟳</button>
+        <input class="addr" data-act="addr" value="${curPath(p) === THIS_PC ? "此电脑" : curPath(p)}" spellcheck="false">
+        <select class="view" data-act="view">
+          <option value="list" ${p.view === "list" ? "selected" : ""}>列表</option>
+          <option value="details" ${p.view === "details" ? "selected" : ""}>详细</option>
+          <option value="icons" ${p.view === "icons" ? "selected" : ""}>图标</option>
+        </select>
+        <button class="nbtn" data-act="sph" title="横向分裂">──</button>
+        <button class="nbtn" data-act="spv" title="纵向分裂">│</button>
+        <button class="nbtn" data-act="close" title="关闭窗格">✕</button>
+      </div>
+      <div class="tabs">
+        ${p.tabs.map((t, i) => `
+          <div class="tab ${i === p.active ? "on" : ""}" data-tab="${i}">
+            <span>${titleOf(t)}</span><span class="x" data-x="${i}">×</span>
+          </div>`).join("")}
+        <button class="newtab" data-act="newtab" title="新建标签">＋</button>
+      </div>
+      ${renderList(p)}
+      <div class="pstatus">
+        <span>Σ ${listing(curPath(p)).length.toLocaleString()} 个对象${p.sel.size ? ` · 选中 ${p.sel.size} 项` : ""}</span>
+        <span>${diskInfo(curPath(p))}</span>
+      </div>
+    </div>`).join("");
+}
+
+function diskInfo(path) {
+  const d = DRIVES.find((x) => path.startsWith(x.path[0]));
+  return d ? `${d.path[0]}: 可用 ${d.free} GB` : "";
+}
+
+function renderList(p) {
+  const path = curPath(p);
+  const items = listing(path);
+  const isPc = path === THIS_PC;
+  const col = (k, label, w, alignR) =>
+    `<span class="c ${w || ""}" style="${w ? "width:" + w : ""};${alignR ? "text-align:right" : ""}" data-sort="${k}">${label}${p.sort.key === k ? (p.sort.dir === "asc" ? " ↑" : " ↓") : ""}</span>`;
+
+  let head;
+  if (p.view !== "details") head = "";
+  else if (isPc) head = `<div class="head"><span style="flex:1">名称</span><span class="type">类型</span><span class="size" style="width:110px">总大小</span><span class="size" style="width:110px">可用空间</span></div>`;
+  else head = `<div class="head">${col("name","名称","")}${col("mtime","修改时间","130px")}${col("type","类型","110px")}${col("size","大小","80px",true)}</div>`;
+
+  const sorted = [...items].sort((a, b) => {
+    if (a.drive !== b.drive) return a.drive ? -1 : 1;
+    if (a.d !== b.d) return a.d ? -1 : 1;
+    let r = 0;
+    if (p.sort.key === "size") r = a.size - b.size;
+    else if (p.sort.key === "mtime") r = String(a.mtime).localeCompare(String(b.mtime));
+    else if (p.sort.key === "type") r = typeName(a).localeCompare(typeName(b));
+    else r = a.name.localeCompare(b.name, "zh", { numeric:true });
+    return p.sort.dir === "asc" ? r : -r;
+  });
+
+  const rows = sorted.map((e) => {
+    const selCls = p.sel.has(e.name) ? "sel" : "";
+    const nameHtml = `<span class="name">${iconSvg(e)}<span>${e.name}</span>${e.drive ? capBar(e) : ""}</span>`;
+    if (p.view === "details") {
+      const cols = isPc
+        ? `<span class="type">${e.type}</span><span class="size" style="width:110px">${fmtSize(e.size)}</span><span class="size" style="width:110px">${e.free} GB</span>`
+        : `<span class="mtime">${e.mtime}</span><span class="type">${typeName(e)}</span><span class="size">${fmtSize(e.size)}</span>`;
+      return `<div class="row ${selCls}" data-name="${e.name}">${nameHtml}${cols}</div>`;
+    }
+    return `<div class="row ${selCls}" data-name="${e.name}">${nameHtml}</div>`;
+  }).join("");
+
+  return `<div class="${p.view}">${head}<div class="rows" data-rows>${rows || '<div style="padding:14px;color:var(--muted);font-size:12px">此文件夹为空</div>'}</div></div>`;
+}
+function capBar(d) {
+  const used = Math.round(((d.total - d.free) / d.total) * 100);
+  return `<span class="cap"><i style="width:${used}%"></i></span>`;
+}
+
+/* ───────────── 交互 ───────────── */
+function navigate(p, path) {
+  if (path !== THIS_PC && !FS[path]) return false;
+  p.tabs[p.active] = path; // 标签记住路径（§3.1）
+  if (p.hist[p.hi] !== path) {
+    p.hist = [...p.hist.slice(0, p.hi + 1), path];
+    p.hi = p.hist.length - 1;
+  }
+  p.sel.clear();
+  renderAll();
+  return true;
+}
+
+root.addEventListener("mousedown", (ev) => {
+  const paneEl = ev.target.closest("[data-pane]");
+  if (!paneEl) return;
+  const pid = paneEl.dataset.pane;
+  if (activePane !== pid) { activePane = pid; renderAll(); return; }
+  const p = P(pid);
+
+  const act = ev.target.closest("[data-act]");
+  if (act) {
+    const a = act.dataset.act;
+    if (a === "back" && p.hi > 0) { p.hi--; p.tabs[p.active] = p.hist[p.hi]; p.sel.clear(); renderAll(); }
+    if (a === "fwd" && p.hi < p.hist.length - 1) { p.hi++; p.tabs[p.active] = p.hist[p.hi]; p.sel.clear(); renderAll(); }
+    if (a === "up") { const u = parentOf(curPath(p)); if (u) navigate(p, u); }
+    if (a === "refresh") { toast("已刷新（预览演示）"); }
+    if (a === "newtab") { p.tabs.push(THIS_PC); p.active = p.tabs.length - 1; renderAll(); }
+    if (a === "sph" || a === "spv") toast("窗格分裂：正式版在应用内生效（预览演示）");
+    if (a === "close") toast("关闭窗格：正式版在应用内生效（预览演示）");
+    return;
+  }
+  const tab = ev.target.closest("[data-tab]");
+  if (tab && !ev.target.dataset.x) { p.active = +tab.dataset.tab; p.sel.clear(); renderAll(); return; }
+  const x = ev.target.closest("[data-x]");
+  if (x) {
+    const i = +x.dataset.x;
+    p.tabs.splice(i, 1);
+    if (!p.tabs.length) p.tabs.push(THIS_PC);
+    p.active = Math.min(p.active, p.tabs.length - 1);
+    renderAll(); return;
+  }
+  const sort = ev.target.closest("[data-sort]");
+  if (sort) {
+    const k = sort.dataset.sort;
+    p.sort = { key:k, dir:p.sort.key === k && p.sort.dir === "asc" ? "desc" : "asc" };
+    renderAll(); return;
+  }
+  const row = ev.target.closest("[data-name]");
+  if (row) {
+    const e = listing(curPath(p)).find((x) => x.name === row.dataset.name);
+    if (!e) return;
+    if (ev.ctrlKey) {
+      p.sel.has(e.name) ? p.sel.delete(e.name) : p.sel.add(e.name);
+    } else {
+      p.sel.clear();
+      p.sel.add(e.name);
+    }
+    // 就地更新选中样式，不重渲染（保留 dblclick 事件序列）
+    paneEl.querySelectorAll(".row.sel").forEach((r) => r.classList.remove("sel"));
+    paneEl.querySelectorAll("[data-name]").forEach((r) => {
+      if (p.sel.has(r.dataset.name)) r.classList.add("sel");
+    });
+    const st = paneEl.querySelector(".pstatus span");
+    if (st) st.textContent = `Σ ${listing(curPath(p)).length.toLocaleString()} 个对象${p.sel.size ? ` · 选中 ${p.sel.size} 项` : ""}`;
+  }
+});
+
+root.addEventListener("dblclick", (ev) => {
+  const paneEl = ev.target.closest("[data-pane]");
+  if (!paneEl) return;
+  const p = P(paneEl.dataset.pane);
+  const row = ev.target.closest("[data-name]");
+  if (!row) return;
+  const e = listing(curPath(p)).find((x) => x.name === row.dataset.name);
+  if (e && e.d) navigate(p, e.path || joinPath(curPath(p), e.name));
+});
+function joinPath(dir, name) {
+  return (dir.endsWith("\\") ? dir : dir + "\\") + name;
+}
+
+root.addEventListener("change", (ev) => {
+  if (ev.target.dataset.act === "view") {
+    P(ev.target.closest("[data-pane]").dataset.pane).view = ev.target.value;
+    renderAll();
+  }
+});
+root.addEventListener("keydown", (ev) => {
+  if (ev.target.dataset?.act === "addr" && ev.key === "Enter") {
+    const p = P(ev.target.closest("[data-pane]").dataset.pane);
+    let v = ev.target.value.trim();
+    if (/^[a-z]:$/i.test(v)) v += "\\";
+    if (v === "此电脑" || v === THIS_PC) v = THIS_PC;
+    if (!navigate(p, v)) { ev.target.classList.add("bad"); setTimeout(() => ev.target.classList.remove("bad"), 900); }
+    ev.target.blur();
+  }
+});
+
+/* 工具栏下拉 */
+document.querySelectorAll("[data-dd]").forEach((dd) => {
+  dd.querySelector("button").addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    const was = dd.classList.contains("open");
+    closeMenus();
+    if (!was) dd.classList.add("open");
+  });
+});
+document.addEventListener("click", closeMenus);
+function closeMenus() { document.querySelectorAll("[data-dd].open").forEach((d) => d.classList.remove("open")); }
+
+document.addEventListener("click", (ev) => {
+  const t = ev.target.closest("button");
+  if (!t) return;
+  if (t.dataset.preset) { document.getElementById("panes").dataset.preset = t.dataset.preset; }
+  if (t.dataset.theme) {
+    document.documentElement.classList.toggle("dark", t.dataset.theme === "dark");
+    document.documentElement.classList.toggle("light", t.dataset.theme === "light");
+  }
+  if (t.dataset.nav) {
+    const p = P(activePane);
+    navigate(p, t.dataset.nav) || toast("该目录不在预览数据中");
+  }
+  if (t.dataset.toast) toast(t.dataset.toast);
+});
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg; el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2200);
+}
+
+/* 底部假任务进度 */
+const gtext = document.getElementById("gtext"), gbar = document.getElementById("gbar"), gx = document.getElementById("gx");
+let prog = 0, timer;
+function jobLoop() {
+  prog = 0; gtext.textContent = "复制 x-dir_v0.1.0_portable.zip → E:\\Tools"; 
+  gbar.style.display = ""; gx.style.display = "";
+  timer = setInterval(() => {
+    prog = Math.min(100, prog + Math.random() * 9);
+    gbar.querySelector("i").style.width = prog + "%";
+    gtext.textContent = `复制 x-dir_v0.1.0_portable.zip → E:\\Tools　${Math.floor(prog)}%`;
+    if (prog >= 100) { clearInterval(timer); setTimeout(() => { gtext.textContent = "就绪"; gbar.style.display = "none"; gx.style.display = "none"; }, 900); }
+  }, 500);
+}
+gx.addEventListener("click", () => { clearInterval(timer); gtext.textContent = "已取消"; gbar.style.display = "none"; gx.style.display = "none"; });
+setTimeout(jobLoop, 1500);
+
+renderAll();
+</script>
+</body>
+</html>

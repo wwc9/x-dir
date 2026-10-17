@@ -1,0 +1,13 @@
+#!/bin/sh
+# AGENTS.md 自动同步：任何提交完成后，若 AGENTS.md 仍有未提交变更（暂存或工作区），
+# 自动补一笔同步提交，保证文档与代码同进同出（push 时一起到达两个远程）。
+file="AGENTS.md"
+[ -f "$file" ] || exit 0
+
+if ! git diff --quiet HEAD -- "$file" 2>/dev/null; then
+    git add -- "$file"
+    if git commit -q -m "docs: 同步 AGENTS.md" -- "$file"; then
+        echo "[post-commit] AGENTS.md 有变更，已自动提交同步"
+    fi
+fi
+exit 0

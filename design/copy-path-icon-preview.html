@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>复制路径 · 图标方案预览（3 选 1）</title>
+<style>
+  :root {
+    --bg: #e9ecf1; --surface: #ffffff; --surface2: rgba(16, 24, 40, 0.045);
+    --border: #d6dbe2; --hairline: rgba(16, 24, 40, 0.06);
+    --fg: #171d26; --muted: #66707e; --accent: #3574f0;
+    --hover: rgba(26, 33, 41, 0.055); --sel: rgba(53, 116, 240, 0.12);
+  }
+  html[data-theme="dark"] {
+    --bg: #131519; --surface: #1b1e23; --surface2: rgba(255, 255, 255, 0.05);
+    --border: #3a414b; --hairline: rgba(255, 255, 255, 0.08);
+    --fg: #e8eaed; --muted: #8b929c; --accent: #5c9dff;
+    --hover: rgba(255, 255, 255, 0.055); --sel: rgba(92, 157, 255, 0.16);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px 36px 56px; background: var(--bg); color: var(--fg);
+    font: 13px/1.6 "Segoe UI", system-ui, -apple-system, "Microsoft YaHei", sans-serif;
+  }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+  h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  .sub { color: var(--muted); font-size: 12px; margin: 0 0 22px; }
+  .toggle {
+    margin-left: auto; height: 28px; padding: 0 12px; border-radius: 14px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface); color: var(--fg); font-size: 12px;
+  }
+  .toggle:hover { background: var(--hover); }
+  .cur-wrap, .grid { max-width: 1060px; }
+  .cur-wrap { margin-bottom: 18px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px;
+  }
+  .card h2 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
+  .card .en { color: var(--muted); font-size: 11px; font-family: Consolas, monospace; }
+  .why { color: var(--muted); font-size: 12px; margin: 8px 0 14px; min-height: 54px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 3px 0 9px;
+    border-radius: 11px; background: var(--sel); color: var(--accent); font-size: 12px; font-weight: 600;
+  }
+  .hero { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+  .hero .tile {
+    width: 56px; height: 56px; border-radius: 12px; background: var(--surface2);
+    display: grid; place-items: center; color: var(--fg); flex: 0 0 auto;
+  }
+  .hero .tile svg { width: 28px; height: 28px; }
+  .hero .sizes { display: flex; align-items: flex-end; gap: 14px; color: var(--muted); font-size: 10px; }
+  .hero .sizes div { display: grid; place-items: center; gap: 3px; color: var(--fg); }
+  .hero .sizes span { color: var(--muted); }
+  .mockcap { font-size: 10px; color: var(--muted); letter-spacing: 0.04em; margin: 12px 0 5px; }
+  .pillrow { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px;
+    border-radius: 14px; background: var(--surface2); color: var(--fg); font-size: 12px;
+    border: 1px solid transparent; white-space: nowrap;
+  }
+  .pill svg { width: 14px; height: 14px; flex: 0 0 auto; }
+  .pill.hot { background: var(--sel); color: var(--accent); border-color: transparent; font-weight: 600; }
+  .menurow {
+    border: 1px solid var(--hairline); border-radius: 8px; padding: 4px 0; background: var(--surface);
+  }
+  .menurow .mi {
+    display: flex; align-items: center; gap: 9px; height: 28px; padding: 0 12px; font-size: 12px;
+  }
+  .menurow .mi svg { width: 16px; height: 16px; flex: 0 0 auto; color: var(--fg); }
+  .menurow .mi.hot { background: var(--sel); color: var(--accent); }
+  .menurow .mi.hot svg { color: var(--accent); }
+  .menurow .mi .k { margin-left: auto; color: var(--muted); font-size: 11px; }
+  .curwrap { display: flex; gap: 14px; align-items: stretch; flex-wrap: wrap; }
+  .curwrap .card { flex: 1 1 320px; }
+  .now { border-color: color-mix(in srgb, #e5484d 55%, var(--border)); }
+  svg { display: block; }
+</style>
+</head>
+<body>
+<header>
+  <h1>「复制路径」图标方案预览</h1>
+  <button class="toggle" id="tg">切换 浅 / 深</button>
+</header>
+<p class="sub">候选均来自 lucide（strokeWidth 2，与全库同源）。每张卡片：大图 + 尺寸档（12/14/16/20 = xs/sm/md/lg）→ 功能库胶囊（14px）→ 右键菜单邻居排（16px，检验与剪切/复制/粘贴/复制名称的区分度）。</p>
+
+<!-- 现状 -->
+<div class="curwrap">
+  <div class="card now">
+    <h2>现状 · ClipboardCopy <span class="en">lucide/clipboard-copy</span></h2>
+    <div class="why">剪贴板家族（ClipboardPaste / ClipboardList）已有两员，ClipboardCopy 与它们首部图形几乎同构；且它表达的是「剪贴板」而非「路径」，功能库里三枚同族图标靠文字才能分清。</div>
+    <div class="hero">
+      <div class="tile" data-i="ClipboardCopy"></div>
+      <div class="sizes">
+        <div data-i="ClipboardCopy" data-s="12"><span>xs 12</span></div>
+        <div data-i="ClipboardCopy" data-s="14"><span>sm 14</span></div>
+        <div data-i="ClipboardCopy" data-s="16"><span>md 16</span></div>
+        <div data-i="ClipboardCopy" data-s="20"><span>lg 20</span></div>
+      </div>
+    </div>
+    <div class="mockcap">功能库胶囊</div>
+    <div class="pillrow">
+      <span class="pill"><i data-i="Scissors"></i>剪切</span>
+      <span class="pill"><i data-i="Copy"></i>复制</span>
+      <span class="pill hot"><i data-i="ClipboardCopy"></i>复制路径</span>
+      <span class="pill"><i data-i="ClipboardPaste"></i>粘贴</span>
+      <span class="pill"><i data-i="Type"></i>复制名称</span>
+    </div>
+    <div class="mockcap">右键菜单</div>
+    <div class="menurow">
+      <div class="mi"><i data-i="Scissors"></i>剪切<span class="k">Ctrl+X</span></div>
+      <div class="mi"><i data-i="Copy"></i>复制<span class="k">Ctrl+C</span></div>
+      <div class="mi hot"><i data-i="ClipboardCopy"></i>复制路径</div>
+      <div class="mi"><i data-i="ClipboardPaste"></i>粘贴<span class="k">Ctrl+V</span></div>
+      <div class="mi"><i data-i="Type"></i>复制名称</div>
+    </div>
+  </div>
+</div>
+
+<!-- 三方案 -->
+<div class="grid">
+  <div class="card">
+    <h2>方案 A · Link <span class="en">lucide/link</span></h2>
+    <div class="badge">推荐</div>
+    <div class="why">「路径 = 定位链接」的通感隐喻（地址栏 / 复制链接同款心智），斜向双环在 14px 依然清晰；与相邻的剪刀、双层方块、书写板、字母 T 全无同族风险。</div>
+    <div class="hero">
+      <div class="tile" data-i="Link"></div>
+      <div class="sizes">
+        <div data-i="Link" data-s="12"><span>xs 12</span></div>
+        <div data-i="Link" data-s="14"><span>sm 14</span></div>
+        <div data-i="Link" data-s="16"><span>md 16</span></div>
+        <div data-i="Link" data-s="20"><span>lg 20</span></div>
+      </div>
+    </div>
+    <div class="mockcap">功能库胶囊</div>
+    <div class="pillrow">
+      <span class="pill"><i data-i="Scissors"></i>剪切</span>
+      <span class="pill"><i data-i="Copy"></i>复制</span>
+      <span class="pill hot"><i data-i="Link"></i>复制路径</span>
+      <span class="pill"><i data-i="ClipboardPaste"></i>粘贴</span>
+      <span class="pill"><i data-i="Type"></i>复制名称</span>
+    </div>
+    <div class="mockcap">右键菜单</div>
+    <div class="menurow">
+      <div class="mi"><i data-i="Scissors"></i>剪切<span class="k">Ctrl+X</span></div>
+      <div class="mi"><i data-i="Copy"></i>复制<span class="k">Ctrl+C</span></div>
+      <div class="mi hot"><i data-i="Link"></i>复制路径</div>
+      <div class="mi"><i data-i="ClipboardPaste"></i>粘贴<span class="k">Ctrl+V</span></div>
+      <div class="mi"><i data-i="Type"></i>复制名称</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>方案 B · Route <span class="en">lucide/route</span></h2>
+    <div class="why">「路径」的直白象形：起点 → 折线路径 → 终点。全功能库唯一一块路线图形，辨识度最高；代价是隐喻偏「导航路线」，与剪贴板动作的关联要靠文字补足。</div>
+    <div class="hero">
+      <div class="tile" data-i="Route"></div>
+      <div class="sizes">
+        <div data-i="Route" data-s="12"><span>xs 12</span></div>
+        <div data-i="Route" data-s="14"><span>sm 14</span></div>
+        <div data-i="Route" data-s="16"><span>md 16</span></div>
+        <div data-i="Route" data-s="20"><span>lg 20</span></div>
+      </div>
+    </div>
+    <div class="mockcap">功能库胶囊</div>
+    <div class="pillrow">
+      <span class="pill"><i data-i="Scissors"></i>剪切</span>
+      <span class="pill"><i data-i="Copy"></i>复制</span>
+      <span class="pill hot"><i data-i="Route"></i>复制路径</span>
+      <span class="pill"><i data-i="ClipboardPaste"></i>粘贴</span>
+      <span class="pill"><i data-i="Type"></i>复制名称</span>
+    </div>
+    <div class="mockcap">右键菜单</div>
+    <div class="menurow">
+      <div class="mi"><i data-i="Scissors"></i>剪切<span class="k">Ctrl+X</span></div>
+      <div class="mi"><i data-i="Copy"></i>复制<span class="k">Ctrl+C</span></div>
+      <div class="mi hot"><i data-i="Route"></i>复制路径</div>
+      <div class="mi"><i data-i="ClipboardPaste"></i>粘贴<span class="k">Ctrl+V</span></div>
+      <div class="mi"><i data-i="Type"></i>复制名称</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>方案 C · FileSymlink <span class="en">lucide/file-symlink</span></h2>
+    <div class="why">「文件 + 快捷方式箭头」，最贴 Windows 资源管理器「复制文件地址」的既有心智；缺点是与库内文件族图标（FileText / FilePlus…）共享文件轮廓，且 14px 下折线箭头偏密。</div>
+    <div class="hero">
+      <div class="tile" data-i="FileSymlink"></div>
+      <div class="sizes">
+        <div data-i="FileSymlink" data-s="12"><span>xs 12</span></div>
+        <div data-i="FileSymlink" data-s="14"><span>sm 14</span></div>
+        <div data-i="FileSymlink" data-s="16"><span>md 16</span></div>
+        <div data-i="FileSymlink" data-s="20"><span>lg 20</span></div>
+      </div>
+    </div>
+    <div class="mockcap">功能库胶囊</div>
+    <div class="pillrow">
+      <span class="pill"><i data-i="Scissors"></i>剪切</span>
+      <span class="pill"><i data-i="Copy"></i>复制</span>
+      <span class="pill hot"><i data-i="FileSymlink"></i>复制路径</span>
+      <span class="pill"><i data-i="ClipboardPaste"></i>粘贴</span>
+      <span class="pill"><i data-i="Type"></i>复制名称</span>
+    </div>
+    <div class="mockcap">右键菜单</div>
+    <div class="menurow">
+      <div class="mi"><i data-i="Scissors"></i>剪切<span class="k">Ctrl+X</span></div>
+      <div class="mi"><i data-i="Copy"></i>复制<span class="k">Ctrl+C</span></div>
+      <div class="mi hot"><i data-i="FileSymlink"></i>复制路径</div>
+      <div class="mi"><i data-i="ClipboardPaste"></i>粘贴<span class="k">Ctrl+V</span></div>
+      <div class="mi"><i data-i="Type"></i>复制名称</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SVGS = {
+    ClipboardCopy: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"></rect><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path><path d="M16 4h2a2 2 0 0 1 2 2v4"></path><path d="M21 14H11"></path><path d="m15 10-4 4 4 4"></path></svg>',
+    ClipboardPaste: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 14h10"></path><path d="M16 4h2a2 2 0 0 1 2 2v1.344"></path><path d="m17 18 4-4-4-4"></path><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113"></path><rect x="8" y="2" width="8" height="4" rx="1"></rect></svg>',
+    Copy: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>',
+    Scissors: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"></circle><path d="M8.12 8.12 12 12"></path><path d="M20 4 8.12 15.88"></path><circle cx="6" cy="18" r="3"></circle><path d="M14.8 14.8 20 20"></path></svg>',
+    Type: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16"></path><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"></path><path d="M9 20h6"></path></svg>',
+    Link: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>',
+    Route: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"></circle><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"></path><circle cx="18" cy="5" r="3"></circle></svg>',
+    FileSymlink: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h7"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="m10 18 3-3-3-3"></path></svg>'
+  };
+  document.querySelectorAll("[data-i]").forEach((el) => {
+    const size = el.dataset.s ? Number(el.dataset.s) : el.classList.contains("tile") ? 28 : 14;
+    el.insertAdjacentHTML("afterbegin", SVGS[el.dataset.i].replace("<svg ", `<svg width="${size}" height="${size}" `));
+  });
+  const root = document.documentElement;
+  root.dataset.theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  document.getElementById("tg").addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+  });
+</script>
+</body>
+</html>

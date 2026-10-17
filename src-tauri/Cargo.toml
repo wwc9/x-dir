@@ -1,0 +1,93 @@
+[package]
+name = "x-dir"
+version = "0.1.0"
+description = "A Tauri App"
+authors = ["you"]
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "x_dir_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+# 直编 release（不经 tauri CLI）也必须启用，否则产物加载 devUrl 而非嵌入资源
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-log = "2"
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+windows-core = "0.62"
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_Security", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_Com", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Ole", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_UI_Shell_Common", "Win32_System_SystemServices", "Win32_System_Com_StructuredStorage", "Win32_System_IO", "Win32_System_SystemInformation"] }
+# 全盘索引的 mmap 只读查询（MIT）
+memmap2 = "0.9"
+trash = "5.2.9"
+notify = "8.2.0"
+png = "0.18"
+# 全盘搜索的拼音首字母/全拼匹配（MIT）
+pinyin = "0.5"
+# 快速预览（V2）：文本编码探测（MIT/Apache-2.0）
+encoding_rs = "0.8"
+# 快速预览：OOXML/ODF 容器与 XML 文本抽取（MIT）
+zip = { version = "2", default-features = false, features = ["deflate"] }
+quick-xml = "0.37"
+# 工具箱：重复文件查找的 SHA-256 内容指纹（MIT）
+sha2 = "0.10"
+# PDF 处理（右键合并/拆分/水印/页级编辑/图片转PDF）：lopdf MIT，flate2 MIT/Apache-2.0；
+# ab_glyph Apache-2.0 负责水印文字光栅化（运行时读系统字体，不打包字体）；
+# jpeg-decoder MIT/Apache-2.0 负责 JPEG → RGB 解码（图片合并转 PDF）
+lopdf = "0.45"
+flate2 = "1"
+ab_glyph = "0.2"
+jpeg-decoder = "0.3"
+# 快速预览：xlsx/xls/xlsb/ods 单元格值读取（MIT）
+calamine = "0.36"
+# 快速预览：tar/tar.gz 清单（MIT/Apache-2.0；gz 解压复用上方 flate2）
+tar = "0.4"
+# 快速预览：7z 清单（Apache-2.0，2026-10-13 核验）
+sevenz-rust = "0.6"
+# 快速预览：TIFF 图片解码（MIT/Apache-2.0）
+tiff = "0.9"
+# 图片批处理（右键压缩/水印/格式转换/尺寸调整/宫格拼图）：image MIT/Apache-2.0
+# 为解码/编码/缩放/合成底座；oxipng MIT 负责 PNG 无损优化；color_quant
+# MIT/Apache-2.0 负责 PNG8 调色板量化（GPL 系 libimagequant 是硬红线不采用）；
+# kamadak-exif MIT/Apache-2.0 负责 EXIF 方向烘焙
+image = { version = "0.25", default-features = false, features = [
+    "png",
+    "jpeg",
+    "gif",
+    "bmp",
+    "tiff",
+    "webp",
+    "ico",
+] }
+oxipng = "9"
+color_quant = "1"
+kamadak-exif = "0.6"
+
+# Windows 专属：关闭 WebView2 浏览器加速键（F5/Ctrl+R 重载、Ctrl+F 查找栏、
+# Ctrl+P 打印、F12 DevTools——全局快捷键由前端 lib/keyboard.ts 全权路由），
+# 编辑类按键（Ctrl+C/V/X/A/Z 等）不受影响；与 wry 同版本保证类型统一
+[target.'cfg(target_os = "windows")'.dependencies]
+webview2-com = "0.39"
+
+
+# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true

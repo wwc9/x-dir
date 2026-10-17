@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>图标库对比 · x-dir 选型预览</title>
+<!-- 六套图标来源 -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@blueprintjs/icons@6.14.1/lib/css/blueprint-icons.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@vscode/codicons@0.0.36/dist/codicon.css">
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<style>
+  :root {
+    --bg:#131519; --surface:#1b1e23; --surface2:#24282f; --border:#2b3038;
+    --fg:#e8eaed; --muted:#8b929c; --accent:#5c9dff; --danger:#f27073;
+    --c-folder:#e5a922; --c-image:#79a9ff; --c-music:#c47ec7;
+    --c-zip:#ef9b2d; --c-code:#43c1dc; --c-exe:#a08df5;
+  }
+  * { box-sizing:border-box; margin:0; }
+  body {
+    background:var(--bg); color:var(--fg); padding:28px;
+    font-family:system-ui,"Segoe UI","Microsoft YaHei",sans-serif; font-size:13px;
+  }
+  h1 { font-size:18px; margin-bottom:4px; }
+  .sub { color:var(--muted); margin-bottom:24px; }
+  .sub b { color:var(--fg); }
+
+  .set { background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:16px; margin-bottom:18px; }
+  .set-h { display:flex; align-items:baseline; gap:10px; margin-bottom:12px; }
+  .set-h b { font-size:14px; }
+  .set-h .meta { color:var(--muted); font-size:12px; }
+  .set-h .cur { background:var(--accent); color:#fff; font-size:11px;
+    padding:2px 8px; border-radius:99px; }
+
+  .mock { background:var(--bg); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  .mock-nav { display:flex; align-items:center; gap:10px; padding:6px 10px;
+    border-bottom:1px solid var(--border); color:var(--muted); }
+  .mock-nav .tools { display:flex; gap:12px; }
+  .mock-nav .addr { flex:1; background:var(--surface2); border-radius:6px;
+    padding:3px 10px; color:var(--fg); font-size:12px; }
+  .mock-rows { padding:4px 4px 6px; }
+  .row { display:flex; align-items:center; gap:9px; height:28px; padding:0 10px;
+    border-radius:6px; }
+  .row:hover { background:rgba(255,255,255,.05); }
+  .row .nm { flex:1; }
+  .row .tp { color:var(--muted); font-size:11px; width:110px; }
+  .row .sz { color:var(--muted); font-size:11px; width:70px; text-align:right; }
+  .row.c-folder .nm, .row.c-folder .ic { color:var(--c-folder); }
+  .row.c-image .nm, .row.c-image .ic { color:var(--c-image); }
+  .row.c-music .nm, .row.c-music .ic { color:var(--c-music); }
+  .row.c-zip .nm, .row.c-zip .ic { color:var(--c-zip); }
+  .row.c-code .nm, .row.c-code .ic { color:var(--c-code); }
+  .row.c-exe .nm, .row.c-exe .ic { color:var(--c-exe); }
+  .mock-ctx { display:flex; gap:16px; padding:6px 12px; border-top:1px solid var(--border);
+    color:var(--muted); font-size:12px; align-items:center; }
+  .mock-ctx .danger { color:var(--danger); }
+
+  .ic { display:inline-flex; width:16px; height:16px; align-items:center; justify-content:center; }
+  .ic i, .ic span { font-size:16px; line-height:1; }
+  .hero { display:inline-block; width:16px; height:16px; background:currentColor;
+    -webkit-mask:var(--m) center / contain no-repeat; mask:var(--m) center / contain no-repeat; }
+  .miss { display:inline-flex; width:16px; height:16px; align-items:center; justify-content:center;
+    border:1px dashed var(--border); border-radius:3px; color:var(--muted); font-size:9px; }
+  .bp6-icon-standard { font-size:16px; }
+  .codicon { font-size:16px; }
+  .lucide { width:16px; height:16px; }
+</style>
+</head>
+<body>
+<h1>文件管理器图标库选型 · 六套同屏对比</h1>
+<div class="sub">同一界面片段（工具栏 / 文件列表 / 右键操作）× 六套图标。<b>虚线小框 = 该库缺少此语义图标</b>（真实覆盖差距）。文件行按 x-dir 的类型着色 token 渲染。</div>
+<div id="root"></div>
+
+<script>
+// 语义位：工具栏 + 文件类型 + 右键
+const GLYPHS = ["back","refresh","grid","add","star","cog","folder","image","music","zip","code","exe","cut","trash"];
+
+const SETS = [
+  {
+    id:"blueprint", name:"Blueprint Icons（现役）", meta:"Apache-2.0 · 500+ · 16px 网格 · 数据密集工具风", current:true,
+    g:{ back:"chevron-left", refresh:"refresh", grid:"grid", add:"add", star:"star", cog:"cog",
+        folder:"folder-close", image:"media", music:"music", zip:"compressed", code:"code", exe:"application",
+        cut:"cut", trash:"trash" },
+    el:(n)=>`<span class="hero" style="--m:url(icons/blueprint/${n}.svg)"></span>`
+  },
+  {
+    id:"lucide", name:"Lucide", meta:"MIT · 1500+ · 24px 网格 · 2px 描边几何极简",
+    g:{ back:"arrow-left", refresh:"refresh-cw", grid:"layout-grid", add:"plus", star:"star", cog:"settings",
+        folder:"folder", image:"image", music:"music", zip:"file-archive", code:"file-code", exe:"app-window",
+        cut:"scissors", trash:"trash-2" },
+    el:(n)=>`<i data-lucide="${n}"></i>`
+  },
+  {
+    id:"phosphor", name:"Phosphor", meta:"MIT · 9000+ · 6 字重 · 现代柔和（此处 regular）",
+    g:{ back:"arrow-left", refresh:"arrows-clockwise", grid:"grid-four", add:"plus", star:"star", cog:"gear",
+        folder:"folder", image:"image", music:"music-notes", zip:"file-zip", code:"file-code", exe:"app-window",
+        cut:"scissors", trash:"trash" },
+    el:(n)=>`<i class="ph ph-${n}"></i>`
+  },
+  {
+    id:"tabler", name:"Tabler Icons", meta:"MIT · 5800+ · 24px 网格 · 2px 描边",
+    g:{ back:"arrow-left", refresh:"refresh", grid:"layout-grid", add:"plus", star:"star", cog:"settings",
+        folder:"folder", image:"photo", music:"music", zip:"file-zip", code:"code", exe:"app-window",
+        cut:"scissors", trash:"trash" },
+    el:(n)=>`<i class="ti ti-${n}"></i>`
+  },
+  {
+    id:"codicons", name:"VS Code Codicons", meta:"MIT · 400+ · 16px 网格 · IDE 工具型",
+    g:{ back:"arrow-left", refresh:"refresh", grid:"layout", add:"add", star:"star-full", cog:"settings-gear",
+        folder:"folder", image:"file-media", music:null, zip:"file-zip", code:"code", exe:null,
+        cut:null, trash:"trash" },
+    el:(n)=>`<i class="codicon codicon-${n}"></i>`
+  },
+  {
+    id:"heroicons", name:"Heroicons", meta:"MIT · 1300+ · 24px outline · Tailwind 官方（本地 SVG mask）",
+    g:{ back:"arrow-uturn-left", refresh:"arrow-path", grid:"squares-2x2", add:"plus", star:"star", cog:"cog-6-tooth",
+        folder:"folder", image:"photo", music:"musical-note", zip:"archive-box", code:"code-bracket", exe:"cpu-chip",
+        cut:"scissors", trash:"trash" },
+    el:(n)=>`<span class="hero" style="--m:url(icons/hero/${n}.svg)"></span>`
+  },
+];
+
+const FILES = [
+  { cls:"folder", glyph:"folder", name:"Code",            type:"文件夹",     size:"—" },
+  { cls:"image",  glyph:"image",  name:"截图 2026-10-10.png", type:"PNG 图片", size:"471.0 KB" },
+  { cls:"music",  glyph:"music",  name:"背景音乐.mp3",   type:"MP3 音频",  size:"3.8 MB" },
+  { cls:"zip",    glyph:"zip",    name:"x-dir_src.7z",  type:"7Z 压缩包", size:"1.2 MB" },
+  { cls:"code",   glyph:"code",   name:"main.rs",        type:"Rust 源文件", size:"12.4 KB" },
+  { cls:"exe",    glyph:"exe",    name:"setup.exe",      type:"应用程序",   size:"5.3 MB" },
+];
+
+function iconOf(set, glyph) {
+  const n = set.g[glyph];
+  if (!n) return `<span class="miss" title="该库无此语义图标">∅</span>`;
+  return `<span class="ic">${set.el(n)}</span>`;
+}
+
+const root = document.getElementById("root");
+root.innerHTML = SETS.map((set) => `
+  <section class="set">
+    <div class="set-h">
+      <b>${set.name}</b>
+      ${set.current ? `<span class="cur">现役方案</span>` : ""}
+      <span class="meta">${set.meta}</span>
+    </div>
+    <div class="mock">
+      <div class="mock-nav">
+        <span class="tools">${iconOf(set,"back")}${iconOf(set,"refresh")}</span>
+        <span class="addr">E:\\Code</span>
+        <span class="tools">${iconOf(set,"grid")}${iconOf(set,"add")}${iconOf(set,"star")}${iconOf(set,"cog")}</span>
+      </div>
+      <div class="mock-rows">
+        ${FILES.map((f) => `
+          <div class="row c-${f.cls}">
+            ${iconOf(set, f.glyph)}
+            <span class="nm">${f.name}</span>
+            <span class="tp">${f.type}</span>
+            <span class="sz">${f.size}</span>
+          </div>`).join("")}
+      </div>
+      <div class="mock-ctx">
+        ${iconOf(set,"cut")}<span>剪切</span>
+        ${iconOf(set,"trash")}<span class="danger">删除</span>
+        <span style="margin-left:auto">Σ 6 个对象</span>
+      </div>
+    </div>
+  </section>`).join("");
+
+// Lucide 渲染（CDN 失败时显示占位）
+if (window.lucide) {
+  lucide.createIcons({ attrs: { width: 16, height: 16, "stroke-width": 2 } });
+} else {
+  document.querySelectorAll('[data-lucide]').forEach((el) => {
+    el.outerHTML = `<span class="miss" title="CDN 未加载">∅</span>`;
+  });
+}
+</script>
+</body>
+</html>

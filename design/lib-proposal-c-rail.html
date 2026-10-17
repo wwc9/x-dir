@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>功能库展示 · 方案 C「组航分栏」</title>
+<script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+  /* ══ x-dir 设计 token 镜像（src/index.css :root）══ */
+  :root {
+    --np-bg: #e9ecf1; --np-surface: #ffffff; --np-surface-2: #f0f2f5;
+    --np-border: #d6dbe2; --np-hairline: rgba(16, 24, 40, 0.06);
+    --np-fg: #171d26; --np-muted: #66707e; --np-accent: #3574f0;
+    --np-accent-line: color-mix(in srgb, var(--np-accent) 45%, transparent);
+    --np-ring: 0 0 0 2px color-mix(in srgb, var(--np-accent) 45%, transparent);
+    --np-hover: rgba(26, 33, 41, 0.055); --np-sel: rgba(53, 116, 240, 0.12);
+    --np-radius: 6px; --np-radius-lg: 10px; --np-radius-pill: 999px;
+    --np-gap: 4px; --np-gutter: 8px;
+    --np-font-ui: 13px; --np-font-sm: 11px;
+  }
+  * { box-sizing: border-box; }
+  button { font: inherit; border: 0; background: none; padding: 0; cursor: pointer; }
+  button:focus, button:focus-visible, input:focus, input:focus-visible { outline: none; }
+  body {
+    margin: 0; padding: 28px clamp(16px, 4vw, 56px) 64px;
+    background: var(--np-bg); color: var(--np-fg);
+    font: 13px/1.65 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  header h1 { font-size: 18px; margin: 0 0 6px; }
+  header h1 .tag {
+    display: inline-block; margin-right: 8px; padding: 1px 10px; border-radius: var(--np-radius-pill);
+    background: var(--np-fg); color: #fff; font-size: 12px; vertical-align: 2px;
+  }
+  header p { margin: 0; color: var(--np-muted); }
+  .jump { margin-top: 8px; font-size: 12px; color: var(--np-muted); }
+  .jump a { color: var(--np-accent); text-decoration: none; margin-right: 12px; }
+  .jump a:hover { text-decoration: underline; }
+
+  /* ══ 面板 mock（比 A/B 宽一档：分栏需要横向空间）══ */
+  .stage { margin-top: 20px; width: min(880px, 100%); }
+  .panel {
+    display: flex; flex-direction: column; gap: var(--np-gutter);
+    background: var(--np-surface-2); border-radius: 14px; padding: var(--np-gutter);
+  }
+  .phead { display: flex; align-items: center; gap: var(--np-gutter); }
+  .ptitle { font-weight: 600; flex: 0 0 auto; }
+  .pcount {
+    flex: 0 0 auto; padding: 0 7px; border-radius: var(--np-radius-pill);
+    background: var(--np-surface); color: var(--np-muted); font-size: var(--np-font-sm);
+  }
+  .search { position: relative; flex: 1; min-width: 0; }
+  .search svg, .search .glyph-fallback {
+    position: absolute; left: 8px; top: 50%; translate: 0 -50%;
+    width: 12px; height: 12px; color: var(--np-muted); pointer-events: none;
+  }
+  .search .glyph-fallback { font-size: 10px; text-align: center; line-height: 1; }
+  .search input {
+    width: 100%; height: 24px; padding: 0 8px 0 26px;
+    font: inherit; font-size: var(--np-font-ui); color: var(--np-fg);
+    background: var(--np-surface-2); border: 0; border-radius: var(--np-radius);
+    box-shadow: inset 0 0 0 1px var(--np-hairline);
+  }
+  .search input::placeholder { color: var(--np-muted); }
+  .search input:focus { background: var(--np-surface); box-shadow: var(--np-ring); }
+
+  /* 分栏体：左组航 rail + 右信息卡网格 */
+  .cbody { display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: var(--np-gutter); height: 520px; }
+  .rail {
+    display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow-y: auto;
+    background: var(--np-surface); border-radius: var(--np-radius-lg); padding: var(--np-gap);
+    user-select: none;
+  }
+  .rail::-webkit-scrollbar { width: 8px; }
+  .rail::-webkit-scrollbar-thumb {
+    background: rgba(23, 29, 38, 0.22); border-radius: var(--np-radius-pill);
+    border: 2px solid transparent; background-clip: content-box;
+  }
+  .ritem {
+    display: flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 8px;
+    border-radius: var(--np-radius); font-size: var(--np-font-ui); color: var(--np-fg); text-align: left;
+  }
+  .ritem:hover { background: var(--np-hover); }
+  .ritem.on { background: var(--np-accent); color: #fff; }
+  .ritem em {
+    font-style: normal; margin-left: auto; font-size: var(--np-font-sm);
+    color: var(--np-muted); background: var(--np-surface-2);
+    padding: 0 6px; border-radius: var(--np-radius-pill); min-width: 18px; text-align: center;
+  }
+  .ritem.on em { background: rgba(255, 255, 255, 0.22); color: #fff; }
+  .railfoot { margin-top: auto; padding: 6px 4px 2px; border-top: 1px solid var(--np-hairline); }
+  .switch { display: inline-flex; align-items: center; gap: 6px; font-size: var(--np-font-sm); color: var(--np-muted); cursor: pointer; }
+  .switch input { accent-color: var(--np-accent); }
+
+  .cmain {
+    display: flex; flex-direction: column; gap: var(--np-gap); min-width: 0;
+    min-height: 0; /* grid 子项钳在 520px 轨道内，cgrid 才能内滚而不外溢 */
+    background: var(--np-surface); border-radius: var(--np-radius-lg); padding: var(--np-gap);
+  }
+  .chead { display: flex; align-items: baseline; gap: var(--np-gutter); padding: 2px 6px 4px; }
+  .chead b { font-weight: 600; }
+  .chead span { font-size: var(--np-font-sm); color: var(--np-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cgrid {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+    gap: var(--np-gutter); align-content: start; padding-bottom: 2px; user-select: none;
+  }
+  .cgrid::-webkit-scrollbar { width: 8px; }
+  .cgrid::-webkit-scrollbar-thumb {
+    background: rgba(23, 29, 38, 0.22); border-radius: var(--np-radius-pill);
+    border: 2px solid transparent; background-clip: content-box;
+  }
+  .kcard {
+    display: flex; flex-direction: column; gap: 3px; padding: 7px 9px;
+    border-radius: var(--np-radius-lg); background: var(--np-surface-2);
+    border: 1px solid var(--np-hairline); cursor: grab;
+  }
+  .kcard:hover { border-color: var(--np-accent-line); background: var(--np-surface); }
+  .kcard:active { cursor: grabbing; }
+  .k1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .k1 svg, .k1 .glyph-fallback { width: 14px; height: 14px; flex: 0 0 auto; color: var(--np-fg); }
+  .k1 .glyph-fallback { font-size: 11px; text-align: center; }
+  .k1 .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--np-font-ui); }
+  .marks { display: inline-flex; gap: 3px; flex: 0 0 auto; }
+  .marks span {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border: 1px solid var(--np-hairline); border-radius: var(--np-radius);
+    color: var(--np-muted); background: var(--np-surface);
+  }
+  .marks svg, .marks .glyph-fallback { width: 11px; height: 11px; }
+  .k2 { display: flex; gap: 4px; overflow: hidden; }
+  .tagc {
+    padding: 0 7px; border-radius: var(--np-radius-pill); background: var(--np-surface);
+    color: var(--np-muted); font-size: var(--np-font-sm); white-space: nowrap;
+  }
+  .tagc.only { color: #9a6b00; background: rgba(202, 144, 22, 0.14); }
+  .empty { padding: var(--np-gutter); font-size: var(--np-font-sm); color: var(--np-muted); }
+
+  .pfoot { display: flex; align-items: center; justify-content: space-between; gap: var(--np-gutter); flex: 0 0 auto; }
+  .pfoot .hint { font-size: var(--np-font-sm); color: var(--np-muted); }
+
+  /* ══ 优缺点卡 ══ */
+  .pc { display: grid; grid-template-columns: 1fr 1fr; gap: var(--np-gutter); margin-top: 14px; width: min(880px, 100%); }
+  .pc > div { background: var(--np-surface); border-radius: var(--np-radius-lg); padding: 10px 12px; font-size: 12.5px; }
+  .pc b { display: block; margin-bottom: 4px; font-size: var(--np-font-sm); }
+  .pc .good b { color: #23834c; } .pc .bad b { color: #c06f16; }
+  .pc ul { margin: 0; padding-left: 18px; color: var(--np-muted); }
+  .note { margin-top: 10px; width: min(880px, 100%); font-size: 12px; color: var(--np-muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="tag">方案 C</span>组航分栏（master–detail）</h1>
+  <p>左侧竖向分组导航（名称 + 计数徽标，底部「未启用」开关），右侧只渲染所选组的「双行信息卡」：第一行图标 + 名称 + 启用面，第二行条件摘要 chip。信息量最大，为功能库继续扩容留好结构。</p>
+  <div class="jump">其他方案：<a href="lib-proposal-a-anchor.html">方案 A · 分组锚点速览</a><a href="lib-proposal-b-chipwall.html">方案 B · 胶囊墙</a><a href="lib-proposal-d-rail-wall.html">方案 A+B · 组航胶囊墙</a></div>
+</header>
+
+<section class="stage">
+  <div class="panel">
+    <div class="phead">
+      <span class="ptitle">功能库</span>
+      <span class="pcount" id="count">52</span>
+      <span class="search">
+        <i data-lucide="search" data-label="搜"></i>
+        <input id="q" placeholder="搜索功能（跨组）" spellcheck="false" />
+      </span>
+    </div>
+    <div class="cbody">
+      <nav class="rail" id="rail"></nav>
+      <div class="cmain">
+        <div class="chead"><b id="ctitle">全部功能</b><span id="cdesc">按组浏览 · 拖入左侧菜单或上方工具栏</span></div>
+        <div class="cgrid" id="grid"></div>
+      </div>
+    </div>
+    <div class="pfoot">
+      <span class="hint">搜索时自动切到跨组结果 · 仅拖拽添加，点击不入场</span>
+    </div>
+  </div>
+</section>
+
+<div class="pc">
+  <div class="good">
+    <b>✓ 优点</b>
+    <ul>
+      <li>结构最清晰：组导航恒定可见，52 项或 152 项都不乱</li>
+      <li>双行卡可承载条件摘要/「仅工具栏」等元信息，拖前即可判断用法</li>
+      <li>rail 徽标 + 未启用计数，定制状态一目了然</li>
+    </ul>
+  </div>
+  <div class="bad">
+    <b>✗ 代价</b>
+    <ul>
+      <li>多一列导航，占宽 ~150px；窄窗格下挤压卡片区</li>
+      <li>浏览全库需逐组点击，跨组比较不如 A/B 直接</li>
+      <li>双行卡 taller（~46px），单屏可见条目少于 A</li>
+    </ul>
+  </div>
+</div>
+<p class="note">示意原型 · 数据与图标取自当前功能库（52 项 · 11 组）；图标经 lucide CDN 加载，离线时以首字母占位。「全部」= 分区滚动视图，选组 = 收窄网格。</p>
+
+<script>
+const GROUPS = ["文件","剪贴板","新建与选择","视图","窗格协作","窗格工具","标记与系统","整理","PDF","办公","表格与文本"];
+const GDESC = {
+  "文件": "打开 / 重命名 / 删除等基础文件操作",
+  "剪贴板": "剪切复制粘贴与路径、名称复制",
+  "新建与选择": "新建条目与批量选择",
+  "视图": "刷新与显示状态",
+  "窗格协作": "跨窗格复制 / 移动（两面共享）",
+  "窗格工具": "窗格导航与分屏（仅可入工具栏）",
+  "标记与系统": "颜色标记、收藏与系统集成",
+  "整理": "压缩解压、查重、空间分析与归类",
+  "PDF": "合并、拆分与页级编辑、加水印",
+  "办公": "Office 转换、隐私清理与导出",
+  "表格与文本": "CSV / 文本批处理与清单导出",
+};
+const FNS = [
+  ["open","打开","external-link","文件","单选",1,0],
+  ["openTab","在新标签打开","app-window","文件","文件夹 · 单选",1,0],
+  ["rename","重命名","text-cursor-input","文件","单选",1,0],
+  ["batchRename","批量重命名","list-ordered","文件","≥ 2 项",0,0],
+  ["delete","删除","trash-2","文件","选中项",1,0],
+  ["deletePerm","永久删除","trash","文件","选中项",0,0],
+  ["properties","属性","info","文件","单选",1,0],
+  ["cut","剪切","scissors","剪贴板","选中项",1,0],
+  ["copy","复制","copy","剪贴板","选中项",1,0],
+  ["paste","粘贴","clipboard-paste","剪贴板","总是",1,0],
+  ["copyPath","复制路径","clipboard-copy","剪贴板","选中/空白",0,1],
+  ["copyName","复制名称","type","剪贴板","选中项",0,0],
+  ["newFolder","新建文件夹","folder-plus","新建与选择","空白处",1,1],
+  ["newFile","新建文本文件","file-plus","新建与选择","空白处",1,0],
+  ["selectAll","全选","list-checks","新建与选择","空白处",1,0],
+  ["reverseSelect","反向选择","arrow-up-down","新建与选择","空白处",0,0],
+  ["refresh","刷新","rotate-cw","视图","总是",1,1],
+  ["toggleHidden","切换隐藏文件","eye","视图","空白处",0,0],
+  ["copyToPane","复制到窗格","arrow-right-to-line","窗格协作","选中项",1,0],
+  ["moveToPane","移动到窗格","arrow-left-right","窗格协作","选中项",1,0],
+  ["up","上一级","corner-left-up","窗格工具","恒可用",0,1],
+  ["view","视图类型","layout-list","窗格工具","恒可用",0,1],
+  ["addr","地址框","rectangle-horizontal","窗格工具","恒可用 · 固定",0,1],
+  ["search","搜索当前文件夹","search","窗格工具","恒可用",0,1],
+  ["splitH","横向分裂","columns-2","窗格工具","恒可用",0,1],
+  ["splitV","纵向分裂","rows-2","窗格工具","恒可用",0,1],
+  ["swap","交换窗格","arrow-left-right","窗格工具","恒可用",0,1],
+  ["colorTag","颜色标记","paintbrush","标记与系统","选中项",1,0],
+  ["addFavorite","添加到收藏夹","star","标记与系统","文件夹",0,1],
+  ["sysMenu","更多系统选项","list","标记与系统","选中项",1,0],
+  ["openTerminal","在终端打开","terminal","标记与系统","选中/空白",0,1],
+  ["zipHere","压缩为 zip","archive","整理","选中项",0,0],
+  ["extract","解压到此处","archive-restore","整理","zip / 7z",0,0],
+  ["organizeBy","按规则归类","folder-input","整理","文件 · ≥ 2",0,0],
+  ["findDuplicates","查找重复文件","layers","整理","文件夹 · 单选",0,0],
+  ["dirSizes","空间分析","hard-drive","整理","文件夹 · 单选",0,0],
+  ["compareFolders","文件夹比较","git-compare","整理","文件夹 · ≥ 2",0,0],
+  ["pdfMerge","PDF 合并","files","PDF","≥ 2 · pdf",1,0],
+  ["pdfSplit","PDF 拆分为单页","file-output","PDF","pdf · 单文件",1,0],
+  ["pdfExtract","PDF 提取页","file-down","PDF","pdf · 单文件",0,0],
+  ["pdfRemove","PDF 删除页","file-minus","PDF","pdf · 单文件",0,0],
+  ["pdfRotate","PDF 旋转","rotate-cw","PDF","pdf · 单文件",0,0],
+  ["pdfCompress","PDF 轻压缩","minimize-2","PDF","pdf",0,0],
+  ["pdfWatermark","PDF 加水印","droplets","PDF","pdf",1,0],
+  ["imgToPdf","图片合并转 PDF","images","办公","png / jpg",0,0],
+  ["officeToPdf","转为 PDF","file-text","办公","office 文档",0,0],
+  ["officeClean","清理隐私属性","eraser","办公","OOXML",0,0],
+  ["officeToTxt","导出文本 TXT","file-type","办公","文档 / 表格",0,0],
+  ["csvConvert","编码转换","replace","表格与文本","文本 / 表格",0,0],
+  ["csvMerge","CSV 合并","table","表格与文本","≥ 2 · csv",0,0],
+  ["textMerge","文本合并","merge","表格与文本","≥ 2 · 文本",0,0],
+  ["exportList","导出文件清单","clipboard-list","表格与文本","选中项",0,0],
+];
+
+let curGroup = "全部";
+const $ = (id) => document.getElementById(id);
+
+function markIcons(m, t) {
+  let h = "";
+  if (m) h += `<span title="已启用 · 右键菜单"><i data-lucide="menu" data-label="菜"></i></span>`;
+  if (t) h += `<span title="已启用 · 窗格工具栏"><i data-lucide="panel-top" data-label="栏"></i></span>`;
+  return h ? `<span class="marks">${h}</span>` : "";
+}
+function toolOnlyTag(g) {
+  return g === "窗格工具" ? `<span class="tagc only">仅工具栏</span>` : "";
+}
+
+function renderRail() {
+  const n = (g) => FNS.filter((r) => r[3] === g).length;
+  $("rail").innerHTML =
+    [`全部`, ...GROUPS].map((g) =>
+      `<button class="ritem ${g === curGroup ? "on" : ""}" data-g="${g}">${g}<em>${g === "全部" ? FNS.length : n(g)}</em></button>`
+    ).join("") +
+    `<div class="railfoot"><label class="switch"><input type="checkbox" id="onlyUnused" />只看未启用</label></div>`;
+  $("onlyUnused").addEventListener("change", render);
+}
+
+function render() {
+  const q = $("q").value.trim().toLowerCase();
+  const onlyUnused = $("onlyUnused")?.checked;
+  const rows = FNS.filter(([, label, , g, , m, t]) =>
+    (curGroup === "全部" || g === curGroup) &&
+    (!onlyUnused || (!m && !t)) &&
+    (!q || label.toLowerCase().includes(q)));
+  $("count").textContent = rows.length;
+  $("ctitle").textContent = q ? `搜索「${$("q").value.trim()}」` : curGroup === "全部" ? "全部功能" : curGroup;
+  $("cdesc").textContent = q
+    ? `跨组结果 ${rows.length} 项`
+    : curGroup === "全部" ? "按组浏览 · 拖入左侧菜单或上方工具栏" : GDESC[curGroup];
+  if (!rows.length) {
+    $("grid").innerHTML = `<div class="empty">无匹配功能</div>`;
+    return;
+  }
+  let html = "";
+  if (curGroup === "全部" && !q) {
+    for (const g of GROUPS) {
+      const items = rows.filter((r) => r[3] === g);
+      if (!items.length) continue;
+      html += `<div class="kcard" style="grid-column:1/-1;cursor:default;border-style:dashed">
+        <div class="k1"><b style="font-weight:600">${g}</b><span style="font-size:var(--np-font-sm);color:var(--np-muted)">${GDESC[g]} · ${items.length}</span></div></div>`;
+      html += items.map(kcard).join("");
+    }
+  } else {
+    html = rows.map(kcard).join("");
+  }
+  $("grid").innerHTML = html;
+  mountIcons();
+}
+const kcard = ([, label, icon, g, cond, m, t]) =>
+  `<div class="kcard" title="${label} · ${cond}（拖入菜单或工具栏）">
+    <div class="k1"><i data-lucide="${icon}" data-label="${label[0]}"></i>
+      <span class="lbl">${label}</span>${markIcons(m, t)}</div>
+    <div class="k2"><span class="tagc">${cond}</span>${toolOnlyTag(g)}</div>
+  </div>`;
+
+$("rail").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-g]");
+  if (!b) return;
+  curGroup = b.dataset.g;
+  renderRail();
+  render();
+});
+$("q").addEventListener("input", render);
+
+function mountIcons() {
+  if (window.lucide && lucide.createIcons) lucide.createIcons();
+  document.querySelectorAll("i[data-lucide]").forEach((el) => {
+    const s = document.createElement("span");
+    s.className = "glyph-fallback";
+    s.textContent = el.dataset.label || "?";
+    el.replaceWith(s);
+  });
+}
+renderRail();
+render();
+</script>
+</body>
+</html>

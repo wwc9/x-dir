@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>激活窗格指示方案 · 六选一预览</title>
+<style>
+  :root {
+    --bg:#e9ecf1; --surface:#ffffff; --surface2:#f0f2f5; --border:#d6dbe2;
+    --hairline:rgba(16,24,40,.06); --fg:#171d26; --muted:#66707e;
+    --accent:#3574f0; --accent-border:#8fafd8;
+    --c-folder:#d6a01a; --c-image:#4586f0; --c-code:#2997b8;
+  }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--fg); padding:26px;
+    font-family:system-ui,"Segoe UI","Microsoft YaHei",sans-serif; font-size:13px; }
+  h1 { font-size:17px; margin-bottom:4px; }
+  .sub { color:var(--muted); margin-bottom:20px; }
+
+  .opt { background:transparent; border:1px solid var(--border); border-radius:10px;
+    padding:14px 16px; margin-bottom:16px; }
+  .opt-h { display:flex; align-items:baseline; gap:10px; margin-bottom:10px; }
+  .opt-h b { font-size:13.5px; }
+  .opt-h .tag { font-size:11px; color:var(--muted); }
+  .opt-h .pick { font-size:11px; color:var(--accent); cursor:pointer; margin-left:auto; text-decoration:underline; }
+
+  .strip { display:flex; gap:14px; align-items:stretch; }
+  .pane { flex:1; min-width:0; background:var(--surface);
+    border:1px solid var(--hairline); border-radius:10px; overflow:hidden;
+    position:relative; cursor:pointer;
+    transition:border-color .15s, box-shadow .15s, opacity .15s, filter .15s; }
+  .nav { display:flex; align-items:center; gap:6px; padding:6px 10px; }
+  .nav .tools { display:flex; gap:10px; color:var(--muted); font-size:12px; }
+  .nav .addr { flex:1; background:var(--surface2); border-radius:6px; padding:3px 10px;
+    color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rows { padding:2px 6px 6px; }
+  .row { display:flex; align-items:center; gap:8px; height:26px; padding:0 8px;
+    border-radius:5px; }
+  .row:hover { background:rgba(26,33,41,.05); }
+  .row .ic { width:14px; text-align:center; }
+  .row .nm { flex:1; }
+  .row .tp { color:var(--muted); font-size:11px; width:64px; }
+  .c-folder { color:var(--c-folder); } .c-image { color:var(--c-image); } .c-code { color:var(--c-code); }
+
+  /* ── 六种激活指示 ── */
+  /* 1 边框强调 */
+  .opt1 .pane.active { border-color:#7ba4e8; box-shadow:0 0 0 1px #7ba4e8; }
+  /* 2 顶部色条 */
+  .opt2 .pane::before { content:""; position:absolute; top:0; left:0; right:0;
+    height:3px; background:transparent; transition:background .15s; }
+  .opt2 .pane.active::before { background:var(--accent); }
+  .opt2 .pane.active { border-color:#c9d2de; }
+  /* 3 左侧竖条 */
+  .opt3 .pane::before { content:""; position:absolute; top:10px; bottom:10px; left:0;
+    width:3px; border-radius:0 3px 3px 0; background:transparent; transition:background .15s; }
+  .opt3 .pane.active::before { background:var(--accent); }
+  /* 4 阴影抬升 */
+  .opt4 .pane { box-shadow:0 1px 2px rgba(16,24,40,.05); }
+  .opt4 .pane.active { box-shadow:0 10px 26px rgba(16,24,40,.14), 0 2px 6px rgba(16,24,40,.08);
+    border-color:#d0d7e0; transform:translateY(-2px); }
+  /* 5 头部染色 */
+  .opt5 .pane.active .nav { background:rgba(53,116,240,.09); }
+  .opt5 .pane.active { border-color:#c9d2de; }
+  /* 6 反向压暗（未激活降饱和降透明） */
+  .opt6 .pane { filter:saturate(.55) opacity(.78); }
+  .opt6 .pane.active { filter:none; border-color:#c9d2de; }
+
+  .note { margin-top:10px; color:var(--muted); font-size:12px; }
+  .note b { color:var(--fg); }
+  .star { color:var(--accent); font-weight:600; }
+</style>
+</head>
+<body>
+<h1>激活窗格指示 · 六种方案</h1>
+<div class="sub">每格左边为 <b>激活窗格</b>、右边为未激活窗格（对比）。<b>点击任意窗格可切换激活</b>，感受切换瞬间。全部纯 CSS，选中哪套即落地哪套。</div>
+<div id="root"></div>
+
+<script>
+const FILES = [
+  { ic:"📁", cls:"c-folder", nm:"Adobe",   tp:"文件夹" },
+  { ic:"🖼️", cls:"c-image",  nm:"wallpaper.png", tp:"PNG 图片" },
+  { ic:"📜", cls:"c-code",   nm:"main.rs", tp:"Rust 源文件" },
+];
+
+const OPTS = [
+  { id:"opt1", name:"方案 1 · 边框强调", tag:"全周 1px 强调色描边",
+    note:"<b>最传统稳妥</b>：边界最明确、实现最简单；存在感中等，深浅主题都成立。" },
+  { id:"opt2", name:"方案 2 · 顶部色条", tag:"窗格顶缘 3px 强调色条", star:true,
+    note:"<span class='star'>★ 推荐</span>：<b>类浏览器激活标签</b>的现代手法；不侵占内容区，多窗格并排时指向性极强。" },
+  { id:"opt3", name:"方案 3 · 左侧竖条", tag:"左缘 3px 竖条（圆角）",
+    note:"类似列表选中态的放大版；紧凑，但窗格并排时左条容易与前一窗格右缘贴在一起。" },
+  { id:"opt4", name:"方案 4 · 阴影抬升", tag:"无彩色，激活卡片上浮（加大投影 + 上移 2px）",
+    note:"<b>零色彩侵入</b>、最素雅；依赖渲染品质，纯色桌面下指向性比色条弱一档。" },
+  { id:"opt5", name:"方案 5 · 头部染色", tag:"导航栏染 9% 强调色底",
+    note:"把窗格『标题带』点亮；与便签卡片风格协调，但底部窗格的头部染色会被误认为内容选中。" },
+  { id:"opt6", name:"方案 6 · 反向压暗", tag:"未激活降饱和至 55% / 透明度 78%，激活保持原样",
+    note:"<span class='star'>★ 推荐</span>：<b>激活窗格零改动</b>，靠『别人变灰』突出焦点，视觉最干净；代价是多数窗格不可用时观感偏暗（单窗格时无效果，需回退方案 2）。" },
+];
+
+const navHtml = (addr) => `
+  <div class="nav">
+    <span class="tools">◀ ▶ ▲ ⟳</span>
+    <span class="addr">${addr}</span>
+  </div>`;
+const rowsHtml = FILES.map((f) => `
+  <div class="row">
+    <span class="ic ${f.cls}">${f.ic}</span>
+    <span class="nm">${f.nm}</span>
+    <span class="tp">${f.tp}</span>
+  </div>`).join("");
+
+const root = document.getElementById("root");
+root.innerHTML = OPTS.map((o) => `
+  <section class="opt ${o.id}" data-opt="${o.id}">
+    <div class="opt-h">
+      <b>${o.name}</b>
+      <span class="tag">${o.tag}</span>
+      ${o.star ? `<span class="pick" data-pick="${o.id}">★ 我选这套</span>` : `<span class="pick" data-pick="${o.id}">我选这套</span>`}
+    </div>
+    <div class="strip">
+      <div class="pane active" data-switch>
+        ${navHtml("E:\\Code")}
+        <div class="rows">${rowsHtml}</div>
+      </div>
+      <div class="pane" data-switch>
+        ${navHtml("D:\\BaiduNetdisk")}
+        <div class="rows">${rowsHtml}</div>
+      </div>
+    </div>
+    <div class="note">${o.note}</div>
+  </section>`).join("");
+
+// 点击切换激活（每组独立）
+document.querySelectorAll("[data-switch]").forEach((pane) => {
+  pane.addEventListener("click", () => {
+    pane.parentElement.querySelectorAll(".pane").forEach((p) => p.classList.remove("active"));
+    pane.classList.add("active");
+  });
+});
+
+// 记录选择
+document.addEventListener("click", (e) => {
+  const pick = e.target.closest("[data-pick]");
+  if (pick) {
+    document.querySelectorAll(".opt-h .tag").forEach(() => {});
+    pick.textContent = "✓ 已记录选择";
+  }
+});
+</script>
+</body>
+</html>

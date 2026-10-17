@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>x-dir · Logo 方案预览 v9（对角渐变 ×10 · 主色系）</title>
+<style>
+  :root {
+    --canvas: #eef1f6;
+    --card: #ffffff;
+    --fg: #24292f;
+    --muted: #6b7482;
+    --hairline: #e4e7ec;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--canvas);
+    color: var(--fg);
+    font: 14px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    padding: 32px 40px 64px;
+  }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .sub { color: var(--muted); margin-bottom: 24px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 18px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--hairline);
+    border-radius: 14px;
+    padding: 18px;
+  }
+  .card h2 { font-size: 14.5px; }
+  .card .idea { color: var(--muted); font-size: 12px; margin: 3px 0 12px; }
+  .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+  .tile {
+    width: 104px; height: 104px;
+    border-radius: 14px;
+    border: 1px solid var(--hairline);
+    display: flex; align-items: center; justify-content: center;
+    background: #ffffff;
+  }
+  .tile.dark { background: #1d2127; border-color: #2a2f38; }
+
+  .logo { display: block; }
+
+  .ladder { display: flex; align-items: flex-end; gap: 12px; margin-top: 12px; }
+  .ladder figure { text-align: center; }
+  .ladder figcaption { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+  .titlebar {
+    margin-top: 12px;
+    display: inline-flex; align-items: center; gap: 7px;
+    background: #eceef1;
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    padding: 5px 12px 5px 8px;
+    font-weight: 600; font-size: 12.5px;
+  }
+  .note { margin-top: 10px; font-size: 11.5px; color: var(--muted); }
+
+  .verdict {
+    margin-top: 32px;
+    background: var(--card);
+    border: 1px solid var(--hairline);
+    border-radius: 14px;
+    padding: 20px 24px;
+  }
+  .verdict h2 { font-size: 15px; margin-bottom: 8px; }
+  .verdict li { margin: 6px 0 0 18px; color: #3d434b; }
+</style>
+</head>
+<body>
+
+<h1>x-dir · Logo 方案预览 v9 —— 对角渐变 ×10（主色系）</h1>
+<p class="sub">直角九宫格 + 对角渐变，全部以工具主色系为锚：<b>亮蓝 #3574F0</b>（暗色主题强调 #5C9DFF）、<b>深藏蓝 #223047</b>，向天蓝/冰蓝/靛蓝/青绿做邻近扩展。10 套 = 4 个渐变方向 × 主色系内的不同停靠组合。</p>
+
+<div class="grid" id="grid"></div>
+
+<div class="verdict">
+  <h2>建议</h2>
+  <li><b>正 logo：1（藏蓝→亮蓝→青）</b>——已验证的基准构图，主色覆盖最全。</li>
+  <li>低调整沉稳：<b>3（亮蓝→深藏蓝）</b>、<b>10（蓝→靛→紫，收在品牌近邻）</b>。</li>
+  <li>暗色主题下的最佳拍档：<b>4（亮蓝→天蓝→冰蓝）</b>——浅渐变在深底上非常亮眼。</li>
+  <li>想要严格"只用主色"：<b>7（深藏蓝↔亮蓝双色）</b>零外延色。</li>
+  <li>定稿后：多尺寸 ico（16/24/32/48/256）→ 替换 TitleBar np-logo 与 tauri.conf 图标；渐变方向与停靠色随时可微调。</li>
+</div>
+
+<script>
+// 九宫格几何：格子 26px、沟槽 6px，起点 4；直角（rx = 0）
+const G = [4, 36, 68];
+const CELL = (ix, iy, f) =>
+  `<rect x="${G[ix]}" y="${G[iy]}" width="26" height="26" fill="${f}"/>`;
+
+// 10 套对角渐变：方向 + 停靠（颜色全部锚定主色系）
+const VARIANTS = [
+  {
+    name: "1 · 藏蓝→亮蓝→青（基准）",
+    idea: "已验证的基准构图：主色三停靠，深起亮收。",
+    dir: [4, 4, 94, 94],
+    stops: [[0, "#223047"], [0.55, "#3574f0"], [1, "#22c1ee"]],
+  },
+  {
+    name: "2 · 亮蓝→藏蓝（反向）",
+    idea: "对角线换向（左下→右上），亮起深收——同一主色的镜像气质。",
+    dir: [4, 94, 94, 4],
+    stops: [[0, "#3574f0"], [1, "#223047"]],
+  },
+  {
+    name: "3 · 亮蓝→深藏蓝（暗调）",
+    idea: "亮起深收的正向版：只有主色两端，最低调。",
+    dir: [4, 4, 94, 94],
+    stops: [[0, "#3574f0"], [1, "#223047"]],
+  },
+  {
+    name: "4 · 亮蓝→天蓝→冰蓝（浅调）",
+    idea: "暗色主题强调色 #5C9DFF 与冰蓝做尾——浅渐变，暗底上最亮眼。",
+    dir: [4, 4, 94, 94],
+    stops: [[0, "#3574f0"], [0.5, "#5c9dff"], [1, "#bae2fd"]],
+  },
+  {
+    name: "5 · 亮蓝→靛蓝（反向）",
+    idea: "向靛蓝做近邻扩展，主色仍占起点。",
+    dir: [4, 94, 94, 4],
+    stops: [[0, "#3574f0"], [1, "#4f46e5"]],
+  },
+  {
+    name: "6 · 亮蓝→青绿",
+    idea: "向青绿扩展一步：蓝绿交界，清爽感最强。",
+    dir: [4, 4, 94, 94],
+    stops: [[0, "#3574f0"], [1, "#0f9d8f"]],
+  },
+  {
+    name: "7 · 藏蓝→亮蓝（右上→左下）",
+    idea: "严格双主色：深藏蓝 ↔ 亮蓝，零外延色；方向从右上压向左下。",
+    dir: [94, 4, 4, 94],
+    stops: [[0, "#223047"], [1, "#3574f0"]],
+  },
+  {
+    name: "8 · 亮蓝→藏蓝（右下→左上）",
+    idea: "又一种对角朝向：右下亮、左上深。",
+    dir: [94, 94, 4, 4],
+    stops: [[0, "#3574f0"], [1, "#223047"]],
+  },
+  {
+    name: "9 · 深藏蓝→亮蓝→浅蓝",
+    idea: "主色居中、两端深浅收放——三停靠里最柔和的一枚。",
+    dir: [4, 4, 94, 94],
+    stops: [[0, "#223047"], [0.5, "#3574f0"], [1, "#c9dcfd"]],
+  },
+  {
+    name: "10 · 亮蓝→靛→紫",
+    idea: "蓝靛紫三连：品牌蓝领跑，向邻近冷色延展。",
+    dir: [4, 4, 94, 94],
+    stops: [[0, "#3574f0"], [0.5, "#6366f1"], [1, "#8b5cf6"]],
+  },
+];
+
+function render(v, uid) {
+  const id = `g${uid}`;
+  const stops = v.stops
+    .map(([o, c]) => `<stop offset="${o}" stop-color="${c}"/>`)
+    .join("");
+  const defs = `<defs><linearGradient id="${id}" x1="${v.dir[0]}" y1="${v.dir[1]}" x2="${v.dir[2]}" y2="${v.dir[3]}" gradientUnits="userSpaceOnUse">${stops}</linearGradient></defs>`;
+  let cells = "";
+  for (let y = 0; y < 3; y++)
+    for (let x = 0; x < 3; x++) cells += CELL(x, y, `url(#${id})`);
+  return defs + cells;
+}
+
+const grid = document.getElementById("grid");
+VARIANTS.forEach((v, i) => {
+  const svg = (size, dark) => {
+    const uid = `${i}${dark ? "d" : "l"}`;
+    return `<svg class="logo" width="${size}" height="${size}" viewBox="0 0 96 96">${render(v, uid)}</svg>`;
+  };
+  const fig = (size) => `<figure>${svg(size, false)}<figcaption>${size}</figcaption></figure>`;
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <h2>${v.name}</h2>
+    <p class="idea">${v.idea}</p>
+    <div class="row">
+      <div class="tile">${svg(88, false)}</div>
+      <div class="tile dark">${svg(88, true)}</div>
+    </div>
+    <div class="ladder">${fig(32)}${fig(20)}${fig(16)}</div>
+    <div class="titlebar">${svg(16, false)} x-dir</div>
+  `;
+  grid.appendChild(card);
+});
+</script>
+
+</body>
+</html>

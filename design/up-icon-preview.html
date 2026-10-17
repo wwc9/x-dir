@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>“上一级”按钮图标备选 · x-dir</title>
+<style>
+:root{--np-bg:#e9ecf1;--np-surface:#ffffff;--np-surface-2:#f0f2f5;--np-border:#d6dbe2;--np-fg:#171d26;--np-muted:#66707e;--np-accent:#3574f0;--np-hover:rgba(26,33,41,.055);--np-radius:6px;--np-radius-pane:14px;--np-font-ui:13px;--np-font-sm:11px;}
+.dark{--np-bg:#131519;--np-surface:#1b1e23;--np-surface-2:#24282f;--np-border:#3a414b;--np-fg:#e8eaed;--np-muted:#8b929c;--np-accent:#5c9dff;--np-hover:rgba(255,255,255,.055);}
+*{box-sizing:border-box}
+body{margin:0;padding:28px 32px 48px;background:var(--np-bg);color:var(--np-fg);font:var(--np-font-ui)/1.6 system-ui,"Segoe UI","Microsoft YaHei",sans-serif;transition:background .2s,color .2s}
+.top{display:flex;align-items:baseline;gap:14px;max-width:1060px;margin:0 auto 6px}
+.top h1{font-size:17px;margin:0}
+.top p{margin:0;color:var(--np-muted);font-size:var(--np-font-sm)}
+#theme{margin-left:auto;border:1px solid var(--np-border);background:var(--np-surface);color:var(--np-fg);border-radius:var(--np-radius);padding:5px 12px;font-size:var(--np-font-sm);cursor:pointer}
+.grid{max-width:1060px;margin:18px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.card{background:var(--np-surface);border:1px solid var(--np-border);border-radius:var(--np-radius-pane);padding:14px 16px 12px;cursor:pointer;transition:border-color .15s}
+.card:hover{border-color:var(--np-accent)}
+.card.picked{outline:2px solid var(--np-accent);outline-offset:1px}
+.card header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.card h2{font-size:14px;margin:0;font-weight:600}
+.card code{color:var(--np-muted);font-size:var(--np-font-sm)}
+.badge{font-size:10px;color:#fff;background:var(--np-accent);border-radius:99px;padding:1px 8px}
+.dark .badge{color:#0d1117}
+.row{display:flex;align-items:center;gap:16px}
+.demo-big{flex:0 0 64px;display:flex;align-items:center;justify-content:center;height:64px;border-radius:var(--np-radius);background:var(--np-surface-2);color:var(--np-fg)}
+.demo-pane{flex:1;min-width:0}
+.navbar{display:flex;align-items:center;gap:2px;padding:4px 6px;min-height:34px;border:1px solid var(--np-border);border-radius:var(--np-radius)}
+.nbtn{display:inline-flex;align-items:center;justify-content:center;min-width:24px;min-height:24px;padding:4px 5px;border-radius:var(--np-radius);color:var(--np-fg);flex:0 0 auto}
+.nbtn:hover{background:var(--np-hover)}
+.addr{flex:1;min-width:0;margin:0 2px;padding:4px 8px;background:var(--np-surface-2);border-radius:var(--np-radius);color:var(--np-muted);font-size:var(--np-font-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pro{margin:10px 0 2px;font-size:var(--np-font-sm);color:var(--np-muted)}
+.con{margin:2px 0 0;font-size:var(--np-font-sm);color:var(--np-muted);opacity:.85}
+.hint{max-width:1060px;margin:14px auto 0;color:var(--np-muted);font-size:var(--np-font-sm)}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>“上一级”按钮图标备选</h1>
+  <p>点击卡片标记意向 · 右上角切换深浅主题 · 导航栏为真实密度仿真</p>
+  <button id="theme">🌙 深色</button>
+</div>
+<div class="grid">
+
+<section class="card" data-id="folder-up">
+  <header>
+    <span class="badge">当前</span>
+    <h2>文件夹上行</h2>
+    <code>FolderUp</code>
+  </header>
+  <div class="row">
+    <div class="demo-big"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /><path d="M12 10v6" /><path d="m9 13 3-3 3 3" /></svg></div>
+    <div class="demo-pane">
+      <div class="navbar">
+        <span class="nbtn" data-up><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /><path d="M12 10v6" /><path d="m9 13 3-3 3 3" /></svg></span>
+        <span class="nbtn" ><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></svg></span>
+        <span class="addr">E:\Code\AIProject\x-dir</span>
+        <span class="nbtn" ><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+        <span class="nbtn" ><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
+      </div>
+    </div>
+  </div>
+  <p class="pro">✓ 语义最明确：从当前文件夹向上走一层；与项目 Lucide 线条语言一致</p>
+  <p class="con">△ 小尺寸下文件夹轮廓 + 箭头元素偏多，视觉略重</p>
+</section>
+
+<section class="card" data-id="arrow-up">
+  <header>
+    <span class="badge" style="display:none">当前</span>
+    <h2>纯上箭头</h2>
+    <code>ArrowUp</code>
+  </header>
+  <div class="row">
+    <div class="demo-big"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 7-7 7 7" /><path d="M12 19V5" /></svg></div>
+    <div class="demo-pane">
+      <div class="navbar">
+        <span class="nbtn" data-up><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 7-7 7 7" /><path d="M12 19V5" /></svg></span>
+        <span class="nbtn" ><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></svg></span>
+        <span class="addr">E:\Code\AIProject\x-dir</span>
+        <span class="nbtn" ><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+        <span class="nbtn" ><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
+      </div>
+    </div>
+  </div>
+  <p class="pro">✓ 最轻最中性，Windows 资源管理器同款（Win10/11 的 ˄），辨识零成本</p>
+  <p class="con">△ 语义靠位置约定；单独看易混“置顶 / 上移”</p>
+</section>
+
+<section class="card" data-id="corner-left-up">
+  <header>
+    <span class="badge" style="display:none">当前</span>
+    <h2>直角上行（↰）</h2>
+    <code>CornerLeftUp</code>
+  </header>
+  <div class="row">
+    <div class="demo-big"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 9 9 4 4 9" /><path d="M20 20h-7a4 4 0 0 1-4-4V4" /></svg></div>
+    <div class="demo-pane">
+      <div class="navbar">
+        <span class="nbtn" data-up><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 9 9 4 4 9" /><path d="M20 20h-7a4 4 0 0 1-4-4V4" /></svg></span>
+        <span class="nbtn" ><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></svg></span>
+        <span class="addr">E:\Code\AIProject\x-dir</span>
+        <span class="nbtn" ><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+        <span class="nbtn" ><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
+      </div>
+    </div>
+  </div>
+  <p class="pro">✓ 传统文件管理器“向上一级”符号（Total Commander / XYplorer 风格），方向感强</p>
+  <p class="con">△ 与“撤销 / 返回”的直角箭头视觉相近，需靠位置区分</p>
+</section>
+
+<section class="card" data-id="arrow-up-from-line">
+  <header>
+    <span class="badge" style="display:none">当前</span>
+    <h2>脱离当前层（线上行）</h2>
+    <code>ArrowUpFromLine</code>
+  </header>
+  <div class="row">
+    <div class="demo-big"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 9-6-6-6 6" /><path d="M12 3v14" /><path d="M5 21h14" /></svg></div>
+    <div class="demo-pane">
+      <div class="navbar">
+        <span class="nbtn" data-up><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 9-6-6-6 6" /><path d="M12 3v14" /><path d="M5 21h14" /></svg></span>
+        <span class="nbtn" ><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></svg></span>
+        <span class="addr">E:\Code\AIProject\x-dir</span>
+        <span class="nbtn" ><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+        <span class="nbtn" ><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
+      </div>
+    </div>
+  </div>
+  <p class="pro">✓ “从当前层级向上离开”的隐喻现代利落，底部横线暗示“当前目录”这一层</p>
+  <p class="con">△ 在部分软件语境里读作“上传 / 发布”</p>
+</section>
+
+<section class="card" data-id="arrow-up-to-line">
+  <header>
+    <span class="badge" style="display:none">当前</span>
+    <h2>并入上一层（线止行）</h2>
+    <code>ArrowUpToLine</code>
+  </header>
+  <div class="row">
+    <div class="demo-big"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14" /><path d="m18 13-6-6-6 6" /><path d="M12 7v14" /></svg></div>
+    <div class="demo-pane">
+      <div class="navbar">
+        <span class="nbtn" data-up><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14" /><path d="m18 13-6-6-6 6" /><path d="M12 7v14" /></svg></span>
+        <span class="nbtn" ><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></svg></span>
+        <span class="addr">E:\Code\AIProject\x-dir</span>
+        <span class="nbtn" ><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+        <span class="nbtn" ><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
+      </div>
+    </div>
+  </div>
+  <p class="pro">✓ 箭头抵住横线，“回到上一层为止”的收束感；与 FromLine 成对，扩展性好</p>
+  <p class="con">△ 易读作“收起 / 置顶”</p>
+</section>
+
+<section class="card" data-id="folder-output">
+  <header>
+    <span class="badge" style="display:none">当前</span>
+    <h2>移出文件夹</h2>
+    <code>FolderOutput</code>
+  </header>
+  <div class="row">
+    <div class="demo-big"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 7.5V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-1.5" /><path d="M2 13h10" /><path d="m5 10-3 3 3 3" /></svg></div>
+    <div class="demo-pane">
+      <div class="navbar">
+        <span class="nbtn" data-up><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 7.5V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-1.5" /><path d="M2 13h10" /><path d="m5 10-3 3 3 3" /></svg></span>
+        <span class="nbtn" ><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></svg></span>
+        <span class="addr">E:\Code\AIProject\x-dir</span>
+        <span class="nbtn" ><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+        <span class="nbtn" ><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
+      </div>
+    </div>
+  </div>
+  <p class="pro">✓ 保留文件夹语义，箭头向外 = 离开当前目录</p>
+  <p class="con">△ 箭头水平朝外，方向不如垂直箭头直觉；易混“分享 / 导出”</p>
+</section>
+</div>
+<p class="hint">说明：预览中的图标即项目所用的 Lucide 线条图标（2px 描边、圆头拐点），选定后只需替换 Pane.tsx 里的一个 import，无需其他改动。</p>
+<script>
+document.getElementById("theme").onclick = function () {
+  var dark = document.documentElement.classList.toggle("dark");
+  this.textContent = dark ? "☀️ 浅色" : "🌙 深色";
+};
+document.querySelectorAll(".card").forEach(function (c) {
+  c.onclick = function () {
+    document.querySelectorAll(".card").forEach(function (x) { x.classList.remove("picked"); });
+    c.classList.add("picked");
+  };
+});
+</script>
+</body>
+</html>
