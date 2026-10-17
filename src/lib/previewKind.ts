@@ -60,8 +60,9 @@ const MAP: Record<string, PreviewKind> = {
   yaml: "text",
   yml: "text",
   toml: "text",
-  csv: "text",
-  tsv: "text",
+  // CSV/TSV：表格网格预览（2026-10-17，Rust 端 RFC4180 解析复用 office 表格管线）
+  csv: "officeSheet",
+  tsv: "officeSheet",
   html: "text",
   htm: "text",
   ts: "text",

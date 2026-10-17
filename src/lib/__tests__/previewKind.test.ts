@@ -15,9 +15,14 @@ describe("previewKind（扩展名 → 预览类型路由）", () => {
     expect(previewKind("a.flac")).toBe("audio");
   });
 
-  it("文本与代码族（HTML 按文本不渲染）", () => {
-    for (const n of ["a.txt", "a.log", "a.json", "a.csv", "a.rs", "a.tsx", "a.html"])
+  it("文本与代码族（HTML 按文本不渲染；CSV/TSV 已改表格预览不在其列）", () => {
+    for (const n of ["a.txt", "a.log", "a.json", "a.rs", "a.tsx", "a.html"])
       expect(previewKind(n)).toBe("text");
+  });
+
+  it("CSV/TSV 走表格网格预览（2026-10-17）", () => {
+    expect(previewKind("a.csv")).toBe("officeSheet");
+    expect(previewKind("a.tsv")).toBe("officeSheet");
   });
 
   it("markdown", () => {

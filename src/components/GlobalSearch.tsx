@@ -41,11 +41,11 @@ import {
   EMPTY_STREAM,
   applyBatch,
   composeTypeFilterQuery,
+  SEARCH_TYPE_OPTIONS,
   highlightParts,
   nextGlobalSearchReq,
   pushSearchHistory,
   sortResults,
-  GSEARCH_TYPE_PRESETS,
   type ResultSortKey,
   type SortDir,
   type StreamState,
@@ -66,23 +66,14 @@ import { AppIcon, ic } from "./AppIcon";
 import { ColGrip, type ColResizeCtl } from "./ColGrip";
 import { FadeInIcon } from "./FileList";
 import { IndexModeBar, useIndexStatus } from "./IndexMode";
-import { NpSelect, type NpSelectOption } from "./NpSelect";
+import { NpSelect } from "./NpSelect";
 import { PreviewBody } from "./preview/PreviewBody";
 
 const MAX_OPTIONS = [500, 2000, 5000];
 
 /** 类型单一选择器选项（2026-10-16 七次定案）：单一平铺清单——常用类型均为文件，
  *  文件夹并入同列，不再分组；无磁盘范围选择（恒全库） */
-const TYPE_SEL_OPTIONS: NpSelectOption<string>[] = [
-  { value: "all", label: "全部" },
-  { value: "files", label: "文件" },
-  { value: "dirs", label: "文件夹" },
-  ...GSEARCH_TYPE_PRESETS.filter((p) => p.exts).map((p) => ({
-    value: p.key,
-    label: p.label,
-    title: p.exts,
-  })),
-];
+
 
 /** 搜索结果列宽控制（寄存 settings.gsearchColWidths，与窗格列表 colWidths 相互独立） */
 const gsColCtl: ColResizeCtl<GsColKey> = {
@@ -668,7 +659,7 @@ export function GlobalSearchPage() {
           <NpSelect<string>
             value={typeSel}
             title="类型（文件/文件夹或常用类型预设，对应 ext: 过滤词）"
-            options={TYPE_SEL_OPTIONS}
+            options={SEARCH_TYPE_OPTIONS}
             onChange={setTypeSel}
           />
           <InputGroup

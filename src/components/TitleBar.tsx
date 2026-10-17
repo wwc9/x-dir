@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   Button,
@@ -43,6 +43,9 @@ const KNOWN = [
   { id: "documents", label: "文档" },
   { id: "downloads", label: "下载" },
 ];
+
+/** 顶栏浏览记录弹层的展示上限（settings.recentFolders 存储上限 50 条，超出只存不显） */
+const HISTORY_SHOW_MAX = 20;
 
 interface DriveLite {
   letter: string;
@@ -112,6 +115,41 @@ export function TitleBar() {
 
   // 当前生效是否深色（含"跟随系统"档），决定切换按钮的朝向
   const isDark = theme === "dark" || (theme === "system" && sysDark);
+
+  // ── 弹层按钮悬浮打开（2026-10-17）：浏览记录/收藏夹/布局预设悬浮即开 ──
+  // 关闭 = 指针离开按钮与弹层（共享宽限 DENSITY.hoverCloseMs，横穿缝隙不闪跳），
+  // 或再点按钮 / 点顶栏空白。整页（全盘搜索/定制）开着时悬浮不动作——弹层的
+  // 导航目标作用于主界面窗格，路过顶栏不应把整页顶掉（点击路径仍 exitPages）。
+  const hoverCloseTimer = useRef<number | null>(null);
+  const cancelHoverClose = () => {
+    if (hoverCloseTimer.current !== null) {
+      clearTimeout(hoverCloseTimer.current);
+      hoverCloseTimer.current = null;
+    }
+  };
+  useEffect(() => cancelHoverClose, []);
+  /** 进入触发钮：清宽限、互斥开自己；on = 该弹层的 set(true) */
+  const hoverEnter = (on: () => void) => () => {
+    cancelHoverClose();
+    if (useUi.getState().globalSearch || useUi.getState().menuPage) return;
+    setHistOpen(false);
+    setFavOpen(false);
+    setPresetOpen(false);
+    on();
+  };
+  /** 离开触发钮/弹层：宽限后关闭（期间进入任一悬浮面即取消） */
+  const hoverLeave = (off: () => void) => () => {
+    cancelHoverClose();
+    hoverCloseTimer.current = window.setTimeout(() => {
+      hoverCloseTimer.current = null;
+      off();
+    }, DENSITY.hoverCloseMs);
+  };
+  /** 弹层内容包裹层：进入取消关闭、离开续接宽限（按钮与弹层两段悬浮面拼接） */
+  const hoverProps = (off: () => void) => ({
+    onMouseEnter: cancelHoverClose,
+    onMouseLeave: hoverLeave(off),
+  });
 
   function navigateActive(path: string) {
     const pane = useLayout.getState().activePane();
@@ -190,11 +228,12 @@ export function TitleBar() {
         placement="bottom-start"
         arrow={false}
         content={
+          <div {...hoverProps(() => setHistOpen(false))}>
           <Menu className="np-hist-menu">
             {recentFolders.length === 0 && (
               <MenuItem text="暂无浏览记录" disabled />
             )}
-            {recentFolders.map((p) => (
+            {recentFolders.slice(0, HISTORY_SHOW_MAX).map((p) => (
               <MenuItem
                 key={p}
                 icon={ic(FolderOpen)}
@@ -205,6 +244,12 @@ export function TitleBar() {
                 }}
               />
             ))}
+            {recentFolders.length > HISTORY_SHOW_MAX && (
+              <MenuItem
+                text={`仅显示最近 ${HISTORY_SHOW_MAX} 条（共 ${recentFolders.length} 条）`}
+                disabled
+              />
+            )}
             {recentFolders.length > 0 && (
               <>
                 <MenuDivider />
@@ -219,6 +264,7 @@ export function TitleBar() {
               </>
             )}
           </Menu>
+          </div>
         }
       >
         <Button
@@ -228,11 +274,14 @@ export function TitleBar() {
           icon={ic(History)}
           active={histOpen}
           title="浏览记录"
+          onMouseEnter={hoverEnter(() => setHistOpen(true))}
+          onMouseLeave={hoverLeave(() => setHistOpen(false))}
           onClick={() => {
             // 整页打开时先回主界面：浏览记录的导航目标作用于主界面窗格
             useUi.getState().exitPages();
             setHistOpen((o) => !o);
             setFavOpen(false);
+            setPresetOpen(false);
           }}
         />
       </PopoverNext>
@@ -243,6 +292,7 @@ export function TitleBar() {
         placement="bottom-start"
         arrow={false}
         content={
+          <div {...hoverProps(() => setFavOpen(false))}>
           <Menu>
             {KNOWN.map((k) => (
               <MenuItem
@@ -307,6 +357,7 @@ export function TitleBar() {
               }}
             />
           </Menu>
+          </div>
         }
       >
         <Button
@@ -316,11 +367,14 @@ export function TitleBar() {
           icon={ic(Star)}
           active={favOpen}
           title="收藏夹"
+          onMouseEnter={hoverEnter(() => setFavOpen(true))}
+          onMouseLeave={hoverLeave(() => setFavOpen(false))}
           onClick={() => {
             // 整页打开时先回主界面：收藏夹导航目标作用于主界面窗格
             useUi.getState().exitPages();
             setFavOpen((o) => !o);
             setHistOpen(false);
+            setPresetOpen(false);
           }}
         />
       </PopoverNext>
@@ -390,7 +444,11 @@ export function TitleBar() {
         onClose={() => setPresetOpen(false)}
         placement="bottom-end"
         arrow={false}
-        content={<PresetPicker />}
+        content={
+          <div {...hoverProps(() => setPresetOpen(false))}>
+            <PresetPicker />
+          </div>
+        }
       >
         <Button
           minimal
@@ -399,6 +457,8 @@ export function TitleBar() {
           icon={ic(LayoutTemplate)}
           active={presetOpen}
           title="布局预设"
+          onMouseEnter={hoverEnter(() => setPresetOpen(true))}
+          onMouseLeave={hoverLeave(() => setPresetOpen(false))}
           onClick={() => {
             // 整页打开时先回主界面：预设排布作用于主界面窗格
             useUi.getState().exitPages();

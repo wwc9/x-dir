@@ -4,6 +4,7 @@
 
 import { create } from "zustand";
 
+
 import type { FileEntry } from "../lib/ipc";
 
 interface PreviewStore {
@@ -38,6 +39,8 @@ export const usePreview = create<PreviewStore>()((set, get) => ({
 
   openPreview(queue, index) {
     if (!queue.length) return;
+    // 搜索视角与选中集保持原样（预览不打断搜索结果）；与搜索浮层的压叠由
+    // .bp6-overlay 层级解决（浮层盖住搜索框），不走收起搜索（2026-10-17 二次定案）
     set({ queue, index: wrap(index, queue.length) });
   },
 

@@ -32,4 +32,7 @@ export const DENSITY = {
   // 定制页拖拽幽灵（纯 JS 启发式，无同名 CSS token）：拖拽浮标相对光标的右/下偏移
   dragGhostDx: 10,
   dragGhostDy: 8,
+  // 顶栏弹层按钮悬浮打开（纯 JS 启发式，无同名 CSS token）：指针离开按钮/弹层后
+  // 延迟关闭的宽限——横穿按钮与弹层间的缝隙、或短暂滑出时弹层不闪跳
+  hoverCloseMs: 180,
 } as const;

@@ -61,6 +61,7 @@ import { useLayout } from "../stores/layout";
 import { useNavTree } from "../stores/navtree";
 import { usePanes } from "../stores/panes";
 import { pickStartIndex, usePreview } from "../stores/preview";
+import { composeTypeFilterQuery } from "../lib/searchStream";
 import { useSettings } from "../stores/settings";
 import { useUi, type MenuItem } from "../stores/ui";
 import {
@@ -429,13 +430,20 @@ export function FileList({
     searchReqRef.current = null;
   };
 
+  // 搜索类型（搜索浮层的类型选择；all/files/dirs 直发 typeFilter，预设组合 ext: 词）
+  const searchType = usePanes((s) => s.tabs[tabId]?.searchType ?? "all");
+
   useEffect(() => {
     if (!searching || isThisPc) {
       cancelSearchReq();
       setSearchRes(null);
       return;
     }
-    if (!search!.trim()) {
+    const typeFilter =
+      searchType === "files" || searchType === "dirs" ? searchType : undefined;
+    const composed = composeTypeFilterQuery(search ?? "", searchType);
+    if (!composed.trim() && !typeFilter) {
+      // 无关键词且未选类型（all）：不触发递归搜索
       cancelSearchReq();
       setSearchRes(null);
       return;
@@ -447,7 +455,7 @@ export function FileList({
       searchReqRef.current = reqId;
       setSearchRes({ entries: [], truncated: false, scanned: 0, elapsedMs: 0, engine: "scan" });
       api
-        .searchDir({ path, query: search!, reqId })
+        .searchDir({ path, query: composed, typeFilter, reqId })
         .then((r) => {
           if (stale || searchReqRef.current !== reqId) return;
           searchReqRef.current = null;
@@ -469,7 +477,7 @@ export function FileList({
       cancelSearchReq();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, search, searching, isThisPc, refreshTick]);
+  }, [path, search, searching, isThisPc, refreshTick, searchType]);
 
   // 可用空间（窗格状态条）
   useEffect(() => {

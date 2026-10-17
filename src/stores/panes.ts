@@ -19,6 +19,8 @@ export interface TabUi {
   error: string | null;
   /** V2 递归搜索：非 null = 搜索模式（值为查询词） */
   search: string | null;
+  /** 窗格搜索的类型选择（"all"/"files"/"dirs"/常用类型预设 key；组合 ext: 词随查询下发） */
+  searchType: string;
   /** 视图内过滤（Ctrl+E）：非 null = 过滤态（值为过滤词，Rust 端 nameFilter）。
    *  与递归搜索（search）互斥展示：搜索浮层打开期间过滤条隐藏 */
   filter: string | null;
@@ -86,6 +88,7 @@ interface PanesStore {
   setTotal(tabId: string, total: number): void;
   setError(tabId: string, error: string | null): void;
   setSearch(tabId: string, query: string | null): void;
+  setSearchType(tabId: string, t: string): void;
   /** 视图内过滤（Ctrl+E）：null = 关闭；空串 = 过滤条开着待输入 */
   setFilter(tabId: string, query: string | null): void;
   bumpRefresh(tabId: string): void;
@@ -131,6 +134,7 @@ export const usePanes = create<PanesStore>()((set, get) => ({
           editing: null,
           error: null,
           search: null,
+        searchType: "all",
           filter: null,
           selMemory: {},
         },
@@ -150,6 +154,7 @@ export const usePanes = create<PanesStore>()((set, get) => ({
         editing: null,
         error: null,
         search: null,
+        searchType: "all",
         // 过滤是"视图局部"工具：进入新目录即还原完整列表（后退/前进不清，
         // 与 search 同语义——回到原目录时过滤视角仍在）
         filter: null,
@@ -224,6 +229,13 @@ export const usePanes = create<PanesStore>()((set, get) => ({
       tabs: patch(s.tabs, tabId, { search: query, selected: [], anchor: null }),
     }));
   },
+
+  setSearchType(tabId, t) {
+    const cur = get().tabs[tabId];
+    if (cur?.searchType === t) return;
+    set((s) => ({ tabs: patch(s.tabs, tabId, { searchType: t }) }));
+  },
+
 
   setFilter(tabId, query) {
     const cur = get().tabs[tabId];

@@ -85,24 +85,42 @@ pub fn run() {
             }));
             // 索引模式预热：后台把已建索引 mmap prefault 进文件缓存，消除首次查询冷映射
             crate::index::warm_views_async();
-            // 移除 Win11 对聚焦无边框窗口绘制的顶部强调色边（DWMWA_BORDER_COLOR =
-            // 固定色值）：应用有自己的卡片视觉，系统蓝线与其冲突
+            // 无边框窗口带阴影时，tao 在 Win11 顶部留 1px 非客户区（WM_NCCALCSIZE
+            // insets，WebView 之外由系统绘制）。该区颜色由 DWMWA_BORDER_COLOR 决定：
+            // 系统默认 = 强调色蓝线（弹层抢焦点后还会被重置回来），COLOR_NONE =
+            // 露出窗口背景亮条——都会形成可见横线（2026-10-17 三次定位）。正确做法
+            // 是填成画布色融入背景，且主题切换时由前端 set_border_color 同步深浅值
             #[cfg(windows)]
             {
                 use windows::Win32::Foundation::HWND;
                 use windows::Win32::Graphics::Dwm::{DWMWA_BORDER_COLOR, DwmSetWindowAttribute};
-                if let Some(w) = _app.get_webview_window("main")
-                    && let Ok(hwnd) = w.hwnd()
-                {
-                    let none: u32 = 0x00F1_ECE9; // 与 --np-bg 同色，融入画布
+                let clear_border = |hwnd: HWND| {
+                    // COLORREF = 0x00BBGGRR，默认浅色画布 --np-bg #e9ecf1
+                    let c = commands::native::BORDER_COLOR.load(std::sync::atomic::Ordering::Relaxed);
                     unsafe {
                         let _ = DwmSetWindowAttribute(
-                            HWND(hwnd.0),
+                            hwnd,
                             DWMWA_BORDER_COLOR,
-                            &none as *const u32 as *const std::ffi::c_void,
+                            &c as *const u32 as *const std::ffi::c_void,
                             std::mem::size_of::<u32>() as u32,
                         );
                     }
+                };
+                if let Some(w) = _app.get_webview_window("main")
+                    && let Ok(hwnd) = w.hwnd()
+                {
+                    // HWND 非 Send：闭包里存原始数值，事件触发时重建
+                    let hwnd_raw = hwnd.0 as isize;
+                    clear_border(HWND(hwnd.0));
+                    w.on_window_event(move |e| {
+                        // 聚焦切换（含弹层抢焦点）与缩放都会让 DWM 重置边框，逐一压回
+                        if matches!(
+                            e,
+                            tauri::WindowEvent::Focused(_) | tauri::WindowEvent::Resized(_)
+                        ) {
+                            clear_border(HWND(hwnd_raw as *mut std::ffi::c_void));
+                        }
+                    });
                 }
             }
             // 关闭 WebView2 浏览器加速键（F5/Ctrl+R 重载、Ctrl+F 查找栏、Ctrl+P
@@ -209,6 +227,7 @@ pub fn run() {
             commands::preview::preview_tiff_data_url,
             commands::native::show_context_menu,
             commands::native::start_drag,
+            commands::native::set_border_color,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

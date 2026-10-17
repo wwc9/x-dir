@@ -77,11 +77,20 @@ export interface PreviewTextResult {
   binary: boolean;
 }
 
+/** 表格合并单元格：0 基锚点 + 跨度（仅 xlsx/xlsm 解析，其余格式为空数组） */
+export interface SheetMerge {
+  row: number;
+  col: number;
+  rowSpan: number;
+  colSpan: number;
+}
+
 /** 快速预览：office 文本抽取的一节（docx=正文；pptx=幻灯片 N；表格=工作表名） */
 export interface OfficeSection {
   title: string;
   text: string;
   truncated: boolean;
+  merges: SheetMerge[];
 }
 
 export interface OfficeTextResult {
@@ -223,6 +232,8 @@ export interface Settings {
   /** ── UI 偏好（2026-10-12 集中化：原散落 localStorage，随 settings.json 保存/导出）── */
   sidebarWidth: number;
   sidebarCollapsed: boolean;
+  /** 边栏「布局方案 / 暂存区」两卡的上下分割比例（布局方案占比，0.2–0.8；拖中间把手调整） */
+  sideSplitRatio: number;
   colWidths: { name: number; mtime: number; type: number; size: number; loc: number };
   /** 全盘搜索结果列宽（独立于文件列表：弹窗宽固定，两侧比例偏好互不干扰） */
   gsearchColWidths: { name: number; loc: number; size: number; type: number; mtime: number };
@@ -308,6 +319,7 @@ export const DEFAULT_SETTINGS: Settings = {
   uiZoom: 1,
   sidebarWidth: 136,
   sidebarCollapsed: false,
+  sideSplitRatio: 0.5,
   colWidths: { name: 240, mtime: 130, type: 110, size: 80, loc: 160 },
   gsearchColWidths: { name: 168, loc: 134, size: 72, type: 72, mtime: 132 },
   gsearchPreview: true,
@@ -483,6 +495,9 @@ export const api = {
     cmd<Record<string, string>>("get_file_icons", { paths }),
   showContextMenu: (paths: string[]) =>
     cmd<void>("show_context_menu", { paths }),
+  /** 主题切换时同步无边框窗口顶部 1px 非客户区颜色（COLORREF 0x00BBGGRR），
+   *  填成画布色融入背景，防系统强调色/窗口背景亮条浮出（实测 2026-10-17） */
+  setBorderColor: (color: number) => cmd<void>("set_border_color", { color }),
   /** 返回落点效果："copy"/"move"；"drop" = 已放置但落点未回写 effect（WebView2 网页落点）；
    *  "none" = 未放置（拖拽取消/落在无效目标） */
   startDrag: (paths: string[]) =>

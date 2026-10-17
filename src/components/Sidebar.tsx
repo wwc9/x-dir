@@ -63,6 +63,9 @@ const PRESET_TREES = Object.fromEntries(
 
 const W_MIN = 120;
 const W_MAX = 340;
+/** 上下分割比例钳制（布局方案卡占比）：两侧各保 20% 可用高度 */
+const SPLIT_MIN = 0.2;
+const SPLIT_MAX = 0.8;
 
 interface Scheme {
   name: string;
@@ -227,12 +230,17 @@ export function Sidebar() {
   const [current, setCurrent] = useState<string | null>(DEFAULT_SCHEME);
   /** 已保存的默认方案树；null = 未保存过（应用/显示出厂 2×2） */
   const [defaultTree, setDefaultTree] = useState<LayoutNode | null>(null);
-  // 宽度/折叠集中存 settings（2026-10-12 配置集中化）；拖宽经本地态实时反馈、松手提交
+  // 宽度/折叠/上下分割集中存 settings（2026-10-12 配置集中化）；拖动经本地态实时反馈、松手提交
   const savedWidth = useSettings((s) => s.sidebarWidth);
   const collapsed = useSettings((s) => s.sidebarCollapsed);
+  const savedRatio = useSettings((s) => s.sideSplitRatio);
   const [dragW, setDragW] = useState<number | null>(null);
   const dragWRef = useRef<number | null>(null);
+  const [dragRatio, setDragRatio] = useState<number | null>(null);
+  const dragRatioRef = useRef<number | null>(null);
   const width = dragW ?? savedWidth;
+  const ratio = dragRatio ?? savedRatio;
+  const asideRef = useRef<HTMLElement>(null);
 
   const refresh = useCallback(() => {
     // 默认方案单独取（不在用户方案列表里）：已保存则缩略图/应用跟随，未保存回落出厂树
@@ -366,6 +374,35 @@ export function Sidebar() {
     window.addEventListener("mouseup", up);
   }
 
+  /** 两卡上下分割：按指针在边栏内的纵向位置归一为比例，钳 0.2–0.8，松手提交 */
+  function startSplit(e: React.MouseEvent) {
+    e.preventDefault();
+    const handle = e.currentTarget as HTMLElement;
+    const rect = asideRef.current?.getBoundingClientRect();
+    if (!rect || rect.height <= 0) return;
+    handle.classList.add("np-side-resizing");
+    const move = (ev: MouseEvent) => {
+      const r = Math.min(
+        SPLIT_MAX,
+        Math.max(SPLIT_MIN, (ev.clientY - rect.top) / rect.height),
+      );
+      dragRatioRef.current = r;
+      setDragRatio(r);
+    };
+    const up = () => {
+      handle.classList.remove("np-side-resizing");
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      if (dragRatioRef.current !== null) {
+        useSettings.getState().update({ sideSplitRatio: dragRatioRef.current });
+      }
+      dragRatioRef.current = null;
+      setDragRatio(null);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  }
+
   if (collapsed) {
     // 折叠态：顶部展开按钮，下方竖排各方案（缩略图 + 名称首字），点击直接切换
     return (
@@ -407,7 +444,11 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="np-sidebar" style={{ flexBasis: width }}>
+    <aside ref={asideRef} className="np-sidebar" style={{ flexBasis: width }}>
+      <div
+        className="np-side-card"
+        style={{ flex: `0 1 ${ratio * 100}%`, minHeight: 96 }}
+      >
       <div className="np-side-h">
         <span>布局方案</span>
         <div className="np-side-actions">
@@ -484,6 +525,13 @@ export function Sidebar() {
           </div>
         )}
       </div>
+      </div>
+
+      <div
+        className="np-side-split"
+        onMouseDown={startSplit}
+        title="拖动调整上下高度"
+      />
 
       <Shelf />
 

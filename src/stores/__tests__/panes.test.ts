@@ -72,6 +72,20 @@ describe("窗格历史栈（navigate / back / forward）", () => {
   });
 });
 
+describe("窗格搜索类型选择（searchType，2026-10-17）", () => {
+  it("设置后保留在 tab 上（新搜索沿用上次类型）", () => {
+    const st = usePanes.getState();
+    st.navigate("p1", "C:\a");
+    const id = Object.keys(usePanes.getState().tabs)[0];
+    expect(usePanes.getState().tabs[id].searchType).toBe("all");
+    st.setSearchType(id, "docs");
+    expect(usePanes.getState().tabs[id].searchType).toBe("docs");
+    // 关闭搜索（setSearch null）不清类型
+    st.setSearch(id, null);
+    expect(usePanes.getState().tabs[id].searchType).toBe("docs");
+  });
+});
+
 describe("选择记忆（selMemory，2026-10-15）", () => {
   beforeEach(() => {
     usePanes.setState({ tabs: {} });

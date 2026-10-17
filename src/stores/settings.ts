@@ -49,6 +49,7 @@ function toPlain(s: SettingsStore): Settings {
     uiZoom: s.uiZoom,
     sidebarWidth: s.sidebarWidth,
     sidebarCollapsed: s.sidebarCollapsed,
+    sideSplitRatio: s.sideSplitRatio,
     colWidths: s.colWidths,
     gsearchColWidths: s.gsearchColWidths,
     gsearchPreview: s.gsearchPreview,
@@ -125,6 +126,13 @@ export function applyTheme(theme: Settings["theme"]) {
   document.documentElement.classList.toggle("dark", dark);
   // Blueprint 深色主题经由 bp6-dark 类生效
   document.documentElement.classList.toggle("bp6-dark", dark);
+  // 无边框窗口顶部 1px 非客户区（tao 阴影 insets，WebView 之外）同步画布色：
+  // 系统默认强调色或 COLOR_NONE 的窗口背景亮条都会在顶缘浮出可见横线
+  // （COLORREF = 0x00BBGGRR；#e9ecf1 / #131519 与 index.css --np-bg 同值）
+  const canvas = dark ? 0x131519 : 0xe9ecf1;
+  const colorref =
+    ((canvas & 0xff) << 16) | (canvas & 0xff00) | ((canvas >> 16) & 0xff);
+  api.setBorderColor(colorref).catch(() => undefined);
 }
 
 /** 界面缩放走 WebView2 原生 ZoomFactor（与浏览器缩放同源） */
@@ -194,6 +202,11 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     merged.colWidths = sanitizeColWidths(merged.colWidths);
     merged.gsearchColWidths = sanitizeGsColWidths(merged.gsearchColWidths);
     merged.gsearchPreviewWidth = clampGsPreviewW(merged.gsearchPreviewWidth);
+    // 边栏上下分割比例：脏数据/越界回落默认（布局方案卡占比，钳 0.2–0.8）
+    merged.sideSplitRatio =
+      typeof merged.sideSplitRatio === "number" && Number.isFinite(merged.sideSplitRatio)
+        ? Math.min(0.8, Math.max(0.2, merged.sideSplitRatio))
+        : DEFAULT_SETTINGS.sideSplitRatio;
     // 图标视图已删除（2026-10-13）：旧档存过 icons 时回落详细信息
     if ((merged.defaultView as string) === "icons") merged.defaultView = "details";
     // 右键菜单迁移：旧档缺 menuEntries 字段时生成出厂布局（用户刻意清空的

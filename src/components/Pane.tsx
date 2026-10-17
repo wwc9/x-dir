@@ -23,7 +23,9 @@ import { createEntry } from "../lib/operations";
 import { dfsPanes, type PaneNode } from "../lib/layoutTree";
 import { useLayout } from "../stores/layout";
 import { usePanes } from "../stores/panes";
+import { usePreview } from "../stores/preview";
 import { useSettings } from "../stores/settings";
+import { SEARCH_TYPE_OPTIONS } from "../lib/searchStream";
 import { closePaneConfirmed, type MenuItem as UiMenuItem, useUi } from "../stores/ui";
 import {
   ChevronRight,
@@ -37,6 +39,7 @@ import {
   X,
 } from "lucide-react";
 import { AppIcon, ic } from "./AppIcon";
+import { NpSelect } from "./NpSelect";
 import { DENSITY } from "../lib/tokens";
 import { FileList } from "./FileList";
 import { FN_ICONS } from "./MenuEditor";
@@ -260,6 +263,8 @@ export function Pane({ pane }: { pane: PaneNode }) {
 
   if (!tab) return null;
   const tabId = tab.id;
+  // 搜索类型（搜索浮层的类型选择；组合 ext: 词随查询下发，关闭搜索后保留）
+  const searchType = usePanes((st) => st.tabs[tabId]?.searchType ?? "all");
   /** 当前窗格选中条目（FileEntry）：工具栏菜单功能的执行与条件判定上下文 */
   const getSelItems = (): FileEntry[] => {
     const sel = ui?.selected ?? [];
@@ -366,13 +371,18 @@ export function Pane({ pane }: { pane: PaneNode }) {
     }
   };
   // 搜索浮层的外点退出：豁免仅限搜索框本体与窗格内的结果行/表头（排序、列宽
-  // 属于搜索结果的操作）；其余一律退出——含本窗格空白处（如「此电脑」页面）
+  // 属于搜索结果的操作）；其余一律退出——含本窗格空白处（如「此电脑」页面）。
+  // 快速预览打开期间暂停外点退出：关闭预览/点预览遮罩的按下不属于"去别处操作"，
+  // 不该退掉搜索结果（2026-10-17；预览关闭后恢复监听）
   useEffect(() => {
     if (!searching) return;
     const onDown = (e: MouseEvent) => {
       const t = e.target as HTMLElement | null;
       if (!t) return;
+      if (usePreview.getState().queue.length) return;
       if (t.closest(".np-search-anchor") || t.closest(".np-search-pop")) return;
+      // 类型选择下拉（portal 弹层）的点击属于搜索操作，不退出搜索
+      if (t.closest(".np-search-type-pop")) return;
       const inPane = !!t.closest(`[data-pane-id="${pane.id}"]`);
       if (inPane && (t.closest(".np-row") || t.closest(".np-head-clip"))) return;
       usePanes.getState().setSearch(tabId, null);
@@ -381,7 +391,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
     return () => window.removeEventListener("mousedown", onDown);
   }, [searching, pane.id, tabId]);
   // 浮层水平跟随搜索键：实测锚点相对导航栏的偏移；收纳档位/窗格宽变化经
-  // ResizeObserver 重测，右缘钳制在导航栏内（260px 浮层 + 8px 边距）
+  // ResizeObserver 重测，右缘钳制在导航栏内（320px 浮层 + 8px 边距）
   const searchAnchorRef = useRef<HTMLDivElement>(null);
   const [searchPopX, setSearchPopX] = useState(0);
   useLayoutEffect(() => {
@@ -391,7 +401,8 @@ export function Pane({ pane }: { pane: PaneNode }) {
       const nav = el?.closest(".np-nav");
       if (!el || !nav) return;
       const x = el.getBoundingClientRect().left - nav.getBoundingClientRect().left;
-      setSearchPopX(Math.max(0, Math.min(x, nav.clientWidth - 268)));
+      // 浮层 320px 宽（输入框 + 类型选择，2026-10-17）：右缘钳制留 8px 边距
+      setSearchPopX(Math.max(0, Math.min(x, nav.clientWidth - 328)));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -797,20 +808,29 @@ export function Pane({ pane }: { pane: PaneNode }) {
             left 由锚点实测下发 */}
         {searching && (
           <div className="np-search-pop" style={{ left: searchPopX }}>
-            <InputGroup
-              size="small"
-              className="np-search"
-              data-search={pane.id}
-              autoFocus
-              leftElement={ic(Search)}
-              value={ui?.search ?? ""}
-              placeholder="递归搜索…"
-              onChange={(e) => usePanes.getState().setSearch(tabId, e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") usePanes.getState().setSearch(tabId, null);
-              }}
-              spellCheck={false}
-            />
+            <div className="np-search-row">
+              <InputGroup
+                size="small"
+                className="np-search"
+                data-search={pane.id}
+                autoFocus
+                leftElement={ic(Search)}
+                value={ui?.search ?? ""}
+                placeholder="递归搜索…"
+                onChange={(e) => usePanes.getState().setSearch(tabId, e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") usePanes.getState().setSearch(tabId, null);
+                }}
+                spellCheck={false}
+              />
+              <NpSelect
+                value={searchType}
+                title="类型（文件/文件夹或常用类型预设，对应 ext: 过滤词）"
+                options={SEARCH_TYPE_OPTIONS}
+                popoverClassName="np-search-type-pop"
+                onChange={(v) => usePanes.getState().setSearchType(tabId, v)}
+              />
+            </div>
           </div>
         )}
         {/* 自动补全下拉（V2 §3.2；仅聚焦且有待选时出现；绝对定位不占布局） */}

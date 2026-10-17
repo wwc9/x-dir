@@ -250,6 +250,18 @@ export const GSEARCH_TYPE_PRESETS: GsTypePreset[] = [
   { key: "apps", label: "程序", exts: "exe;msi;lnk;bat;cmd;ps1;dll;jar;apk" },
 ];
 
+/** 类型选择选项（窗格搜索与全盘搜索共用）：all + files/dirs + 常用类型预设 */
+export const SEARCH_TYPE_OPTIONS: { value: string; label: string; title?: string }[] = [
+  { value: "all", label: "全部" },
+  { value: "files", label: "文件" },
+  { value: "dirs", label: "文件夹" },
+  ...GSEARCH_TYPE_PRESETS.filter((p) => p.exts).map((p) => ({
+    value: p.key,
+    label: p.label,
+    title: p.exts,
+  })),
+];
+
 /** 用户查询 + 类型预设 → 发往后端的实际查询（预设不过滤时原样返回） */
 export function composeTypeFilterQuery(query: string, presetKey: string): string {
   const q = query.trim();

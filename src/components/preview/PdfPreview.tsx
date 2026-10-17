@@ -101,6 +101,12 @@ export default function PdfPreview({
               style={{ position: "absolute", insetInline: 0, transform: `translateY(${row.start}px)` }}
             >
               <PdfCanvas doc={doc} pageNum={row.index + 1} width={width || 760} />
+              {/* 页码隔断（2026-10-17 定稿放页尾）：第 N 页，共 M 页 */}
+              <div className="np-pv-pdf-pagemark">
+                <span className="np-pv-pdf-pagemark-line" />
+                第 {row.index + 1} 页，共 {doc.numPages} 页
+                <span className="np-pv-pdf-pagemark-line" />
+              </div>
             </div>
           ))}
         </div>

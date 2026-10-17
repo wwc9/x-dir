@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 const ALLOWLIST = new Set<string>([
   "np-dialog", // Blueprint Dialog 上的语义标记类，样式由 .bp6-dialog + 皮肤类（np-pv 等）承担
   "np-pop-trigger", // JS 查询钩子（TitleBar 判断点击目标是否在弹层触发钮内），不参与样式
+  "np-search-type-pop", // JS 查询钩子（Pane 搜索外点退出豁免：类型下拉弹层内容卡标记，经 NpSelect popoverClassName 透传），不参与样式
 ]);
 
 function walk(dir: string, out: string[] = []): string[] {

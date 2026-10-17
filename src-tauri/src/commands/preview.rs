@@ -26,6 +26,19 @@ pub struct OfficeSection {
     pub title: String,
     pub text: String,
     pub truncated: bool,
+    /// 表格合并单元格（仅 xlsx/xlsm 解析；其余格式为空——calamine 不产合并信息）
+    #[serde(default)]
+    pub merges: Vec<SheetMerge>,
+}
+
+/// 合并单元格：0 基锚点 + 跨度（serde camelCase → rowSpan/colSpan）
+#[derive(serde::Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SheetMerge {
+    pub row: u32,
+    pub col: u32,
+    pub row_span: u32,
+    pub col_span: u32,
 }
 
 #[derive(Serialize)]
@@ -125,14 +138,18 @@ pub async fn preview_extract_office(path: String) -> Result<OfficeText, String> 
     match ext.as_str() {
         "docx" | "docm" => {
             let data = std::fs::read(&path).map_err(|e| e.to_string())?;
-            let (text, truncated) = docx_text(&data)?;
+            let (mut sections, truncated) = docx_sections(&data)?;
+            if sections.is_empty() {
+                sections.push(OfficeSection {
+                merges: vec![],
+                    title: "（空文档）".into(),
+                    text: String::new(),
+                    truncated: false,
+                });
+            }
             Ok(OfficeText {
                 kind: "docx".into(),
-                sections: vec![OfficeSection {
-                    title: "正文".into(),
-                    text,
-                    truncated,
-                }],
+                sections,
                 truncated,
             })
         }
@@ -149,6 +166,7 @@ pub async fn preview_extract_office(path: String) -> Result<OfficeText, String> 
             let (mut sections, truncated) = sheet_sections(&path)?;
             if sections.is_empty() {
                 sections.push(OfficeSection {
+            merges: vec![],
                     title: "（无工作表）".into(),
                     text: String::new(),
                     truncated: false,
@@ -166,6 +184,17 @@ pub async fn preview_extract_office(path: String) -> Result<OfficeText, String> 
             Ok(OfficeText {
                 kind: "epub".into(),
                 sections,
+                truncated,
+            })
+        }
+        // CSV/TSV → 表格网格预览（2026-10-17：原走纯文本，现与 office 表格同管线）
+        "csv" | "tsv" => {
+            let delim = if ext == "tsv" { '\t' } else { ',' };
+            let section = csv_section(&path, delim)?;
+            let truncated = section.truncated;
+            Ok(OfficeText {
+                kind: "sheet".into(),
+                sections: vec![section],
                 truncated,
             })
         }
@@ -235,10 +264,131 @@ fn zip_read_entry(data: &[u8], name: &str) -> Result<String, String> {
     Ok(s)
 }
 
-/// docx → 正文文本：word/document.xml，段落 = w:p，文本 = w:t，w:tab/w:br 保留
-pub fn docx_text(data: &[u8]) -> Result<(String, bool), String> {
+/// document.xml → 分页文本数组（纯函数）：显式分页符（w:br type="page"）与
+/// lastRenderedPageBreak（Word/WPS 保存时记录的上次渲染分页点，普通文档普遍存在）
+/// 作为页边界；断点落到所在段落末尾（页边界精度 = 段落级，预览足够）。
+/// 行数与页数双上限，超限 truncated。
+pub fn docx_page_texts(xml: &str, cap_chars: usize, max_pages: usize) -> (Vec<String>, bool) {
+    use quick_xml::events::Event;
+
+    let mut r = quick_xml::Reader::from_reader(xml.as_bytes());
+    let mut pages: Vec<String> = vec![String::new()];
+    let mut in_text = false;
+    // 段落内遇到分页标记：翻页落到该段落末尾
+    let mut pending_break = false;
+    let mut buf = Vec::new();
+    let mut truncated = false;
+    loop {
+        let cur = pages.last_mut().unwrap();
+        if cur.len() >= cap_chars {
+            truncated = true;
+            break;
+        }
+        match r.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) => {
+                if is_local(e.name().local_name(), "t") {
+                    in_text = true;
+                }
+            }
+            Ok(Event::Empty(e)) => {
+                let name = e.name().local_name();
+                if is_local(name, "lastRenderedPageBreak") {
+                    pending_break = true;
+                } else if is_local(name, "br") {
+                    // 显式分页符：w:type="page"（普通换行 br 仍按换行处理）
+                    let is_page_break = e.attributes().any(|a| {
+                        a.as_ref().is_ok_and(|a| {
+                            is_local(a.key.local_name(), "type") && a.value.as_ref() == b"page"
+                        })
+                    });
+                    if is_page_break {
+                        pending_break = true;
+                    }
+                    pages.last_mut().unwrap().push('\n');
+                } else if is_local(name, "tab") {
+                    pages.last_mut().unwrap().push('\t');
+                }
+            }
+            Ok(Event::End(e)) => {
+                let local = e.name().local_name();
+                if is_local(local, "t") {
+                    in_text = false;
+                } else if is_local(local, "p") {
+                    pages.last_mut().unwrap().push('\n');
+                    if pending_break {
+                        pending_break = false;
+                        if pages.len() >= max_pages {
+                            truncated = true; // 后续内容并入末页，不再分
+                        } else {
+                            pages.push(String::new());
+                        }
+                    }
+                }
+            }
+            Ok(Event::Text(t)) if in_text => {
+                if let Ok(s) = t.unescape() {
+                    pages.last_mut().unwrap().push_str(&s);
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    // 末页无内容（分页标记恰好收尾）丢弃；每页收敛空行 + 去首尾空白行
+    if pages.len() > 1 && pages.last().is_some_and(|p| p.trim().is_empty()) {
+        pages.pop();
+    }
+    let pages = pages
+        .into_iter()
+        .map(|p| {
+            let collapsed = collapse_blank_lines(&p);
+            collapsed.trim_matches('\n').to_string()
+        })
+        .collect();
+    (pages, truncated)
+}
+
+/// docx → 每页一节（2026-10-17）：分页感知抽取，多页时节标题 =「第 N 页」；
+/// 无分页标记的文档退化为单节「正文」（与旧版一致）
+pub fn docx_sections(data: &[u8]) -> Result<(Vec<OfficeSection>, bool), String> {
     let xml = zip_read_entry(data, "word/document.xml")?;
-    Ok(xml_paragraphs(&xml, "p", "t", SECTION_CHAR_CAP))
+    let (pages, truncated) = docx_page_texts(&xml, SECTION_CHAR_CAP, SECTION_CAP);
+    let multi = pages.len() > 1;
+    let sections = pages
+        .into_iter()
+        .enumerate()
+        .map(|(i, text)| OfficeSection {
+            merges: vec![],
+            title: if multi {
+                format!("第 {} 页", i + 1)
+            } else {
+                "正文".into()
+            },
+            text,
+            truncated: false,
+        })
+        .collect();
+    Ok((sections, truncated))
+}
+
+/// 3+ 连续换行收敛为空行（纯函数；xml_paragraphs 与 docx 分页共用）
+fn collapse_blank_lines(s: &str) -> String {
+    let mut collapsed = String::with_capacity(s.len());
+    let mut run = 0usize;
+    for ch in s.chars() {
+        if ch == '\n' {
+            run += 1;
+            if run <= 2 {
+                collapsed.push(ch);
+            }
+        } else {
+            run = 0;
+            collapsed.push(ch);
+        }
+    }
+    collapsed
 }
 
 /// pptx → 每页一节：ppt/slides/slideN.xml 按 N 排序，段落 = a:p，文本 = a:t
@@ -261,6 +411,7 @@ pub fn pptx_slides(data: &[u8]) -> Result<(Vec<OfficeSection>, bool), String> {
         let xml = zip_read_entry(data, &format!("ppt/slides/slide{n}.xml"))?;
         let (text, truncated) = xml_paragraphs(&xml, "p", "t", SECTION_CHAR_CAP);
         sections.push(OfficeSection {
+            merges: vec![],
             title: format!("幻灯片 {n}"),
             text,
             truncated,
@@ -274,19 +425,30 @@ pub fn pptx_slides(data: &[u8]) -> Result<(Vec<OfficeSection>, bool), String> {
     Ok((sections, over))
 }
 
-/// 表格 → 每个工作表一节（xlsx/xlsm/xlsb/xls/ods 统一走 calamine）
+/// 表格 → 每个工作表一节（xlsx/xlsm/xlsb/xls/ods 统一走 calamine）。
+/// 合并单元格仅 xlsx/xlsm 支持：calamine 不解析 mergeCells，另从容器 XML 直读
+/// （workbook.xml 的 sheet 顺序 → rels → 各 worksheet 的 mergeCells）；其余格式
+/// 合并信息留在二进制/ODF 结构里，第一版不解析（merges 为空，展示退化为平铺网格）。
 fn sheet_sections(path: &str) -> Result<(Vec<OfficeSection>, bool), String> {
     use calamine::Reader as _;
+    let lower = path.to_ascii_lowercase();
+    let has_merge = lower.ends_with(".xlsx") || lower.ends_with(".xlsm");
+    let merge_sheets = if has_merge {
+        sheet_merges_xlsx(path)
+    } else {
+        Vec::new()
+    };
     let mut wb = calamine::open_workbook_auto(path).map_err(|e| format!("表格解析失败：{e}"))?;
     let names = wb.sheet_names();
     let capped = names.len() > SECTION_CAP;
     let mut sections = Vec::new();
-    for name in names.iter().take(SECTION_CAP) {
+    for (i, name) in names.iter().take(SECTION_CAP).enumerate() {
         let range = wb
             .worksheet_range(name)
             .map_err(|e| format!("读取工作表 {name} 失败：{e}"))?;
         let (text, truncated) = range_to_text(&range, SHEET_ROW_CAP, SECTION_CHAR_CAP);
         sections.push(OfficeSection {
+            merges: merge_sheets.get(i).cloned().unwrap_or_default(),
             title: name.clone(),
             text,
             truncated,
@@ -295,10 +457,157 @@ fn sheet_sections(path: &str) -> Result<(Vec<OfficeSection>, bool), String> {
     Ok((sections, capped))
 }
 
-/// 单元格 → 预览文本（纯函数）：整数去小数尾、布尔 TRUE/FALSE、ISO 日期原样
+/// 单 sheet 的 mergeCells 护栏（病态表格防拖死解析）
+const MERGE_CAP: usize = 4_000;
+
+/// xlsx/xlsm → 每个工作表的合并单元格清单（顺序与 calamine sheet_names 对齐）。
+/// 任一部件缺失/解析失败返回空（合并展示是增强项，不让预览失败）。
+fn sheet_merges_xlsx(path: &str) -> Vec<Vec<SheetMerge>> {
+    let Ok(data) = std::fs::read(path) else {
+        return Vec::new();
+    };
+    let Ok(wb_xml) = zip_read_entry(&data, "xl/workbook.xml") else {
+        return Vec::new();
+    };
+    let Ok(rels_xml) = zip_read_entry(&data, "xl/_rels/workbook.xml.rels") else {
+        return Vec::new();
+    };
+    let rids = sheet_rids(&wb_xml);
+    let targets = rel_targets(&rels_xml);
+    rids.iter()
+        .map(|rid| {
+            targets
+                .get(rid)
+                .map(|t| {
+                    let entry = if t.starts_with('/') {
+                        t.trim_start_matches('/').to_string()
+                    } else {
+                        format!("xl/{t}")
+                    };
+                    zip_read_entry(&data, &entry)
+                        .map(|xml| worksheet_merges(&xml, MERGE_CAP))
+                        .unwrap_or_default()
+                })
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
+/// workbook.xml → sheet 顺序的 r:id 清单（文档顺序 = 工作表顺序，与 calamine 对齐）
+pub fn sheet_rids(wb_xml: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = wb_xml;
+    while let Some(i) = rest.find("<sheet ") {
+        rest = &rest[i + 7..];
+        let end = match rest.find("/>") {
+            Some(e) => e,
+            None => break,
+        };
+        let tag = &rest[..end];
+        if let Some(id) = tag_attr(tag, "r:id") {
+            out.push(id);
+        }
+    }
+    out
+}
+
+/// workbook.xml.rels → rId → Target（worksheet 部件，相对 xl/ 的路径）
+pub fn rel_targets(rels_xml: &str) -> std::collections::HashMap<String, String> {
+    let mut out = std::collections::HashMap::new();
+    let mut rest = rels_xml;
+    while let Some(i) = rest.find("<Relationship ") {
+        rest = &rest[i + 14..];
+        let end = match rest.find("/>") {
+            Some(e) => e,
+            None => break,
+        };
+        let tag = &rest[..end];
+        // 只要 worksheet 类型的关系（Type 以 .../worksheet 结尾）
+        if let (Some(id), Some(target)) = (tag_attr(tag, "Id"), tag_attr(tag, "Target"))
+            && tag.contains("worksheet\"")
+        {
+            out.insert(id, target);
+        }
+    }
+    out
+}
+
+/// XML 标签内取属性值（两端引号均可，值内不做实体反解码——r:id/Target/URL 安全字符）
+fn tag_attr(tag: &str, name: &str) -> Option<String> {
+    let pat = format!("{name}=\"");
+    let i = tag.find(&pat).or_else(|| tag.find(&format!("{name}='")))?;
+    let after = &tag[i + pat.len()..];
+    let close = after.find('"').or_else(|| after.find('\''))?;
+    Some(after[..close].to_string())
+}
+
+/// worksheet xml → 合并单元格清单（mergeCell ref 如 "A1:B2"，锚点 0 基 + 跨度）
+pub fn worksheet_merges(xml: &str, cap: usize) -> Vec<SheetMerge> {
+    let mut out = Vec::new();
+    let mut rest = xml;
+    while out.len() < cap {
+        let Some(i) = rest.find("<mergeCell ") else {
+            break;
+        };
+        rest = &rest[i + 11..];
+        let Some(end) = rest.find("/>") else {
+            break;
+        };
+        let Some(r) = tag_attr(&rest[..end], "ref") else {
+            continue;
+        };
+        if let Some(m) = parse_merge_ref(&r) {
+            out.push(m);
+        }
+    }
+    out
+}
+
+/// "A1:B2" → SheetMerge { row: 0, col: 0, rowSpan: 2, colSpan: 2 }（锚点 0 基；
+/// 单格 ref 或越界列（> ZZ 之外即 3 字母列）返回 None 跳过）
+pub fn parse_merge_ref(r: &str) -> Option<SheetMerge> {
+    let (a, b) = r.split_once(':')?;
+    let (ar, ac) = cell_addr(a)?;
+    let (br, bc) = cell_addr(b)?;
+    if br < ar || bc < ac {
+        return None;
+    }
+    Some(SheetMerge {
+        row: ar,
+        col: ac,
+        row_span: br - ar + 1,
+        col_span: bc - ac + 1,
+    })
+}
+
+/// "B3" → (row 2, col 1)；仅支持 A-ZZ 两字母内列（预览网格足够）
+fn cell_addr(a: &str) -> Option<(u32, u32)> {
+    let split = a.find(|c: char| c.is_ascii_digit())?;
+    let (letters, digits) = a.split_at(split);
+    if letters.is_empty() || letters.len() > 2 || digits.is_empty() {
+        return None;
+    }
+    let mut col = 0u32;
+    for ch in letters.chars() {
+        let v = ch.to_ascii_uppercase() as u32 - b'A' as u32;
+        if v > 25 {
+            return None;
+        }
+        col = col * 26 + v + 1;
+    }
+    let row: u32 = digits.parse().ok()?;
+    if row == 0 {
+        return None;
+    }
+    Some((row - 1, col - 1))
+}
+
+/// 单元格 → 预览文本（纯函数）：整数去小数尾、布尔 TRUE/FALSE、ISO 日期原样；
+/// 单元格内换行/制表符替换为空格——制表符分隔文本化时它们会冲乱行列结构
+/// （实测 WPS 合并格内的多行文本把整表行错位，2026-10-17）
 pub fn cell_display(d: &calamine::Data) -> String {
     use calamine::Data;
-    match d {
+    let raw = match d {
         Data::Empty => String::new(),
         Data::String(s) => s.clone(),
         Data::Int(i) => i.to_string(),
@@ -307,7 +616,8 @@ pub fn cell_display(d: &calamine::Data) -> String {
         Data::DateTime(dt) => fmt_float(dt.as_f64()),
         Data::DateTimeIso(s) | Data::DurationIso(s) => s.clone(),
         Data::Error(e) => e.to_string(),
-    }
+    };
+    clean_cell_text(raw)
 }
 
 fn fmt_float(f: f64) -> String {
@@ -324,18 +634,95 @@ pub fn range_to_text(
     max_rows: usize,
     cap_chars: usize,
 ) -> (String, bool) {
+    let rows: Vec<Vec<String>> = range
+        .rows()
+        .map(|row| row.iter().map(cell_display).collect())
+        .collect();
+    matrix_to_text(rows, max_rows, cap_chars)
+}
+
+/// 行列矩阵 → 制表符分隔文本（纯函数）：行数与字符数双上限（calamine 与 CSV 共用尾部）
+pub fn matrix_to_text(rows: Vec<Vec<String>>, max_rows: usize, cap_chars: usize) -> (String, bool) {
     let mut out = String::new();
     let mut truncated = false;
-    for (rows, row) in range.rows().enumerate() {
-        if rows >= max_rows || out.len() >= cap_chars {
+    for (i, row) in rows.iter().enumerate() {
+        if i >= max_rows || out.len() >= cap_chars {
             truncated = true;
             break;
         }
-        let cells: Vec<String> = row.iter().map(cell_display).collect();
-        out.push_str(&cells.join("\t"));
+        out.push_str(&row.join("\t"));
         out.push('\n');
     }
     (out, truncated)
+}
+
+/// 制表符分隔文本化的单元格清洗：值内换行/制表符会冲乱行列结构，替换为空格
+fn clean_cell_text(raw: String) -> String {
+    // \r\n 先归一为单个换行，避免替换出双空格
+    raw.replace("\r\n", "\n").replace(['\r', '\n', '\t'], " ")
+}
+
+/// CSV/TSV → 单节表格预览：编码探测（BOM → UTF-8 → GB18030，Excel 导出的 GBK 可读）
+/// → RFC4180 解析（引号内逗号/换行/转义引号）→ 复用表格网格管线。csv 无合并概念。
+fn csv_section(path: &str, delim: char) -> Result<OfficeSection, String> {
+    let data = std::fs::read(path).map_err(|e| e.to_string())?;
+    if sniff_binary(&data) {
+        return Err("二进制文件不支持按表格预览".into());
+    }
+    let (_, text) = decode_text(&data);
+    let rows = parse_csv_rows(&text, delim);
+    let cells: Vec<Vec<String>> = rows
+        .into_iter()
+        .map(|row| row.into_iter().map(clean_cell_text).collect())
+        .collect();
+    let title = std::path::Path::new(path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("CSV")
+        .to_string();
+    let (text, truncated) = matrix_to_text(cells, SHEET_ROW_CAP, SECTION_CHAR_CAP);
+    Ok(OfficeSection {
+        merges: vec![],
+        title,
+        text,
+        truncated,
+    })
+}
+
+/// RFC4180 CSV 解析（纯函数）：字段首引号开启引用，"" 转义引号，引号内
+/// 分隔符/换行皆为值的一部分；裸引号（非字段首）按普通字符容错处理
+pub fn parse_csv_rows(text: &str, delim: char) -> Vec<Vec<String>> {
+    let mut rows: Vec<Vec<String>> = vec![vec![String::new()]];
+    let mut in_quotes = false;
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        let cell = rows.last_mut().unwrap().last_mut().unwrap();
+        if in_quotes {
+            if c == '"' {
+                if chars.peek() == Some(&'"') {
+                    chars.next();
+                    cell.push('"');
+                } else {
+                    in_quotes = false;
+                }
+            } else {
+                cell.push(c);
+            }
+        } else {
+            match c {
+                '"' if cell.is_empty() => in_quotes = true,
+                c if c == delim => rows.last_mut().unwrap().push(String::new()),
+                '\n' => rows.push(vec![String::new()]),
+                '\r' => {}
+                _ => cell.push(c),
+            }
+        }
+    }
+    // 丢弃末尾空行（文件尾换行产生）
+    while rows.len() > 1 && rows.last().is_some_and(|r| r.len() == 1 && r[0].is_empty()) {
+        rows.pop();
+    }
+    rows
 }
 
 /// OOXML 标签的本地名比对（LocalName 是 &[u8] 包装；want 为 ASCII 本地名）
@@ -511,6 +898,7 @@ pub fn epub_chapters(data: &[u8]) -> Result<(Vec<OfficeSection>, bool), String> 
         );
         any_truncated |= truncated;
         sections.push(OfficeSection {
+            merges: vec![],
             title: format!("第 {} 节", i + 1),
             text,
             truncated,
@@ -993,9 +1381,12 @@ mod tests {
                 r#"<w:document xmlns:w="x"><w:body><w:p><w:r><w:t>段落一</w:t></w:r></w:p><w:p><w:r><w:t>段落二</w:t></w:r></w:p></w:body></w:document>"#,
             ),
         ]);
-        let (text, truncated) = docx_text(&data).unwrap();
+        let (sections, truncated) = docx_sections(&data).unwrap();
         assert!(!truncated);
-        assert_eq!(text, "段落一\n段落二");
+        // 无分页标记 → 单节「正文」
+        assert_eq!(sections.len(), 1);
+        assert_eq!(sections[0].title, "正文");
+        assert_eq!(sections[0].text, "段落一\n段落二");
     }
 
     #[test]
@@ -1265,5 +1656,232 @@ mod tests {
         assert_eq!(listing.entries[0].size, 8);
         let _ = std::fs::remove_dir_all(&dir);
         Ok(())
+    }
+
+    // ── 合并单元格（2026-10-17）──
+
+    #[test]
+    fn docx_page_texts_splits_on_breaks() {
+        use super::docx_page_texts;
+        // 无分页标记 → 单页
+        let xml = r#"<w:document><w:body>
+            <w:p><w:r><w:t>第一段</w:t></w:r></w:p>
+        </w:body></w:document>"#;
+        let (pages, truncated) = docx_page_texts(xml, 1 << 20, 50);
+        assert_eq!(pages.len(), 1);
+        assert!(pages[0].contains("第一段"));
+        assert!(!truncated);
+        // lastRenderedPageBreak + 显式分页符混合 → 三页
+        let xml = r#"<w:document><w:body>
+            <w:p><w:r><w:t>首页内容</w:t><w:lastRenderedPageBreak/></w:r></w:p>
+            <w:p><w:r><w:t>第二页</w:t></w:r><w:r><w:br w:type="page"/></w:r></w:p>
+            <w:p><w:r><w:t>第三页</w:t></w:r></w:p>
+        </w:body></w:document>"#;
+        let (pages, truncated) = docx_page_texts(xml, 1 << 20, 50);
+        assert_eq!(pages.len(), 3);
+        assert!(pages[0].contains("首页内容"));
+        assert!(pages[1].contains("第二页"));
+        assert!(pages[2].contains("第三页"));
+        assert!(!truncated);
+        // 页数超限：内容并入末页并标记截断
+        let xml = r#"<w:document><w:body>
+            <w:p><w:r><w:t>A</w:t><w:lastRenderedPageBreak/></w:r></w:p>
+            <w:p><w:r><w:t>B</w:t><w:lastRenderedPageBreak/></w:r></w:p>
+            <w:p><w:r><w:t>C</w:t></w:r></w:p>
+        </w:body></w:document>"#;
+        let (pages, truncated) = docx_page_texts(xml, 1 << 20, 2);
+        assert_eq!(pages.len(), 2);
+        assert!(pages[1].contains("B") && pages[1].contains("C"));
+        assert!(truncated);
+    }
+
+    #[test]
+    fn docx_sections_titles_by_page() {
+        use super::docx_sections;
+        // 手写最小 docx：document.xml 含一个 lastRenderedPageBreak
+        let dir = std::env::temp_dir().join(format!("xdir-docx-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p.docx");
+        let xml = r#"<?xml version="1.0"?><w:document xmlns:w="http://x"><w:body>
+            <w:p><w:r><w:t>第一页内容</w:t><w:lastRenderedPageBreak/></w:r></w:p>
+            <w:p><w:r><w:t>第二页内容</w:t></w:r></w:p>
+        </w:body></w:document>"#;
+        let mut zip_bytes = Vec::new();
+        {
+            let cursor = std::io::Cursor::new(&mut zip_bytes);
+            let mut z = zip::ZipWriter::new(cursor);
+            z.start_file("word/document.xml", zip::write::SimpleFileOptions::default()).unwrap();
+            std::io::Write::write_all(&mut z, xml.as_bytes()).unwrap();
+            z.finish().unwrap();
+        }
+        std::fs::write(&path, zip_bytes).unwrap();
+        let (sections, _) = docx_sections(std::fs::read(&path).unwrap().as_slice()).unwrap();
+        assert_eq!(sections.len(), 2);
+        assert_eq!(sections[0].title, "第 1 页");
+        assert!(sections[0].text.contains("第一页内容"));
+        assert_eq!(sections[1].title, "第 2 页");
+        assert!(sections[1].text.contains("第二页内容"));
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn parse_csv_rows_handles_quotes() {
+        use super::parse_csv_rows;
+        // 基础 + 尾换行
+        assert_eq!(
+            parse_csv_rows("a,b
+c,d
+", ','),
+            vec![vec!["a", "b"], vec!["c", "d"]]
+        );
+        // 引号内逗号 / 转义引号 / 引号内换行
+        assert_eq!(
+            parse_csv_rows("\"x,y\",z\n\"他说\"\"好\"\"\",1", ','),
+            vec![
+                vec!["x,y", "z"],
+                vec!["他说\"好\"", "1"]
+            ]
+        );
+        // 引号内换行保留为值的一部分
+        assert_eq!(
+            parse_csv_rows("a,\"b
+2\"
+", ','),
+            vec![vec!["a", "b
+2"]]
+        );
+        // TSV 分隔符 + 无尾换行
+        assert_eq!(
+            parse_csv_rows("a\tb", '\t'),
+            vec![vec!["a", "b"]]
+        );
+    }
+
+    #[test]
+    fn csv_section_reads_gbk_and_utf8() {
+        use super::csv_section;
+        let dir = std::env::temp_dir().join(format!("xdir-csv-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // UTF-8
+        let u = dir.join("u.csv");
+        std::fs::write(&u, "名称,数量
+甲,1
+乙,2").unwrap();
+        let s = csv_section(u.to_str().unwrap(), ',').unwrap();
+        assert_eq!(s.title, "u");
+        assert!(s.merges.is_empty());
+        assert_eq!(s.text, "名称	数量
+甲	1
+乙	2
+");
+        // GBK（Excel 导出常见编码）：名称,数量 / 甲,1
+        let g = dir.join("g.csv");
+        let (enc_bytes, _, _) = encoding_rs::GBK.encode("名称,数量
+甲,1");
+        std::fs::write(&g, enc_bytes.as_ref()).unwrap();
+        let s = csv_section(g.to_str().unwrap(), ',').unwrap();
+        assert_eq!(s.text, "名称	数量
+甲	1
+");
+        // 引号内逗号不切列
+        let q = dir.join("q.csv");
+        std::fs::write(&q, "a,\"b,c\"
+").unwrap();
+        let s = csv_section(q.to_str().unwrap(), ',').unwrap();
+        assert_eq!(s.text, "a	b,c
+");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn cell_display_flattens_embedded_breaks() {
+        use super::cell_display;
+        use calamine::Data;
+        // WPS 合并格内的多行文本：换行/制表符替换为空格，不冲乱行列分隔结构
+        assert_eq!(cell_display(&Data::String("1\n2\n3".into())), "1 2 3");
+        assert_eq!(cell_display(&Data::String("a\tb".into())), "a b");
+        assert_eq!(cell_display(&Data::String("x\r\ny".into())), "x y");
+    }
+
+    #[test]
+    fn parse_merge_ref_spans_and_guards() {
+        use super::parse_merge_ref;
+        let m = parse_merge_ref("A1:B2").unwrap();
+        assert_eq!(
+            (m.row, m.col, m.row_span, m.col_span),
+            (0, 0, 2, 2)
+        );
+        let m = parse_merge_ref("C3:D5").unwrap();
+        assert_eq!((m.row, m.col, m.row_span, m.col_span), (2, 2, 3, 2));
+        // 无冒号（单格）/ 倒置范围 / 非法列 → None
+        assert!(parse_merge_ref("A1").is_none());
+        assert!(parse_merge_ref("B2:A1").is_none());
+        assert!(parse_merge_ref("AAA1:B2").is_none());
+    }
+
+    #[test]
+    fn sheet_rids_and_rels() {
+        use super::{rel_targets, sheet_rids};
+        let wb = r#"<workbook><sheets>
+            <sheet name="甲" sheetId="1" r:id="rId3"/>
+            <sheet name="乙" sheetId="2" r:id="rId7"/>
+        </sheets></workbook>"#;
+        assert_eq!(sheet_rids(wb), vec!["rId3", "rId7"]);
+        let rels = r#"<Relationships>
+            <Relationship Id="rId3" Type="http://x/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/>
+            <Relationship Id="rId7" Type="http://x/officeDocument/2006/relationships/worksheet" Target="/xl/worksheets/sheet7.xml"/>
+            <Relationship Id="rId9" Type="http://x/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+        </Relationships>"#;
+        let t = rel_targets(rels);
+        assert_eq!(t.get("rId3").unwrap(), "worksheets/sheet3.xml");
+        assert_eq!(t.get("rId7").unwrap(), "/xl/worksheets/sheet7.xml");
+        assert!(!t.contains_key("rId9")); // styles 不是 worksheet，不入表
+    }
+
+    #[test]
+    fn worksheet_merges_reads_refs() {
+        use super::worksheet_merges;
+        let xml = r#"<worksheet><sheetData/></worksheet>"#;
+        assert!(worksheet_merges(xml, 10).is_empty());
+        let xml = r#"<worksheet><sheetData/><mergeCells count="2">
+            <mergeCell ref="A1:B2"/><mergeCell ref="C5:C9"/>
+        </mergeCells></worksheet>"#;
+        let ms = worksheet_merges(xml, 10);
+        assert_eq!(ms.len(), 2);
+        assert_eq!((ms[0].row, ms[0].col, ms[0].row_span, ms[0].col_span), (0, 0, 2, 2));
+        assert_eq!((ms[1].row, ms[1].col, ms[1].row_span, ms[1].col_span), (4, 2, 5, 1));
+    }
+
+    #[test]
+    fn sheet_sections_reads_merges_end_to_end() {
+        use super::sheet_sections;
+        use rust_xlsxwriter::Format;
+        let dir = std::env::temp_dir().join(format!("xdir-merge-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("m.xlsx");
+        let mut wb = rust_xlsxwriter::Workbook::new();
+        let ws = wb.add_worksheet();
+        ws.set_name("报表").unwrap();
+        // 标题横向合并 A1:C1，纵向合并 A2:A4
+        ws.merge_range(0, 0, 0, 2, "标题", &Format::new()).unwrap();
+        ws.merge_range(1, 0, 3, 0, "纵向", &Format::new()).unwrap();
+        ws.write(1, 1, "x").unwrap();
+        wb.save(&path).unwrap();
+        let (sections, _) = sheet_sections(path.to_str().unwrap()).unwrap();
+        assert_eq!(sections.len(), 1);
+        assert_eq!(sections[0].title, "报表");
+        let ms = &sections[0].merges;
+        assert_eq!(ms.len(), 2, "{ms:?}");
+        assert_eq!(
+            (ms[0].row, ms[0].col, ms[0].row_span, ms[0].col_span),
+            (0, 0, 1, 3)
+        );
+        assert_eq!(
+            (ms[1].row, ms[1].col, ms[1].row_span, ms[1].col_span),
+            (1, 0, 3, 1)
+        );
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

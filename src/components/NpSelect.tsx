@@ -24,12 +24,15 @@ export function NpSelect<T extends string | number>({
   onChange,
   title,
   className,
+  popoverClassName,
 }: {
   value: T;
   options: NpSelectOption<T>[];
   onChange(value: T): void;
   title?: string;
   className?: string;
+  /** 透传 Menu className（弹层内容，点击目标祖先）：外点退出监听按此豁免弹层内点击 */
+  popoverClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const current = options.find((o) => o.value === value);
@@ -40,7 +43,7 @@ export function NpSelect<T extends string | number>({
       placement="bottom-start"
       arrow={false}
       content={
-        <Menu>
+        <Menu className={popoverClassName}>
           {options.map((o, i) =>
             o.sep ? (
               <MenuDivider key={`sep-${i}`} />

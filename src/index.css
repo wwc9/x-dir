@@ -189,7 +189,16 @@ body {
   border-radius: var(--np-radius-lg);
   padding: 4px;
   background: var(--np-surface);
-  box-shadow: var(--np-shadow);
+  /* 发丝线 ring + 投影：白底浮层叠在白底卡片上时仅靠投影边界不清（2026-10-17） */
+  box-shadow:
+    0 0 0 1px var(--np-border),
+    var(--np-shadow);
+  /* 高度封顶：长菜单（浏览记录/收藏夹等）不得超出主界面高度，超出内部滚动
+     （2026-10-17；顶栏弹层起点 ≈ 顶栏 40 + 画布边距，底部再留安全距离，
+     72px 偏移实测贴合；弹出位置由 Popover 翻转负责） */
+  max-height: calc(100vh - 72px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .bp6-menu-item {
   border-radius: var(--np-radius);
@@ -227,7 +236,10 @@ body {
    与 .bp6-menu 同款 surface 卡片 + 大圆角 + np 阴影，深浅主题随 token 自适应 */
 .bp6-popover {
   border-radius: var(--np-radius-lg);
-  box-shadow: var(--np-shadow);
+  /* 同上：ring 描边强化浮层边界，圆角完美跟随不占布局 */
+  box-shadow:
+    0 0 0 1px var(--np-border),
+    var(--np-shadow);
 }
 .bp6-popover .bp6-popover-content {
   background: var(--np-surface);
@@ -238,6 +250,12 @@ body {
 .bp6-overlay-backdrop {
   background: var(--np-overlay);
 }
+/* 浮层层级（2026-10-17 补配）：Blueprint overlay（预览/对话框/菜单）须高于应用内
+   浮层（搜索框/地址补全 40、np-pv-pos 等 50）——否则窗格搜索框会压在快速预览上；
+   仍低于菜单编辑器拖拽幽灵 1000。对齐 .np-bench-fps 注释里的既有约定 */
+.bp6-overlay {
+  z-index: 100;
+}
 /* ═══ 弹层统一规范（2026-10-12 定案）：所有浮层面板一张"脸" ═══
    面板 = --np-surface 底 + --np-radius-xl(Dialog)/--np-radius-lg(浮层) + --np-shadow；
    Dialog 三段 header/body/footer 全部透明（覆写 Blueprint 白头灰身默认值），
@@ -246,7 +264,10 @@ body {
 .bp6-dialog {
   background: var(--np-surface);
   border-radius: var(--np-radius-xl);
-  box-shadow: var(--np-shadow);
+  /* 同上：ring 描边统一浮层边界质感 */
+  box-shadow:
+    0 0 0 1px var(--np-border),
+    var(--np-shadow);
   overflow: hidden;
 }
 .bp6-dark .bp6-dialog {
@@ -306,6 +327,25 @@ body {
 .bp6-button.bp6-intent-danger:hover,
 .bp6-dark .bp6-button.bp6-intent-danger:hover {
   background: color-mix(in srgb, var(--np-danger) 92%, var(--np-fg));
+}
+/* 实底按钮统一（2026-10-17）：非 minimal 非 intent 的实底钮（弹窗「取消」、
+   设置/表单普通钮）原本残留 Blueprint 裸默认——白底 + 内阴影描边 + 14px 字，
+   与应用「填充式、无描边」语言冲突。压回与 NpSelect 触发钮同配方：
+   surface-2 填充底、无描边、正文档 13px；intent 实心钮同步字号并去内描边 */
+.bp6-button:not([class*="bp6-intent-"]):not(.bp6-minimal) {
+  background-color: var(--np-surface-2);
+  background-image: none;
+  box-shadow: none;
+  color: var(--np-fg);
+  font-size: var(--np-font-ui);
+}
+.bp6-button:not([class*="bp6-intent-"]):not(.bp6-minimal):hover {
+  background-color: var(--np-hover);
+  background-image: none;
+}
+.bp6-button[class*="bp6-intent-"] {
+  font-size: var(--np-font-ui);
+  box-shadow: none;
 }
 /* NpSelect 触发钮（components/NpSelect.tsx，二级页面统一规范 §4.7）：
    填充式与输入框同语言——surface-2 底、无描边、--np-ctl-h 高、6px 圆角；
@@ -442,6 +482,19 @@ button:focus-visible {
 /* ═══ 应用外壳（2026-10-11 改版）：自绘顶栏 + 左侧边栏 + 内容区 ═══
    去系统标题栏（decorations:false），顶栏 = 工具栏 + 拖拽区 + 窗口控制合一行；
    左侧边栏 = 布局方案（工作区）保存与快速切换；全部为浮于 --np-bg 画布的圆角卡片 */
+/* 顶缘盖板（2026-10-17）：弹层 portal 触发 WebView2 固定层合成 glitch，窗口顶缘
+   浮出 ~2px 蓝线（合成器产物，DOM 查无元素，逐像素实测定位）——画布色固定条
+   盖住，随主题 token 变色，pointer-events none 不挡交互 */
+.np-topline-cover {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--np-bg);
+  z-index: 2147483647;
+  pointer-events: none;
+}
 .np-shell {
   display: flex;
   flex-direction: column;
@@ -611,19 +664,18 @@ button:focus-visible {
   color: var(--np-fg);
 }
 
-/* 左侧边栏：布局方案（工作区）列表；右缘可拖拽调宽，可折叠成窄条 */
+/* 左侧边栏（2026-10-17 卡片化）：透明沟槽容器，上下两张卡（布局方案 / 暂存区）
+   靠沟槽分隔，中间把手可上下拖动调比例；右缘可拖拽调宽，可折叠成窄条 */
 .np-sidebar {
   position: relative;
   display: flex;
   flex-direction: column;
   flex: 0 0 156px;
   min-height: 0;
-  padding: 8px;
-  gap: 2px;
-  background: var(--np-surface);
-  border: 1px solid var(--np-border);
-  border-radius: var(--np-radius-pane);
-  /* visible：拖拽把手需探出面板边缘（骑在沟槽上）不能被裁切，长列表滚动收进 .np-side-scroll */
+  padding: 0;
+  /* 两卡间隔 = 把手占位（--np-gutter），与窗格间沟槽同宽；把手热区另负扩展 */
+  gap: 0;
+  /* visible：拖拽把手需探出面板边缘（骑在沟槽上）不能被裁切，长列表滚动收进卡片内 */
   overflow: visible;
 }
 .np-sidebar-collapsed {
@@ -631,8 +683,23 @@ button:focus-visible {
   padding: 8px 6px;
   align-items: center;
   gap: 6px;
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  border-radius: var(--np-radius-pane);
   overflow-y: auto;
   overflow-x: hidden;
+}
+/* 边栏卡片（布局方案 / 暂存区同一张脸，同主界面窗格卡）：surface 底 + 1px 边 +
+   面板圆角；本体不滚动（拖拽把手骑在容器沟槽上），滚动收进卡内列表 */
+.np-side-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 2px 6px 6px;
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  border-radius: var(--np-radius-pane);
+  overflow: hidden;
 }
 /* 折叠态的方案按钮：竖排 = 缩略图 + 名称首字，激活亮底 */
 .np-side-mini {
@@ -671,10 +738,9 @@ button:focus-visible {
   width: 18px;
   height: 18px;
 }
-/* 方案列表滚动区：卡片本体不滚动（拖拽把手骑在沟槽上），滚动收在这里（同导航树 .np-tree-rows）；
-   与下方暂存区（.np-shelf）各占边栏一半 */
+/* 方案列表滚动区：滚动收在卡片内部（卡片本体不滚），高度由上方 .np-side-split 拖拽决定 */
 .np-side-scroll {
-  flex: 1 1 50%;
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
@@ -700,9 +766,31 @@ button:focus-visible {
    竖把手线全高、横把手线全宽。唯一特例 = 表头列宽把手 .np-col-grip
    （常显发丝线，2026-10-12 定案：把手必须可见可发现）。
    拖拽态驱动各随其库/脚本（视觉统一、驱动不统一）：窗格分隔条 data-separator、
-   侧栏/树 .np-side-resizing、全盘搜索/菜单编辑器 body.np-col-resizing */
+   侧栏/树/边栏上下分隔 .np-side-resizing、全盘搜索/菜单编辑器 body.np-col-resizing */
+/* 边栏两卡上下分隔把手（2026-10-17 卡片化）：横向把手，占位 = --np-gutter
+   （两卡间隔与窗格沟槽一致）；2px 细线骑在占位带正中，热区上下负扩展 6px 不占布局 */
+.np-side-split {
+  position: relative;
+  flex: 0 0 var(--np-gutter);
+  cursor: row-resize;
+}
+.np-side-split::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+}
+.np-side-split::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -6px;
+  bottom: -6px;
+}
 .np-side-resize::before,
 .np-tree-resize::before,
+.np-side-split::before,
 .np-sep-v::after,
 .np-sep-h::after,
 .np-gsearch-split::after,
@@ -721,8 +809,9 @@ button:focus-visible {
   width: 2px;
   height: 100%;
 }
-/* 横向全宽 2px 线：窗格横分隔 */
-.np-sep-h::after {
+/* 横向全宽 2px 线：窗格横分隔、边栏两卡上下分隔（.np-side-split） */
+.np-sep-h::after,
+.np-side-split::before {
   width: 100%;
   height: 2px;
 }
@@ -730,6 +819,8 @@ button:focus-visible {
 .np-side-resize.np-side-resizing::before,
 .np-tree-resize:hover::before,
 .np-tree-resize.np-side-resizing::before,
+.np-side-split:hover::before,
+.np-side-split.np-side-resizing::before,
 .np-sep-v:hover::after,
 .np-sep-v[data-separator="hover"]::after,
 .np-sep-v[data-separator="active"]::after,
@@ -918,24 +1009,26 @@ body.np-col-resizing .np-menued-grip::after {
   padding: 8px 8px 4px;
   line-height: 1.6;
 }
-/* ── 暂存区（侧边栏下半，2026-10-17）：临时拖放文件/文件夹，用到时拖出到目标窗格 ──
+/* ── 暂存区（侧边栏下方卡片，2026-10-17；同日卡片化与布局方案卡分离）──
    拖入 = OLE 落点命中 [data-shelf]（oleDispatch 前置分流，Explorer 拖入同管线）；
-   拖出 = 行拖起 startDrag，落窗格即移动。与布局方案列表各占边栏一半（flex 1 1 50%）。 */
+   拖出 = 行拖起 startDrag，落窗格即移动。高度 = 边栏减布局方案卡（.np-side-split 拖定） */
 .np-shelf {
-  flex: 1 1 50%;
+  flex: 1 1 0;
   min-height: 104px;
   display: flex;
   flex-direction: column;
-  margin-top: 4px;
-  padding-top: 4px;
-  border-top: 1px solid var(--np-hairline);
+  padding: 2px 6px 6px;
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  border-radius: var(--np-radius-pane);
+  overflow: hidden;
 }
 /* OLE 拖拽悬停：淡染底 + 强调色虚线框，提示"松手即暂存" */
 .np-shelf.on {
   background: var(--np-hover);
   outline: 1px dashed var(--np-accent-border);
   outline-offset: -1px;
-  border-radius: var(--np-radius);
+  border-radius: var(--np-radius-pane);
 }
 .np-shelf-title {
   display: flex;
@@ -1237,13 +1330,26 @@ body.np-col-resizing .np-menued-grip::after {
   /* 锚在导航栏底缘下方（left 由 Pane 实测搜索键位置下发） */
   top: calc(100% + 6px);
   z-index: 40;
-  width: 260px;
-}
-.np-search-pop .np-search {
-  width: 100%;
-  margin: 0;
-  /* 浮层卡片规格：surface 底 + 投影（弹层统一规范） */
+  width: 320px;
+  padding: 6px;
+  background: var(--np-surface);
+  border-radius: var(--np-radius-lg);
   box-shadow: var(--np-shadow);
+}
+/* 输入框 + 类型选择同行（2026-10-17）：类型对应 ext: 过滤词随查询下发 */
+.np-search-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.np-search-row .np-search {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.np-search-row .np-select {
+  flex: none;
+  width: 88px;
 }
 
 /* V2 地址栏自动补全下拉（锚在导航栏下方；与菜单/Popover 同款 surface 卡片） */
@@ -2709,7 +2815,8 @@ body.np-col-resizing * {
   display: flex;
   gap: 4px;
   padding: 6px 10px;
-  border-bottom: 1px solid var(--np-hairline);
+  /* 2026-10-17 移到网格下方：与 Excel sheet 条同位，上缘发丝线分隔 */
+  border-top: 1px solid var(--np-hairline);
   background: var(--np-surface-2);
   overflow-x: auto;
 }
@@ -2744,14 +2851,12 @@ body.np-col-resizing * {
 .np-pv-sheet-inner {
   position: relative;
   min-width: 100%;
-}
-.np-pv-sheet-row {
+  /* 单一 grid 容器 + 格子显式行列定位（2026-10-17）：合并单元格靠 grid span
+     跨行跨列展开，行虚拟化仍由 JS 只渲染可见区间格子 */
   display: grid;
+  grid-auto-rows: var(--np-row-h);
   font-size: var(--np-font-ui);
   font-variant-numeric: tabular-nums;
-}
-.np-pv-sheet-row:nth-child(even) {
-  background: var(--np-surface-2);
 }
 .np-pv-sheet-cell {
   overflow: hidden;
@@ -2759,8 +2864,21 @@ body.np-col-resizing * {
   white-space: nowrap;
   padding: 0 8px;
   line-height: var(--np-row-h);
-  border-right: 1px solid var(--np-hairline);
+  /* 网格线用 --np-border（比发丝线深一档）：横竖都要，单元格边界清晰可辨 */
+  border-right: 1px solid var(--np-border);
+  border-bottom: 1px solid var(--np-border);
   color: var(--np-fg);
+}
+/* 斑马纹下沉到格子级：行容器已移除（合并格跨行，nth-child 会错位） */
+.np-pv-sheet-cell.is-even {
+  background: var(--np-surface-2);
+}
+/* 合并锚点格：跨行跨列展开，白底 + 垂直居中，压过斑马纹（合并区整体一块） */
+.np-pv-sheet-cell.is-anchor {
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  background: var(--np-surface);
 }
 
 /* 压缩包清单：虚拟行列表（图标 + 名称 + 大小） */
@@ -2833,6 +2951,20 @@ body.np-col-resizing * {
 }
 .np-pv-pdf-page canvas {
   display: block;
+}
+/* 页码隔断（2026-10-17 定稿放页尾）：canvas 下方流内条，两侧虚线 + 「第 N 页，共 M 页」 */
+.np-pv-pdf-pagemark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+  white-space: nowrap;
+}
+.np-pv-pdf-pagemark-line {
+  flex: 1;
+  border-top: 1px dashed var(--np-border);
 }
 
 /* 兜底卡：居中元信息 + 动作 */
