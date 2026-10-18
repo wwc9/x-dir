@@ -894,6 +894,15 @@ pub fn pptx_slides(data: &[u8]) -> Result<(Vec<OfficeSection>, bool), String> {
         // 备注（与幻灯片同号约定；缺件静默跳过）
         if let Ok(notes) = zip_read_entry(data, &format!("ppt/notesSlides/notesSlide{n}.xml")) {
             let (notes_text, _) = xml_paragraphs(&notes, "p", "t", SECTION_CHAR_CAP);
+            // 页码占位（sldNum）独立成段且为纯数字，滤掉（2026-10-18 实测混入）
+            let notes_text = notes_text
+                .lines()
+                .filter(|l| {
+                    let t = l.trim();
+                    !(t.len() <= 4 && !t.is_empty() && t.bytes().all(|b| b.is_ascii_digit()))
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
             let notes_text = notes_text.trim().to_string();
             if !notes_text.is_empty() {
                 text.push_str("备注：");
@@ -1925,11 +1934,10 @@ pub fn odp_page_blocks(
             Ok(Event::Start(e)) => {
                 let local = e.name().local_name();
                 if is_local(local, "page") {
-                    pages.push((
-                        std::mem::take(&mut page_name),
-                        std::mem::take(&mut blocks),
-                        std::mem::take(&mut text),
-                    ));
+                    // 上一页已在 End 收尾，此处只清残留状态（2026-10-18 修：
+                    // 原先这里再 push 一次，给每页中间留了一个空哨兵节）
+                    blocks.clear();
+                    text.clear();
                     title_taken = false;
                     in_title_frame = false;
                     page_name = xml_attr_el(&e, "name").unwrap_or_default();
@@ -2007,6 +2015,7 @@ fn odp_slides_office(data: &[u8]) -> Result<OfficeText, String> {
     let (pages, truncated) = odp_page_blocks(&xml, SECTION_CHAR_CAP);
     let mut sections: Vec<OfficeSection> = pages
         .into_iter()
+        .filter(|(name, blocks, text)| !name.is_empty() || !blocks.is_empty() || !text.is_empty())
         .map(|(name, blocks, text)| OfficeSection {
             merges: vec![],
             title: name,

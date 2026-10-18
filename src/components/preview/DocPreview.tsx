@@ -18,7 +18,8 @@ import {
   type PreviewSearchCtl,
 } from "../../lib/previewSearch";
 
-/** 语法高亮语言映射（扩展名 → highlight.js 语言；按需懒加载单语言包） */
+/** 语法高亮语言映射（扩展名 → highlight.js 语言）+ 显式加载器
+ *  （静态 import 表保证打包器落地独立 chunk；变量模板串在 Vite 下无法分析） */
 const HL_LANGS: Record<string, string> = {
   ts: "typescript",
   tsx: "typescript",
@@ -45,6 +46,27 @@ const HL_LANGS: Record<string, string> = {
   xml: "xml",
   html: "xml",
   htm: "xml",
+};
+
+const HL_LOADERS: Record<string, () => Promise<{ default: unknown }>> = {
+  typescript: () => import("highlight.js/lib/languages/typescript"),
+  javascript: () => import("highlight.js/lib/languages/javascript"),
+  python: () => import("highlight.js/lib/languages/python"),
+  rust: () => import("highlight.js/lib/languages/rust"),
+  go: () => import("highlight.js/lib/languages/go"),
+  java: () => import("highlight.js/lib/languages/java"),
+  c: () => import("highlight.js/lib/languages/c"),
+  cpp: () => import("highlight.js/lib/languages/cpp"),
+  csharp: () => import("highlight.js/lib/languages/csharp"),
+  ruby: () => import("highlight.js/lib/languages/ruby"),
+  php: () => import("highlight.js/lib/languages/php"),
+  bash: () => import("highlight.js/lib/languages/bash"),
+  dos: () => import("highlight.js/lib/languages/dos"),
+  powershell: () => import("highlight.js/lib/languages/powershell"),
+  css: () => import("highlight.js/lib/languages/css"),
+  sql: () => import("highlight.js/lib/languages/sql"),
+  json: () => import("highlight.js/lib/languages/json"),
+  xml: () => import("highlight.js/lib/languages/xml"),
 };
 
 const HL_MAX_CHARS = 200_000;
@@ -88,13 +110,18 @@ export function DocPreview({
     let alive = true;
     (async () => {
       try {
+        const loader = HL_LOADERS[lang!];
+        if (!loader) {
+          setHl(null);
+          return;
+        }
         const [{ default: hljs }, langMod] = await Promise.all([
           import("highlight.js/lib/core"),
-          import(`highlight.js/lib/languages/${lang}.js`),
+          loader(),
         ]);
         if (!alive) return;
-        hljs.registerLanguage(lang, langMod.default);
-        setHl(hljs.highlight(text!.content, { language: lang }).value);
+        hljs.registerLanguage(lang!, langMod.default as Parameters<typeof hljs.registerLanguage>[1]);
+        setHl(hljs.highlight(text!.content, { language: lang! }).value);
       } catch {
         if (alive) setHl(null);
       }

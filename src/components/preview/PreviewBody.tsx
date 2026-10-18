@@ -131,7 +131,7 @@ export function PreviewBody({
       if (reqRef.current === req) setLoad({ stage: "error", message: String(err) });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entry?.path, kind]);
+  }, [entry?.path, entry?.mtimeMs, kind]);
 
   // doc/ppt/pps → COM 转 PDF（缓存 %TEMP%/xdir_preview；需已装 Office/WPS）
   useEffect(() => {
@@ -150,7 +150,7 @@ export function PreviewBody({
         }
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entry?.path, kind]);
+  }, [entry?.path, entry?.mtimeMs, kind]);
 
   // TIFF：WebView2 无内置解码，Rust 解码转 PNG data URL
   useEffect(() => {
