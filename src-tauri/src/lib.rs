@@ -96,7 +96,8 @@ pub fn run() {
                 use windows::Win32::Graphics::Dwm::{DWMWA_BORDER_COLOR, DwmSetWindowAttribute};
                 let clear_border = |hwnd: HWND| {
                     // COLORREF = 0x00BBGGRR，默认浅色画布 --np-bg #e9ecf1
-                    let c = commands::native::BORDER_COLOR.load(std::sync::atomic::Ordering::Relaxed);
+                    let c =
+                        commands::native::BORDER_COLOR.load(std::sync::atomic::Ordering::Relaxed);
                     unsafe {
                         let _ = DwmSetWindowAttribute(
                             hwnd,
@@ -225,6 +226,7 @@ pub fn run() {
             commands::preview::preview_extract_office,
             commands::preview::preview_list_archive,
             commands::preview::preview_tiff_data_url,
+            commands::preview::preview_doc_pdf,
             commands::native::show_context_menu,
             commands::native::start_drag,
             commands::native::set_border_color,

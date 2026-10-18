@@ -2,17 +2,21 @@
 // 渲染核心抽在 preview/PreviewBody（与全盘搜索内嵌面板共用），本文件只管外壳：
 // Dialog、header 动作条、prev/next、页脚元信息、选中同步活动窗格。
 
-import { useEffect, useState } from "react";
-import { Button, Dialog } from "@blueprintjs/core";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Button, Dialog, InputGroup } from "@blueprintjs/core";
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   ClipboardCopy,
   Copy,
   FolderOpen,
   RotateCw,
+  Search,
   SquareArrowOutUpRight,
   Trash2,
+  WrapText,
   X,
 } from "lucide-react";
 
@@ -21,6 +25,7 @@ import { parentPath } from "../lib/path";
 import { getList } from "../lib/listRegistry";
 import { fileIcon } from "../lib/fileIcons";
 import { PREVIEW_LABELS, previewKind, type PreviewKind } from "../lib/previewKind";
+import { SEARCHABLE_KINDS, type PreviewSearchCtl } from "../lib/previewSearch";
 import { DENSITY } from "../lib/tokens";
 import { useLayout } from "../stores/layout";
 import { useClipboard } from "../stores/clipboard";
@@ -50,6 +55,51 @@ export function QuickPreviewHost() {
     infoText: null,
   });
   const [rotateTick, setRotateTick] = useState(0);
+  // 文本自动换行开关（默认开 = 历史行为；关闭后 nowrap + 行号）
+  const [textWrap, setTextWrap] = useState(true);
+  // 预览内查找（Ctrl+F 唤起；词/活动命中/总数由宿主持有）
+  const searchOpen = usePreview((s) => s.searchOpen);
+  const setSearchOpen = usePreview((s) => s.setSearchOpen);
+  const [term, setTerm] = useState("");
+  const [matchActive, setMatchActive] = useState(0);
+  const [matchTotal, setMatchTotal] = useState(0);
+  const searchable = SEARCHABLE_KINDS.has(kind);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // 换条目：查找态与命中归零（store 开关一并收起）
+  const entryKey = entry?.path;
+  useEffect(() => {
+    setTerm("");
+    setMatchActive(0);
+    setMatchTotal(0);
+    setSearchOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entryKey]);
+
+  // Ctrl+F（keyboard 路由）唤起后聚焦输入框
+  useEffect(() => {
+    if (searchOpen)
+      requestAnimationFrame(() => searchRef.current?.focus());
+  }, [searchOpen]);
+
+  const stepMatch = (dir: 1 | -1) => {
+    setMatchActive((a) =>
+      matchTotal > 0 ? (a + dir + matchTotal) % matchTotal : 0,
+    );
+  };
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setTerm("");
+    setMatchActive(0);
+    setMatchTotal(0);
+  };
+  const searchCtl: PreviewSearchCtl | undefined = useMemo(
+    () =>
+      searchable && searchOpen
+        ? { term, active: matchActive, onTotal: (n) => setMatchTotal(n) }
+        : undefined,
+    [searchable, searchOpen, term, matchActive],
+  );
 
   // 预览位置变化（键盘 ↑↓ / 头部切换钮共用）→ 同步活动窗格列表选中（按路径，搜索结果同名不误伤）
   const entryPath = entry?.path;
@@ -146,6 +196,8 @@ export function QuickPreviewHost() {
       return `${d.sections.length} 节${d.truncated ? " · 已截断" : ""}`;
     }
     if (kind === "pdf" && meta.pdfPages !== null) return `PDF · ${meta.pdfPages} 页`;
+    if (kind === "officeBinary" && meta.pdfPages !== null)
+      return `转换预览 · ${meta.pdfPages} 页`;
     if (kind === "archive" && meta.infoText) return meta.infoText;
     if (kind === "folder" && meta.infoText) return `文件夹 · ${meta.infoText}`;
     return PREVIEW_LABELS[kind];
@@ -195,6 +247,75 @@ export function QuickPreviewHost() {
                 onClick={() => setRotateTick((t) => t + 1)}
               />
             )}
+            {kind === "text" && (
+              <Button
+                minimal
+                size="small"
+                icon={ic(WrapText)}
+                active={!textWrap}
+                title={textWrap ? "自动换行：开（点击改为不换行 + 行号）" : "自动换行：关（点击恢复）"}
+                onClick={() => setTextWrap((w) => !w)}
+              />
+            )}
+            {searchable &&
+              (searchOpen ? (
+                <div className="np-pv-searchbar">
+                  <InputGroup
+                    small
+                    leftElement={ic(Search)}
+                    placeholder="查找…"
+                    value={term}
+                    inputRef={searchRef}
+                    onChange={(e) => {
+                      setTerm(e.target.value);
+                      setMatchActive(0);
+                    }}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === "Enter") {
+                        stepMatch(e.shiftKey ? -1 : 1);
+                        e.preventDefault();
+                      } else if (e.key === "Escape") {
+                        closeSearch();
+                      }
+                    }}
+                  />
+                  <span className="np-pv-search-count">
+                    {term ? `${matchTotal ? Math.min(matchActive + 1, matchTotal) : 0} / ${matchTotal}` : ""}
+                  </span>
+                  <Button
+                    minimal
+                    size="small"
+                    icon={ic(ChevronUp)}
+                    title="上一个命中 (Shift+Enter)"
+                    disabled={!matchTotal}
+                    onClick={() => stepMatch(-1)}
+                  />
+                  <Button
+                    minimal
+                    size="small"
+                    icon={ic(ChevronDown)}
+                    title="下一个命中 (Enter)"
+                    disabled={!matchTotal}
+                    onClick={() => stepMatch(1)}
+                  />
+                  <Button
+                    minimal
+                    size="small"
+                    icon={ic(X)}
+                    title="关闭查找 (Esc)"
+                    onClick={closeSearch}
+                  />
+                </div>
+              ) : (
+                <Button
+                  minimal
+                  size="small"
+                  icon={ic(Search)}
+                  title="预览内查找 (Ctrl+F)"
+                  onClick={() => setSearchOpen(true)}
+                />
+              ))}
             <Button
               minimal
               size="small"
@@ -245,6 +366,8 @@ export function QuickPreviewHost() {
             onOpen={openDefault}
             onReveal={reveal}
             onMeta={setMeta}
+            search={searchCtl}
+            textWrap={textWrap}
           />
           <footer className="np-pv-foot">
             <span className="np-ellipsis">{footerLeft()}</span>

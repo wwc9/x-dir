@@ -94,8 +94,9 @@ fn cell_text(v: &Data) -> String {
     }
 }
 
-/// calamine 日期 → 字符串（to_ymd_hms_milli 不依赖 chrono；时长按 h:mm:ss 展开）
-fn format_datetime(dt: &calamine::ExcelDateTime) -> String {
+/// calamine 日期 → 字符串（to_ymd_hms_milli 不依赖 chrono；时长按 h:mm:ss 展开）。
+/// pub(crate)：快速预览 cell_display 复用（2026-10-18 修日期列显示成序列数）
+pub(crate) fn format_datetime(dt: &calamine::ExcelDateTime) -> String {
     if dt.is_duration() {
         let total = dt.as_f64() * 86_400.0;
         let h = (total / 3600.0).floor() as i64;

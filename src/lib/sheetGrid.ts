@@ -79,3 +79,60 @@ export function sheetColumnCount(rows: SheetRows): number {
   for (const row of rows) if (row.length > n) n = row.length;
   return n;
 }
+
+/** 数值样文本（纯函数）：可选正负号 + 千分位（半/全角逗号，仅数字组间合法）+
+ *  可选小数 + 可选百分号；"3," 与 "1.2.3" 这类非数值不入列 */
+export function isNumericLike(v: string): boolean {
+  const s = v.trim();
+  if (!s) return false;
+  const body = s.endsWith("%") ? s.slice(0, -1).trim() : s;
+  return /^-?(\d{1,3}([,，]\d{3})+|\d+)(\.\d+)?$/.test(body) || /^-?\.\d+$/.test(body);
+}
+
+/** 列级数值判定（纯函数）：采样 ≤500 行（跳过表头行），列内非空值 ≥60% 为
+ *  数值样 → 该列右对齐。返回 colCount 布尔数组。 */
+export function sheetNumericCols(rows: SheetRows, colCount: number): boolean[] {
+  const NUM_RATIO = 0.6;
+  const body = rows.length > 1 ? rows.slice(1) : rows;
+  const sample = body.length > 500 ? body.slice(0, 500) : body;
+  const out: boolean[] = [];
+  for (let c = 0; c < colCount; c++) {
+    let nonEmpty = 0;
+    let numeric = 0;
+    for (const row of sample) {
+      const v = row[c];
+      if (!v) continue;
+      nonEmpty++;
+      if (isNumericLike(v)) numeric++;
+    }
+    out.push(nonEmpty > 0 && numeric / nonEmpty >= NUM_RATIO);
+  }
+  return out;
+}
+
+/** 表格搜索命中（纯函数）：逐格大小写不敏感匹配，返回 (行, 列, 该格内序号) 列表，
+ *  全局序号由调用方按数组下标推得；上限 2000。 */
+export function sheetMatches(
+  rows: SheetRows,
+  term: string,
+  cap = 2000,
+): { r: number; c: number; occ: number }[] {
+  const out: { r: number; c: number; occ: number }[] = [];
+  if (!term) return out;
+  const t = term.toLowerCase();
+  for (let r = 0; r < rows.length && out.length < cap; r++) {
+    for (let c = 0; c < rows[r].length && out.length < cap; c++) {
+      const cell = rows[r][c];
+      if (!cell) continue;
+      const lower = cell.toLowerCase();
+      let idx = lower.indexOf(t);
+      let occ = 0;
+      while (idx >= 0 && out.length < cap) {
+        out.push({ r, c, occ });
+        occ++;
+        idx = lower.indexOf(t, idx + t.length);
+      }
+    }
+  }
+  return out;
+}

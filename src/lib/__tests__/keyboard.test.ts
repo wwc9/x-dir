@@ -439,6 +439,17 @@ describe("快速预览", () => {
     covered.add("preview-open-file");
     covered.add("preview-close");
   });
+
+  it("preview-search：预览开着时 Ctrl+F 唤起预览内查找条", () => {
+    usePreview.getState().openPreview([FILE_A], 0);
+    expect(usePreview.getState().searchOpen).toBe(false);
+    expect(fire({ key: "f", ctrl: true }).prevented).toBe(true);
+    expect(usePreview.getState().searchOpen).toBe(true);
+    // 关闭预览时查找条一并复位
+    usePreview.getState().close();
+    expect(usePreview.getState().searchOpen).toBe(false);
+    covered.add("preview-search");
+  });
 });
 
 describe("列表选择", () => {

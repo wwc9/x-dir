@@ -10,6 +10,8 @@ import type { FileEntry } from "../lib/ipc";
 interface PreviewStore {
   queue: FileEntry[];
   index: number;
+  /** 预览内查找条开关（Ctrl+F 唤起；词/命中序号由宿主 QuickPreview 持有） */
+  searchOpen: boolean;
   /** 预览是否打开（queue 非空即视为打开） */
   openPreview(queue: FileEntry[], index: number): void;
   close(): void;
@@ -18,6 +20,7 @@ interface PreviewStore {
   prev(): void;
   goto(i: number): void;
   current(): FileEntry | null;
+  setSearchOpen(v: boolean): void;
 }
 
 function wrap(i: number, n: number): number {
@@ -36,16 +39,17 @@ export function pickStartIndex(files: FileEntry[], selectedPaths: string[]): num
 export const usePreview = create<PreviewStore>()((set, get) => ({
   queue: [],
   index: 0,
+  searchOpen: false,
 
   openPreview(queue, index) {
     if (!queue.length) return;
     // 搜索视角与选中集保持原样（预览不打断搜索结果）；与搜索浮层的压叠由
     // .bp6-overlay 层级解决（浮层盖住搜索框），不走收起搜索（2026-10-17 二次定案）
-    set({ queue, index: wrap(index, queue.length) });
+    set({ queue, index: wrap(index, queue.length), searchOpen: false });
   },
 
   close() {
-    set({ queue: [], index: 0 });
+    set({ queue: [], index: 0, searchOpen: false });
   },
 
   next() {
@@ -66,5 +70,9 @@ export const usePreview = create<PreviewStore>()((set, get) => ({
   current() {
     const { queue, index } = get();
     return queue[index] ?? null;
+  },
+
+  setSearchOpen(v) {
+    if (get().queue.length) set({ searchOpen: v });
   },
 }));

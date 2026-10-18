@@ -95,6 +95,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     items: [
       { id: "preview-toggle", keys: ["Space"], label: "开 / 关快速预览", scope: "global" },
       { id: "preview-cycle", keys: ["↑ / ↓"], label: "预览中切换上一个 / 下一个文件", scope: "global" },
+      { id: "preview-search", keys: ["Ctrl+F"], label: "预览内查找（PDF / 文本 / 表格 / 文档；Enter / Shift+Enter 跳命中）", scope: "global" },
       { id: "preview-open-file", keys: ["Enter"], label: "预览中用默认程序打开", scope: "global" },
       { id: "preview-close", keys: ["Esc"], label: "关闭快速预览", scope: "global" },
     ],

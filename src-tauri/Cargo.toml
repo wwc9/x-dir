@@ -54,6 +54,10 @@ ab_glyph = "0.2"
 jpeg-decoder = "0.3"
 # 快速预览：xlsx/xls/xlsb/ods 单元格值读取（MIT）
 calamine = "0.36"
+# 快速预览：邮件 .eml MIME 解析（0BSD，2026-10-18 核验）
+mailparse = "0.18"
+# 快速预览：.msg（OLE 复合文档容器）读流（MIT，2026-10-18 核验）
+cfb = "0.15"
 # 快速预览：tar/tar.gz 清单（MIT/Apache-2.0；gz 解压复用上方 flate2）
 tar = "0.4"
 # 快速预览：7z 清单（Apache-2.0，2026-10-13 核验）

@@ -16,6 +16,7 @@ import {
 import { extOf } from "../../lib/fileIcons";
 import { previewKind } from "../../lib/previewKind";
 import { DENSITY } from "../../lib/tokens";
+import type { PreviewSearchCtl } from "../../lib/previewSearch";
 import { ArchivePreview } from "./ArchivePreview";
 import { DocPreview } from "./DocPreview";
 import { FallbackPreview } from "./FallbackPreview";
@@ -41,7 +42,8 @@ export interface PreviewMeta {
   infoText: string | null;
 }
 
-/** 需要 Rust 取数据的类型；其余走 asset protocol 直读 */
+/** 需要 Rust 取数据的类型；其余走 asset protocol 直读
+ *  （email 复用 office 抽取管线；officeBinary 走专用转换通道不计入） */
 export function needsPreviewLoad(kind: string): boolean {
   return (
     kind === "text" ||
@@ -49,6 +51,7 @@ export function needsPreviewLoad(kind: string): boolean {
     kind === "officeDoc" ||
     kind === "officeSheet" ||
     kind === "officeSlides" ||
+    kind === "email" ||
     kind === "epub"
   );
 }
@@ -59,6 +62,8 @@ export function PreviewBody({
   onOpen,
   onReveal,
   onMeta,
+  search,
+  textWrap = true,
   emptyHint = "选择文件以预览",
 }: {
   entry: FileEntry | null;
@@ -66,6 +71,10 @@ export function PreviewBody({
   onOpen(en: FileEntry): void;
   onReveal(en: FileEntry): void;
   onMeta?: (m: PreviewMeta) => void;
+  /** 预览内查找控制通道（宿主搜索条；不传 = 无查找 UI） */
+  search?: PreviewSearchCtl;
+  /** 文本自动换行开关（宿主按钮切换） */
+  textWrap?: boolean;
   emptyHint?: string;
 }) {
   // 文件夹不按扩展名路由（previewKind 是名称纯函数）：isDir 直取 folder 卡
@@ -79,6 +88,11 @@ export function PreviewBody({
     loading: false,
     url: null,
   });
+  // officeBinary（doc/ppt/pps）→ COM 转 PDF 通道
+  const [binPdf, setBinPdf] = useState<{ loading: boolean; path: string | null }>({
+    loading: false,
+    path: null,
+  });
   const reqRef = useRef(0);
   const tiffReq = useRef(0);
 
@@ -89,13 +103,14 @@ export function PreviewBody({
     metaRef.current?.({ load, pdfPages, infoText });
   }, [load, pdfPages, infoText]);
 
-  // 数据加载：文本/markdown → preview_read_text；office → preview_extract_office。
+  // 数据加载：文本/markdown → preview_read_text；office/email → preview_extract_office。
   // reqId 守卫：切换条目后旧响应直接丢弃
   useEffect(() => {
     setMediaError(null);
     setPdfPages(null);
     setInfoText(null);
     setTiffSrc({ loading: false, url: null });
+    setBinPdf({ loading: false, path: null });
     setLoad({ stage: "loading" });
     if (!entry || !needsPreviewLoad(kind)) return;
     const req = ++reqRef.current;
@@ -115,6 +130,25 @@ export function PreviewBody({
     }).catch((err) => {
       if (reqRef.current === req) setLoad({ stage: "error", message: String(err) });
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entry?.path, kind]);
+
+  // doc/ppt/pps → COM 转 PDF（缓存 %TEMP%/xdir_preview；需已装 Office/WPS）
+  useEffect(() => {
+    if (!entry || kind !== "officeBinary") return;
+    const req = ++reqRef.current;
+    setBinPdf({ loading: true, path: null });
+    api
+      .previewDocPdf(entry.path)
+      .then((r) => {
+        if (reqRef.current === req) setBinPdf({ loading: false, path: r.pdfPath });
+      })
+      .catch((err) => {
+        if (reqRef.current === req) {
+          setBinPdf({ loading: false, path: null });
+          setMediaError(String(err));
+        }
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry?.path, kind]);
 
@@ -228,6 +262,7 @@ export function PreviewBody({
       case "officeDoc":
       case "officeSheet":
       case "officeSlides":
+      case "email":
       case "epub": {
         if (load.stage === "loading")
           return (
@@ -237,13 +272,45 @@ export function PreviewBody({
           );
         // 表格走专用虚拟网格（整幅铺满，多 sheet 切换条）
         if (kind === "officeSheet" && load.stage === "office")
-          return <SheetPreview key={entry.path} sections={load.data.sections} />;
+          return (
+            <SheetPreview key={entry.path} sections={load.data.sections} search={search} />
+          );
         return (
           <DocPreview
             kind={kind}
             text={load.stage === "text" ? load.data : undefined}
             office={load.stage === "office" ? load.data : undefined}
+            fileName={entry.name}
+            search={search}
+            textWrap={textWrap}
           />
+        );
+      }
+      case "officeBinary": {
+        // doc/ppt/pps → COM 转 PDF 通道（需已装 Office/WPS；结果缓存秒开）
+        if (binPdf.loading)
+          return (
+            <div className="np-pv-none np-pv-converting">
+              <Spinner size={DENSITY.iconMd} />
+              <div>正在转换为 PDF 预览…（首次转换需数秒，需已装 Office 或 WPS）</div>
+            </div>
+          );
+        if (!binPdf.path) return null; // 失败已置 mediaError → 兜底卡
+        return (
+          <Suspense
+            fallback={
+              <div className="np-pv-loading">
+                <Spinner size={DENSITY.iconMd} />
+              </div>
+            }
+          >
+            <PdfPreview
+              url={convertFileSrc(binPdf.path)}
+              onDocInfo={setPdfPages}
+              onError={(m) => setMediaError(m || "转换后的 PDF 加载失败")}
+              search={search}
+            />
+          </Suspense>
         );
       }
       case "pdf":
@@ -259,6 +326,7 @@ export function PreviewBody({
               url={convertFileSrc(entry.path)}
               onDocInfo={setPdfPages}
               onError={(m) => setMediaError(m || "PDF 加载失败（加密或损坏的文件不支持预览）")}
+              search={search}
             />
           </Suspense>
         );

@@ -77,7 +77,7 @@ export interface PreviewTextResult {
   binary: boolean;
 }
 
-/** 表格合并单元格：0 基锚点 + 跨度（仅 xlsx/xlsm 解析，其余格式为空数组） */
+/** 表格合并单元格：0 基锚点 + 跨度（xlsx/xlsm/ods 解析，其余格式为空数组） */
 export interface SheetMerge {
   row: number;
   col: number;
@@ -85,18 +85,41 @@ export interface SheetMerge {
   colSpan: number;
 }
 
-/** 快速预览：office 文本抽取的一节（docx=正文；pptx=幻灯片 N；表格=工作表名） */
+/** 结构化文档块（2026-10-18）：docx/pptx/odt/odp/rtf/eml/msg 富预览单元 */
+export interface OfficeBlock {
+  /** "heading" | "para" | "list" | "table" | "kv" | "note" */
+  kind: string;
+  /** 标题级别(1-6) / 列表缩进层级 */
+  level: number;
+  text: string;
+  /** 仅 kv：标签（主题/发件人/附件…） */
+  label: string;
+  /** 仅 table：行×格 */
+  rows: string[][];
+}
+
+/** 快速预览：office 文本抽取的一节（docx=正文/第 N 页；pptx=幻灯片 N；表格=工作表名） */
 export interface OfficeSection {
   title: string;
   text: string;
   truncated: boolean;
   merges: SheetMerge[];
+  /** 结构化块（非空时前端按块渲染，空则回退纯文本 pre） */
+  blocks?: OfficeBlock[];
 }
 
 export interface OfficeTextResult {
-  kind: "docx" | "slides" | "sheet" | "epub";
+  kind: "docx" | "slides" | "sheet" | "epub" | "email";
   sections: OfficeSection[];
   truncated: boolean;
+  /** epub 封面（PNG data URL）；其余类型为 null */
+  cover?: string | null;
+}
+
+/** doc/ppt COM 转 PDF 预览回执（pdfPath 经 asset protocol 直读） */
+export interface DocPdfPreview {
+  pdfPath: string;
+  cached: boolean;
 }
 
 /** 快速预览：压缩包内条目（不解压，仅清单） */
@@ -514,9 +537,12 @@ export const api = {
   /** 快速预览：按编码探测读文本（上限 8MB = 后端 TEXT_READ_CAP；maxBytes 为 u32 勿传更大值） */
   previewReadText: (path: string, maxBytes: number) =>
     cmd<PreviewTextResult>("preview_read_text", { path, maxBytes }),
-  /** 快速预览：OOXML/ODF 文本抽取（docx/pptx/xlsx/xls/xlsb/ods） */
+  /** 快速预览：OOXML/ODF/RTF/邮件文本抽取（docx/pptx/xlsx/xls/xlsb/ods/odt/odp/rtf/eml/msg/et/wps/dps） */
   previewExtractOffice: (path: string) =>
     cmd<OfficeTextResult>("preview_extract_office", { path }),
+  /** 快速预览：doc/ppt/pps COM 转 PDF（缓存 %TEMP%/xdir_preview；需已装 Office/WPS） */
+  previewDocPdf: (path: string) =>
+    cmd<DocPdfPreview>("preview_doc_pdf", { path }),
   /** 快速预览：压缩包清单（zip/tar/tar.gz/7z，不解压） */
   listArchive: (path: string) =>
     cmd<ArchiveListing>("preview_list_archive", { path }),

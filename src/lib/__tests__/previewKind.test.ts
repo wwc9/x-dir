@@ -75,9 +75,7 @@ describe("previewKind（扩展名 → 预览类型路由）", () => {
     expect(previewKind(".gitignore")).toBe("fallback");
     expect(previewKind("a.xyz")).toBe("fallback");
     expect(previewKind("a.exe")).toBe("fallback");
-    // 旧版二进制 office 暂不支持（M1 范围外）
-    expect(previewKind("a.doc")).toBe("fallback");
-    expect(previewKind("a.ppt")).toBe("fallback");
+    // 旧版二进制 office 2026-10-18 起走 COM 转换预览通道（见下方新格式组）
   });
 
   it("大小写不敏感", () => {
@@ -89,5 +87,31 @@ describe("previewKind（扩展名 → 预览类型路由）", () => {
     for (const k of Object.keys(PREVIEW_LABELS)) {
       expect(PREVIEW_LABELS[k as keyof typeof PREVIEW_LABELS]).toBeTruthy();
     }
+  });
+});
+
+describe("previewKind（2026-10-18 新格式路由）", () => {
+  it("旧版二进制 Office → 转换预览通道", () => {
+    for (const n of ["a.doc", "b.ppt", "c.pps"]) expect(previewKind(n)).toBe("officeBinary");
+  });
+
+  it("ODF 全家桶 / RTF / WPS 自有格式", () => {
+    expect(previewKind("a.odt")).toBe("officeDoc");
+    expect(previewKind("b.rtf")).toBe("officeDoc");
+    expect(previewKind("c.wps")).toBe("officeDoc");
+    expect(previewKind("d.odp")).toBe("officeSlides");
+    expect(previewKind("e.dps")).toBe("officeSlides");
+    expect(previewKind("f.ppsx")).toBe("officeSlides");
+    expect(previewKind("g.et")).toBe("officeSheet");
+  });
+
+  it("邮件原件", () => {
+    expect(previewKind("a.eml")).toBe("email");
+    expect(previewKind("b.MSG")).toBe("email");
+  });
+
+  it("新类型徽标文案齐备", () => {
+    expect(PREVIEW_LABELS.officeBinary).toBe("文档（转换预览）");
+    expect(PREVIEW_LABELS.email).toBe("邮件");
   });
 });

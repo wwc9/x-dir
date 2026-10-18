@@ -2880,6 +2880,27 @@ body.np-col-resizing * {
   align-items: center;
   background: var(--np-surface);
 }
+/* 首行表头（2026-10-18）：加粗 + surface-2 底 + 冻结在滚动口顶部 */
+.np-pv-sheet-cell.is-head {
+  z-index: 2;
+  position: sticky;
+  top: 0;
+  background: var(--np-surface-2);
+  font-weight: 600;
+  border-bottom-color: var(--np-border);
+}
+/* 数值列右对齐（采样启发，2026-10-18） */
+.np-pv-sheet-cell.is-num {
+  text-align: right;
+}
+/* 预览内查找命中格（活动命中 = accent 实底白字） */
+.np-pv-sheet-cell.is-hit {
+  background: color-mix(in srgb, var(--np-accent) 18%, transparent);
+}
+.np-pv-sheet-cell.is-hit-active {
+  background: var(--np-accent);
+  color: var(--np-accent-fg);
+}
 
 /* 压缩包清单：虚拟行列表（图标 + 名称 + 大小） */
 .np-pv-ar {
@@ -2965,6 +2986,233 @@ body.np-col-resizing * {
 .np-pv-pdf-pagemark-line {
   flex: 1;
   border-top: 1px dashed var(--np-border);
+}
+
+/* ── PDF 页码跳转（2026-10-18）：右上角浮动小条 ── */
+.np-pv-pdf-jump {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  border-radius: var(--np-radius);
+  box-shadow: var(--np-shadow);
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+}
+.np-pv-pdf-jump-input {
+  width: 48px;
+  border: none;
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius);
+  padding: 2px 6px;
+  font-size: var(--np-font-sm);
+  color: var(--np-fg);
+  text-align: center;
+}
+.np-pv-pdf-jump-input:focus {
+  outline: none;
+  background: var(--np-surface);
+  box-shadow: var(--np-ring);
+}
+.np-pv-pdf-viewport {
+  position: relative;
+}
+/* pdf.js 文本层：透明文字叠加在画布上，供选中复制与查找高亮 */
+.np-pv-pdf-viewport .textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  z-index: 2;
+}
+.np-pv-pdf-viewport .textLayer span {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+.np-pv-pdf-viewport .textLayer ::selection {
+  background: color-mix(in srgb, var(--np-accent) 35%, transparent);
+}
+
+/* ── 预览内查找（2026-10-18）：CSS Custom Highlight API 命中高亮 ── */
+::highlight(pv-search) {
+  background-color: color-mix(in srgb, var(--np-accent) 28%, transparent);
+  color: var(--np-fg);
+}
+::highlight(pv-search-active) {
+  background-color: var(--np-accent);
+  color: var(--np-accent-fg);
+}
+/* QuickPreview 头部查找条 */
+.np-pv-searchbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.np-pv-searchbar .bp6-input-group {
+  width: 150px;
+}
+.np-pv-search-count {
+  flex: none;
+  min-width: 44px;
+  text-align: center;
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+  font-variant-numeric: tabular-nums;
+}
+/* doc/ppt 转换等待态 */
+.np-pv-converting {
+  flex-direction: column;
+  gap: 10px;
+  color: var(--np-muted);
+  font-size: var(--np-font-ui);
+  text-align: center;
+  padding: 16px;
+}
+
+/* ── 文本增强（2026-10-18）：不换行 + 行号 ── */
+.np-pv-codewrap {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  overflow-x: auto;
+}
+.np-pv-pre.is-nowrap {
+  white-space: pre;
+  overflow-wrap: normal;
+}
+.np-pv-gutter {
+  flex: none;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  padding: 0 8px 0 0;
+  margin-right: 10px;
+  text-align: right;
+  color: var(--np-muted);
+  background: var(--np-surface);
+  user-select: none;
+  border-right: 1px solid var(--np-hairline);
+}
+
+/* ── office 结构化块（2026-10-18）：docx/pptx/odt/odp/rtf/eml/msg 富渲染 ── */
+.np-pv-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.np-pv-h {
+  margin: 6px 0 0;
+  line-height: 1.35;
+  font-weight: 600;
+}
+.np-pv-h1 {
+  font-size: 19px;
+}
+.np-pv-h2 {
+  font-size: 16px;
+}
+.np-pv-h3 {
+  font-size: 14px;
+}
+.np-pv-h4 {
+  font-size: var(--np-font-ui);
+  color: var(--np-muted);
+}
+.np-pv-p {
+  margin: 0;
+  line-height: 1.55;
+}
+.np-pv-li {
+  display: flex;
+  gap: 6px;
+  line-height: 1.5;
+}
+.np-pv-li-dot {
+  flex: none;
+  color: var(--np-accent);
+}
+.np-pv-kv {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: var(--np-font-ui);
+  line-height: 1.5;
+}
+.np-pv-kv-label {
+  flex: none;
+  min-width: 44px;
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+}
+.np-pv-kv-val {
+  min-width: 0;
+}
+.np-pv-note {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius);
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+/* 文档内嵌表格（docx/odt） */
+.np-pv-dtable {
+  display: grid;
+  border: 1px solid var(--np-border);
+  border-radius: var(--np-radius);
+  overflow: hidden;
+  margin: 4px 0;
+  width: fit-content;
+  max-width: 100%;
+}
+.np-pv-dtable-cell {
+  padding: 3px 8px;
+  border-right: 1px solid var(--np-hairline);
+  border-bottom: 1px solid var(--np-hairline);
+  font-size: var(--np-font-sm);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.np-pv-dtable-cell.is-head {
+  background: var(--np-surface-2);
+  font-weight: 600;
+}
+.np-pv-dtable-cell.is-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+/* epub 封面布局 */
+.np-pv-epub {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.np-pv-epub-cover {
+  flex: none;
+  max-width: 180px;
+  max-height: 260px;
+  border-radius: var(--np-radius-lg);
+  box-shadow: var(--np-shadow);
+}
+.np-pv-epub-sections {
+  flex: 1;
+  min-width: 0;
 }
 
 /* 兜底卡：居中元信息 + 动作 */

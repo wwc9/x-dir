@@ -43,9 +43,11 @@ pub(crate) enum OfficeKind {
 
 pub(crate) fn office_kind(path: &str) -> Option<OfficeKind> {
     match ext_of(path).as_str() {
-        "doc" | "docx" | "docm" | "rtf" => Some(OfficeKind::Word),
-        "xls" | "xlsx" | "xlsm" | "xlsb" => Some(OfficeKind::Excel),
-        "ppt" | "pptx" | "pptm" => Some(OfficeKind::PowerPnt),
+        // 2026-10-18 起 .wps/.et/.dps（WPS 自有格式）与 .pps 一并纳入：
+        // COM 双引擎（Office 优先 / KWPS 系回退）可直接打开转换
+        "doc" | "docx" | "docm" | "rtf" | "wps" => Some(OfficeKind::Word),
+        "xls" | "xlsx" | "xlsm" | "xlsb" | "et" => Some(OfficeKind::Excel),
+        "ppt" | "pptx" | "pptm" | "pps" | "dps" => Some(OfficeKind::PowerPnt),
         _ => None,
     }
 }
@@ -122,6 +124,24 @@ fn spawn_powershell(script: &str) -> Result<(), String> {
     Err(msg.to_string())
 }
 
+/// 单文件 → PDF（可复用核心：快速预览的 doc/ppt 转 PDF 通道同用，2026-10-18）。
+/// dst 须为绝对路径；只读打开防改源。
+pub(crate) fn convert_to_pdf_file(src: &str, dst: &str, kind: OfficeKind) -> Result<(), String> {
+    if !Path::new(&to_extended(src)).is_file() {
+        return Err("文件不存在".into());
+    }
+    let script = ps_convert_script(
+        &to_extended(src).to_string_lossy(),
+        &to_extended(dst).to_string_lossy(),
+        kind,
+    );
+    spawn_powershell(&script)?;
+    if !Path::new(&to_extended(dst)).is_file() {
+        return Err("转换未产出文件".into());
+    }
+    Ok(())
+}
+
 /// Office → PDF：每文件旁写 "<stem>.pdf"（同目录）；逐文件进度 + 取消。
 /// 注意：COM 转换不可强杀，取消在文件边界生效（当前文件会转完）。
 pub(crate) fn run_office_to_pdf(
@@ -138,27 +158,13 @@ pub(crate) fn run_office_to_pdf(
         }
         prog.current_path = p.clone();
         let result = (|| -> Result<(), String> {
-            let Some(kind) = office_kind(p) else {
-                return Err("不支持的 Office 格式".into());
-            };
-            if !Path::new(&to_extended(p)).is_file() {
-                return Err("文件不存在".into());
-            }
+            let kind = office_kind(p).ok_or("不支持的 Office 格式")?;
             let dst = format!(
                 "{}\\{}.pdf",
                 parent_of(p).unwrap_or_else(|| ".".into()),
                 stem_of(p)
             );
-            let script = ps_convert_script(
-                &to_extended(p).to_string_lossy(),
-                &to_extended(&dst).to_string_lossy(),
-                kind,
-            );
-            spawn_powershell(&script)?;
-            if !Path::new(&to_extended(&dst)).is_file() {
-                return Err("转换未产出文件".into());
-            }
-            Ok(())
+            convert_to_pdf_file(p, &dst, kind)
         })();
         if let Err(e) = result {
             failed.push(FailItem {

@@ -176,6 +176,12 @@ export function onGlobalKeyDown(e: KeyboardEvent): void {
       e.preventDefault();
       return;
     }
+    // Ctrl+F：预览内查找（宿主搜索条由 usePreview.searchOpen 驱动聚焦）
+    if (ctrl && !e.altKey && lower === "f") {
+      pv.setSearchOpen(true);
+      e.preventDefault();
+      return;
+    }
   } else if (k === " " && !e.ctrlKey && !e.altKey && !e.metaKey) {
     const snap = list?.getSnapshot();
     // 队列含文件夹：走文件夹元信息卡（子项数/体积，preview/PreviewBody 路由）

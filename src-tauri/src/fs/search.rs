@@ -591,6 +591,9 @@ pub fn search_all(
     }
 
     let mut entries = out.into_inner().unwrap();
+    // 并行 worker 的 stop 检查与入列间存在 TOCTOU：封顶后仍可能多收几条
+    // （高负载下偶现），收尾按 max_results 统一钳制（2026-10-18）
+    entries.truncate(max_results);
     let sort = SortSpec {
         key: SortKey::Name,
         dir: SortDir::Asc,

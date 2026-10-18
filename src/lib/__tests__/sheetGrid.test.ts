@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { buildMergeMap, parseSheetRows } from "../sheetGrid";
+import {
+  buildMergeMap,
+  parseSheetRows,
+  isNumericLike,
+  sheetNumericCols,
+  sheetMatches,
+} from "../sheetGrid";
 
 describe("表格预览网格（parseSheetRows）", () => {
   it("制表符分行分列，末尾空行丢弃", () => {
@@ -39,5 +45,42 @@ describe("合并单元格查找表（buildMergeMap）", () => {
     const m2 = buildMergeMap([{ row: 0, col: 0, rowSpan: 1, colSpan: 1 }], 2, 2);
     expect(m2.anchors.size).toBe(0);
     expect(m2.covered.size).toBe(0);
+  });
+});
+
+describe("sheetNumericCols / sheetMatches（2026-10-18）", () => {
+  it("isNumericLike：数字样文本判定", () => {
+    expect(isNumericLike("123")).toBe(true);
+    expect(isNumericLike("-12.5")).toBe(true);
+    expect(isNumericLike("1,234.56")).toBe(true);
+    expect(isNumericLike("3,")).toBe(false);
+    expect(isNumericLike("45%")).toBe(true);
+    expect(isNumericLike("abc")).toBe(false);
+    expect(isNumericLike("")).toBe(false);
+    expect(isNumericLike("1.2.3")).toBe(false);
+  });
+
+  it("sheetNumericCols：≥60% 数值样列右对齐", () => {
+    const rows = [
+      ["名称", "数量", "备注"],
+      ["甲", "10", "x"],
+      ["乙", "20", "y"],
+      ["丙", "三十", "z"],
+    ];
+    const cols = sheetNumericCols(rows, 3);
+    expect(cols).toEqual([false, true, false]);
+  });
+
+  it("sheetMatches：逐格大小写不敏感计数", () => {
+    const rows = [
+      ["Total", "10"],
+      ["total price", "20"],
+    ];
+    const hits = sheetMatches(rows, "total");
+    expect(hits).toEqual([
+      { r: 0, c: 0, occ: 0 },
+      { r: 1, c: 0, occ: 0 },
+    ]);
+    expect(sheetMatches(rows, "")).toEqual([]);
   });
 });

@@ -13,6 +13,8 @@ export type PreviewKind =
   | "officeDoc"
   | "officeSheet"
   | "officeSlides"
+  | "officeBinary"
+  | "email"
   | "epub"
   | "archive"
   | "font"
@@ -92,13 +94,29 @@ const MAP: Record<string, PreviewKind> = {
   // office 文本抽取（Rust 端 preview_extract_office）
   docx: "officeDoc",
   docm: "officeDoc",
+  // ODF 文字（2026-10-18 补齐）+ RTF + WPS 自有格式（后端容器嗅探分流）
+  odt: "officeDoc",
+  rtf: "officeDoc",
+  wps: "officeDoc",
   xlsx: "officeSheet",
   xlsm: "officeSheet",
   xlsb: "officeSheet",
   xls: "officeSheet",
   ods: "officeSheet",
+  et: "officeSheet",
   pptx: "officeSlides",
   pptm: "officeSlides",
+  odp: "officeSlides",
+  dps: "officeSlides",
+  ppsx: "officeSlides",
+  ppsm: "officeSlides",
+  // 旧版二进制 Office：COM 转 PDF 通道（2026-10-18；需已装 Office/WPS）
+  doc: "officeBinary",
+  ppt: "officeBinary",
+  pps: "officeBinary",
+  // 邮件原件（2026-10-18）
+  eml: "email",
+  msg: "email",
   // 压缩包清单（Rust 端 preview_list_archive；rar 许可证不合 §8 不支持）
   zip: "archive",
   tar: "archive",
@@ -137,6 +155,8 @@ export const PREVIEW_LABELS: Record<PreviewKind, string> = {
   officeDoc: "Word 文档",
   officeSheet: "电子表格",
   officeSlides: "演示文稿",
+  officeBinary: "文档（转换预览）",
+  email: "邮件",
   epub: "电子书",
   archive: "压缩包",
   font: "字体",
