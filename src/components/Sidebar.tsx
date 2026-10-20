@@ -17,16 +17,18 @@ import {
   type LayoutNode,
   type Preset,
 } from "../lib/layoutTree";
-import { fileIcon } from "../lib/fileIcons";
+import { extOf, fileIcon } from "../lib/fileIcons";
 import { fileNameOf } from "../lib/path";
 import { shelfEntryIsDir } from "../lib/shelf";
 import { randomSchemeName } from "../lib/schemeName";
 import { DENSITY } from "../lib/tokens";
 import { useDnd } from "../stores/dnd";
+import { useIcons } from "../stores/icons";
 import { useLayout } from "../stores/layout";
 import { useSettings } from "../stores/settings";
 import { confirmDialog, useUi } from "../stores/ui";
 import { AppIcon } from "./AppIcon";
+import { FadeInIcon } from "./FileList";
 
 /** 自动保存的会话不属于用户方案，不显示在边栏 */
 const LAST_SESSION = "上次会话";
@@ -129,9 +131,19 @@ export function PresetPicker() {
  *  拖出 = 行拖起走同一 startDrag 管线，落窗格即移动，effect ≠ none 视为已取走并移出暂存。 */
 function Shelf() {
   const items = useSettings((s) => s.staging);
+  const realIcons = useSettings((s) => s.realIcons);
+  const iconMap = useIcons((s) => s.icons);
+  const extMap = useIcons((s) => s.exts);
   const point = useDnd((s) => s.point);
   const ref = useRef<HTMLDivElement>(null);
   const [over, setOver] = useState(false);
+
+  // 真实图标：与文件列表同源（设置 realIcons 开关 + icons store 路径表/扩展名共享表）；
+  // 暂存区条目 ≤200 全量直发（immediate 跳过防抖，条目少无需可见窗裁剪）
+  useEffect(() => {
+    if (!realIcons || !items.length) return;
+    useIcons.getState().requestIcons(items, true);
+  }, [items, realIcons]);
 
   // OLE 拖拽悬停高亮：dnd store 推 CSS 坐标，与自身矩形判定
   useEffect(() => {
@@ -198,7 +210,8 @@ function Shelf() {
         <div className="np-shelf-list">
           {items.map((p) => {
             const name = fileNameOf(p);
-            const spec = fileIcon(name, shelfEntryIsDir(p));
+            const isDir = shelfEntryIsDir(p);
+            const spec = fileIcon(name, isDir);
             return (
               <div
                 key={p.toLowerCase()}
@@ -206,7 +219,22 @@ function Shelf() {
                 title={p}
                 onMouseDown={(e) => armRowDrag(e, p)}
               >
-                <AppIcon icon={spec.icon} size={DENSITY.iconMd} colorVar={spec.colorVar} />
+                {realIcons ? (
+                  (() => {
+                    const u = iconMap[p] ?? extMap[extOf(name)] ?? undefined;
+                    return u ? (
+                      <FadeInIcon src={u} />
+                    ) : (
+                      <span className="np-icon-slot" />
+                    );
+                  })()
+                ) : (
+                  <AppIcon
+                    icon={spec.icon}
+                    size={DENSITY.iconMd}
+                    colorVar={spec.colorVar}
+                  />
+                )}
                 <span className="np-shelf-name">{name}</span>
                 <button
                   className="np-shelf-del"

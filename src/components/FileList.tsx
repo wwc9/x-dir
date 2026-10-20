@@ -133,7 +133,7 @@ function tagColorOf(entry: FileEntry): TagColor | null {
   return null;
 }
 
-/** 真实图标淡入：img 挂载后下一帧淡入（150ms）。
+/** 真实图标淡入（共享：文件列表行 + 暂存区行）：img 挂载后下一帧淡入（150ms）。
  *  必须停留在模块层：若定义在组件体内，父组件每次重渲染（如点击选中）都会
  *  产生新的函数身份，React 卸载重建整棵行子树，淡入状态被重置而反复重放 */
 export function FadeInIcon({ src }: { src: string }) {

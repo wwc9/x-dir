@@ -30,6 +30,13 @@ interface IconsStore {
 const pending = new Set<string>();
 const missed = new Set<string>();
 let timer: number | undefined;
+let retryTimer: number | undefined;
+/** miss 复活重试轮数（有界）：冷启动瞬时提取失败（SHGetFileInfo 偶发 None）会把
+ *  真实路径永久拉黑、整会话无图标——2s 后重试一轮，至多 2 轮；假路径多打 2 批
+ *  IPC 开销可忽略 */
+const MISS_RETRY_ROUNDS = 2;
+const MISS_RETRY_DELAY_MS = 2000;
+let missedRetries = 0;
 
 function flush() {
   const batch = [...pending].slice(0, BATCH_MAX);
@@ -39,10 +46,22 @@ function flush() {
     .getFileIcons(batch)
     .then((map) => {
       // 无产出的路径进负缓存；集合超限时清空重试（新文件/临时失败可恢复）
+      const missesNow: string[] = [];
       for (const p of batch) {
-        if (!(p in map)) missed.add(p);
+        if (!(p in map)) missesNow.push(p);
+        missed.add(p);
       }
       if (missed.size > MISS_MAX) missed.clear();
+      // miss 复活：负缓存出队重试（有界），冷启动瞬时提取失败自愈——
+      // 必须在整批失败早退之前调度（整批皆 miss 同样需要重试）
+      if (missesNow.length && missedRetries < MISS_RETRY_ROUNDS) {
+        missedRetries += 1;
+        window.clearTimeout(retryTimer);
+        retryTimer = window.setTimeout(() => {
+          for (const p of missesNow) missed.delete(p);
+          schedule(missesNow, true);
+        }, MISS_RETRY_DELAY_MS);
+      }
       if (!Object.keys(map).length) return;
       const s = useIcons.getState();
       const merged = { ...s.icons, ...map };
