@@ -13,9 +13,11 @@ export const RELEASE_URLS = {
   github: `${REPO_URLS.github}/releases`,
 } as const;
 
-/** 版本清单在仓库根 update.json，随版本发布一并更新（version/pubDate/notes） */
+/** 版本清单在仓库根 update.json，随版本发布一并更新（version/pubDate/notes）。
+ *  Gitee 走 contents API（raw.giteeusercontent.com 302 落点无 Access-Control-Allow-Origin，
+ *  WebView 内 fetch 会被 CORS 拦截；API v5 带 ACAO:*，内容 base64 编码）；GitHub raw 自带 ACAO:* */
 const MANIFEST_URLS = [
-  { source: "gitee", url: `${REPO_URLS.gitee}/raw/main/update.json` },
+  { source: "gitee", url: `${REPO_URLS.gitee}/api/v5/repos/wwc9/x-dir/contents/update.json?ref=main` },
   { source: "github", url: `${REPO_URLS.github.replace("github.com", "raw.githubusercontent.com")}/main/update.json` },
 ] as const;
 
@@ -52,6 +54,27 @@ export function parseManifest(data: unknown): UpdateManifest | null {
     ...(typeof v.pubDate === "string" ? { pubDate: v.pubDate } : {}),
     ...(notes && notes.length ? { notes } : {}),
   };
+}
+
+/** base64 → UTF-8 文本（中文 notes 安全解码；容忍 Gitee 返回里的换行空白） */
+function base64ToUtf8(b64: string): string {
+  const bin = atob(b64.replace(/\s/g, ""));
+  return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+}
+
+/** 响应体 → 清单：GitHub raw = 清单本体；Gitee contents API = { encoding, content } 信封 */
+export function manifestFromPayload(data: unknown): UpdateManifest | null {
+  if (typeof data !== "object" || data === null || !("content" in data)) {
+    return parseManifest(data);
+  }
+  const v = data as Record<string, unknown>;
+  if (typeof v.content !== "string") return null;
+  try {
+    const text = v.encoding === "base64" ? base64ToUtf8(v.content) : v.content;
+    return parseManifest(JSON.parse(text));
+  } catch {
+    return null;
+  }
 }
 
 /** 三段式版本号比较（"v" 前缀容忍、缺段按 0、非数字段字符串兜底）：
@@ -93,7 +116,7 @@ export async function fetchLatestManifest(
       const res = await fetch(url, { signal: ctl.signal, cache: "no-store" });
       window.clearTimeout(timer);
       if (!res.ok) continue;
-      const manifest = parseManifest(await res.json());
+      const manifest = manifestFromPayload(await res.json());
       if (manifest) return { ...manifest, source };
     } catch {
       // 网络失败/超时/JSON 解析失败：静默换源
