@@ -1,6 +1,10 @@
-// 应用更新检查（关于浮窗 + 启动静默检查）：仓库版本清单解析、版本号比较、
-// 双源拉取（Gitee 优先——国内网络可达性好；GitHub 兜底）。纯函数配单测。
+// 应用更新检查（关于浮窗 + 启动静默检查）。清单拉取在 Rust 侧（api.fetchUpdateManifest，
+// PowerShell 双源直取仓库根 update.json）——WebView 内 fetch 不可靠：Gitee API 匿名调用
+// 被 WAF 以 "403 rate limit" 拒绝、GitHub raw 受 WebView2 代理态影响超时，禁改回前端 fetch。
+// 本模块只做版本比较与更新判定（纯函数配单测）。
 import { getVersion } from "@tauri-apps/api/app";
+
+import { api, type UpdateManifestDto } from "./ipc";
 
 export const REPO_URLS = {
   gitee: "https://gitee.com/wwc9/x-dir",
@@ -13,68 +17,20 @@ export const RELEASE_URLS = {
   github: `${REPO_URLS.github}/releases`,
 } as const;
 
-/** 版本清单在仓库根 update.json，随版本发布一并更新（version/pubDate/notes）。
- *  Gitee 走 contents API（raw.giteeusercontent.com 302 落点无 Access-Control-Allow-Origin，
- *  WebView 内 fetch 会被 CORS 拦截；API v5 带 ACAO:*，内容 base64 编码）；GitHub raw 自带 ACAO:* */
-const MANIFEST_URLS = [
-  { source: "gitee", url: `${REPO_URLS.gitee}/api/v5/repos/wwc9/x-dir/contents/update.json?ref=main` },
-  { source: "github", url: `${REPO_URLS.github.replace("github.com", "raw.githubusercontent.com")}/main/update.json` },
-] as const;
-
-export type UpdateSource = (typeof MANIFEST_URLS)[number]["source"];
-
 /** 启动发现新版本后自动弹「关于」浮窗的延迟：让会话恢复/首帧先落地，不打断启动 */
 export const UPDATE_PROMPT_DELAY_MS = 2000;
 
-/** 仓库版本清单（update.json）；notes 为更新内容逐条列表 */
-export interface UpdateManifest {
-  version: string;
-  pubDate?: string;
-  notes?: string[];
-}
+export type UpdateManifest = UpdateManifestDto;
 
 /** 一次更新检查的结果（存 useUi.updateCheck；null = 尚未检查过） */
 export interface UpdateCheck {
   current: string;
   /** 远端最新清单；双源都拉取失败为 null */
   manifest: UpdateManifest | null;
-  /** 命中的拉取源（manifest 为 null 时为 null） */
-  source: UpdateSource | null;
-}
-
-export function parseManifest(data: unknown): UpdateManifest | null {
-  if (typeof data !== "object" || data === null) return null;
-  const v = data as Record<string, unknown>;
-  if (typeof v.version !== "string" || !v.version.trim()) return null;
-  const notes = Array.isArray(v.notes)
-    ? v.notes.filter((n): n is string => typeof n === "string")
-    : undefined;
-  return {
-    version: v.version.trim(),
-    ...(typeof v.pubDate === "string" ? { pubDate: v.pubDate } : {}),
-    ...(notes && notes.length ? { notes } : {}),
-  };
-}
-
-/** base64 → UTF-8 文本（中文 notes 安全解码；容忍 Gitee 返回里的换行空白） */
-function base64ToUtf8(b64: string): string {
-  const bin = atob(b64.replace(/\s/g, ""));
-  return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
-}
-
-/** 响应体 → 清单：GitHub raw = 清单本体；Gitee contents API = { encoding, content } 信封 */
-export function manifestFromPayload(data: unknown): UpdateManifest | null {
-  if (typeof data !== "object" || data === null || !("content" in data)) {
-    return parseManifest(data);
-  }
-  const v = data as Record<string, unknown>;
-  if (typeof v.content !== "string") return null;
-  try {
-    const text = v.encoding === "base64" ? base64ToUtf8(v.content) : v.content;
-    return parseManifest(JSON.parse(text));
-  } catch {
-    return null;
-  }
+  /** 命中的拉取源："Gitee" | "GitHub"（manifest 为 null 时为 null） */
+  source: string | null;
+  /** 逐源失败原因（如 "Gitee：HTTP 403"）；有清单命中时为空数组 */
+  errors: string[];
 }
 
 /** 三段式版本号比较（"v" 前缀容忍、缺段按 0、非数字段字符串兜底）：
@@ -105,31 +61,16 @@ export function isUpdateAvailable(check: UpdateCheck | null): boolean {
   );
 }
 
-/** 依次尝试双源拉取清单（单源超时/非 200/解析失败即换下一源），全败返回 null */
-export async function fetchLatestManifest(
-  timeoutMs = 6000,
-): Promise<(UpdateManifest & { source: UpdateSource }) | null> {
-  for (const { source, url } of MANIFEST_URLS) {
-    try {
-      const ctl = new AbortController();
-      const timer = window.setTimeout(() => ctl.abort(), timeoutMs);
-      const res = await fetch(url, { signal: ctl.signal, cache: "no-store" });
-      window.clearTimeout(timer);
-      if (!res.ok) continue;
-      const manifest = manifestFromPayload(await res.json());
-      if (manifest) return { ...manifest, source };
-    } catch {
-      // 网络失败/超时/JSON 解析失败：静默换源
-    }
-  }
-  return null;
-}
-
-/** 完整检查：远端清单 + 当前版本号（getVersion 失败按空串，isUpdateAvailable 判 false） */
+/** 完整检查：Rust 侧拉清单 + 当前版本号（getVersion 失败按空串，isUpdateAvailable 判 false） */
 export async function checkForUpdate(): Promise<UpdateCheck> {
-  const [manifest, current] = await Promise.all([
-    fetchLatestManifest(),
+  const [result, current] = await Promise.all([
+    api.fetchUpdateManifest().catch(() => ({ manifest: null, errors: ["IPC 调用失败"] })),
     getVersion().catch(() => ""),
   ]);
-  return { current, manifest, source: manifest?.source ?? null };
+  return {
+    current,
+    manifest: result.manifest,
+    source: result.manifest?.source ?? null,
+    errors: result.errors,
+  };
 }

@@ -207,6 +207,7 @@ pub fn run() {
             commands::config_cmds::delete_workspace,
             commands::config_cmds::export_config,
             commands::config_cmds::import_config,
+            commands::update::fetch_update_manifest,
             commands::terminal::open_terminal,
             commands::watch::watch_dir,
             commands::watch::unwatch_dir,

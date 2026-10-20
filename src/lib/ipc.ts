@@ -122,6 +122,21 @@ export interface DocPdfPreview {
   cached: boolean;
 }
 
+/** 仓库版本清单（update.json；Rust 侧 PowerShell 双源直取，见 commands/update.rs） */
+export interface UpdateManifestDto {
+  version: string;
+  pubDate: string | null;
+  notes: string[];
+  /** 命中的拉取源："Gitee" | "GitHub" */
+  source: string;
+}
+
+/** fetch_update_manifest 回执：manifest 为 null 时 errors 为逐源失败原因 */
+export interface UpdateFetchResult {
+  manifest: UpdateManifestDto | null;
+  errors: string[];
+}
+
 /** 快速预览：压缩包内条目（不解压，仅清单） */
 export interface ArchiveEntry {
   name: string;
@@ -507,6 +522,8 @@ export const api = {
     cmd<{ freeBytes: number; totalBytes: number }>("get_volume", { path }),
   getKnownFolder: (id: string) => cmd<string>("get_known_folder", { id }),
   getLaunchArgs: () => cmd<string[]>("get_launch_args"),
+  /** 关于浮窗更新检查：Rust 侧双源直取 update.json（绕开 WebView CORS/代理态不稳） */
+  fetchUpdateManifest: () => cmd<UpdateFetchResult>("fetch_update_manifest"),
   watchDir: (path: string) => cmd<void>("watch_dir", { path }),
   unwatchDir: (path: string) => cmd<void>("unwatch_dir", { path }),
   setClipboardFiles: (paths: string[], cut: boolean) =>

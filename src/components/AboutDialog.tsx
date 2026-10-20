@@ -6,12 +6,7 @@ import { Button, Dialog, DialogBody, DialogFooter } from "@blueprintjs/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Download, Info, Link2, RefreshCw } from "lucide-react";
 
-import {
-  RELEASE_URLS,
-  REPO_URLS,
-  checkForUpdate,
-  isUpdateAvailable,
-} from "../lib/update";
+import { RELEASE_URLS, REPO_URLS, checkForUpdate, isUpdateAvailable } from "../lib/update";
 import { useUi } from "../stores/ui";
 import { ic } from "./AppIcon";
 import { BrandLogo } from "./BrandLogo";
@@ -72,8 +67,16 @@ export function AboutDialog() {
           {/* 更新区块：检查中 / 已最新 / 检查失败 / 发现新版本（四态） */}
           {busy && <div className="np-dialog-muted">正在检查更新…</div>}
           {!busy && !manifest && check !== null && (
-            <div className="np-dialog-muted">
-              检查更新失败：网络不可达或源暂时无法访问，可稍后在下方重试。
+            <div className="np-about-fail">
+              <div>检查更新失败（双源均不可达）：</div>
+              <div className="np-about-errors">
+                {(check.errors.length ? check.errors : ["原因未知"]).map((e) => (
+                  <div key={e}>· {e}</div>
+                ))}
+              </div>
+              <div className="np-dialog-muted">
+                可点下方开源地址在浏览器验证网络后重试。
+              </div>
             </div>
           )}
           {!busy && manifest && !hasNew && (
@@ -115,29 +118,31 @@ export function AboutDialog() {
             </div>
           )}
 
-          {/* 固定信息：作者 / 公众号 / 开源地址（可点直达仓库主页） */}
+          {/* 固定信息：作者 / 公众号 / 开源地址（完整 URL，可点直达仓库主页） */}
           <div className="np-props np-about-props">
             <AboutProp k="开发者" v="王文铖" />
             <AboutProp k="微信公众号" v="效率视界" />
-            <AboutProp
-              k="开源地址"
-              v={
-                <span className="np-about-links">
-                  <button
-                    className="np-linkbtn"
-                    onClick={() => void openUrl(REPO_URLS.github)}
-                  >
-                    GitHub
-                  </button>
-                  <button
-                    className="np-linkbtn"
-                    onClick={() => void openUrl(REPO_URLS.gitee)}
-                  >
-                    Gitee
-                  </button>
-                </span>
-              }
-            />
+            <div className="np-prop-row">
+              <span className="np-prop-key">开源地址</span>
+              <span className="np-prop-val np-about-srcs">
+                <button
+                  type="button"
+                  className="np-linkbtn is-url"
+                  title={`在浏览器打开：${REPO_URLS.gitee}`}
+                  onClick={() => void openUrl(REPO_URLS.gitee)}
+                >
+                  {REPO_URLS.gitee}
+                </button>
+                <button
+                  type="button"
+                  className="np-linkbtn is-url"
+                  title={`在浏览器打开：${REPO_URLS.github}`}
+                  onClick={() => void openUrl(REPO_URLS.github)}
+                >
+                  {REPO_URLS.github}
+                </button>
+              </span>
+            </div>
           </div>
         </div>
       </DialogBody>

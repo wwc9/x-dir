@@ -16,4 +16,5 @@ pub mod preview;
 pub mod search;
 pub mod terminal;
 pub mod text_cmds;
+pub mod update;
 pub mod watch;
