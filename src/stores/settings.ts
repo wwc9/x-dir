@@ -35,6 +35,7 @@ function toPlain(s: SettingsStore): Settings {
     showHidden: s.showHidden,
     defaultView: s.defaultView,
     defaultSort: s.defaultSort,
+    stagingMode: s.stagingMode,
     confirmDelete: s.confirmDelete,
     toolbarEntries: s.toolbarEntries,
     restoreLastSession: s.restoreLastSession,

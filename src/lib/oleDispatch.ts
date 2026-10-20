@@ -20,6 +20,17 @@ interface DragDropPayload {
   position: { x: number; y: number }; // 物理像素
 }
 
+/** 暂存区拖拽源标记：armRowDrag 在 OLE 拖拽起止置位/清除（drop 事件先于 startDrag
+ *  resolve，时序可靠）。handleDrop 据此应用暂存区的 移动/复制 语义——Explorer 拖入
+ * 不受此标记影响，恒为 move。 */
+let shelfDragActive = false;
+export function beginShelfDrag() {
+  shelfDragActive = true;
+}
+export function endShelfDrag() {
+  shelfDragActive = false;
+}
+
 function collectRects(): PaneRects[] {
   const out: PaneRects[] = [];
   document.querySelectorAll<HTMLElement>("[data-pane-id]").forEach((el) => {
@@ -95,7 +106,11 @@ async function handleDrop(paths: string[], cssX: number, cssY: number) {
     useUi.getState().toast("不能把文件夹放入它自身内部", "error");
     return;
   }
-  await transfer(paths, destPath, "move");
+  // 暂存区拖出 = 标题切换钮的语义（移动/复制，settings.stagingMode）；
+  // 其余来源（Explorer / 文件列表拖出）恒为 move
+  const mode =
+    shelfDragActive && useSettings.getState().stagingMode === "copy" ? "copy" : "move";
+  await transfer(paths, destPath, mode);
 }
 
 /** App 启动时挂载：拖拽高亮 + 落点分发（物理坐标 → CSS 换算，逐事件取缩放） */

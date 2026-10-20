@@ -27,6 +27,7 @@ import { useIcons } from "../stores/icons";
 import { useLayout } from "../stores/layout";
 import { useSettings } from "../stores/settings";
 import { confirmDialog, useUi } from "../stores/ui";
+import { beginShelfDrag, endShelfDrag } from "../lib/oleDispatch";
 import { AppIcon } from "./AppIcon";
 import { FadeInIcon } from "./FileList";
 
@@ -132,6 +133,7 @@ export function PresetPicker() {
 function Shelf() {
   const items = useSettings((s) => s.staging);
   const realIcons = useSettings((s) => s.realIcons);
+  const stagingMode = useSettings((s) => s.stagingMode);
   const iconMap = useIcons((s) => s.icons);
   const extMap = useIcons((s) => s.exts);
   const point = useDnd((s) => s.point);
@@ -164,12 +166,23 @@ function Shelf() {
     const onMove = (ev: MouseEvent) => {
       if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5) return;
       cleanup();
+      // 标记暂存区拖拽源：落点分发按标题切换钮的 移动/复制 语义执行传输
+      beginShelfDrag();
       api
         .startDrag([path])
         .then((effect) => {
-          if (effect !== "none") useSettings.getState().removeShelf(path);
+          endShelfDrag();
+          // 移出暂存区 iff 源文件确实被移动：mode=move 时任何真实落点都算；
+          // mode=copy 保留条目（复制语义），仅 Explorer 明确回传 move 才移除
+          const moved =
+            effect === "move" ||
+            (effect !== "none" && useSettings.getState().stagingMode === "move");
+          if (moved) useSettings.getState().removeShelf(path);
         })
-        .catch((err) => useUi.getState().toast(String(err), "error"));
+        .catch((err) => {
+          endShelfDrag();
+          useUi.getState().toast(String(err), "error");
+        });
     };
     const onUp = () => cleanup();
     const cleanup = () => {
@@ -188,6 +201,23 @@ function Shelf() {
           {items.length > 0 && <span className="np-shelf-count">{items.length}</span>}
         </span>
         <div className="np-side-actions">
+          {/* 拖出语义切换（2026-10-20）：移动 = 落窗格即移动并移出暂存（默认）；
+              复制 = 复制到目标窗格、条目保留（accent 淡染提示非默认态） */}
+          <button
+            className={`np-shelf-mode${stagingMode === "copy" ? " is-copy" : ""}`}
+            title={
+              stagingMode === "move"
+                ? "拖出到窗格：移动（原件移走）· 点击切换为复制"
+                : "拖出到窗格：复制（保留原件）· 点击切换为移动"
+            }
+            onClick={() =>
+              useSettings
+                .getState()
+                .update({ stagingMode: stagingMode === "move" ? "copy" : "move" })
+            }
+          >
+            {stagingMode === "move" ? "移动" : "复制"}
+          </button>
           <button
             className="np-side-add"
             title="清空暂存区"
