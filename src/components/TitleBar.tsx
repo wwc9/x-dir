@@ -193,19 +193,6 @@ export function TitleBar() {
       </span>
       <span className="np-title">X-Dir</span>
 
-      <Button
-        minimal
-        size="small"
-        icon={ic(FolderTree)}
-        active={treeVisible}
-        title="导航树（所有窗格共用）"
-        onClick={() => {
-          // 整页（全盘搜索/定制）打开时点主界面类按钮：先回主界面再执行
-          useUi.getState().exitPages();
-          useSettings.getState().update({ navTreeVisible: !treeVisible });
-        }}
-      />
-
       <PopoverNext
         isOpen={histOpen}
         onClose={() => setHistOpen(false)}
@@ -363,40 +350,6 @@ export function TitleBar() {
         />
       </PopoverNext>
 
-      {/* 语义分组分隔：浏览定位簇 | 全局模式簇 */}
-      <span className="np-tb-sep" aria-hidden />
-
-      <Button
-        minimal
-        size="small"
-        icon={ic(Search)}
-        active={gsearchOpen}
-        title="全盘搜索（Ctrl+Shift+F）"
-        onClick={() =>
-          gsearchOpen
-            ? useUi.getState().closeGlobalSearch()
-            : useUi.getState().openGlobalSearch()
-        }
-      />
-
-      <Button
-        minimal
-        size="small"
-        icon={ic(WandSparkles)}
-        active={menuPage}
-        aria-label="定制"
-        title="定制"
-        onClick={() =>
-          menuPage
-            ? useUi.getState().closeMenuPage()
-            : useUi.getState().openMenuPage()
-        }
-      />
-
-      {/* 语义分组分隔：全局模式簇 | 应用级簇（2026-10-20 三次定案：应用级簇移至岛左侧，
-          右簇只留 明暗切换 + 窗口控制） */}
-      <span className="np-tb-sep" aria-hidden />
-
       {/* 布局预设（2026-10-12 自边栏移入）：16 宫格选择器，应用后弹层保持打开可连续试排 */}
       <PopoverNext
         isOpen={presetOpen}
@@ -427,6 +380,52 @@ export function TitleBar() {
           }}
         />
       </PopoverNext>
+
+      {/* 语义分组分隔：快捷弹层组 | 模式切换组（2026-10-20 四次定案 · 方案 B 弹层组最前） */}
+      <span className="np-tb-sep" aria-hidden />
+
+      <Button
+        minimal
+        size="small"
+        icon={ic(FolderTree)}
+        active={treeVisible}
+        title="导航树（所有窗格共用）"
+        onClick={() => {
+          // 整页（全盘搜索/定制）打开时点主界面类按钮：先回主界面再执行
+          useUi.getState().exitPages();
+          useSettings.getState().update({ navTreeVisible: !treeVisible });
+        }}
+      />
+
+      <Button
+        minimal
+        size="small"
+        icon={ic(Search)}
+        active={gsearchOpen}
+        title="全盘搜索（Ctrl+Shift+F）"
+        onClick={() =>
+          gsearchOpen
+            ? useUi.getState().closeGlobalSearch()
+            : useUi.getState().openGlobalSearch()
+        }
+      />
+
+      <Button
+        minimal
+        size="small"
+        icon={ic(WandSparkles)}
+        active={menuPage}
+        aria-label="定制"
+        title="定制"
+        onClick={() =>
+          menuPage
+            ? useUi.getState().closeMenuPage()
+            : useUi.getState().openMenuPage()
+        }
+      />
+
+      {/* 语义分组分隔：模式切换组 | 应用级组 */}
+      <span className="np-tb-sep" aria-hidden />
 
       <Button
         minimal
