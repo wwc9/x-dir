@@ -2794,6 +2794,11 @@ body.np-col-resizing * {
   background: var(--np-surface);
   border-radius: var(--np-radius-lg);
   padding: 14px 16px;
+  /* 长文档修复（2026-10-20）：np-pv-body 是 flex 行容器，默认 stretch 会把卡片
+     高度钉死在视口高——更高的 pre 溢出卡片、以灰底画在卡片外。改为高度随内容
+     自适应，短文按 min-height 撑满视口保持原观感（20px = 上下 margin） */
+  align-self: flex-start;
+  min-height: calc(100% - 20px);
 }
 .np-pv-pre {
   margin: 0;
