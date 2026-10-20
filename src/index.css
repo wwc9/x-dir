@@ -526,6 +526,17 @@ button:focus-visible {
   border: 1px solid var(--np-border);
   border-radius: var(--np-radius-pane);
 }
+/* 顶栏语义分组分隔线（2026-10-20 定案）：浏览定位 | 全局模式、应用级 | 窗口控制。
+   用 --np-border（hairline 对 14px 短竖线过淡）；与窗口控制钮之间自然形成
+   ~9px 间隙，兼作低频钮的防误触安全距离 */
+.np-tb-sep {
+  flex: 0 0 auto;
+  align-self: center;
+  width: 1px;
+  height: 14px;
+  margin: 0 5px;
+  background: var(--np-border);
+}
 .np-logo {
   display: flex;
   align-items: center;

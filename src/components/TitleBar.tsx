@@ -359,6 +359,9 @@ export function TitleBar() {
         />
       </PopoverNext>
 
+      {/* 语义分组分隔（2026-10-20 定案）：浏览定位簇 | 全局模式簇 */}
+      <span className="np-tb-sep" aria-hidden />
+
       <Button
         minimal
         size="small"
@@ -384,20 +387,6 @@ export function TitleBar() {
             ? useUi.getState().closeMenuPage()
             : useUi.getState().openMenuPage()
         }
-      />
-
-      <Button
-        minimal
-        size="small"
-        icon={ic(Settings)}
-        active={settingsTab !== null}
-        aria-label="设置"
-        title="设置"
-        onClick={() => {
-          // 整页打开时先回主界面：设置浮窗作用于主界面观感
-          useUi.getState().exitPages();
-          useUi.getState().openSettings("appearance");
-        }}
       />
 
       <div
@@ -449,6 +438,22 @@ export function TitleBar() {
         />
       </PopoverNext>
 
+      {/* 应用级簇（2026-10-20 定案）：低频应用操作靠窗口控制钮一侧——
+          布局预设 / 设置 / 明暗切换 / 关于，与窗口控制之间由 np-tb-sep 隔开防误触 */}
+      <Button
+        minimal
+        size="small"
+        icon={ic(Settings)}
+        active={settingsTab !== null}
+        aria-label="设置"
+        title="设置"
+        onClick={() => {
+          // 整页打开时先回主界面：设置浮窗作用于主界面观感
+          useUi.getState().exitPages();
+          useUi.getState().openSettings("appearance");
+        }}
+      />
+
       {/* 明暗切换：按当前生效主题二态翻转；"跟随系统"档仍在设置面板可选 */}
       <Button
         minimal
@@ -480,6 +485,9 @@ export function TitleBar() {
       >
         <AboutBadgeDot />
       </Button>
+
+      {/* 窗口控制与功能钮之间：分组边界 + 安全间距（防误触窗口钮） */}
+      <span className="np-tb-sep" aria-hidden />
 
       <button
         className="np-winbtn"
