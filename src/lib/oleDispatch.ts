@@ -7,6 +7,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 
 import { THIS_PC } from "./ipc";
 import { allSourcesInside, dropGuard, hitPane, type PaneRects } from "./hitTest";
+import { SHELF_MAX } from "./shelf";
 import { dfsPanes, type LayoutNode } from "./layoutTree";
 import { transfer } from "./operations";
 import { useLayout } from "../stores/layout";
@@ -68,10 +69,15 @@ async function handleDrop(paths: string[], cssX: number, cssY: number) {
     .elementFromPoint(cssX, cssY)
     ?.closest<HTMLElement>("[data-shelf]");
   if (overShelf) {
-    const added = useSettings.getState().addShelf(paths);
+    const st = useSettings.getState();
+    // 暂存条目拖回暂存区（或重复拖入已暂存项）：完全无操作——不入库、不提示、
+    // 不触发拖出结算的移出（2026-10-20：此前会误报"已在暂存区"且按 move 移除条目）
+    const staged = new Set(st.staging.map((p) => p.toLowerCase()));
+    if (paths.every((p) => staged.has(p.toLowerCase()))) return;
+    const added = st.addShelf(paths);
     useUi
       .getState()
-      .toast(added ? `已暂存 ${added} 项` : "这些项已在暂存区（或暂存区已满）");
+      .toast(added ? `已暂存 ${added} 项` : `暂存区已满（上限 ${SHELF_MAX} 项）`);
     return;
   }
   const hit = hitAt(cssX, cssY);
@@ -111,6 +117,11 @@ async function handleDrop(paths: string[], cssX: number, cssY: number) {
   const mode =
     shelfDragActive && useSettings.getState().stagingMode === "copy" ? "copy" : "move";
   await transfer(paths, destPath, mode);
+  // 暂存区拖出 + move 语义 = 原件移走，同步移出暂存条目（copy 语义保留条目）。
+  // 移出决策收拢在此（应用内落点有完整上下文）；armRowDrag 只结算 Explorer 落点
+  if (shelfDragActive && mode === "move") {
+    for (const p of paths) useSettings.getState().removeShelf(p);
+  }
 }
 
 /** App 启动时挂载：拖拽高亮 + 落点分发（物理坐标 → CSS 换算，逐事件取缩放） */

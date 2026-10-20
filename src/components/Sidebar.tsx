@@ -166,18 +166,16 @@ function Shelf() {
     const onMove = (ev: MouseEvent) => {
       if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5) return;
       cleanup();
-      // 标记暂存区拖拽源：落点分发按标题切换钮的 移动/复制 语义执行传输
+      // 标记暂存区拖拽源：落点分发按标题切换钮的 移动/复制 语义执行传输；
+      // 应用内落点（窗格/暂存区）的移出由 handleDrop 统一决策（有完整落点
+      // 上下文，暂存条目拖回暂存区 = 无操作），这里只结算拖出到 Explorer
+      // 的 OLE 效果（明确回传 move 才移出暂存，copy 保留条目）
       beginShelfDrag();
       api
         .startDrag([path])
         .then((effect) => {
           endShelfDrag();
-          // 移出暂存区 iff 源文件确实被移动：mode=move 时任何真实落点都算；
-          // mode=copy 保留条目（复制语义），仅 Explorer 明确回传 move 才移除
-          const moved =
-            effect === "move" ||
-            (effect !== "none" && useSettings.getState().stagingMode === "move");
-          if (moved) useSettings.getState().removeShelf(path);
+          if (effect === "move") useSettings.getState().removeShelf(path);
         })
         .catch((err) => {
           endShelfDrag();
