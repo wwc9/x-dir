@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>暂存区拖出语义切换钮 · 三套样式方案 · X-Dir</title>
+<style>
+  :root {
+    --np-bg: #e9ecf1;
+    --np-surface: #ffffff;
+    --np-surface-2: #f0f2f5;
+    --np-border: #d6dbe2;
+    --np-fg: #171d26;
+    --np-muted: #66707e;
+    --np-accent: #3574f0;
+    --np-hover: rgba(26, 33, 41, 0.055);
+    --np-danger: #d1434b;
+    --np-icon-folder: #d6a01a;
+    --np-icon-doc: #2997b8;
+  }
+  body.dark {
+    --np-bg: #101216;
+    --np-surface: #1b1e23;
+    --np-surface-2: #24282f;
+    --np-border: #343a45;
+    --np-fg: #e8eaed;
+    --np-muted: #8b929c;
+    --np-accent: #5c9dff;
+    --np-hover: rgba(255, 255, 255, 0.06);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 32px 40px;
+    background: var(--np-bg);
+    color: var(--np-fg);
+    font: 13px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    transition: background 0.2s, color 0.2s;
+  }
+  .pagehead { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .pagehead h1 { font-size: 16px; margin: 0; }
+  .pagehead .tip { color: var(--np-muted); font-size: 11px; }
+  .theme-toggle {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--np-muted);
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .cols { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+  .col { width: 388px; }
+  .col h2 { font-size: 13px; margin: 0 0 2px; }
+  .col .why { color: var(--np-muted); font-size: 11px; margin-bottom: 8px; min-height: 30px; }
+  .pair { display: flex; gap: 14px; }
+  .cardwrap .cap { font-size: 10px; color: var(--np-muted); margin-bottom: 4px; }
+
+  /* ── 暂存区卡（np-shelf 静态镜像，170px 宽）── */
+  .shelf {
+    width: 170px;
+    height: 150px;
+    display: flex;
+    flex-direction: column;
+    padding: 2px 6px 6px;
+    background: var(--np-surface);
+    border: 1px solid var(--np-border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .side-h {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 4px 2px 6px;
+    font-size: 11px;
+    color: var(--np-muted);
+    flex: none;
+  }
+  .side-h .title { flex: none; }
+  .count {
+    min-width: 16px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--np-surface-2);
+    font-size: 11px;
+    line-height: 16px;
+    text-align: center;
+  }
+  .actions { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+  .trash {
+    width: 18px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--np-muted);
+    cursor: pointer;
+  }
+  .trash:hover { color: var(--np-danger); background: var(--np-hover); }
+  svg { display: block; }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 6px;
+    color: var(--np-fg);
+  }
+  .row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+
+  /* ══ 方案 A：双段迷你分段开关 ══ */
+  .modeseg {
+    display: flex;
+    height: 16px;
+    border-radius: 999px;
+    background: var(--np-surface-2);
+    padding: 1px;
+    gap: 1px;
+  }
+  .modeseg button {
+    border: 0;
+    border-radius: 999px;
+    background: none;
+    padding: 0 5px;
+    font-size: 10px;
+    line-height: 14px;
+    color: var(--np-muted);
+    cursor: pointer;
+  }
+  .modeseg button.on {
+    background: var(--np-accent);
+    color: #fff;
+  }
+  body.dark .modeseg button.on { color: #101216; }
+
+  /* ══ 方案 B：图标两态钮 ══ */
+  .modeico {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--np-muted);
+    cursor: pointer;
+  }
+  .modeico:hover { background: var(--np-hover); color: var(--np-fg); }
+  .modeico.is-copy { color: var(--np-accent); background: color-mix(in srgb, var(--np-accent) 12%, transparent); }
+
+  /* ══ 方案 C：图标 + 文字 chip ══ */
+  .modechip {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    height: 16px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--np-surface-2);
+    font-size: 10px;
+    line-height: 16px;
+    color: var(--np-fg);
+    cursor: pointer;
+  }
+  .modechip:hover { background: var(--np-hover); }
+  .modechip.is-copy {
+    background: color-mix(in srgb, var(--np-accent) 14%, transparent);
+    color: var(--np-accent);
+  }
+  .modechip svg { flex: none; }
+
+  /* 头部放大细节条（纵向堆叠，1.8× 不裁切） */
+  .zoom {
+    margin-top: 10px;
+    border: 1px dashed var(--np-border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow: hidden;
+  }
+  .zoom .zwrap { transform: scale(1.8); transform-origin: left top; }
+  .zoom .zspacer { width: 320px; height: 30px; }
+  .zoomcap { font-size: 10px; color: var(--np-muted); margin-bottom: 2px; }
+  .zoomrow { display: flex; gap: 30px; }
+  .note { margin-top: 10px; font-size: 11px; color: var(--np-muted); }
+  .note b { color: var(--np-fg); font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="pagehead">
+    <h1>暂存区拖出语义切换钮 · 三套样式</h1>
+    <span class="tip">每套 = 移动态 / 复制态 两张卡 + 头部 1.8× 放大细节 · 语义行为不变（移动=原件移走并移出暂存；复制=保留原件与条目）</span>
+    <label class="theme-toggle">
+      <input type="checkbox" onchange="document.body.classList.toggle('dark', this.checked)" />
+      深色预览
+    </label>
+  </div>
+
+  <script>
+    const I = {
+      move: '<polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="22"/>',
+      copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+      arrow: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+      trash: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+      folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+      doc: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
+    };
+    const icon = (p, s = 14, extra = "") =>
+      `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${p}</svg>`;
+
+    // 各方案的头部切换钮（mode = "move" | "copy"）
+    const widget = {
+      A: (mode) =>
+        `<span class="modeseg">
+           <button class="${mode === "move" ? "on" : ""}" title="拖出到窗格：移动（原件移走）">移动</button>
+           <button class="${mode === "copy" ? "on" : ""}" title="拖出到窗格：复制（保留原件）">复制</button>
+         </span>`,
+      B: (mode) =>
+        `<button class="modeico ${mode === "copy" ? "is-copy" : ""}" title="${
+          mode === "move"
+            ? "拖出到窗格：移动（原件移走）· 点击切换为复制"
+            : "拖出到窗格：复制（保留原件）· 点击切换为移动"
+        }">${icon(mode === "move" ? I.move : I.copy, 14)}</button>`,
+      C: (mode) =>
+        `<button class="modechip ${mode === "copy" ? "is-copy" : ""}" title="${
+          mode === "move"
+            ? "拖出到窗格：移动（原件移走）· 点击切换为复制"
+            : "拖出到窗格：复制（保留原件）· 点击切换为移动"
+        }">${icon(mode === "move" ? I.arrow : I.copy, 11)}${mode === "move" ? "移动" : "复制"}</button>`,
+    };
+
+    const rows = `
+      <div class="row">${icon(I.folder, 16, 'stroke="var(--np-icon-folder)"')}<span class="name">modules</span></div>
+      <div class="row">${icon(I.doc, 16, 'stroke="var(--np-icon-doc)"')}<span class="name">说明.txt</span></div>`;
+
+    function shelfCard(widgetHtml) {
+      return `<div class="shelf">
+        <div class="side-h">
+          <span class="title">暂存区</span>
+          <span class="count">2</span>
+          <span class="actions">${widgetHtml}${icon(I.trash, 14, 'style="margin-left:2px" class="trash"').replace("<svg", '<svg class="trash"')}</span>
+        </div>
+        ${rows}
+      </div>`;
+    }
+
+    // 头部放大（1.8×）：只渲染 side-h
+    function zoomHeader(widgetHtml, label) {
+      return `<div><div class="zoomcap">${label}</div><div class="zwrap" style="width:170px">
+        <div class="side-h" style="background:var(--np-surface)">
+          <span class="title">暂存区</span>
+          <span class="count">2</span>
+          <span class="actions">${widgetHtml}</span>
+        </div>
+      </div><div class="zspacer"></div></div>`;
+    }
+
+    const schemes = [
+      {
+        key: "A",
+        title: "方案 A · 双段迷你分段开关",
+        why: "两态同时可见，切换心智最直白（点另一半即切换）；与设置页 np-seg 同语言。最宽（约 56px），156px 侧栏需 10px 字号微调。",
+        note: "改动：<b>np-side-actions 内嵌两段式开关</b>，激活段 accent 实底白字；点击另一段切换。",
+      },
+      {
+        key: "B",
+        title: "方案 B · 图标两态钮",
+        why: "最省空间（20px 单钮）：移动态 = 四向移动箭头（中性灰），复制态 = 复制图标（accent 淡染底提示非默认）。靠图标隐喻 + tooltip，直观性依赖图标认知。",
+        note: "改动：<b>单图标钮随态切换图标与着色</b>，tooltip 补充完整语义。",
+      },
+      {
+        key: "C",
+        title: "方案 C · 图标 + 文字 chip",
+        why: "折中：图标给语义线索、文字消除歧义，宽度约 40px。移动态中性 chip（→ 移动），复制态 accent 淡染（⧉ 复制）。",
+        note: "改动：<b>chip 内图标随态切换</b>（箭头/复制），文字恒显示当前语义；复制态 accent 淡染。",
+      },
+    ];
+
+    document.write(
+      schemes
+        .map((s) => {
+          return `<div class="col">
+            <h2>${s.title}</h2>
+            <div class="why">${s.why}</div>
+            <div class="pair">
+              <div class="cardwrap"><div class="cap">移动态（默认）</div>${shelfCard(widget[s.key]("move"))}</div>
+              <div class="cardwrap"><div class="cap">复制态</div>${shelfCard(widget[s.key]("copy"))}</div>
+            </div>
+            <div class="zoom">
+              ${zoomHeader(widget[s.key]("move"), "移动态")}
+              ${zoomHeader(widget[s.key]("copy"), "复制态")}
+            </div>
+            <div class="note">${s.note}</div>
+          </div>`;
+        })
+        .join(""),
+    );
+  </script>
+</body>
+</html>
