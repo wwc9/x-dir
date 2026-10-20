@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>暂存区空态方案预览 · X-Dir</title>
+<style>
+  /* ── np 设计 token（与 src/index.css 浅/深两段同值，静态镜像） ── */
+  :root {
+    --np-bg: #e9ecf1;
+    --np-surface: #ffffff;
+    --np-surface-2: #f0f2f5;
+    --np-border: #d6dbe2;
+    --np-fg: #171d26;
+    --np-muted: #66707e;
+    --np-accent: #3574f0;
+    --np-hover: rgba(26, 33, 41, 0.055);
+    --np-accent-border: color-mix(in srgb, var(--np-accent) 45%, var(--np-border));
+    --np-icon-folder: #d6a01a;
+    --np-icon-doc: #2997b8;
+    --np-danger: #d1434b;
+  }
+  body.dark {
+    --np-bg: #101216;
+    --np-surface: #1b1e23;
+    --np-surface-2: #24282f;
+    --np-border: #343a45;
+    --np-fg: #e8eaed;
+    --np-muted: #8b929c;
+    --np-accent: #5c9dff;
+    --np-hover: rgba(255, 255, 255, 0.06);
+    --np-accent-border: color-mix(in srgb, var(--np-accent) 45%, var(--np-border));
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 32px 40px;
+    background: var(--np-bg);
+    color: var(--np-fg);
+    font: 13px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    transition: background 0.2s, color 0.2s;
+  }
+  .pagehead {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+  .pagehead h1 { font-size: 16px; margin: 0; }
+  .pagehead .tip { color: var(--np-muted); font-size: 11px; }
+  .theme-toggle {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--np-muted);
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .cols { display: flex; gap: 40px; align-items: flex-start; flex-wrap: wrap; }
+  .col { width: 236px; }
+  .col h2 { font-size: 13px; margin: 0 0 2px; }
+  .col .positioning { color: var(--np-muted); font-size: 11px; margin-bottom: 10px; }
+
+  /* ── 暂存区卡片（np-shelf 静态镜像：14px 圆角白卡 + 共用标题行） ── */
+  .shelf {
+    height: 330px;
+    display: flex;
+    flex-direction: column;
+    padding: 2px 6px 6px;
+    background: var(--np-surface);
+    border: 1px solid var(--np-border);
+    border-radius: 14px;
+    overflow: hidden;
+    transition: background 0.15s, outline-color 0.15s;
+  }
+  /* 悬停 = OLE 拖拽悬停态（.on）预览：淡染底 + accent 虚线框 */
+  .shelf:hover {
+    background: var(--np-hover);
+    outline: 1px dashed var(--np-accent-border);
+    outline-offset: -1px;
+  }
+  .side-h {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2px;
+    padding: 2px 4px 2px 6px;
+    font-size: 11px;
+    color: var(--np-muted);
+    flex: none;
+  }
+  .side-h .title { display: flex; align-items: center; gap: 4px; }
+  .count {
+    min-width: 16px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--np-surface-2);
+    font-size: 11px;
+    line-height: 16px;
+    text-align: center;
+  }
+  .trash {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--np-muted);
+    cursor: pointer;
+  }
+  .trash:hover { color: var(--np-danger); background: var(--np-hover); }
+  svg { display: block; }
+
+  /* 内容态行（与现网 np-shelf-row 同款） */
+  .rows { flex: 1; min-height: 0; overflow: hidden; }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 6px;
+    cursor: grab;
+  }
+  .row:hover { background: var(--np-hover); }
+  .row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .x { opacity: 0; color: var(--np-muted); }
+  .row:hover .x { opacity: 0.7; }
+
+  /* ══ 方案 A：虚线投放靶 ══ */
+  .dz {
+    flex: 1;
+    margin: 2px 2px 2px;
+    border: 1.5px dashed var(--np-border);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    text-align: center;
+    padding: 12px;
+    color: var(--np-muted);
+  }
+  .dz .main { color: var(--np-fg); }
+  .dz .sub { font-size: 11px; }
+  .shelf:hover .dz { border-color: var(--np-accent-border); color: var(--np-muted); }
+
+  /* ══ 方案 B：居中静默（圆底示意） ══ */
+  .empty-b {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    text-align: center;
+    padding: 10px;
+  }
+  .empty-b .badge {
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    background: var(--np-surface-2);
+    color: var(--np-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .empty-b .main { color: var(--np-fg); }
+  .empty-b .sub { font-size: 11px; color: var(--np-muted); }
+
+  /* ══ 方案 C：紧凑行注 ══ */
+  .empty-c {
+    padding: 6px 4px 4px;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--np-muted);
+  }
+  .empty-c .spacer { flex: 1; }
+
+  .note {
+    margin-top: 10px;
+    font-size: 11px;
+    color: var(--np-muted);
+  }
+  .note b { color: var(--np-fg); font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="pagehead">
+    <h1>暂存区 · 三套空态方案</h1>
+    <span class="tip">标题行已去图标 · 悬停任意卡片 = 拖拽悬停态（淡染 + accent 虚线）预览</span>
+    <label class="theme-toggle">
+      <input type="checkbox" onchange="document.body.classList.toggle('dark', this.checked)" />
+      深色预览
+    </label>
+  </div>
+
+  <div class="cols">
+    <!-- ═══ 方案 A ═══ -->
+    <div class="col">
+      <h2>方案 A · 虚线投放靶</h2>
+      <div class="positioning">投放心智最强：整幅虚线区即"可投放"的物理隐喻，拖拽悬停时虚线变 accent。</div>
+      <div class="shelf">
+        <div class="side-h">
+          <span class="title">暂存区</span>
+          <button class="trash" title="清空暂存区"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+        </div>
+        <div class="dz">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+          <div class="main">拖入即暂存</div>
+          <div class="sub">跨会话保留 · 上限 200 项</div>
+        </div>
+      </div>
+      <div class="shelf" style="margin-top: 12px">
+        <div class="side-h">
+          <span class="title">暂存区 <span class="count">2</span></span>
+          <button class="trash"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+        </div>
+        <div class="rows">
+          <div class="row"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--np-icon-folder)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span class="name">报表工作</span><span class="x"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div>
+          <div class="row"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--np-icon-doc)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="name">说明.txt</span><span class="x"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div>
+        </div>
+      </div>
+      <div class="note">改动：空态改为 <b>.np-shelf-dropzone</b>（虚线框 + 图标 + 两行文案），文案精炼为「拖入即暂存」。</div>
+    </div>
+
+    <!-- ═══ 方案 B ═══ -->
+    <div class="col">
+      <h2>方案 B · 居中静默</h2>
+      <div class="positioning">回收站式空态：无内嵌框、整卡居中，圆底托盘示意弱化到近装饰。</div>
+      <div class="shelf">
+        <div class="side-h">
+          <span class="title">暂存区</span>
+          <button class="trash" title="清空暂存区"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+        </div>
+        <div class="empty-b">
+          <div class="badge"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></div>
+          <div class="main">暂存区还是空的</div>
+          <div class="sub">拖入文件/文件夹即可暂存，跨会话保留</div>
+        </div>
+      </div>
+      <div class="shelf" style="margin-top: 12px">
+        <div class="side-h">
+          <span class="title">暂存区 <span class="count">2</span></span>
+          <button class="trash"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+        </div>
+        <div class="rows">
+          <div class="row"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--np-icon-folder)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span class="name">报表工作</span><span class="x"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div>
+          <div class="row"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--np-icon-doc)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="name">说明.txt</span><span class="x"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div>
+        </div>
+      </div>
+      <div class="note">改动：空态垂直居中 + 36px 圆底托盘示意（图标只在空态中央出现，标题行保持无图标），文案两行。</div>
+    </div>
+
+    <!-- ═══ 方案 C ═══ -->
+    <div class="col">
+      <h2>方案 C · 紧凑行注</h2>
+      <div class="positioning">最轻：单行 muted 小字紧贴标题，其余全部留白——几乎不占空间。</div>
+      <div class="shelf">
+        <div class="side-h">
+          <span class="title">暂存区</span>
+          <button class="trash" title="清空暂存区"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+        </div>
+        <div class="empty-c">拖入文件/文件夹即可暂存，跨会话保留</div>
+        <div class="spacer" style="flex: 1"></div>
+      </div>
+      <div class="shelf" style="margin-top: 12px">
+        <div class="side-h">
+          <span class="title">暂存区 <span class="count">2</span></span>
+          <button class="trash"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+        </div>
+        <div class="rows">
+          <div class="row"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--np-icon-folder)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span class="name">报表工作</span><span class="x"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div>
+          <div class="row"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--np-icon-doc)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="name">说明.txt</span><span class="x"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div>
+        </div>
+      </div>
+      <div class="note">改动：仅空态文案与样式（单行 11px muted），标题行不变；空区其余留白。</div>
+    </div>
+  </div>
+</body>
+</html>

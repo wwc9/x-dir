@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Inbox,
   PanelLeftClose,
   PanelLeftOpen,
   Save,
@@ -172,7 +171,6 @@ function Shelf() {
     <div ref={ref} className={`np-shelf${over ? " on" : ""}`} data-shelf>
       <div className="np-side-h">
         <span className="np-shelf-title">
-          <AppIcon icon={Inbox} size={DENSITY.iconSm} />
           暂存区
           {items.length > 0 && <span className="np-shelf-count">{items.length}</span>}
         </span>
