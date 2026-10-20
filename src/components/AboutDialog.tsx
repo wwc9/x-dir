@@ -11,7 +11,8 @@ import { useUi } from "../stores/ui";
 import { ic } from "./AppIcon";
 import { BrandLogo } from "./BrandLogo";
 
-const APP_INTRO = "Windows 优先的轻量级多窗格文件管理器";
+const APP_INTRO =
+  "轻量级多窗格文件管理器：单窗口自由分割出任意数量的窗格，支持 Everything 式全盘秒搜（拼音检索）、空格快速预览、批量重命名、PDF 与图片批处理等内置工具箱；绿色便携，免费开源。";
 
 export function AboutDialog() {
   const open = useUi((s) => s.aboutOpen);
