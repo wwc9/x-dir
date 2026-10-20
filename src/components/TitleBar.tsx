@@ -168,8 +168,12 @@ export function TitleBar() {
     <header
       className="np-titlebar"
       data-tauri-drag-region
-        onMouseDown={(e) => {
-          // 顶栏带拖拽区（data-tauri-drag-region）：空白处按下会进入原生窗口拖动，
+      onMouseDown={(e) => {
+        // 地址栏编辑态退出（Explorer 口径）：拖拽区按下会进入原生拖拽循环，
+        // Pane 的 window 级外点失焦监听在部分路径下不可依赖——顶栏统一显式失焦兜底
+        const ae = document.activeElement;
+        if (ae instanceof HTMLInputElement && ae.closest(".np-addrwrap")) ae.blur();
+        // 顶栏带拖拽区（data-tauri-drag-region）：空白处按下会进入原生窗口拖动，
           // click 事件被拖动循环吞掉，Blueprint 的"点外关闭"收不到 → 弹层关不上。
           // 因此按下时主动关闭弹层；按在触发钮（.np-pop-trigger）上则交给按钮自身 toggle。
           // 弹层内容经 React portal 挂在 body，合成事件却沿 React 树冒泡回 header——
