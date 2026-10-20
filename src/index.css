@@ -1484,7 +1484,7 @@ body.np-col-resizing .np-menued-grip::after {
   display: flex;
   align-items: center;
   gap: 1px;
-  padding: 0 8px;
+  padding: 0 6px;
   overflow: hidden;
   /* Explorer 口径：自左向右排（此电脑 › 盘符 › 目录 › 尾箭头）；
      放不下由折叠态（"…" + 末 3 段）兜底，末段再放不下就地省略号（不裁右缘） */
@@ -1499,14 +1499,14 @@ body.np-col-resizing .np-menued-grip::after {
 .np-crumb {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
   max-width: 160px;
   flex: 0 0 auto;
   border: none;
   outline: none;
   background: none;
-  padding: 1px 4px;
+  padding: 1px 2px;
   border-radius: var(--np-radius);
   color: var(--np-fg);
   cursor: pointer;
@@ -1523,7 +1523,7 @@ body.np-col-resizing .np-menued-grip::after {
 /* "…" 折叠按钮（点击弹出被隐藏的上级目录）与层间箭头按钮（np-crumb-tail，
    分隔与子文件夹下拉二合一，替代纯分隔符） */
 .np-crumb-more {
-  padding: 1px 6px;
+  padding: 1px 4px;
   color: var(--np-muted);
 }
 .np-crumb-more:hover {
@@ -1537,7 +1537,7 @@ body.np-col-resizing .np-menued-grip::after {
   border: none;
   outline: none;
   background: none;
-  padding: 1px 3px;
+  padding: 1px 1px;
   border-radius: var(--np-radius);
   color: color-mix(in srgb, var(--np-muted) 70%, transparent);
   cursor: pointer;
