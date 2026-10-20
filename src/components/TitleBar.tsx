@@ -15,6 +15,7 @@ import {
   FolderTree,
   HardDrive,
   History,
+  Info,
   LayoutTemplate,
   Minus,
   Moon,
@@ -29,9 +30,12 @@ import {
   X,
 } from "lucide-react";
 import { AppIcon, ic } from "./AppIcon";
+import { AboutBadgeDot } from "./AboutDialog";
+import { BrandLogo } from "./BrandLogo";
 import { IslandPill } from "./IslandPill";
 import { PresetPicker } from "./Sidebar";
 import { DENSITY } from "../lib/tokens";
+import { isUpdateAvailable } from "../lib/update";
 import { useLayout } from "../stores/layout";
 import { usePanes } from "../stores/panes";
 import { setThemeWithFx, useSettings } from "../stores/settings";
@@ -69,6 +73,9 @@ export function TitleBar() {
   const theme = useSettings((s) => s.theme);
   const favorites = useSettings((s) => s.favorites);
   const uiZoom = useSettings((s) => s.uiZoom);
+  // 更新检查结果（启动静默检查 / 关于浮窗写入）：有新版本时关于钮亮角标
+  const updateCheck = useUi((s) => s.updateCheck);
+  const hasNewVersion = isUpdateAvailable(updateCheck);
   const [histOpen, setHistOpen] = useState(false);
   const [favOpen, setFavOpen] = useState(false);
   // 跟随系统档的实时长亮态：只驱动切换按钮的图标/文案，文档类名由 applyTheme 统一管
@@ -176,36 +183,9 @@ export function TitleBar() {
           }
         }}
     >
-      {/* 品牌标：九宫格对角渐变（与应用/任务栏图标同源，资产由 tools/gen-logo-icon.mjs 生成） */}
+      {/* 品牌标：九宫格对角渐变（与应用/任务栏图标同源，BrandLogo 与「关于」浮窗共用） */}
       <span className="np-logo">
-        <svg width="22" height="22" viewBox="0 0 96 96" aria-hidden="true">
-          <defs>
-            <linearGradient
-              id="xd-logo-grad"
-              x1="4"
-              y1="4"
-              x2="94"
-              y2="94"
-              gradientUnits="userSpaceOnUse"
-            >
-              <stop offset="0" stopColor="#3574f0" />
-              <stop offset="0.5" stopColor="#5c9dff" />
-              <stop offset="1" stopColor="#bae2fd" />
-            </linearGradient>
-          </defs>
-          {[4, 36, 68].flatMap((x) =>
-            [4, 36, 68].map((y) => (
-              <rect
-                key={`${x}.${y}`}
-                x={x}
-                y={y}
-                width={26}
-                height={26}
-                fill="url(#xd-logo-grad)"
-              />
-            )),
-          )}
-        </svg>
+        <BrandLogo />
       </span>
       <span className="np-title">X-Dir</span>
 
@@ -483,6 +463,23 @@ export function TitleBar() {
           });
         }}
       />
+
+      {/* 关于 X-Dir：简介/开源地址/作者 + 更新检查；发现新版本时角标常亮提示 */}
+      <Button
+        minimal
+        size="small"
+        className="np-about-btn"
+        icon={ic(Info)}
+        aria-label="关于"
+        title={
+          hasNewVersion
+            ? `关于 X-Dir（发现新版本 v${updateCheck?.manifest?.version}）`
+            : "关于 X-Dir"
+        }
+        onClick={() => useUi.getState().openAbout()}
+      >
+        <AboutBadgeDot />
+      </Button>
 
       <button
         className="np-winbtn"

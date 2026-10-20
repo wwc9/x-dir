@@ -2156,6 +2156,90 @@ body.np-col-resizing * {
   min-width: 0;
 }
 
+/* ── 关于浮窗（components/AboutDialog.tsx）：简介 + 更新检查 + 作者信息 ──
+   开源信息固定三行复用 np-prop-* 布局；更新卡片走 surface-2 凹陷层级（§4.7） */
+.np-about {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.np-about-head {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gutter);
+}
+.np-about-id {
+  display: flex;
+  align-items: baseline;
+  gap: var(--np-gutter);
+  min-width: 0;
+}
+.np-about-name {
+  font-weight: 600;
+}
+.np-about-ver {
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+}
+.np-about-update {
+  display: flex;
+  flex-direction: column;
+  gap: var(--np-gutter);
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius-lg);
+  padding: var(--np-gutter);
+}
+.np-about-update-title {
+  color: var(--np-accent);
+}
+.np-about-notes {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+}
+.np-about-actions {
+  display: flex;
+  gap: var(--np-gutter);
+}
+.np-about-props {
+  padding-top: var(--np-gutter);
+  border-top: 1px solid var(--np-hairline);
+}
+.np-about-links {
+  display: inline-flex;
+  gap: var(--np-gutter);
+}
+.np-linkbtn {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--np-font-sm);
+  color: var(--np-accent);
+  cursor: pointer;
+}
+.np-linkbtn:hover {
+  text-decoration: underline;
+}
+/* 顶栏关于钮的新版角标：accent 圆点常亮（发现新版本期间） */
+.np-about-btn {
+  position: relative;
+}
+.np-about-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-accent);
+  pointer-events: none;
+}
+
 /* ═══ 全盘搜索整页（Everything 式，components/GlobalSearch.tsx）═══
    2026-10-16 定案弃浮窗：np-gsearchpage 占满顶栏以下内容区（替换侧栏+窗格区）。
    2026-10-16 四次定案：边框语言与主界面窗格一致（surface 卡 + 1px border +

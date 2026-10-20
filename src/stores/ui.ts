@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 import type { FileEntry } from "../lib/ipc";
 import type { SettingsTabId } from "../components/SettingsPanel";
+import type { UpdateCheck } from "../lib/update";
 import { useLayout } from "./layout";
 import { useIsland } from "./island";
 
@@ -115,6 +116,10 @@ interface UiStore {
   settingsTab: SettingsTabId | null;
   /** 右键菜单独立页（占满顶栏以下内容区，顶栏指针钮唤起，Esc 返回） */
   menuPage: boolean;
+  /** 关于浮窗（Dialog）：工具简介/开源地址/作者 + 更新检查（顶栏信息钮与启动检查共用） */
+  aboutOpen: boolean;
+  /** 更新检查结果：null = 尚未检查过；manifest 为 null = 双源都拉取失败 */
+  updateCheck: UpdateCheck | null;
   /** 窗格交换选择模式：非空 = 该窗格已按下"交换"，等待点选目标窗格 */
   swapFrom: string | null;
   /** type-ahead 输入回显（lib/keyboard 维护；null = 无输入中缓冲） */
@@ -132,6 +137,9 @@ interface UiStore {
   closeSettings(): void;
   openMenuPage(): void;
   closeMenuPage(): void;
+  openAbout(): void;
+  closeAbout(): void;
+  setUpdateCheck(c: UpdateCheck): void;
   beginSwap(paneId: string): void;
   cancelSwap(): void;
   /** 提示播报（2026-10-15 并入灵动岛回执，独立 toast 窗口已移除）：
@@ -146,6 +154,8 @@ export const useUi = create<UiStore>()((set, get) => ({
   globalSearch: false,
   settingsTab: null,
   menuPage: false,
+  aboutOpen: false,
+  updateCheck: null,
   swapFrom: null,
   typeAhead: null,
 
@@ -208,6 +218,18 @@ export const useUi = create<UiStore>()((set, get) => ({
 
   closeMenuPage() {
     set({ menuPage: false });
+  },
+
+  openAbout() {
+    set({ aboutOpen: true });
+  },
+
+  closeAbout() {
+    set({ aboutOpen: false });
+  },
+
+  setUpdateCheck(c) {
+    set({ updateCheck: c });
   },
 
   beginSwap(paneId) {

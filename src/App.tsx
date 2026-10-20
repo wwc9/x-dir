@@ -5,6 +5,11 @@ import { initOleDnd } from "./lib/oleDispatch";
 import { installMouseNav } from "./lib/mouseNav";
 import { setupAutoScrollbar } from "./lib/autoScrollbar";
 import { zoomStep } from "./lib/zoom";
+import {
+  UPDATE_PROMPT_DELAY_MS,
+  checkForUpdate,
+  isUpdateAvailable,
+} from "./lib/update";
 import { api, THIS_PC, type Settings } from "./lib/ipc";
 import {
   applyPreset,
@@ -22,6 +27,7 @@ import { useLayout } from "./stores/layout";
 import { useUi } from "./stores/ui";
 import { useIsland } from "./stores/island";
 import { applyTheme, useSettings } from "./stores/settings";
+import { AboutDialog } from "./components/AboutDialog";
 import { ContextMenu } from "./components/ContextMenu";
 import { DialogHost } from "./components/DialogHost";
 import { GlobalSearchPage } from "./components/GlobalSearch";
@@ -116,6 +122,29 @@ export default function App() {
         // V2：从 Explorer 复制后切回本窗口时同步系统剪贴板（CF_HDROP）
         window.addEventListener("focus", onFocusSyncClipboard);
         void useClipboard.getState().syncFromSystem();
+
+        // 启动静默检查更新（双源拉取失败即静默，不打扰）：结果驱动顶栏关于钮角标；
+        // 发现新版本且此刻无弹窗/整页占用时，短暂延迟后自动弹「关于」浮窗
+        // 供用户选择 Gitee/GitHub 下载（Gitee 国内网络更快，浮窗内已注明）
+        void checkForUpdate().then((c) => {
+          if (disposed) return;
+          useUi.getState().setUpdateCheck(c);
+          if (isUpdateAvailable(c)) {
+            window.setTimeout(() => {
+              const ui = useUi.getState();
+              if (
+                ui.dialog ||
+                ui.settingsTab ||
+                ui.menuPage ||
+                ui.globalSearch ||
+                ui.aboutOpen
+              ) {
+                return; // 有界面占用：只留角标，用户点关于钮仍可见新版提示
+              }
+              ui.openAbout();
+            }, UPDATE_PROMPT_DELAY_MS);
+          }
+        });
       } catch (e) {
         // 启动链路任何一步失败都兜底出默认布局，避免内容区白屏；错误上 toast 便于定位
         console.error(e);
@@ -184,6 +213,8 @@ export default function App() {
       <DialogHost />
       {/* 设置浮窗（Dialog）：常驻挂载，开合与直达分类由 useUi.settingsTab 驱动 */}
       <SettingsPanel />
+      {/* 关于浮窗（Dialog）：常驻挂载，开合由 useUi.aboutOpen 驱动（顶栏信息钮/启动新版提示） */}
+      <AboutDialog />
       <QuickPreviewHost />
       <ContextMenu />
       {benchMode && <BenchFps />}
