@@ -1056,9 +1056,34 @@ body.np-col-resizing .np-menued-grip::after {
   text-align: center;
   color: var(--np-muted);
 }
+/* 空态（2026-10-20 定案 · 方案 B 居中静默）：36px 圆底托盘示意 + 主/辅两行居中；
+   图标仅出现在空态中央（标题行无图标），托盘示意用 iconLg 空态大示意档 */
 .np-shelf-empty {
-  padding: 8px 8px 4px;
-  line-height: 1.6;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  text-align: center;
+  padding: 10px;
+}
+.np-shelf-empty-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-surface-2);
+  color: var(--np-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.np-shelf-empty-main {
+  color: var(--np-fg);
+}
+.np-shelf-empty-sub {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
 }
 .np-shelf-list {
   flex: 1;

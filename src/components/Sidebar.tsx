@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Inbox,
   PanelLeftClose,
   PanelLeftOpen,
   Save,
@@ -187,9 +188,11 @@ function Shelf() {
       </div>
       {items.length === 0 ? (
         <div className="np-shelf-empty">
-          把文件/文件夹拖到这里暂存，
-          <br />
-          用时再拖到目标文件夹。
+          <div className="np-shelf-empty-badge">
+            <AppIcon icon={Inbox} size={DENSITY.iconLg} />
+          </div>
+          <div className="np-shelf-empty-main">暂存区还是空的</div>
+          <div className="np-shelf-empty-sub">拖入文件/文件夹即可暂存，跨会话保留</div>
         </div>
       ) : (
         <div className="np-shelf-list">
