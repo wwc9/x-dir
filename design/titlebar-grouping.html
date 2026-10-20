@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>顶栏左簇 8 钮分组方案预览 · X-Dir</title>
+<style>
+  :root {
+    --np-bg: #e9ecf1;
+    --np-surface: #ffffff;
+    --np-surface-2: #f0f2f5;
+    --np-border: #d6dbe2;
+    --np-fg: #171d26;
+    --np-muted: #66707e;
+    --np-accent: #3574f0;
+    --np-hover: rgba(26, 33, 41, 0.055);
+    --np-danger: #d1434b;
+    --g1: #3574f0;   /* 组1 强调 */
+    --g2: #0e9f6e;   /* 组2 强调 */
+    --g3: #d1434b;   /* 组3 强调 */
+  }
+  body.dark {
+    --np-bg: #101216;
+    --np-surface: #1b1e23;
+    --np-surface-2: #24282f;
+    --np-border: #343a45;
+    --np-fg: #e8eaed;
+    --np-muted: #8b929c;
+    --np-accent: #5c9dff;
+    --np-hover: rgba(255, 255, 255, 0.06);
+    --g1: #5c9dff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 32px 40px;
+    background: var(--np-bg);
+    color: var(--np-fg);
+    font: 13px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    transition: background 0.2s, color 0.2s;
+  }
+  .pagehead { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .pagehead h1 { font-size: 16px; margin: 0; }
+  .pagehead .tip { color: var(--np-muted); font-size: 11px; }
+  .theme-toggle {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--np-muted);
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .scheme { margin-bottom: 26px; }
+  .scheme h2 { font-size: 13px; margin: 0 0 2px; }
+  .scheme .why { color: var(--np-muted); font-size: 11px; margin-bottom: 10px; }
+
+  /* ── 顶栏静态镜像：14px 圆角 surface 卡 + 40px 高 ── */
+  .titlebar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 40px;
+    padding: 0 6px 0 10px;
+    background: var(--np-surface);
+    border: 1px solid var(--np-border);
+    border-radius: 14px;
+    max-width: 1160px;
+  }
+  .logo { display: flex; margin-right: 2px; }
+  .title { font-weight: 600; margin-right: 10px; flex: none; }
+  .tb-btn {
+    width: 26px;
+    height: 24px;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--np-fg);
+    cursor: pointer;
+  }
+  .tb-btn:hover { background: var(--np-hover); }
+  .tb-text {
+    height: 24px;
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0 5px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--np-fg);
+    cursor: pointer;
+    font: inherit;
+  }
+  .tb-text:hover { background: var(--np-hover); }
+  .tb-sep {
+    flex: none;
+    width: 1px;
+    height: 14px;
+    margin: 0 5px;
+    background: var(--np-border);
+  }
+  .tb-drag {
+    flex: 1;
+    height: 24px;
+    margin: 0 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .island {
+    pointer-events: none;
+    background: var(--np-surface-2);
+    border-radius: 999px;
+    padding: 3px 14px;
+    color: var(--np-muted);
+    font-size: 13px;
+  }
+  .zoompill {
+    background: var(--np-surface-2);
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 11px;
+    color: var(--np-muted);
+    flex: none;
+  }
+  .winbtn { color: var(--np-fg); }
+  .winbtn.close:hover { background: var(--np-danger); color: #fff; }
+
+  /* ── 分组标注：组下缘彩线 + 组名 ── */
+  .grp { display: flex; align-items: center; position: relative; }
+  .grp::after {
+    content: attr(data-label);
+    position: absolute;
+    top: calc(100% + 3px);
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--gc);
+  }
+  .grp::before {
+    content: "";
+    position: absolute;
+    top: calc(100% + 1px);
+    left: 0;
+    right: 0;
+    height: 2px;
+    border-radius: 999px;
+    background: var(--gc);
+    opacity: 0.75;
+  }
+  .g1 { --gc: var(--g1); }
+  .g2 { --gc: var(--g2); }
+  .g3 { --gc: var(--g3); }
+  .scheme .legend { margin-top: 22px; font-size: 11px; color: var(--np-muted); }
+  .scheme .legend b { color: var(--np-fg); font-weight: 600; }
+  .legend .k1 { color: var(--g1); font-weight: 600; }
+  .legend .k2 { color: var(--g2); font-weight: 600; }
+  .legend .k3 { color: var(--g3); font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="pagehead">
+    <h1>顶栏左簇 8 钮 · 三套分组方案</h1>
+    <span class="tip">彩色下缘线 = 分组边界 · 右簇（缩放/主题/窗口钮）三案一致仅作背景</span>
+    <label class="theme-toggle">
+      <input type="checkbox" onchange="document.body.classList.toggle('dark', this.checked)" />
+      深色预览
+    </label>
+  </div>
+
+  <!-- 公共部件 -->
+  <template id="tb-common">
+  </template>
+
+  <script>
+    const I = {
+      list: '<line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/>',
+      history: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+      star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+      search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+      sparkles: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>',
+      layout: '<rect width="18" height="7" x="3" y="3" rx="1"/><rect width="9" height="7" x="3" y="14" rx="1"/><rect width="5" height="7" x="16" y="14" rx="1"/>',
+      settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+      info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+      moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+      minus: '<path d="M5 12h14"/>',
+      square: '<rect width="18" height="18" x="3" y="3" rx="2"/>',
+      x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    };
+    const icon = (p) => `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+    const btn = (p, title) => `<button class="tb-btn" title="${title}">${icon(p)}</button>`;
+    const logoSvg = `<svg width="22" height="22" viewBox="0 0 96 96" aria-hidden="true"><defs><linearGradient id="lg" x1="4" y1="4" x2="94" y2="94" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#3574f0"/><stop offset="0.5" stop-color="#5c9dff"/><stop offset="1" stop-color="#bae2fd"/></linearGradient></defs>${[4, 36, 68].flatMap((x) => [4, 36, 68].map((y) => `<rect x="${x}" y="${y}" width="26" height="26" fill="url(#lg)"/>`)).join("")}</svg>`;
+
+    // 左簇按钮（titlebar 按钮名 → 图标）；文字钮 = 布局预设（现网即图标钮，此处保持图标钮）
+    const B = {
+      tree: () => btn(I.list, "导航树"),
+      history: () => btn(I.history, "浏览记录"),
+      star: () => btn(I.star, "收藏夹"),
+      search: () => btn(I.search, "全盘搜索"),
+      wand: () => btn(I.sparkles, "定制"),
+      layout: () => btn(I.layout, "布局预设"),
+      settings: () => btn(I.settings, "设置"),
+      about: () => btn(I.info, "关于"),
+      sep: () => `<span class="tb-sep"></span>`,
+    };
+
+    // 右簇（三案一致背景）
+    const rightCluster = `
+      <span class="zoompill">100%</span>
+      <button class="tb-btn" title="切换主题">${icon(I.moon)}</button>
+      <span class="tb-sep"></span>
+      <button class="tb-btn winbtn" title="最小化">${icon(I.minus)}</button>
+      <button class="tb-btn winbtn" title="最大化">${icon(I.square)}</button>
+      <button class="tb-btn winbtn close" title="关闭">${icon(I.x)}</button>
+    `;
+
+    // 分组包裹：彩色下缘线 + 组名
+    const grp = (label, cls, inner) => `<span class="grp ${cls}" data-label="${label}">${inner}</span>`;
+
+    function bar(leftHtml) {
+      return `<div class="titlebar">
+        <span class="logo">${logoSvg}</span>
+        <span class="title">X-Dir</span>
+        ${leftHtml}
+        <div class="tb-drag"><span class="island">test-data</span></div>
+        ${rightCluster}
+      </div>`;
+    }
+
+    const schemes = [
+      {
+        title: "方案 A · 形态三分（推荐）",
+        why: "同交互形态成组：三个带 active 态的切换钮领头（高频），三个悬停弹层钮居中（扫过连览红利最大化），设置 + 关于收尾；布局预设从应用级归位弹层组。",
+        legend: `<span class="k1">组1 模式切换</span>：导航树 / 全盘搜索 / 定制（三个 active 态切换钮） ·
+                 <span class="k2">组2 快捷弹层</span>：浏览记录 / 收藏夹 / 布局预设（悬停展开的列表弹层） ·
+                 <span class="k3">组3 应用</span>：设置 / 关于`,
+        left: [
+          grp("模式切换", "g1", B.tree() + B.search() + B.wand()),
+          B.sep(),
+          grp("快捷弹层", "g2", B.history() + B.star() + B.layout()),
+          B.sep(),
+          grp("应用", "g3", B.settings() + B.about()),
+        ].join(""),
+      },
+      {
+        title: "方案 B · 弹层组最前",
+        why: "弹层三钮紧贴 Logo，悬停扫览距离最短；代价是栏首是中频的历史钮而非高频的树/搜索。",
+        legend: `<span class="k1">组1 快捷弹层</span>：浏览记录 / 收藏夹 / 布局预设 ·
+                 <span class="k2">组2 模式切换</span>：导航树 / 全盘搜索 / 定制 ·
+                 <span class="k3">组3 应用</span>：设置 / 关于`,
+        left: [
+          grp("快捷弹层", "g1", B.history() + B.star() + B.layout()),
+          B.sep(),
+          grp("模式切换", "g2", B.tree() + B.search() + B.wand()),
+          B.sep(),
+          grp("应用", "g3", B.settings() + B.about()),
+        ].join(""),
+      },
+      {
+        title: "方案 C · 维持现状",
+        why: "导航辅助（树/历史/收藏都是找地方）┊ 全局模式（搜索/定制）┊ 应用（预设/设置/关于）——预设语义上略孤，但整体可用。",
+        legend: `<span class="k1">组1 导航辅助</span>：导航树 / 浏览记录 / 收藏夹 ·
+                 <span class="k2">组2 全局模式</span>：全盘搜索 / 定制 ·
+                 <span class="k3">组3 应用级</span>：布局预设 / 设置 / 关于`,
+        left: [
+          grp("导航辅助", "g1", B.tree() + B.history() + B.star()),
+          B.sep(),
+          grp("全局模式", "g2", B.search() + B.wand()),
+          B.sep(),
+          grp("应用级", "g3", B.layout() + B.settings() + B.about()),
+        ].join(""),
+      },
+    ];
+
+    document.write(
+      schemes
+        .map(
+          (s) => `<div class="scheme">
+            <h2>${s.title}</h2>
+            <div class="why">${s.why}</div>
+            ${bar(s.left)}
+            <div class="legend">${s.legend}</div>
+          </div>`,
+        )
+        .join(""),
+    );
+  </script>
+</body>
+</html>
