@@ -1059,24 +1059,32 @@ body.np-col-resizing .np-menued-grip::after {
   text-align: center;
   color: var(--np-muted);
 }
-/* 拖出语义切换钮（2026-10-20）：移动/复制 pill；copy 态 accent 淡染提示非默认 */
-.np-shelf-mode {
+/* 拖出语义切换（2026-10-20 定案 · 方案 A 双段迷你分段，替换原文字 pill）：
+   两态同见、点另一半即切换；激活段 accent 实底（与 np-seg 同语言） */
+.np-shelf-modeseg {
+  display: flex;
   height: 16px;
-  padding: 0 6px;
-  border: 0;
   border-radius: var(--np-radius-pill);
   background: var(--np-surface-2);
+  padding: 1px;
+  gap: 1px;
+}
+.np-shelf-modeseg button {
+  border: 0;
+  border-radius: var(--np-radius-pill);
+  background: none;
+  padding: 0 4px;
   font-size: var(--np-font-sm);
-  line-height: 16px;
+  line-height: 14px;
   color: var(--np-muted);
   cursor: pointer;
 }
-.np-shelf-mode:hover {
+.np-shelf-modeseg button:hover {
   color: var(--np-fg);
 }
-.np-shelf-mode.is-copy {
-  background: color-mix(in srgb, var(--np-accent) 14%, transparent);
-  color: var(--np-accent);
+.np-shelf-modeseg button.on {
+  background: var(--np-accent);
+  color: var(--np-accent-fg);
 }
 /* 空态（2026-10-20 定案 · 方案 B 居中静默）：36px 圆底托盘示意 + 主/辅两行居中；
    图标仅出现在空态中央（标题行无图标），托盘示意用 iconLg 空态大示意档 */

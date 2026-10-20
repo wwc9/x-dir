@@ -196,28 +196,27 @@ function Shelf() {
   return (
     <div ref={ref} className={`np-shelf${over ? " on" : ""}`} data-shelf>
       <div className="np-side-h">
-        <span className="np-shelf-title">
-          暂存区
-          {items.length > 0 && <span className="np-shelf-count">{items.length}</span>}
-        </span>
+        <span className="np-shelf-title">暂存区</span>
         <div className="np-side-actions">
-          {/* 拖出语义切换（2026-10-20）：移动 = 落窗格即移动并移出暂存（默认）；
-              复制 = 复制到目标窗格、条目保留（accent 淡染提示非默认态） */}
-          <button
-            className={`np-shelf-mode${stagingMode === "copy" ? " is-copy" : ""}`}
-            title={
-              stagingMode === "move"
-                ? "拖出到窗格：移动（原件移走）· 点击切换为复制"
-                : "拖出到窗格：复制（保留原件）· 点击切换为移动"
-            }
-            onClick={() =>
-              useSettings
-                .getState()
-                .update({ stagingMode: stagingMode === "move" ? "copy" : "move" })
-            }
-          >
-            {stagingMode === "move" ? "移动" : "复制"}
-          </button>
+          {/* 拖出语义切换（2026-10-20 定案 · 方案 A 双段迷你分段）：两态同见，
+              点另一半即切换；移动 = 落窗格即移动并移出暂存（默认）；
+              复制 = 复制到目标窗格、条目保留 */}
+          <span className="np-shelf-modeseg" role="group" aria-label="拖出语义：移动/复制">
+            <button
+              className={stagingMode === "move" ? "on" : ""}
+              title="拖出到窗格：移动（原件移走）"
+              onClick={() => useSettings.getState().update({ stagingMode: "move" })}
+            >
+              移动
+            </button>
+            <button
+              className={stagingMode === "copy" ? "on" : ""}
+              title="拖出到窗格：复制（保留原件）"
+              onClick={() => useSettings.getState().update({ stagingMode: "copy" })}
+            >
+              复制
+            </button>
+          </span>
           <button
             className="np-side-add"
             title="清空暂存区"
