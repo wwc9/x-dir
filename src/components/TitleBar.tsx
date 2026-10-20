@@ -189,19 +189,6 @@ export function TitleBar() {
       </span>
       <span className="np-title">X-Dir</span>
 
-      <Button
-        minimal
-        size="small"
-        icon={ic(FolderTree)}
-        active={treeVisible}
-        title="导航树（所有窗格共用）"
-        onClick={() => {
-          // 整页（全盘搜索/定制）打开时点主界面类按钮：先回主界面再执行
-          useUi.getState().exitPages();
-          useSettings.getState().update({ navTreeVisible: !treeVisible });
-        }}
-      />
-
       <PopoverNext
         isOpen={histOpen}
         onClose={() => setHistOpen(false)}
@@ -359,8 +346,37 @@ export function TitleBar() {
         />
       </PopoverNext>
 
-      {/* 语义分组分隔（2026-10-20 定案）：浏览定位簇 | 全局模式簇 */}
-      <span className="np-tb-sep" aria-hidden />
+      <div
+        className="np-drag"
+        data-tauri-drag-region
+        onDoubleClick={() => void getCurrentWindow().toggleMaximize()}
+        title="拖动窗口 · 双击最大化/还原"
+      >
+        <IslandPill path={activePath} />
+      </div>
+
+      {/* 界面缩放指示：右簇首位常驻，点击重置 100%（Ctrl+滚轮/Ctrl+加减 调整后在此确认） */}
+      <button
+        className="np-zoompill"
+        title={`界面缩放 ${Math.round(uiZoom * 100)}% · Ctrl+滚轮 / Ctrl+加减号调整 · 点击重置 100%`}
+        onClick={() => useSettings.getState().update({ uiZoom: 1 })}
+      >
+        {Math.round(uiZoom * 100)}%
+      </button>
+
+      {/* 主界面模式簇（2026-10-20 二次定案自左簇移入）：导航树 / 全盘搜索 / 定制 */}
+      <Button
+        minimal
+        size="small"
+        icon={ic(FolderTree)}
+        active={treeVisible}
+        title="导航树（所有窗格共用）"
+        onClick={() => {
+          // 整页（全盘搜索/定制）打开时点主界面类按钮：先回主界面再执行
+          useUi.getState().exitPages();
+          useSettings.getState().update({ navTreeVisible: !treeVisible });
+        }}
+      />
 
       <Button
         minimal
@@ -389,23 +405,8 @@ export function TitleBar() {
         }
       />
 
-      <div
-        className="np-drag"
-        data-tauri-drag-region
-        onDoubleClick={() => void getCurrentWindow().toggleMaximize()}
-        title="拖动窗口 · 双击最大化/还原"
-      >
-        <IslandPill path={activePath} />
-      </div>
-
-      {/* 界面缩放指示：常驻右缘，点击重置 100%（Ctrl+滚轮/Ctrl+加减 调整后在此确认） */}
-      <button
-        className="np-zoompill"
-        title={`界面缩放 ${Math.round(uiZoom * 100)}% · Ctrl+滚轮 / Ctrl+加减号调整 · 点击重置 100%`}
-        onClick={() => useSettings.getState().update({ uiZoom: 1 })}
-      >
-        {Math.round(uiZoom * 100)}%
-      </button>
+      {/* 语义分组分隔：主界面模式簇 | 应用级簇 */}
+      <span className="np-tb-sep" aria-hidden />
 
       {/* 布局预设（2026-10-12 自边栏移入）：16 宫格选择器，应用后弹层保持打开可连续试排 */}
       <PopoverNext
