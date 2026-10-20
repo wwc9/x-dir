@@ -189,6 +189,19 @@ export function TitleBar() {
       </span>
       <span className="np-title">X-Dir</span>
 
+      <Button
+        minimal
+        size="small"
+        icon={ic(FolderTree)}
+        active={treeVisible}
+        title="导航树（所有窗格共用）"
+        onClick={() => {
+          // 整页（全盘搜索/定制）打开时点主界面类按钮：先回主界面再执行
+          useUi.getState().exitPages();
+          useSettings.getState().update({ navTreeVisible: !treeVisible });
+        }}
+      />
+
       <PopoverNext
         isOpen={histOpen}
         onClose={() => setHistOpen(false)}
@@ -346,37 +359,8 @@ export function TitleBar() {
         />
       </PopoverNext>
 
-      <div
-        className="np-drag"
-        data-tauri-drag-region
-        onDoubleClick={() => void getCurrentWindow().toggleMaximize()}
-        title="拖动窗口 · 双击最大化/还原"
-      >
-        <IslandPill path={activePath} />
-      </div>
-
-      {/* 界面缩放指示：右簇首位常驻，点击重置 100%（Ctrl+滚轮/Ctrl+加减 调整后在此确认） */}
-      <button
-        className="np-zoompill"
-        title={`界面缩放 ${Math.round(uiZoom * 100)}% · Ctrl+滚轮 / Ctrl+加减号调整 · 点击重置 100%`}
-        onClick={() => useSettings.getState().update({ uiZoom: 1 })}
-      >
-        {Math.round(uiZoom * 100)}%
-      </button>
-
-      {/* 主界面模式簇（2026-10-20 二次定案自左簇移入）：导航树 / 全盘搜索 / 定制 */}
-      <Button
-        minimal
-        size="small"
-        icon={ic(FolderTree)}
-        active={treeVisible}
-        title="导航树（所有窗格共用）"
-        onClick={() => {
-          // 整页（全盘搜索/定制）打开时点主界面类按钮：先回主界面再执行
-          useUi.getState().exitPages();
-          useSettings.getState().update({ navTreeVisible: !treeVisible });
-        }}
-      />
+      {/* 语义分组分隔：浏览定位簇 | 全局模式簇 */}
+      <span className="np-tb-sep" aria-hidden />
 
       <Button
         minimal
@@ -405,14 +389,15 @@ export function TitleBar() {
         }
       />
 
-      {/* 语义分组分隔：主界面模式簇 | 应用级簇 */}
+      {/* 语义分组分隔：全局模式簇 | 应用级簇（2026-10-20 三次定案：应用级簇移至岛左侧，
+          右簇只留 明暗切换 + 窗口控制） */}
       <span className="np-tb-sep" aria-hidden />
 
       {/* 布局预设（2026-10-12 自边栏移入）：16 宫格选择器，应用后弹层保持打开可连续试排 */}
       <PopoverNext
         isOpen={presetOpen}
         onClose={() => setPresetOpen(false)}
-        placement="bottom-end"
+        placement="bottom-start"
         arrow={false}
         content={
           <div {...hoverProps(() => setPresetOpen(false))}>
@@ -439,8 +424,6 @@ export function TitleBar() {
         />
       </PopoverNext>
 
-      {/* 应用级簇（2026-10-20 定案）：低频应用操作靠窗口控制钮一侧——
-          布局预设 / 设置 / 明暗切换 / 关于，与窗口控制之间由 np-tb-sep 隔开防误触 */}
       <Button
         minimal
         size="small"
@@ -452,21 +435,6 @@ export function TitleBar() {
           // 整页打开时先回主界面：设置浮窗作用于主界面观感
           useUi.getState().exitPages();
           useUi.getState().openSettings("appearance");
-        }}
-      />
-
-      {/* 明暗切换：按当前生效主题二态翻转；"跟随系统"档仍在设置面板可选 */}
-      <Button
-        minimal
-        size="small"
-        icon={ic(isDark ? Sun : Moon)}
-        title={isDark ? "切换为浅色主题" : "切换为深色主题"}
-        onClick={(e) => {
-          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          setThemeWithFx(isDark ? "light" : "dark", {
-            x: r.left + r.width / 2,
-            y: r.top + r.height / 2,
-          });
         }}
       />
 
@@ -486,6 +454,39 @@ export function TitleBar() {
       >
         <AboutBadgeDot />
       </Button>
+
+      <div
+        className="np-drag"
+        data-tauri-drag-region
+        onDoubleClick={() => void getCurrentWindow().toggleMaximize()}
+        title="拖动窗口 · 双击最大化/还原"
+      >
+        <IslandPill path={activePath} />
+      </div>
+
+      {/* 界面缩放指示：右簇首位常驻，点击重置 100%（Ctrl+滚轮/Ctrl+加减 调整后在此确认） */}
+      <button
+        className="np-zoompill"
+        title={`界面缩放 ${Math.round(uiZoom * 100)}% · Ctrl+滚轮 / Ctrl+加减号调整 · 点击重置 100%`}
+        onClick={() => useSettings.getState().update({ uiZoom: 1 })}
+      >
+        {Math.round(uiZoom * 100)}%
+      </button>
+
+      {/* 明暗切换：按当前生效主题二态翻转；"跟随系统"档仍在设置面板可选 */}
+      <Button
+        minimal
+        size="small"
+        icon={ic(isDark ? Sun : Moon)}
+        title={isDark ? "切换为浅色主题" : "切换为深色主题"}
+        onClick={(e) => {
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          setThemeWithFx(isDark ? "light" : "dark", {
+            x: r.left + r.width / 2,
+            y: r.top + r.height / 2,
+          });
+        }}
+      />
 
       {/* 窗口控制与功能钮之间：分组边界 + 安全间距（防误触窗口钮） */}
       <span className="np-tb-sep" aria-hidden />
