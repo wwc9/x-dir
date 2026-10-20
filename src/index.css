@@ -682,6 +682,9 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   flex: 0 0 156px;
+  /* 长文件名防线（2026-10-20）：flex 子项自动最小尺寸 = min-content，
+     超长不可断行的暂存区文件名会把整条侧栏顶宽——钳到 0 交由卡内省略号 */
+  min-width: 0;
   min-height: 0;
   padding: 0;
   /* 两卡间隔 = 把手占位（--np-gutter），与窗格间沟槽同宽；把手热区另负扩展 */
