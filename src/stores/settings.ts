@@ -195,7 +195,11 @@ export function applyZoom(zoom: number) {
     .catch(() => undefined);
 }
 
-/** 主题切换圆形扩散特效（2026-10-15 定案）：View Transitions 从触发点圆形揭示
+/** 主题圆形揭示时长（ms，2026-10-21 由 450 放缓）：页面揭示动画与原生边色
+ *  渐变共用同一常量保证同步，调速只改这里 */
+const THEME_FX_MS = 650;
+
+/** 主题圆形扩散特效（2026-10-15 定案）：View Transitions 从触发点圆形揭示
  *  新主题；浏览器不支持 / 用户偏好减少动效时直接切换。
  *  origin = 触发点视口坐标，缺省从屏幕中心扩散。 */
 export function setThemeWithFx(
@@ -219,14 +223,14 @@ export function setThemeWithFx(
   const vt = doc.startViewTransition(apply);
   // 原生边色与揭示平行渐变（applyTheme 内被 themeFxInFlight 抑制即时写）：
   // 二值翻色无论在起点（边框领先，"先变黑"）还是终点（边框滞后，割裂）
-  // 都与 450ms 径向揭示脱节；渐变结束再以 syncBorderColor 落精确终值
+  // 都与径向揭示脱节；渐变结束再以 syncBorderColor 落精确终值兜底
   if (vt.finished) {
     themeFxInFlight = true;
     const dark =
       theme === "dark" ||
       (theme === "system" &&
         window.matchMedia("(prefers-color-scheme: dark)").matches);
-    fadeBorderColor(dark ? 0x131519 : 0xe9ecf1, 450);
+    fadeBorderColor(dark ? 0x131519 : 0xe9ecf1, THEME_FX_MS);
     void vt.finished
       .catch(() => undefined)
       .then(() => {
@@ -249,7 +253,7 @@ export function setThemeWithFx(
           ],
         },
         {
-          duration: 450,
+          duration: THEME_FX_MS,
           easing: "ease-in-out",
           pseudoElement: "::view-transition-new(root)",
         },
