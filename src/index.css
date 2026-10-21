@@ -1089,31 +1089,50 @@ body.np-col-resizing .np-menued-grip::after {
   text-align: center;
   color: var(--np-muted);
 }
-/* 拖出语义切换（2026-10-20 定案 · 方案 A 双段迷你分段，替换原文字 pill）：
-   两态同见、点另一半即切换；激活段 accent 实底（与 np-seg 同语言） */
+/* 拖出语义切换（2026-10-20 定案双段文字分段 → 2026-10-21 定案 · 方案 F 滑块式
+   双图标分段）：胶囊轨道内 accent thumb 平移指示当前态（0.18s transform 过渡），
+   folder-input = 移动、copy = 复制，两态同见点另一半即切换；激活钮图标反白，
+   非激活 muted 悬停提亮。几何沿用预览稿 design/shelf-modeseg-preview.html */
 .np-shelf-modeseg {
+  position: relative;
   display: flex;
-  height: 16px;
+  height: 20px;
+  padding: 2px;
   border-radius: var(--np-radius-pill);
   background: var(--np-surface-2);
-  padding: 1px;
-  gap: 1px;
+}
+.np-shelf-modeseg-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 26px;
+  height: 16px;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-accent);
+  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.np-shelf-modeseg[data-mode="copy"] .np-shelf-modeseg-thumb {
+  transform: translateX(26px);
 }
 .np-shelf-modeseg button {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 16px;
   border: 0;
   border-radius: var(--np-radius-pill);
   background: none;
-  padding: 0 4px;
-  font-size: var(--np-font-sm);
-  line-height: 14px;
   color: var(--np-muted);
   cursor: pointer;
 }
 .np-shelf-modeseg button:hover {
   color: var(--np-fg);
 }
-.np-shelf-modeseg button.on {
-  background: var(--np-accent);
+.np-shelf-modeseg button.on,
+.np-shelf-modeseg button.on:hover {
   color: var(--np-accent-fg);
 }
 /* 空态（2026-10-20 定案 · 方案 B 居中静默）：36px 圆底托盘示意 + 主/辅两行居中；
