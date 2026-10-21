@@ -119,20 +119,62 @@ function migrateLegacyPrefs(target: Settings, saved: Partial<Settings>) {
   }
 }
 
+/** 原生窗缘底色当前值（RGB 0xRRGGBB）：渐变动画的插值基准，初始 = 浅色画布 */
+let borderCur = 0xe9ecf1;
+let borderFadeTimer: number | null = null;
+
+const toColorref = (rgb: number): number =>
+  ((rgb & 0xff) << 16) | (rgb & 0xff00) | ((rgb >> 16) & 0xff);
+
 /** 原生窗缘底色（顶缘 1px 非客户区 + DWM 窗框，WebView 之外）与画布同色，
  *  取当前 DOM 主题类计算（COLORREF = 0x00BBGGRR；#e9ecf1 / #131519 与
  *  index.css --np-bg 同值；Rust 侧默认浅色，深色由本函数同步） */
 function syncBorderColor() {
+  if (borderFadeTimer !== null) {
+    clearInterval(borderFadeTimer);
+    borderFadeTimer = null;
+  }
   const canvas = document.documentElement.classList.contains("dark")
     ? 0x131519
     : 0xe9ecf1;
-  const colorref =
-    ((canvas & 0xff) << 16) | (canvas & 0xff00) | ((canvas >> 16) & 0xff);
-  api.setBorderColor(colorref).catch(() => undefined);
+  borderCur = canvas;
+  api.setBorderColor(toColorref(canvas)).catch(() => undefined);
 }
 
-/** 主题圆形扩散在飞标记：揭示期间原生边色不得先行翻色（领先页面揭示即
- *  "边框先变黑"），延到 vt.finished 再同步；直切路径（无 VT/减少动效）不置位 */
+/** 原生窗缘色随揭示时长平行渐变（约 8 步插值 + ease-in-out，与圆形揭示同
+ *  时长同缓动）：边框是整窗一色，圆形揭示是径向动画，二值翻色无论放起点
+ *  （领先成"先变黑"）还是终点（滞后成割裂）都会与页面脱节，平行渐变让
+ *  边框与页面同步过渡。borderCur 全程跟踪插值，新切换以当前值为起点 */
+function fadeBorderColor(target: number, duration: number) {
+  const from = borderCur;
+  if (from === target) return;
+  if (borderFadeTimer !== null) clearInterval(borderFadeTimer);
+  const fr = (from >> 16) & 0xff;
+  const fg = (from >> 8) & 0xff;
+  const fb = from & 0xff;
+  const tr = (target >> 16) & 0xff;
+  const tg = (target >> 8) & 0xff;
+  const tb = target & 0xff;
+  const t0 = Date.now();
+  const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
+  borderFadeTimer = window.setInterval(() => {
+    const p = Math.min(1, (Date.now() - t0) / duration);
+    const k = ease(p);
+    borderCur =
+      (Math.round(fr + (tr - fr) * k) << 16) |
+      (Math.round(fg + (tg - fg) * k) << 8) |
+      Math.round(fb + (tb - fb) * k);
+    api.setBorderColor(toColorref(borderCur)).catch(() => undefined);
+    if (p >= 1 && borderFadeTimer !== null) {
+      clearInterval(borderFadeTimer);
+      borderFadeTimer = null;
+    }
+  }, 55);
+}
+
+/** 主题圆形扩散在飞标记：揭示期间原生边色由 fadeBorderColor 接管渐变，
+ *  applyTheme 不再即时写（避免与渐变互相覆盖）；直切路径（无 VT/减少动效）
+ *  不置位，仍走 syncBorderColor 瞬切 */
 let themeFxInFlight = false;
 
 export function applyTheme(theme: Settings["theme"]) {
@@ -175,10 +217,16 @@ export function setThemeWithFx(
     return;
   }
   const vt = doc.startViewTransition(apply);
-  // 原生边色延到揭示完成再同步（applyTheme 内被 themeFxInFlight 抑制）：
-  // 边色即时翻转会在 450ms 揭示期间呈现"窗框先变黑/先变白"的脱节
+  // 原生边色与揭示平行渐变（applyTheme 内被 themeFxInFlight 抑制即时写）：
+  // 二值翻色无论在起点（边框领先，"先变黑"）还是终点（边框滞后，割裂）
+  // 都与 450ms 径向揭示脱节；渐变结束再以 syncBorderColor 落精确终值
   if (vt.finished) {
     themeFxInFlight = true;
+    const dark =
+      theme === "dark" ||
+      (theme === "system" &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches);
+    fadeBorderColor(dark ? 0x131519 : 0xe9ecf1, 450);
     void vt.finished
       .catch(() => undefined)
       .then(() => {
