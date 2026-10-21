@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>按钮悬浮提示（Tooltip）· 三套方案预览</title>
+<style>
+  /* ═══ np token 替身（与 src/index.css 同值，2026-10-21）═══ */
+  .t-light {
+    --np-bg: #e9ecf1; --np-surface: #ffffff; --np-surface-2: #f0f2f5;
+    --np-border: #d6dbe2; --np-fg: #171d26; --np-muted: #66707e;
+    --np-accent: #3574f0; --np-hover: rgba(26, 33, 41, 0.055);
+    --np-shadow: 0 12px 32px rgba(20, 28, 40, 0.14);
+  }
+  .t-dark {
+    --np-bg: #131519; --np-surface: #1b1e23; --np-surface-2: #24282f;
+    --np-border: #3a414b; --np-fg: #e8eaed; --np-muted: #8b929c;
+    --np-accent: #5c9dff; --np-hover: rgba(255, 255, 255, 0.055);
+    --np-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 56px; background: #dde2ea; color: #171d26;
+    font-family: system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 13px; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: #66707e; font-size: 12px; margin: 0 0 20px; }
+  .banner { background: #fff; border: 1px solid #d6dbe2; border-radius: 12px;
+    padding: 10px 14px; margin-bottom: 24px; font-size: 12px; color: #66707e; line-height: 1.8; }
+  .banner code { background: #f0f2f5; border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+
+  section { margin-bottom: 34px; }
+  .sec-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .sec-h .tag { background: #3574f0; color: #fff; font-size: 11px; font-weight: 600;
+    border-radius: 999px; padding: 1px 9px; }
+  .sec-h h2 { font-size: 14px; margin: 0; }
+  .spec { font-size: 12px; color: #66707e; margin: 0 0 12px; line-height: 1.8; }
+  .spec b { color: #171d26; font-weight: 600; }
+
+  /* ═══ 模拟工具栏（还原窗格控制钮上下文）═══ */
+  .toolbar-wrap { display: flex; gap: 14px; flex-wrap: wrap; }
+  .toolbar { background: var(--np-surface); border-radius: 12px; padding: 7px 9px;
+    display: flex; align-items: center; gap: 3px;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.08); }
+  .toolbar.dark { background: var(--np-surface); }
+  .tbtn { width: 26px; height: 24px; display: flex; align-items: center; justify-content: center;
+    border: 0; border-radius: 6px; background: none; color: var(--np-fg); cursor: pointer; }
+  .tbtn:hover { background: var(--np-hover); }
+  .theme-label { font-size: 11px; color: #8a93a0; margin-bottom: 6px; }
+
+  /* ═══════════ Tooltip 通用 ═══════════ */
+  .tip { position: fixed; z-index: 2147483000; pointer-events: none; white-space: nowrap;
+    max-width: 300px; white-space: normal; text-align: left;
+    opacity: 0; }
+  .tip.show { opacity: 1; }
+  .tip kbd, .tip .kk { font-family: Consolas, "Cascadia Mono", monospace; font-style: normal; }
+
+  /* ═══ 方案 A · 墨面速显：深色胶囊 + 半透明键帽 ═══ */
+  .tipA { background: #1f242c; color: #f2f4f7; border-radius: 8px; padding: 5px 9px;
+    font-size: 12px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+    transform: translateY(4px); transition: opacity 0.12s ease-out, transform 0.12s ease-out; }
+  .tipA.show { transform: translateY(0); }
+  .tipA kbd { background: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 4px; padding: 0 5px; font-size: 10.5px; color: #e8eaed; margin-left: 7px; }
+  .t-dark .tipA { background: #2a3039; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.09); }
+
+  /* ═══ 方案 B · 卡片键帽：surface 卡片 + 独立键帽（与应用卡片语言同源）═══ */
+  .tipB { background: var(--np-surface); color: var(--np-fg); border-radius: 8px;
+    padding: 6px 10px; font-size: 12px; box-shadow: var(--np-shadow), 0 0 0 1px var(--np-border);
+    transform: scale(0.96); transition: opacity 0.14s ease-out, transform 0.14s ease-out; }
+  .tipB.show { transform: scale(1); }
+  .tipB kbd { background: var(--np-surface-2); border: 1px solid var(--np-border);
+    border-radius: 4px; padding: 0 5px; font-size: 10.5px; color: var(--np-muted); margin-left: 7px; }
+
+  /* ═══ 方案 C · 即时跟随：无键帽盒、光标侧随、最小形态 ═══ */
+  .tipC { background: rgba(23, 29, 38, 0.92); backdrop-filter: blur(4px); color: #fff;
+    border-radius: 6px; padding: 3px 8px; font-size: 11.5px;
+    transition: opacity 0.08s ease-out; }
+  .tipC .kk { color: rgba(255, 255, 255, 0.62); margin-left: 6px; font-size: 10.5px; }
+</style>
+</head>
+<body>
+  <h1>按钮悬浮提示（Tooltip）· 三套方案预览</h1>
+  <p class="sub">2026-10-21 · 现状 = 浏览器原生 title（约 1s 才出、样式不可控、快捷键无键帽质感）；三案均为自绘全局委托式 Tooltip，可直接悬停体验延迟与动效。快捷键取自 lib/shortcuts.ts 清单。</p>
+  <div class="banner">
+    实现思路（定案后）：<b>全局单例</b> —— 监听 <code>mouseover/mouseout/focusin/focusout</code>，读 <code>data-tip</code> + <code>data-kbd</code> 属性渲染唯一浮层，不用给每个按钮包组件；<code>title</code> 属性移除（避免双提示）。
+    定位 = 按钮<b>下方居中</b>、贴边自动上翻、视口内钳制；Esc / 滚动 / 拖拽即隐。
+    窗口顶缘已有 <code>np-topline-cover</code> 盖板，portal 固定层 glitch 家族问题已兜住。
+  </div>
+
+  <!-- ═══════════ 方案 A ═══════════ -->
+  <section>
+    <div class="sec-h"><span class="tag">方案 A</span><h2>墨面速显（深色胶囊 + 半透明键帽）</h2></div>
+    <p class="spec"><b>延迟</b> 250ms（连续切换不同按钮时立即出）· <b>动效</b> 120ms 上浮 4px + 淡入 · <b>定位</b> 钮下居中，贴底上翻 · <b>取舍</b>：对比度最高、全局一眼可辨，VSCode/Linear 同款心智；代价是深底白字与浅色卡片语言略有反差（但提示本就该"跳"出来）。</p>
+    <div class="toolbar-wrap">
+      <div>
+        <div class="theme-label">浅色主题</div>
+        <div class="toolbar t-light" data-scheme="A" data-delay="250">
+          <button class="tbtn" data-tip="新建标签页" aria-label="新建标签页"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
+          <button class="tbtn" data-tip="切换面板" data-kbd="Ctrl+Alt+B" aria-label="切换面板"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button>
+          <button class="tbtn" data-tip="最小化" aria-label="最小化"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+          <button class="tbtn" data-tip="最大化 / 还原" aria-label="最大化 / 还原"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="12" height="12" x="6" y="6" rx="1"/><path d="M9 3H5a2 2 0 0 0-2 2v4"/></svg></button>
+          <button class="tbtn" data-tip="关闭窗口" data-kbd="Alt+F4" aria-label="关闭窗口"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          <button class="tbtn" data-tip="把当前窗格地址在系统资源管理器中打开，长路径换行显示也不截断" aria-label="打开所在文件夹"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></svg></button>
+        </div>
+      </div>
+      <div>
+        <div class="theme-label">深色主题</div>
+        <div class="toolbar t-dark" data-scheme="A" data-delay="250">
+          <button class="tbtn" data-tip="新建标签页"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
+          <button class="tbtn" data-tip="切换面板" data-kbd="Ctrl+Alt+B"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button>
+          <button class="tbtn" data-tip="最小化"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+          <button class="tbtn" data-tip="关闭窗口" data-kbd="Alt+F4"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ 方案 B ═══════════ -->
+  <section>
+    <div class="sec-h"><span class="tag">方案 B</span><h2>卡片键帽（surface 卡片，与应用浮层语言同源）</h2></div>
+    <p class="spec"><b>延迟</b> 300ms · <b>动效</b> 140ms 淡入 + 轻微缩放（0.96 → 1）· <b>定位</b> 钮下居中，贴底上翻 · <b>取舍</b>：与菜单/弹层一张"脸"（surface 底 + 发丝线 ring + np 阴影），键帽用 surface-2 底 + mono 字体，质感最完整；代价是浅底提示在浅底界面上存在感略弱于深色胶囊。</p>
+    <div class="toolbar-wrap">
+      <div>
+        <div class="theme-label">浅色主题</div>
+        <div class="toolbar t-light" data-scheme="B" data-delay="300">
+          <button class="tbtn" data-tip="新建标签页"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
+          <button class="tbtn" data-tip="切换面板" data-kbd="Ctrl+Alt+B"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button>
+          <button class="tbtn" data-tip="最小化"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+          <button class="tbtn" data-tip="最大化 / 还原"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="12" height="12" x="6" y="6" rx="1"/><path d="M9 3H5a2 2 0 0 0-2 2v4"/></svg></button>
+          <button class="tbtn" data-tip="关闭窗口" data-kbd="Alt+F4"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          <button class="tbtn" data-tip="把当前窗格地址在系统资源管理器中打开，长路径换行显示也不截断"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></svg></button>
+        </div>
+      </div>
+      <div>
+        <div class="theme-label">深色主题</div>
+        <div class="toolbar t-dark" data-scheme="B" data-delay="300">
+          <button class="tbtn" data-tip="新建标签页"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
+          <button class="tbtn" data-tip="切换面板" data-kbd="Ctrl+Alt+B"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button>
+          <button class="tbtn" data-tip="最小化"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+          <button class="tbtn" data-tip="关闭窗口" data-kbd="Alt+F4"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ 方案 C ═══════════ -->
+  <section>
+    <div class="sec-h"><span class="tag">方案 C</span><h2>即时跟随（无键帽盒、贴光标、扫过即现）</h2></div>
+    <p class="spec"><b>延迟</b> 120ms（同工具栏内移动到下一钮近似立即出）· <b>动效</b> 80ms 纯淡入 · <b>定位</b> 光标右下 12px 跟随 · <b>取舍</b>：最快最跟手，密集工具栏逐个扫过时体验最顺；快捷键以"· Ctrl+Alt+B"弱化文字呈现，质感最简；代价是跟随光标会轻微遮挡视线焦点，长文本可读性弱于 A/B。</p>
+    <div class="toolbar-wrap">
+      <div>
+        <div class="theme-label">浅色主题</div>
+        <div class="toolbar t-light" data-scheme="C" data-delay="120" data-follow="1">
+          <button class="tbtn" data-tip="新建标签页"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
+          <button class="tbtn" data-tip="切换面板" data-kbd="Ctrl+Alt+B"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button>
+          <button class="tbtn" data-tip="最小化"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+          <button class="tbtn" data-tip="最大化 / 还原"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="12" height="12" x="6" y="6" rx="1"/><path d="M9 3H5a2 2 0 0 0-2 2v4"/></svg></button>
+          <button class="tbtn" data-tip="关闭窗口" data-kbd="Alt+F4"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+        </div>
+      </div>
+      <div>
+        <div class="theme-label">深色主题</div>
+        <div class="toolbar t-dark" data-scheme="C" data-delay="120" data-follow="1">
+          <button class="tbtn" data-tip="新建标签页"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
+          <button class="tbtn" data-tip="切换面板" data-kbd="Ctrl+Alt+B"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button>
+          <button class="tbtn" data-tip="关闭窗口" data-kbd="Alt+F4"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    // 三案各自的迷你 Tooltip 引擎（生产实现会合并为一个委托单例）
+    function attachTips(toolbar) {
+      const scheme = toolbar.dataset.scheme, delay = +toolbar.dataset.delay,
+            follow = toolbar.dataset.follow === "1";
+      let el = null, timer = null, cur = null;
+      const build = (t) => {
+        const d = document.createElement("div");
+        d.className = "tip tip" + scheme;
+        d.textContent = t.dataset.tip;
+        if (t.dataset.kbd) {
+          if (scheme === "C") { const s = document.createElement("span");
+            s.className = "kk"; s.textContent = "· " + t.dataset.kbd; d.appendChild(s); }
+          else { const k = document.createElement("kbd"); k.textContent = t.dataset.kbd; d.appendChild(k); }
+        }
+        // 挂到工具栏内以继承 --np-* 主题变量（fixed 定位不受含块影响）；
+        // body 直挂会丢变量导致方案 B 透明底
+        toolbar.appendChild(d); return d;
+      };
+      const place = (t, ev) => {
+        const r = t.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
+        let x, y;
+        if (follow && ev) { x = ev.clientX + 12; y = ev.clientY + 16; }
+        else { x = r.left + r.width / 2 - w / 2; y = r.bottom + 6;
+               if (y + h > innerHeight - 8) y = r.top - h - 6; }
+        x = Math.max(8, Math.min(x, innerWidth - w - 8));
+        el.style.left = x + "px"; el.style.top = y + "px";
+      };
+      const clear = () => { clearTimeout(timer); timer = null;
+        if (el) { el.remove(); el = null; } cur = null; };
+      toolbar.addEventListener("mouseover", (e) => {
+        const t = e.target.closest("[data-tip]");
+        if (!t || t === cur) return;
+        clear(); cur = t;
+        timer = setTimeout(() => { el = build(t); place(t, e);
+          requestAnimationFrame(() => el && el.classList.add("show")); }, delay);
+      });
+      if (follow) toolbar.addEventListener("mousemove", (e) => {
+        if (el && cur) place(cur, e);
+      });
+      toolbar.addEventListener("mouseleave", clear);
+      toolbar.addEventListener("mousedown", clear);
+    }
+    document.querySelectorAll("[data-scheme]").forEach(attachTips);
+    // ?freeze=1：定格每案第一个"切换面板"提示（供截图/评审）
+    if (location.search.includes("freeze")) {
+      document.querySelectorAll("[data-scheme]").forEach((tb) => {
+        const btn = tb.querySelector('[data-tip="切换面板"]');
+        const fake = { clientX: 0, clientY: 0 };
+        const r = btn.getBoundingClientRect();
+        fake.clientX = r.left + r.width / 2; fake.clientY = r.top + r.height / 2;
+        tb.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, clientX: fake.clientX, clientY: fake.clientY }));
+      });
+    }
+  </script>
+</body>
+</html>
