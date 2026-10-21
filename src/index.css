@@ -482,18 +482,28 @@ button:focus-visible {
 /* ═══ 应用外壳（2026-10-11 改版）：自绘顶栏 + 左侧边栏 + 内容区 ═══
    去系统标题栏（decorations:false），顶栏 = 工具栏 + 拖拽区 + 窗口控制合一行；
    左侧边栏 = 布局方案（工作区）保存与快速切换；全部为浮于 --np-bg 画布的圆角卡片 */
-/* 顶缘盖板（2026-10-17）：弹层 portal 触发 WebView2 固定层合成 glitch，窗口顶缘
-   浮出 ~2px 蓝线（合成器产物，DOM 查无元素，逐像素实测定位）——画布色固定条
-   盖住，随主题 token 变色，pointer-events none 不挡交互 */
+/* 窗缘盖板（2026-10-17 顶缘 → 2026-10-21 扩四缘）：WebView2 固定层合成 glitch——
+   弹层 portal 触发时窗口顶缘浮出 ~2px 蓝线（合成器产物，DOM 查无元素，逐像素实测
+   定位），且 backdrop 画不到窗口最外侧 ~1px（左/右/底实测露未压暗画布）。
+   画布色四缘固定条盖住：顶 4px、左右下 1px，随主题 token 变色，pointer-events
+   none 不挡交互。遮罩在场时（body:has .bp6-overlay-backdrop，对话框/快速预览等
+   一切带 backdrop 的浮层通用，无需 JS 状态）盖板叠加同浓度遮罩色，与 backdrop
+   之下被压暗的画布逐像素一致，遮罩因此视觉上完整盖到窗缘 */
 .np-topline-cover {
+  --np-cover-tint: linear-gradient(transparent, transparent);
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: var(--np-bg);
+  inset: 0;
   z-index: 2147483647;
   pointer-events: none;
+  background-color: var(--np-bg);
+  background-image: var(--np-cover-tint), var(--np-cover-tint), var(--np-cover-tint),
+    var(--np-cover-tint);
+  background-position: top, bottom, left, right;
+  background-size: 100% 4px, 100% 1px, 1px 100%, 1px 100%;
+  background-repeat: no-repeat;
+}
+body:has(.bp6-overlay-backdrop) .np-topline-cover {
+  --np-cover-tint: linear-gradient(var(--np-overlay), var(--np-overlay));
 }
 .np-shell {
   display: flex;

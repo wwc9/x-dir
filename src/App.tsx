@@ -191,10 +191,11 @@ export default function App() {
 
   return (
     <div className="np-shell">
-      {/* 顶缘盖板（2026-10-17）：弹层 portal 触发 WebView2 为固定层建独立合成层时，
-          窗口顶缘 ~2px 会浮出一条蓝色 glitch 线（真实客户端逐像素实测定位，
-          elementsFromPoint 查无元素 = 合成器产物）。用画布色固定条盖住，
-          随主题 token 变色，pointer-events none 不挡交互 */}
+      {/* 窗缘盖板（2026-10-17 顶缘 / 2026-10-21 扩四缘）：弹层 portal 触发 WebView2
+          固定层合成 glitch——顶缘 ~2px 蓝线 + backdrop 画不到的最外侧 ~1px 亮边
+          （合成器产物，elementsFromPoint 查无元素 = 逐像素实测定位）。画布色固定条
+          盖住，遮罩在场时叠加同浓度遮罩色（index.css body:has 规则），随主题 token
+          变色，pointer-events none 不挡交互 */}
       <div className="np-topline-cover" aria-hidden />
       <TitleBar />
       <div className="np-body">
