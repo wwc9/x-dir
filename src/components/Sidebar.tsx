@@ -211,7 +211,11 @@ function Shelf() {
             <span className="np-shelf-modeseg-thumb" aria-hidden />
             <button
               className={stagingMode === "move" ? "on" : ""}
-              title="拖出到窗格：移动（原件移走）"
+              title={
+                stagingMode === "move"
+                  ? "移动：拖动条目到窗格即移动，并移出暂存（当前模式）"
+                  : "切换为移动：拖动条目到窗格即移动，并移出暂存"
+              }
               aria-label="拖出语义：移动"
               aria-pressed={stagingMode === "move"}
               onClick={() => useSettings.getState().update({ stagingMode: "move" })}
@@ -220,7 +224,11 @@ function Shelf() {
             </button>
             <button
               className={stagingMode === "copy" ? "on" : ""}
-              title="拖出到窗格：复制（保留原件）"
+              title={
+                stagingMode === "copy"
+                  ? "复制：拖动条目到窗格即复制，保留原件（当前模式）"
+                  : "切换为复制：拖动条目到窗格即复制，保留原件"
+              }
               aria-label="拖出语义：复制"
               aria-pressed={stagingMode === "copy"}
               onClick={() => useSettings.getState().update({ stagingMode: "copy" })}
