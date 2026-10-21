@@ -3,6 +3,7 @@
 // 先出子项数，体积异步补齐；条目切换即弃用旧响应（reqId 守卫）。
 
 import { useEffect, useRef, useState } from "react";
+import { t } from "../../lib/i18n";
 
 import { api, type DirSizeEntry, type FileEntry, type Sort } from "../../lib/ipc";
 import { formatSize, formatTime } from "../../lib/format";
@@ -81,11 +82,11 @@ export function FolderPreview({
       <AppIcon icon={spec.icon} size={DENSITY.iconLg} colorVar={spec.colorVar} />
       <div className="np-pv-fallback-name np-ellipsis">{entry.name}</div>
       <div className="np-pv-fallback-rows">
-        <span className="np-pv-k">类型</span>
-        <span>文件夹</span>
-        <span className="np-pv-k">直接子项</span>
+        <span className="np-pv-k">{t("类型")}</span>
+        <span>{t("文件夹")}</span>
+        <span className="np-pv-k">{t("直接子项")}</span>
         <span>{children === null ? "统计中…" : `${children.toLocaleString()} 项`}</span>
-        <span className="np-pv-k">总大小</span>
+        <span className="np-pv-k">{t("总大小")}</span>
         <span>
           {size
             ? `${formatSize({ isDir: false, size: size.bytes })}（${size.files.toLocaleString()} 个文件）`
@@ -93,15 +94,15 @@ export function FolderPreview({
               ? "计算中…"
               : "—"}
         </span>
-        <span className="np-pv-k">修改时间</span>
+        <span className="np-pv-k">{t("修改时间")}</span>
         <span>{formatTime(entry.mtimeMs)}</span>
       </div>
       <div className="np-pv-fallback-actions">
         <button className="np-pv-btn" onClick={onOpen}>
-          打开文件夹
+          {t("打开文件夹")}
         </button>
         <button className="np-pv-btn" onClick={onReveal}>
-          打开所在位置
+          {t("打开所在位置")}
         </button>
       </div>
     </div>

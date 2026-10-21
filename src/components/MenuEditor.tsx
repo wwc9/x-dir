@@ -545,7 +545,7 @@ export function MenuEditor() {
     <div className="np-menued-cond">
       <div className="np-menued-cond-name">{t("出现条件")} · {entryLabel(en)}</div>
       <div className="np-menued-frow">
-        <span className="np-menued-clabel">启用时机</span>
+        <span className="np-menued-clabel">{t("启用时机")}</span>
         <Seg
           value={en.area}
           options={areaOptsFor(entryFn(en))}
@@ -553,7 +553,7 @@ export function MenuEditor() {
         />
       </div>
       <div className="np-menued-frow">
-        <span className="np-menued-clabel">对象类型</span>
+        <span className="np-menued-clabel">{t("对象类型")}</span>
         <Seg
           value={en.cond.target}
           options={TARGET_OPTS}
@@ -561,7 +561,7 @@ export function MenuEditor() {
         />
       </div>
       <div className="np-menued-frow">
-        <span className="np-menued-clabel">选中数量</span>
+        <span className="np-menued-clabel">{t("选中数量")}</span>
         <Seg
           value={countPresetOf(en.cond)}
           options={COUNT_PRESET_OPTS}
@@ -586,11 +586,11 @@ export function MenuEditor() {
         </div>
       )}
       <div className="np-menued-frow">
-        <span className="np-menued-clabel">文件类型</span>
+        <span className="np-menued-clabel">{t("文件类型")}</span>
         <InputGroup
           size="small"
           value={en.cond.exts}
-          placeholder="如 pdf, txt（空 = 不限）"
+          placeholder={t("如 pdf, txt（空 = 不限）")}
           data-tip={
             en.cond.target !== "file"
               ? "对象类型为「仅文件」时可配置"
@@ -618,7 +618,7 @@ export function MenuEditor() {
         启用条件 · {builtinByKey(en.id.slice("builtin:".length))?.label ?? en.id}
       </div>
       <div className="np-menued-frow">
-        <span className="np-menued-clabel">启用时机</span>
+        <span className="np-menued-clabel">{t("启用时机")}</span>
         <Seg
           value={en.area}
           options={SCOPE_OPTS}
@@ -626,7 +626,7 @@ export function MenuEditor() {
         />
       </div>
       <div className="np-menued-frow">
-        <span className="np-menued-clabel">对象类型</span>
+        <span className="np-menued-clabel">{t("对象类型")}</span>
         <Seg
           value={en.cond.target}
           options={TARGET_OPTS}
@@ -634,7 +634,7 @@ export function MenuEditor() {
         />
       </div>
       <div className="np-menued-frow">
-        <span className="np-menued-clabel">选中数量</span>
+        <span className="np-menued-clabel">{t("选中数量")}</span>
         <Seg
           value={countPresetOf(en.cond)}
           options={COUNT_PRESET_OPTS}
@@ -659,11 +659,11 @@ export function MenuEditor() {
         </div>
       )}
       <div className="np-menued-frow">
-        <span className="np-menued-clabel">文件类型</span>
+        <span className="np-menued-clabel">{t("文件类型")}</span>
         <InputGroup
           size="small"
           value={en.cond.exts}
-          placeholder="如 pdf, txt（空 = 不限）"
+          placeholder={t("如 pdf, txt（空 = 不限）")}
           data-tip={
             en.cond.target !== "file"
               ? "对象类型为「仅文件」时可配置"
@@ -858,14 +858,14 @@ export function MenuEditor() {
           只挂条带时丢在卡片空白处会被判为"拖出区外"，与左栏 data-menued-left 同理 */}
       <div className="np-menued-pane np-menued-toolzone" data-toolbar-zone>
         <div className="np-menued-title np-menued-toolhead">
-          <span>窗格工具栏</span>
+          <span>{t("窗格工具栏")}</span>
           <Button
             minimal
             size="small"
             icon={ic(LayoutTemplate)}
-            text="重置为默认方案"
+            text={t("重置为默认方案")}
             onClick={applyToolbarDefault}
-            data-tip="恢复默认工具栏排列（地址框保留常驻）"
+            data-tip={t("恢复默认工具栏排列（地址框保留常驻）")}
           />
         </div>
         <div className="np-menued-tbar">
@@ -907,7 +907,7 @@ export function MenuEditor() {
           })}
           {!toolbarEntries.length && (
             <div className="np-menued-empty">
-              从功能库把功能拖到这里（任意功能都可入工具栏）
+              {t("从功能库把功能拖到这里（任意功能都可入工具栏）")}
             </div>
           )}
         </div>
@@ -920,7 +920,7 @@ export function MenuEditor() {
             （只挂列表框时，拖到框下空白会被判为"拖出左栏"= 误删条目） */}
         <div className="np-menued-pane" data-menued-left>
           <div className="np-menued-title np-menued-headrow">
-            <span>启用菜单</span>
+            <span>{t("启用菜单")}</span>
             <span className="np-menued-headacts">
               <Button
                 size="small"
@@ -937,15 +937,15 @@ export function MenuEditor() {
                   });
                 }}
               >
-                清空
+                {t("清空")}
               </Button>
               <Button
                 minimal
                 size="small"
                 icon={ic(LayoutTemplate)}
-                text="重置为默认方案"
+                text={t("重置为默认方案")}
                 onClick={applyMenuDefault}
-                data-tip="恢复默认菜单布局（七项基础功能保留）"
+                data-tip={t("恢复默认菜单布局（七项基础功能保留）")}
               />
             </span>
           </div>
@@ -963,7 +963,7 @@ export function MenuEditor() {
                   <span className="np-menued-label np-ellipsis">
                     {entryLabel(en)}
                   </span>
-                  {isFixedEntry(en) && <span className="np-menued-chip">固定</span>}
+                  {isFixedEntry(en) && <span className="np-menued-chip">{t("固定")}</span>}
                   {en.kind !== "sep" &&
                     condChipTexts(en).map((t) => (
                       <span key={t} className="np-menued-chip">
@@ -998,7 +998,7 @@ export function MenuEditor() {
             ))}
             {!entries.length && (
               <div className="np-menued-empty">
-                菜单为空——从右侧功能库把功能拖到这里
+                {t("菜单为空——从右侧功能库把功能拖到这里")}
               </div>
             )}
           </div>
@@ -1006,35 +1006,35 @@ export function MenuEditor() {
         <div
           className="np-menued-grip"
           onPointerDown={startLeftResize}
-          data-tip="拖动调整两栏宽度"
+          data-tip={t("拖动调整两栏宽度")}
         />
         <div className="np-menued-pane">
           <div className="np-menued-title np-menued-libhead">
-            <span>功能库</span>
+            <span>{t("功能库")}</span>
             <span className="np-menued-libcount">{libFns.length}</span>
             <InputGroup
               className="np-menued-search"
               size="small"
               value={query}
-              placeholder="搜索功能"
+              placeholder={t("搜索功能")}
               leftElement={ic(Search)}
               spellCheck={false}
               onChange={(e) => setQuery(e.target.value)}
             />
             <Switch
               checked={onlyUnused}
-              label="只展示未启用的功能"
+              label={t("只展示未启用的功能")}
               onChange={(e) => setOnlyUnused(e.currentTarget.checked)}
             />
             <span className="np-menued-legend">
               <span className="np-menued-mark is-menu">
                 <AppIcon icon={MenuIcon} size={DENSITY.iconXs} />
               </span>
-              菜单
+              {t("菜单")}
               <span className="np-menued-mark is-tool">
                 <AppIcon icon={PanelTop} size={DENSITY.iconXs} />
               </span>
-              工具栏
+              {t("工具栏")}
             </span>
           </div>
           <div className="np-menued-libbody">
@@ -1059,17 +1059,17 @@ export function MenuEditor() {
               {showSep && (
                 <div className="np-menued-cluster" data-libcluster="布局">
                   <div className="np-menued-clabel">
-                    <b>布局</b>
+                    <b>{t("布局")}</b>
                     <span>1</span>
                   </div>
                   <div className="np-menued-wall">
                     <div
                       className="np-menued-librow"
                       onPointerDown={(e) => beginDrag(e, { src: "sep" })}
-                      data-tip="拖入左侧菜单即可添加分割线"
+                      data-tip={t("拖入左侧菜单即可添加分割线")}
                     >
                       <AppIcon icon={Minus} size={DENSITY.iconSm} />
-                      <span className="np-menued-label">分割线</span>
+                      <span className="np-menued-label">{t("分割线")}</span>
                     </div>
                   </div>
                 </div>
@@ -1112,7 +1112,7 @@ export function MenuEditor() {
                               {used.has(id) && (
                                 <span
                                   className="np-menued-mark is-menu"
-                                  data-tip="已启用 · 右键菜单"
+                                  data-tip={t("已启用 · 右键菜单")}
                                 >
                                   <AppIcon icon={MenuIcon} size={DENSITY.iconXs} />
                                 </span>
@@ -1120,7 +1120,7 @@ export function MenuEditor() {
                               {toolbarUsed.has(id) && (
                                 <span
                                   className="np-menued-mark is-tool"
-                                  data-tip="已启用 · 窗格工具栏"
+                                  data-tip={t("已启用 · 窗格工具栏")}
                                 >
                                   <AppIcon icon={PanelTop} size={DENSITY.iconXs} />
                                 </span>
@@ -1133,7 +1133,7 @@ export function MenuEditor() {
                 </div>
               ))}
               {!visibleGroups.length && !showSep && (
-                <div className="np-menued-empty">无匹配功能</div>
+                <div className="np-menued-empty">{t("无匹配功能")}</div>
               )}
             </div>
           </div>

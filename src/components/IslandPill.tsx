@@ -4,6 +4,7 @@
 // 交换模式 → 取消；全盘搜索 → 唤起面板；回执 → 点击消去。
 // 剪贴板持有为纯指示（不响应点击，粘贴仍走 Ctrl+V / 右键菜单）。
 import { useEffect, useState } from "react";
+import { t } from "../lib/i18n";
 import {
   ArrowLeftRight,
   Check,
@@ -125,7 +126,7 @@ export function IslandPill({ path }: { path: string }) {
               />
             </span>
             <span className="np-ellipsis">
-              {j.label}
+              {t(j.label)}
               {j.count > 1 ? ` ×${j.count}` : ""} {pctText}
               {state}
             </span>
@@ -136,7 +137,7 @@ export function IslandPill({ path }: { path: string }) {
         return (
           <>
             <AppIcon icon={ArrowLeftRight} size={DENSITY.iconXs} />
-            <span>点选目标窗格 · Esc 取消</span>
+            <span>{t("点选目标窗格 · Esc 取消")}</span>
           </>
         );
       case "gsearch":

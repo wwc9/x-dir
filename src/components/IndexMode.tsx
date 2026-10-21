@@ -14,6 +14,7 @@ import {
   type IndexPhase,
 } from "../lib/indexPhase";
 import { DENSITY } from "../lib/tokens";
+import { t } from "../lib/i18n";
 import { useSettings } from "../stores/settings";
 import { useUi } from "../stores/ui";
 import { AppIcon } from "./AppIcon";
@@ -185,7 +186,7 @@ export function IndexModeBar({ status }: { status: IndexStatus | null }) {
                     <AppIcon icon={LoaderCircle} size={DENSITY.iconXs} />
                   </span>
                   <span className="np-gsearch-idx-vol-text">
-                    等待守护进程拉起（UAC 授权后自动进行）…
+                    {t("等待守护进程拉起（UAC 授权后自动进行）…")}
                   </span>
                 </span>
               </div>
@@ -193,28 +194,28 @@ export function IndexModeBar({ status }: { status: IndexStatus | null }) {
             <VolumeRows vols={vols} />
             {phase === "error" && (
               <div className="np-gsearch-idx-hint">
-                USN 日志重置类错误守护会自动重建并恢复；若该盘持续失败，重新开关一次索引模式可重试。
+                {t("USN 日志重置类错误守护会自动重建并恢复；若该盘持续失败，重新开关一次索引模式可重试。")}
               </div>
             )}
             {phase === "down" && (
               <div className="np-gsearch-idx-hint">
-                上次启动未成功或守护已退出；重新开关一次索引模式即可再试。
+                {t("上次启动未成功或守护已退出；重新开关一次索引模式即可再试。")}
               </div>
             )}
             {phase === "off" && (
               <div className="np-gsearch-idx-hint">
-                打开开关建立索引：毫秒级出结果并实时同步文件变更（开启时弹一次 UAC 授权）。
+                {t("打开开关建立索引：毫秒级出结果并实时同步文件变更（开启时弹一次 UAC 授权）。")}
               </div>
             )}
             <div className="np-gsearch-idx-hint">
-              未提权 / 非 NTFS 盘自动回退实时遍历。索引存于程序目录 config\index，删除目录即卸载。
+              {t("未提权 / 非 NTFS 盘自动回退实时遍历。索引存于程序目录 config\index，删除目录即卸载。")}
             </div>
           </div>
         }
       >
         <button
           className={`np-gsearch-idx np-gsearch-idx-${phase}`}
-          data-tip="索引建立进度，点击查看详情"
+          data-tip={t("索引建立进度，点击查看详情")}
         >
           <span className="np-gsearch-idx-dot" />
           <span>{PHASE_LABEL[phase]}</span>
@@ -222,7 +223,7 @@ export function IndexModeBar({ status }: { status: IndexStatus | null }) {
       </PopoverNext>
       <Switch
         checked={enabled}
-        data-tip="索引模式：借助 NTFS 索引毫秒级出结果，文件变动实时同步"
+        data-tip={t("索引模式：借助 NTFS 索引毫秒级出结果，文件变动实时同步")}
         onChange={(e) => onToggle(e.currentTarget.checked)}
       />
     </span>

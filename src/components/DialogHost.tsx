@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { t } from "../lib/i18n";
 import {
   Button,
   Dialog,
@@ -230,14 +231,14 @@ export function DialogHost() {
         <>
           <DialogBody>
             <div className="np-props">
-              <Prop k="名称" v={dialog.entry.name} />
-              <Prop k="路径" v={dialog.entry.path} />
-              <Prop k="类型" v={typeName(dialog.entry.name, dialog.entry.isDir)} />
-              <Prop k="大小" v={<SizeValue entry={dialog.entry} />} />
-              <Prop k="修改时间" v={formatTime(dialog.entry.mtimeMs)} />
-              <Prop k="创建时间" v={formatTime(dialog.entry.ctimeMs)} />
+              <Prop k={t("名称")} v={dialog.entry.name} />
+              <Prop k={t("路径")} v={dialog.entry.path} />
+              <Prop k={t("类型")} v={t(typeName(dialog.entry.name, dialog.entry.isDir))} />
+              <Prop k={t("大小")} v={<SizeValue entry={dialog.entry} />} />
+              <Prop k={t("修改时间")} v={formatTime(dialog.entry.mtimeMs)} />
+              <Prop k={t("创建时间")} v={formatTime(dialog.entry.ctimeMs)} />
               <Prop
-                k="属性"
+                k={t("属性")}
                 v={
                   [
                     dialog.entry.attrs.readonly && "只读",
@@ -251,7 +252,7 @@ export function DialogHost() {
             </div>
           </DialogBody>
           <DialogFooter
-            actions={<Button size="small" intent="primary" onClick={close}>关闭</Button>}
+            actions={<Button size="small" intent="primary" onClick={close}>{t("关闭")}</Button>}
           />
         </>
       )}
@@ -304,7 +305,7 @@ function InputDialog({
         actions={
           <>
             <Button size="small" onClick={() => onDone(null)}>
-              取消
+              {t("取消")}
             </Button>
             <Button size="small" intent="primary" onClick={submit}>
               {dialog.okText ?? "确定"}
@@ -343,14 +344,14 @@ function ConflictDialog({
           onChange={(e) => setAction(e.currentTarget.value as typeof action)}
           className="np-conflict-radios"
         >
-          <Radio value="overwrite" label="覆盖目标文件" />
-          <Radio value="skip" label="跳过这些文件" />
-          <Radio value="rename" label="保留两者（重命名为 “xxx (2).ext”）" />
+          <Radio value="overwrite" label={t("覆盖目标文件")} />
+          <Radio value="skip" label={t("跳过这些文件")} />
+          <Radio value="rename" label={t("保留两者（重命名为 “xxx (2).ext”）")} />
         </RadioGroup>
         <Switch
           className="np-conflict-remember"
           checked={remember}
-          label="本会话内不再询问（后续冲突直接套用该策略）"
+          label={t("本会话内不再询问（后续冲突直接套用该策略）")}
           onChange={(e) => setRemember(e.currentTarget.checked)}
         />
       </DialogBody>
@@ -358,10 +359,10 @@ function ConflictDialog({
         actions={
           <>
             <Button size="small" onClick={() => onDone(null)}>
-              取消
+              {t("取消")}
             </Button>
             <Button size="small" intent="primary" onClick={() => onDone({ action, remember })}>
-              确定
+              {t("确定")}
             </Button>
           </>
         }
@@ -426,17 +427,17 @@ function BatchRenameDialog({
       <DialogBody>
         <div className="np-bren-form">
           <span className="np-bren-field">
-            <span className="np-bren-k">查找</span>
+            <span className="np-bren-k">{t("查找")}</span>
             <InputGroup
               size="small"
               value={rule.find}
-              placeholder="留空 = 不替换"
+              placeholder={t("留空 = 不替换")}
               spellCheck={false}
               onChange={(e) => patch({ find: e.target.value })}
             />
           </span>
           <span className="np-bren-field">
-            <span className="np-bren-k">替换为</span>
+            <span className="np-bren-k">{t("替换为")}</span>
             <InputGroup
               size="small"
               value={rule.replace}
@@ -445,7 +446,7 @@ function BatchRenameDialog({
             />
           </span>
           <span className="np-bren-field">
-            <span className="np-bren-k">前缀</span>
+            <span className="np-bren-k">{t("前缀")}</span>
             <InputGroup
               size="small"
               value={rule.prefix}
@@ -454,7 +455,7 @@ function BatchRenameDialog({
             />
           </span>
           <span className="np-bren-field">
-            <span className="np-bren-k">后缀</span>
+            <span className="np-bren-k">{t("后缀")}</span>
             <InputGroup
               size="small"
               value={rule.suffix}
@@ -468,12 +469,12 @@ function BatchRenameDialog({
             {/* Switch v6 无 small 档，默认即紧凑（AGENTS §4.4） */}
             <Switch
               checked={rule.useSeq}
-              label="加序号"
+              label={t("加序号")}
               onChange={(e) => patch({ useSeq: e.currentTarget.checked })}
             />
           </span>
           <span className="np-bren-field">
-            <span className="np-bren-k">起始</span>
+            <span className="np-bren-k">{t("起始")}</span>
             <InputGroup
               size="small"
               value={String(rule.seqStart)}
@@ -486,7 +487,7 @@ function BatchRenameDialog({
             />
           </span>
           <span className="np-bren-field">
-            <span className="np-bren-k">位数</span>
+            <span className="np-bren-k">{t("位数")}</span>
             <NpSelect
               value={rule.seqPad}
               options={SEQ_PAD_OPTS}
@@ -523,7 +524,7 @@ function BatchRenameDialog({
         actions={
           <>
             <Button size="small" onClick={() => onDone(null)}>
-              取消
+              {t("取消")}
             </Button>
             <Button
               size="small"

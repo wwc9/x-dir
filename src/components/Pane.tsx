@@ -495,7 +495,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
       const arrow = (prevTarget: string) => (
         <button
           className="np-crumb-tail"
-          data-tip="浏览子文件夹"
+          data-tip={t("浏览子文件夹")}
           onClick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
             openChildMenu(prevTarget, r.left, r.bottom + 4);
@@ -510,7 +510,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
       nodes.push({
         key: "pc",
         el: (
-          <button className="np-crumb" data-tip="此电脑" onClick={() => go(THIS_PC)}>
+          <button className="np-crumb" data-tip={t("此电脑")} onClick={() => go(THIS_PC)}>
             <AppIcon icon={Computer} size={DENSITY.iconSm} />
           </button>
         ),
@@ -540,7 +540,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
           el: (
             <button
               className="np-crumb np-crumb-more"
-              data-tip="更多上级目录"
+              data-tip={t("更多上级目录")}
               onClick={(e) => {
                 if (!hiddenCrumbs.length) return;
                 const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -818,7 +818,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
                 autoFocus
                 leftElement={ic(Search)}
                 value={ui?.search ?? ""}
-                placeholder="递归搜索…"
+                placeholder={t("递归搜索…")}
                 onChange={(e) => usePanes.getState().setSearch(tabId, e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Escape") usePanes.getState().setSearch(tabId, null);
@@ -827,7 +827,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
               />
               <NpSelect
                 value={searchType}
-                data-tip="类型（选文件/文件夹或常用类型，等同于 ext: 过滤）"
+                data-tip={t("类型（选文件/文件夹或常用类型，等同于 ext: 过滤）")}
                 options={SEARCH_TYPE_OPTIONS}
                 popoverClassName="np-search-type-pop"
                 onChange={(v) => usePanes.getState().setSearchType(tabId, v)}
@@ -911,7 +911,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
               </Menu>
             }
           >
-            <Button minimal size="small" icon={ic(MoreHorizontal)} data-tip="更多" />
+            <Button minimal size="small" icon={ic(MoreHorizontal)} data-tip={t("更多")} />
           </PopoverNext>
         </div>
         <Button
@@ -920,7 +920,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
           icon={ic(X)}
           disabled={dfsPanes(useLayout.getState().tree!).length <= 1}
           onClick={() => closePaneConfirmed(pane.id)}
-          data-tip="关闭窗格" data-kbd="Ctrl+Shift+W"
+          data-tip={t("关闭窗格")} data-kbd="Ctrl+Shift+W"
         />
       </div>
 
@@ -1013,7 +1013,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
           minimal
           size="small"
           icon={ic(Plus)}
-          aria-label="新建标签"
+          aria-label={t("新建标签")}
           onClick={() => useLayout.getState().newTab(pane.id)}
         />
       </div>
@@ -1027,7 +1027,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
             className="np-filter-input"
             data-filter={pane.id}
             value={ftext}
-            placeholder="过滤当前文件夹（名称 / 拼音首字母，多词空格分隔）"
+            placeholder={t("过滤当前文件夹（名称 / 拼音首字母，多词空格分隔）")}
             onChange={(e) => commitFilter(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Escape") {
@@ -1040,7 +1040,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
           <span className="np-filter-count">{(ui?.total ?? 0).toLocaleString()} 项</span>
           <button
             className="np-filter-clear"
-            data-tip="退出过滤" data-kbd="Esc"
+            data-tip={t("退出过滤")} data-kbd="Esc"
             onClick={() => usePanes.getState().setFilter(tabId, null)}
           >
             <AppIcon icon={X} size={DENSITY.iconXs} />

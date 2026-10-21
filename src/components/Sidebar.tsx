@@ -108,6 +108,7 @@ function MiniTreeSvg({ node, size }: { node: LayoutNode; size: number }) {
 /** 布局预设选择面板（16 种，4×4；挂在顶栏"布局预设"按钮下，2026-10-12 自边栏移入）：
  *  应用后弹层保持打开，可连续试排 */
 export function PresetPicker() {
+  const t = useT();
   return (
     <div className="np-layoutpicker">
       {PRESET_LIST.map((p) => (
@@ -124,7 +125,7 @@ export function PresetPicker() {
         </button>
       ))}
       <div className="np-layouthint">
-        预设之外，每个窗格可继续 ──/│ 递归分裂成任意混合布局
+        {t("预设之外，每个窗格可继续 ──/│ 递归分裂成任意混合布局")}
       </div>
     </div>
   );
@@ -207,7 +208,7 @@ function Shelf() {
           <span
             className="np-shelf-modeseg"
             role="group"
-            aria-label="拖出语义：移动/复制"
+            aria-label={t("拖出语义：移动/复制")}
             data-mode={stagingMode}
           >
             <span className="np-shelf-modeseg-thumb" aria-hidden />
@@ -218,7 +219,7 @@ function Shelf() {
                   ? t("移动：拖动条目到窗格即移动，并移出暂存（当前模式）")
                   : t("切换为移动：拖动条目到窗格即移动，并移出暂存")
               }
-              aria-label="拖出语义：移动"
+              aria-label={t("拖出语义：移动")}
               aria-pressed={stagingMode === "move"}
               onClick={() => useSettings.getState().update({ stagingMode: "move" })}
             >
@@ -231,7 +232,7 @@ function Shelf() {
                   ? t("复制：拖动条目到窗格即复制，保留原件（当前模式）")
                   : t("切换为复制：拖动条目到窗格即复制，保留原件")
               }
-              aria-label="拖出语义：复制"
+              aria-label={t("拖出语义：复制")}
               aria-pressed={stagingMode === "copy"}
               onClick={() => useSettings.getState().update({ stagingMode: "copy" })}
             >
@@ -603,9 +604,9 @@ export function Sidebar() {
         ))}
         {items.length === 0 && (
           <div className="np-side-empty">
-            还没有自定义方案。
+            {t("还没有自定义方案。")}
             <br />
-            摆好窗格组合后，点上方“另存为新方案”保存。
+            {t("摆好窗格组合后，点上方“另存为新方案”保存。")}
           </div>
         )}
       </div>

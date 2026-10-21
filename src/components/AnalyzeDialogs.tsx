@@ -1,6 +1,7 @@
 // 目录分析对话框（右键：查找重复文件 / 空间分析 / 文件夹比较）：
 // 扫描由后端异步命令完成（秒级），对话框内 loading → 结果；宽弹窗（§4.7 二级页面规范）。
 import { useEffect, useState } from "react";
+import { t } from "../lib/i18n";
 import { Button, Checkbox, DialogBody, DialogFooter } from "@blueprintjs/core";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
 
@@ -72,9 +73,9 @@ export function DuplicateDialog({ dir, onDone }: { dir: string; onDone(): void }
         {error ? (
           <div className="np-list-error">扫描失败：{error}</div>
         ) : !groups ? (
-          <Loading text="正在按内容指纹扫描…" />
+          <Loading text={t("正在按内容指纹扫描…")} />
         ) : !groups.length ? (
-          <div className="np-list-empty">没有发现重复文件</div>
+          <div className="np-list-empty">{t("没有发现重复文件")}</div>
         ) : (
           <div className="np-dup-list">
             <div className="np-dialog-muted">
@@ -112,10 +113,10 @@ export function DuplicateDialog({ dir, onDone }: { dir: string; onDone(): void }
         actions={
           <>
             <Button size="small" onClick={onDone}>
-              关闭
+              {t("关闭")}
             </Button>
             <Button size="small" intent="danger" disabled={!sel.size} onClick={del}>
-              删除选中（回收站）
+              {t("删除选中（回收站）")}
             </Button>
           </>
         }
@@ -195,9 +196,9 @@ export function EmptyScanDialog({ dir, onDone }: { dir: string; onDone(): void }
         {error ? (
           <div className="np-list-error">扫描失败：{error}</div>
         ) : !scan ? (
-          <Loading text="正在扫描空文件与空文件夹…" />
+          <Loading text={t("正在扫描空文件与空文件夹…")} />
         ) : !total ? (
-          <div className="np-list-empty">没有发现空文件或空文件夹</div>
+          <div className="np-list-empty">{t("没有发现空文件或空文件夹")}</div>
         ) : (
           <div className="np-dup-list">
             <div className="np-dialog-muted">
@@ -212,7 +213,7 @@ export function EmptyScanDialog({ dir, onDone }: { dir: string; onDone(): void }
         actions={
           <>
             <Button size="small" onClick={onDone}>
-              关闭
+              {t("关闭")}
             </Button>
             <Button
               size="small"
@@ -220,7 +221,7 @@ export function EmptyScanDialog({ dir, onDone }: { dir: string; onDone(): void }
               disabled={!sel.size}
               onClick={del}
             >
-              删除选中（回收站）
+              {t("删除选中（回收站）")}
             </Button>
           </>
         }
@@ -266,7 +267,7 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
       <DialogBody>
         <div className="np-dsiz-head">
           {stack.length > 0 && (
-            <button className="np-dsiz-back" data-tip="返回上一级" onClick={back}>
+            <button className="np-dsiz-back" data-tip={t("返回上一级")} onClick={back}>
               <AppIcon icon={ArrowLeft} size={DENSITY.iconSm} />
             </button>
           )}
@@ -277,9 +278,9 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
         {error ? (
           <div className="np-list-error">扫描失败：{error}</div>
         ) : !rows ? (
-          <Loading text="正在统计目录体积…" />
+          <Loading text={t("正在统计目录体积…")} />
         ) : !rows.length ? (
-          <div className="np-list-empty">空目录</div>
+          <div className="np-list-empty">{t("空目录")}</div>
         ) : (
           <div className="np-dsiz-list">
             {rows.map((r) => (
@@ -313,7 +314,7 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
       <DialogFooter
         actions={
           <Button size="small" onClick={onDone}>
-            关闭
+            {t("关闭")}
           </Button>
         }
       />
@@ -417,7 +418,7 @@ export function CompareDialog({
         {error ? (
           <div className="np-list-error">比较失败：{error}</div>
         ) : !res ? (
-          <Loading text="正在比较两个文件夹…" />
+          <Loading text={t("正在比较两个文件夹…")} />
         ) : (
           <>
             <div className="np-dialog-muted">
@@ -428,7 +429,7 @@ export function CompareDialog({
               {section(`仅在 ${bName}`, "b", res.bOnly, selB)}
               {section("内容不同（复制时以左侧版本为准）", "a", res.differ, selA)}
               {!res.aOnly.length && !res.bOnly.length && !res.differ.length && (
-                <div className="np-list-empty">两个文件夹内容一致</div>
+                <div className="np-list-empty">{t("两个文件夹内容一致")}</div>
               )}
             </div>
           </>
@@ -438,7 +439,7 @@ export function CompareDialog({
         actions={
           <>
             <Button size="small" onClick={onDone}>
-              关闭
+              {t("关闭")}
             </Button>
             <Button
               size="small"

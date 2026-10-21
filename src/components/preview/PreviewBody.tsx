@@ -4,6 +4,7 @@
 // 单条目生命周期：切换即弃用上一条目数据（reqId 竞态守卫 + FontFace/media 自清理）。
 
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { t } from "../../lib/i18n";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Spinner } from "@blueprintjs/core";
 
@@ -292,7 +293,7 @@ export function PreviewBody({
           return (
             <div className="np-pv-none np-pv-converting">
               <Spinner size={DENSITY.iconMd} />
-              <div>正在转换为 PDF 预览…（首次转换需数秒，需已装 Office 或 WPS）</div>
+              <div>{t("正在转换为 PDF 预览…（首次转换需数秒，需已装 Office 或 WPS）")}</div>
             </div>
           );
         if (!binPdf.path) return null; // 失败已置 mediaError → 兜底卡

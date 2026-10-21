@@ -62,6 +62,7 @@ import { useNavTree } from "../stores/navtree";
 import { usePanes } from "../stores/panes";
 import { pickStartIndex, usePreview } from "../stores/preview";
 import { composeTypeFilterQuery } from "../lib/searchStream";
+import { t } from "../lib/i18n";
 import { useSettings } from "../stores/settings";
 import { useUi, type MenuItem } from "../stores/ui";
 import {
@@ -82,12 +83,12 @@ const freeCache = new Map<string, number>();
 const FREE_CACHE_MAX = 200;
 /** 颜色标记选项（键 = index.css --np-tag-* token） */
 const TAG_COLORS: { key: TagColor; label: string }[] = [
-  { key: "red", label: "红" },
-  { key: "orange", label: "橙" },
-  { key: "yellow", label: "黄" },
-  { key: "green", label: "绿" },
-  { key: "blue", label: "蓝" },
-  { key: "purple", label: "紫" },
+  { key: "red", label: t("红") },
+  { key: "orange", label: t("橙") },
+  { key: "yellow", label: t("黄") },
+  { key: "green", label: t("绿") },
+  { key: "blue", label: t("蓝") },
+  { key: "purple", label: t("紫") },
 ];
 
 function driveName(d: DriveInfo): string {
@@ -823,43 +824,43 @@ export function FileList({
     const layout = useLayout.getState();
     switch (key) {
       case "open":
-        return { label: "打开", action: () => openEntry(entry0) };
+        return { label: t("打开"), action: () => openEntry(entry0) };
       case "openTab":
         return {
-          label: "在新标签打开",
+          label: t("在新标签打开"),
           action: () => {
             const paneId = layout.activePaneId;
             if (paneId) useLayout.getState().newTab(paneId, entry0.path);
           },
         };
       case "rename":
-        return { label: "重命名", action: () => usePanes.getState().setEditing(tabId, entry0.path) };
+        return { label: t("重命名"), action: () => usePanes.getState().setEditing(tabId, entry0.path) };
       case "delete":
         return {
-          label: "删除",
+          label: t("删除"),
           danger: true,
           action: () => deletePaths(selectedPaths(), confirmDelete),
         };
       case "deletePerm":
         return {
-          label: "永久删除",
+          label: t("永久删除"),
           danger: true,
           action: () => void deletePaths(selectedPaths(), true, true),
         };
       case "properties":
         return {
-          label: "属性",
+          label: t("属性"),
           action: () =>
             useUi
               .getState()
               .openDialog({ type: "properties", entry: entry0, freeBytes: free ?? undefined }),
         };
       case "cut":
-        return { label: "剪切", action: () => useClipboard.getState().set("cut", selectedPaths()) };
+        return { label: t("剪切"), action: () => useClipboard.getState().set("cut", selectedPaths()) };
       case "copy":
-        return { label: "复制", action: () => useClipboard.getState().set("copy", selectedPaths()) };
+        return { label: t("复制"), action: () => useClipboard.getState().set("copy", selectedPaths()) };
       case "paste":
-        return { label: "粘贴", action: () => void doPaste() };
+        return { label: t("粘贴"), action: () => void doPaste() };
       case "copyPath": {
         // 空白处右键 = 复制当前目录路径
         const text = sel.length ? selectedPaths().join("\n") : path;
@@ -870,7 +871,7 @@ export function FileList({
       }
       case "copyName":
         return {
-          label: "复制名称",
+          label: t("复制名称"),
           action: () => copyText(sel.map((e2) => e2.name).join("\n"), "名称已复制"),
         };
       case "copyToPane":
@@ -905,7 +906,7 @@ export function FileList({
       }
       case "colorTag":
         return {
-          label: "颜色标记 ▸",
+          label: t("颜色标记 ▸"),
           sub: [
             ...TAG_COLORS.map((c) => ({
               label: c.label,
@@ -913,7 +914,7 @@ export function FileList({
             })),
             { sep: true },
             {
-              label: "清除标记",
+              label: t("清除标记"),
               action: () => useSettings.getState().setTagged(entry0.path, null),
             },
           ],
@@ -921,7 +922,7 @@ export function FileList({
       case "addFavorite": {
         const paths = selectedPaths();
         return {
-          label: "添加到收藏夹",
+          label: t("添加到收藏夹"),
           action: () => {
             const st = useSettings.getState();
             for (const p of paths) st.addFavorite(p);
@@ -932,7 +933,7 @@ export function FileList({
       case "shelfAdd": {
         const paths = selectedPaths();
         return {
-          label: "添加到暂存区",
+          label: t("添加到暂存区"),
           action: () => {
             const added = useSettings.getState().addShelf(paths);
             useUi.getState().toast(
@@ -943,7 +944,7 @@ export function FileList({
       }
       case "sysMenu":
         return {
-          label: "更多系统选项（Shift+右键）",
+          label: t("更多系统选项（Shift+右键）"),
           action: () => {
             api
               .showContextMenu(selectedPaths())
@@ -954,7 +955,7 @@ export function FileList({
         // 选中条目 = 其所在目录；空白处 = 当前目录；"此电脑"伪路径无终端可开
         const dir = sel.length ? (parentPath(entry0.path) ?? path) : path;
         return {
-          label: "在终端打开",
+          label: t("在终端打开"),
           disabled: dir === THIS_PC,
           action: () =>
             api
@@ -963,63 +964,63 @@ export function FileList({
         };
       }
       case "pdfMerge":
-        return { label: "PDF 合并…", action: () => void mergePdfs(sel, path) };
+        return { label: t("PDF 合并…"), action: () => void mergePdfs(sel, path) };
       case "pdfSplit":
-        return { label: "PDF 拆分为单页…", action: () => void splitPdf(entry0, path) };
+        return { label: t("PDF 拆分为单页…"), action: () => void splitPdf(entry0, path) };
       case "pdfWatermark":
-        return { label: "PDF 加水印…", action: () => void watermarkPdfs(sel, path) };
+        return { label: t("PDF 加水印…"), action: () => void watermarkPdfs(sel, path) };
       case "pdfExtract":
-        return { label: "PDF 提取页…", action: () => void extractPdfPages(entry0, path) };
+        return { label: t("PDF 提取页…"), action: () => void extractPdfPages(entry0, path) };
       case "pdfRemove":
-        return { label: "PDF 删除页…", action: () => void removePdfPages(entry0, path) };
+        return { label: t("PDF 删除页…"), action: () => void removePdfPages(entry0, path) };
       case "pdfRotate":
         return {
-          label: "PDF 旋转 ▸",
+          label: t("PDF 旋转 ▸"),
           sub: [-90, 90, 180, 270].map((deg) => ({
-            label: deg < 0 ? `逆时针 ${-deg}°` : `${deg}°`,
+            label: deg < 0 ? t("逆时针 {d}°", { d: -deg }) : `${deg}°`,
             action: () => void rotatePdf(entry0, deg),
           })),
         };
       case "pdfCompress":
-        return { label: "PDF 轻压缩", action: () => void compressPdfs(sel, path) };
+        return { label: t("PDF 轻压缩"), action: () => void compressPdfs(sel, path) };
       case "imgToPdf":
-        return { label: "图片合并为 PDF…", action: () => void imagesToPdf(sel, path) };
+        return { label: t("图片合并为 PDF…"), action: () => void imagesToPdf(sel, path) };
       case "imgCompress":
-        return { label: "图片压缩…", action: () => void imgCompress(sel, path) };
+        return { label: t("图片压缩…"), action: () => void imgCompress(sel, path) };
       case "imgWatermark":
-        return { label: "图片加水印…", action: () => void imgWatermark(sel, path) };
+        return { label: t("图片加水印…"), action: () => void imgWatermark(sel, path) };
       case "imgConvert":
-        return { label: "图片格式转换…", action: () => void imgConvert(sel, path) };
+        return { label: t("图片格式转换…"), action: () => void imgConvert(sel, path) };
       case "imgResize":
-        return { label: "图片尺寸调整…", action: () => void imgResize(sel, path) };
+        return { label: t("图片尺寸调整…"), action: () => void imgResize(sel, path) };
       case "imgMontage":
-        return { label: "宫格拼图…", action: () => void imgMontage(sel, path) };
+        return { label: t("宫格拼图…"), action: () => void imgMontage(sel, path) };
       case "officeToPdf":
-        return { label: "转为 PDF…", action: () => void officeToPdf(sel, path) };
+        return { label: t("转为 PDF…"), action: () => void officeToPdf(sel, path) };
       case "officeClean":
-        return { label: "清理隐私属性", action: () => void cleanOfficeMeta(sel, path) };
+        return { label: t("清理隐私属性"), action: () => void cleanOfficeMeta(sel, path) };
       case "officeToTxt":
-        return { label: "导出文本 TXT", action: () => void exportOfficeText(sel, path) };
+        return { label: t("导出文本 TXT"), action: () => void exportOfficeText(sel, path) };
       case "csvConvert":
         return {
-          label: "编码转换 ▸",
+          label: t("编码转换 ▸"),
           sub: [
-            { label: "转为 UTF-8 BOM（Excel 友好）", action: () => void convertEncoding(sel, "utf8bom") },
-            { label: "转为 UTF-8", action: () => void convertEncoding(sel, "utf8") },
-            { label: "转为 GBK", action: () => void convertEncoding(sel, "gbk") },
+            { label: t("转为 UTF-8 BOM（Excel 友好）"), action: () => void convertEncoding(sel, "utf8bom") },
+            { label: t("转为 UTF-8"), action: () => void convertEncoding(sel, "utf8") },
+            { label: t("转为 GBK"), action: () => void convertEncoding(sel, "gbk") },
           ],
         };
       case "csvMerge":
-        return { label: "CSV 合并…", action: () => void mergeCsvs(sel, path) };
+        return { label: t("CSV 合并…"), action: () => void mergeCsvs(sel, path) };
       case "xlsxMerge":
-        return { label: "Excel 合并…", action: () => void mergeXlsx(sel, path) };
+        return { label: t("Excel 合并…"), action: () => void mergeXlsx(sel, path) };
       case "textMerge":
-        return { label: "文本合并…", action: () => void mergeTexts(sel, path) };
+        return { label: t("文本合并…"), action: () => void mergeTexts(sel, path) };
       case "exportList":
-        return { label: "导出文件清单…", action: () => void exportListing(sel, path) };
+        return { label: t("导出文件清单…"), action: () => void exportListing(sel, path) };
       case "batchRename":
         return {
-          label: "批量重命名…",
+          label: t("批量重命名…"),
           action: () => {
             void useUi
               .getState()
@@ -1033,15 +1034,15 @@ export function FileList({
           },
         };
       case "zipHere":
-        return { label: "压缩为 zip…", action: () => void zipEntries(sel, path) };
+        return { label: t("压缩为 zip…"), action: () => void zipEntries(sel, path) };
       case "extract":
         return {
-          label: "解压到此处",
+          label: t("解压到此处"),
           action: () => void extractArchives(selectedPaths()),
         };
       case "findDuplicates":
         return {
-          label: "查找重复文件",
+          label: t("查找重复文件"),
           action: () =>
             void useUi
               .getState()
@@ -1049,19 +1050,19 @@ export function FileList({
         };
       case "findEmpty":
         return {
-          label: "清理空文件/空文件夹",
+          label: t("清理空文件/空文件夹"),
           action: () =>
             void useUi.getState().openDialog({ type: "emptyScan", dir: entry0.path }),
         };
       case "dirSizes":
         return {
-          label: "空间分析",
+          label: t("空间分析"),
           action: () =>
             void useUi.getState().openDialog({ type: "dirsizes", dir: entry0.path }),
         };
       case "compareFolders":
         return {
-          label: "文件夹比较",
+          label: t("文件夹比较"),
           action: () => {
             const [x, y] = selectedPaths();
             if (x && y) void useUi.getState().openDialog({ type: "compare", a: x, b: y });
@@ -1069,19 +1070,19 @@ export function FileList({
         };
       case "organizeBy":
         return {
-          label: "按规则归类 ▸",
+          label: t("按规则归类 ▸"),
           sub: [
-            { label: "按扩展名分组", action: () => void organizeEntries(sel, path, "ext") },
-            { label: "按修改年月分组", action: () => void organizeEntries(sel, path, "month") },
+            { label: t("按扩展名分组"), action: () => void organizeEntries(sel, path, "ext") },
+            { label: t("按修改年月分组"), action: () => void organizeEntries(sel, path, "month") },
           ],
         };
       case "newFolder":
-        return { label: "新建文件夹", action: () => createEntry(path, "dir", forceBump) };
+        return { label: t("新建文件夹"), action: () => createEntry(path, "dir", forceBump) };
       case "newFile":
-        return { label: "新建文本文件", action: () => createEntry(path, "file", forceBump) };
+        return { label: t("新建文本文件"), action: () => createEntry(path, "file", forceBump) };
       case "newFolders":
         return {
-          label: "批量新建文件夹…",
+          label: t("批量新建文件夹…"),
           action: () =>
             void createFolders(
               path,
@@ -1093,7 +1094,7 @@ export function FileList({
       // Office/WPS 打开时按新文档处理）
       case "new":
         return {
-          label: "新建",
+          label: t("新建"),
           sub: (
             [
               ["文件夹", "新建文件夹", "新建文件夹", "dir"],
@@ -1112,7 +1113,7 @@ export function FileList({
       // 预览：与 Space 同语义——当前视图全部条目（含文件夹元信息卡）入队，定位到选中项
       case "preview":
         return {
-          label: "预览",
+          label: t("预览"),
           action: () => {
             if (entries.length)
               usePreview
@@ -1125,17 +1126,17 @@ export function FileList({
         };
       case "refresh":
         return {
-          label: "刷新",
+          label: t("刷新"),
           action: () => {
             forceRef.current = true;
             usePanes.getState().bumpRefresh(tabId);
           },
         };
       case "selectAll":
-        return { label: "全选", action: () => selectAll() };
+        return { label: t("全选"), action: () => selectAll() };
       case "reverseSelect":
         return {
-          label: "反向选择",
+          label: t("反向选择"),
           action: () => {
             const cur = new Set(selectedPaths());
             const inv = entries.filter((e2) => !cur.has(e2.path)).map((e2) => e2.path);
@@ -1183,7 +1184,7 @@ export function FileList({
     // 任何配置/条件下恒在且排最后，直达右键菜单编辑页
     if (items.length && !items[items.length - 1].sep) items.push({ sep: true });
     items.push({
-      label: "编辑菜单…",
+      label: t("编辑菜单…"),
       action: () => useUi.getState().openMenuPage(),
     });
     return items;
@@ -1396,49 +1397,49 @@ export function FileList({
           {isThisPc ? (
             <>
               <span className="np-col-name">
-                名称<ColGrip col="name" ctl={paneCtl} />
+                {t("名称")}<ColGrip col="name" ctl={paneCtl} />
               </span>
               <span className="np-col-type">
-                类型<ColGrip col="type" ctl={paneCtl} />
+                {t("类型")}<ColGrip col="type" ctl={paneCtl} />
               </span>
               <span className="np-col-size">
-                总大小<ColGrip col="size" ctl={paneCtl} />
+                {t("总大小")}<ColGrip col="size" ctl={paneCtl} />
               </span>
               <span className="np-col-size">
-                可用空间<ColGrip col="size" ctl={paneCtl} />
+                {t("可用空间")}<ColGrip col="size" ctl={paneCtl} />
               </span>
             </>
           ) : searchActive ? (
             <>
               <span className="np-col-name">
-                名称<ColGrip col="name" ctl={paneCtl} />
+                {t("名称")}<ColGrip col="name" ctl={paneCtl} />
               </span>
               <span className="np-col-loc">
-                位置<ColGrip col="loc" ctl={paneCtl} />
+                {t("位置")}<ColGrip col="loc" ctl={paneCtl} />
               </span>
               <span className="np-col-type">
-                类型<ColGrip col="type" ctl={paneCtl} />
+                {t("类型")}<ColGrip col="type" ctl={paneCtl} />
               </span>
               <span className="np-col-size">
-                大小<ColGrip col="size" ctl={paneCtl} />
+                {t("大小")}<ColGrip col="size" ctl={paneCtl} />
               </span>
             </>
           ) : (
             <>
               <button className="np-head-c np-col-name" onClick={() => toggleSort("name")}>
-                名称{sortArrow("name")}
+                {t("名称")}{sortArrow("name")}
                 <ColGrip col="name" ctl={paneCtl} />
               </button>
               <button className="np-head-c np-col-mtime" onClick={() => toggleSort("mtime")}>
-                修改时间{sortArrow("mtime")}
+                {t("修改时间")}{sortArrow("mtime")}
                 <ColGrip col="mtime" ctl={paneCtl} />
               </button>
               <button className="np-head-c np-col-type" onClick={() => toggleSort("type")}>
-                类型{sortArrow("type")}
+                {t("类型")}{sortArrow("type")}
                 <ColGrip col="type" ctl={paneCtl} />
               </button>
               <button className="np-head-c np-col-size" onClick={() => toggleSort("size")}>
-                大小{sortArrow("size")}
+                {t("大小")}{sortArrow("size")}
                 <ColGrip col="size" ctl={paneCtl} />
               </button>
             </>
@@ -1482,12 +1483,12 @@ export function FileList({
               .openMenu(
                 [
                   {
-                    label: "刷新 F5",
+                    label: t("刷新 F5"),
                     action: () => usePanes.getState().bumpRefresh(tabId),
                   },
                   { sep: true },
                   {
-                    label: "编辑菜单…",
+                    label: t("编辑菜单…"),
                     action: () => useUi.getState().openMenuPage(),
                   },
                 ],
@@ -1611,7 +1612,7 @@ export function FileList({
                               {relDirOf(entry)}
                             </span>
                             <span className="np-cell-muted np-col-type">
-                              {typeName(entry.name, entry.isDir)}
+                              {t(typeName(entry.name, entry.isDir))}
                             </span>
                             <span className="np-cell-muted np-col-size">
                               {formatSize(entry)}
@@ -1623,7 +1624,7 @@ export function FileList({
                               {formatTime(entry.mtimeMs)}
                             </span>
                             <span className="np-cell-muted np-col-type">
-                              {typeName(entry.name, entry.isDir)}
+                              {t(typeName(entry.name, entry.isDir))}
                             </span>
                             <span className="np-cell-muted np-col-size">
                               {formatSize(entry)}
@@ -1631,7 +1632,7 @@ export function FileList({
                           </>
                         ) : (
                           <>
-                            <span className="np-cell-muted np-col-type">本地磁盘</span>
+                            <span className="np-cell-muted np-col-type">{t("本地磁盘")}</span>
                             <span className="np-cell-muted np-col-size">
                               {formatSize(entry)}
                             </span>
@@ -1707,21 +1708,20 @@ export function FileList({
                 searchRes?.engine === "index"
                   ? " · 索引"
                   : searchRes?.scanned
-                    ? ` · 已扫描 ${searchRes.scanned.toLocaleString()}`
+                    ? t(" · 已扫描 {n}", { n: searchRes.scanned.toLocaleString() })
                     : ""
-              }${searchRes?.truncated ? "（已截断）" : ""}`
+              }${searchRes?.truncated ? t("（已截断）") : ""}`
             : filterActive
-              ? `过滤 “${filter?.trim()}” · ${count.toLocaleString()} 项（Ctrl+E 编辑 · Esc 退出）`
-              : `Σ ${count.toLocaleString()} 个对象`}
+              ? t("过滤 “{q}” · {n} 项（Ctrl+E 编辑 · Esc 退出）", { q: filter?.trim(), n: count.toLocaleString() })
+              : t("Σ {n} 个对象", { n: count.toLocaleString() })}
           {!searchActive &&
             selected.length > 0 &&
-            ` · 选中 ${selected.length} 项${
-              selSize > 0 ? ` (${formatSize({ isDir: false, size: selSize })})` : ""
-            }`}
-        </span>
+            t(" · 选中 {n} 项", { n: selected.length }) +
+              (selSize > 0 ? ` (${formatSize({ isDir: false, size: selSize })})` : "")
+        }</span>
         <span className="np-ellipsis">
-          {free !== null && !searchActive && `可用 ${formatSize({ isDir: false, size: free })}`}
-          {dropHover && " · 释放以放入"}
+          {free !== null && !searchActive && t("可用 {s}", { s: formatSize({ isDir: false, size: free }) })}
+          {dropHover && t(" · 释放以放入")}
         </span>
       </div>
     </div>

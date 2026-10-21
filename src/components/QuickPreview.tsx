@@ -3,6 +3,7 @@
 // Dialog、header 动作条、prev/next、页脚元信息、选中同步活动窗格。
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { t } from "../lib/i18n";
 import { Button, Dialog, InputGroup } from "@blueprintjs/core";
 import {
   ChevronDown,
@@ -226,7 +227,7 @@ export function QuickPreviewHost() {
               minimal
               size="small"
               icon={ic(ChevronLeft)}
-              data-tip="上一个" data-kbd="↑"
+              data-tip={t("上一个")} data-kbd="↑"
               disabled={queue.length <= 1}
               onClick={prev}
             />
@@ -234,7 +235,7 @@ export function QuickPreviewHost() {
               minimal
               size="small"
               icon={ic(ChevronRight)}
-              data-tip="下一个" data-kbd="↓"
+              data-tip={t("下一个")} data-kbd="↓"
               disabled={queue.length <= 1}
               onClick={next}
             />
@@ -243,7 +244,7 @@ export function QuickPreviewHost() {
                 minimal
                 size="small"
                 icon={ic(RotateCw)}
-                data-tip="顺时针旋转 90°"
+                data-tip={t("顺时针旋转 90°")}
                 onClick={() => setRotateTick((t) => t + 1)}
               />
             )}
@@ -263,7 +264,7 @@ export function QuickPreviewHost() {
                   <InputGroup
                     small
                     leftElement={ic(Search)}
-                    placeholder="查找…"
+                    placeholder={t("查找…")}
                     value={term}
                     inputRef={searchRef}
                     onChange={(e) => {
@@ -287,7 +288,7 @@ export function QuickPreviewHost() {
                     minimal
                     size="small"
                     icon={ic(ChevronUp)}
-                    data-tip="上一个命中" data-kbd="Shift+Enter"
+                    data-tip={t("上一个命中")} data-kbd="Shift+Enter"
                     disabled={!matchTotal}
                     onClick={() => stepMatch(-1)}
                   />
@@ -295,7 +296,7 @@ export function QuickPreviewHost() {
                     minimal
                     size="small"
                     icon={ic(ChevronDown)}
-                    data-tip="下一个命中" data-kbd="Enter"
+                    data-tip={t("下一个命中")} data-kbd="Enter"
                     disabled={!matchTotal}
                     onClick={() => stepMatch(1)}
                   />
@@ -303,7 +304,7 @@ export function QuickPreviewHost() {
                     minimal
                     size="small"
                     icon={ic(X)}
-                    data-tip="关闭查找" data-kbd="Esc"
+                    data-tip={t("关闭查找")} data-kbd="Esc"
                     onClick={closeSearch}
                   />
                 </div>
@@ -312,7 +313,7 @@ export function QuickPreviewHost() {
                   minimal
                   size="small"
                   icon={ic(Search)}
-                  data-tip="预览内查找" data-kbd="Ctrl+F"
+                  data-tip={t("预览内查找")} data-kbd="Ctrl+F"
                   onClick={() => setSearchOpen(true)}
                 />
               ))}
@@ -320,21 +321,21 @@ export function QuickPreviewHost() {
               minimal
               size="small"
               icon={ic(Copy)}
-              data-tip="复制完整路径"
+              data-tip={t("复制完整路径")}
               onClick={() => copyPath(entry)}
             />
             <Button
               minimal
               size="small"
               icon={ic(ClipboardCopy)}
-              data-tip="复制文件（可在窗格中粘贴）"
+              data-tip={t("复制文件（可在窗格中粘贴）")}
               onClick={() => copyFile(entry)}
             />
             <Button
               minimal
               size="small"
               icon={ic(Trash2)}
-              data-tip="删除到回收站"
+              data-tip={t("删除到回收站")}
               className="np-pv-danger"
               onClick={() => removeFile(entry)}
             />
@@ -342,21 +343,21 @@ export function QuickPreviewHost() {
               minimal
               size="small"
               icon={ic(SquareArrowOutUpRight)}
-              data-tip="用默认程序打开" data-kbd="Enter"
+              data-tip={t("用默认程序打开")} data-kbd="Enter"
               onClick={() => openDefault(entry)}
             />
             <Button
               minimal
               size="small"
               icon={ic(FolderOpen)}
-              data-tip="打开所在文件夹"
+              data-tip={t("打开所在文件夹")}
               onClick={() => reveal(entry)}
             />
             <Button
               minimal
               size="small"
               icon={ic(X)}
-              data-tip="关闭" data-kbd="Esc / Space"
+              data-tip={t("关闭")} data-kbd="Esc / Space"
               onClick={close}
             />
           </header>

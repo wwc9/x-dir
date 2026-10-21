@@ -2,6 +2,7 @@
 // 行 = 条目类型图标（复用 fileIcons）+ 名称 + 大小；目录行弱化显示。
 
 import { useEffect, useRef, useState } from "react";
+import { t } from "../../lib/i18n";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Folder } from "lucide-react";
 
@@ -61,7 +62,7 @@ export function ArchivePreview({
           <AppIcon icon={Folder} size={DENSITY.iconMd} colorVar="--np-icon-archive" />
         </div>
       ) : entries.length === 0 ? (
-        <div className="np-pv-empty">（空压缩包）</div>
+        <div className="np-pv-empty">{t("（空压缩包）")}</div>
       ) : (
         <div className="np-pv-ar-inner" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((row) => {

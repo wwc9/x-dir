@@ -3,6 +3,7 @@
 // 导出共用）、预览行复用 np-bren-preview/row（§4.7 二级页面规范）；
 // 编排（api + 任务登记）在 lib/operations.ts，名单预演纯函数在 lib/folderBatch。
 import { useMemo, useState } from "react";
+import { t } from "../lib/i18n";
 import { Button, DialogBody, DialogFooter, InputGroup } from "@blueprintjs/core";
 import { ArrowRight } from "lucide-react";
 
@@ -36,7 +37,7 @@ function Footer({
       actions={
         <>
           <Button size="small" onClick={onCancel}>
-            取消
+            {t("取消")}
           </Button>
           <Button size="small" intent="primary" disabled={disabled} onClick={onOk}>
             {okText}
@@ -104,7 +105,7 @@ export function NewFoldersDialog({
               <InputGroup
                 size="small"
                 value={pattern}
-                placeholder="名称含 {} 占位符"
+                placeholder={t("名称含 {} 占位符")}
                 spellCheck={false}
                 onChange={(e) => setPattern(e.target.value)}
               />

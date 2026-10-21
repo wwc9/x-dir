@@ -6,6 +6,7 @@
 // （命中格高亮 + 滚动定位）。
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { t } from "../../lib/i18n";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import type { OfficeSection } from "../../lib/ipc";
@@ -110,7 +111,7 @@ export function SheetPreview({
     <div className="np-pv-sheet">
       <div ref={scrollRef} className="np-pv-sheet-scroll">
         {rows.length === 0 ? (
-          <div className="np-pv-empty">（空工作表）</div>
+          <div className="np-pv-empty">{t("（空工作表）")}</div>
         ) : (
           <div
             className="np-pv-sheet-inner"

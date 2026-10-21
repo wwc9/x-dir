@@ -319,7 +319,7 @@ export function TitleBar() {
             <MenuDivider />
             <MenuItem
               icon={ic(Plus)}
-              text="添加当前文件夹"
+              text={t("添加当前文件夹")}
               onClick={() => {
                 const p = useLayout.getState().activePath();
                 if (p === THIS_PC) {
@@ -418,7 +418,7 @@ export function TitleBar() {
         size="small"
         icon={ic(WandSparkles)}
         active={menuPage}
-        aria-label="定制"
+        aria-label={t("定制")}
         data-tip={t("定制右键菜单与工具栏")}
         onClick={() =>
           menuPage
@@ -435,7 +435,7 @@ export function TitleBar() {
         size="small"
         icon={ic(Settings)}
         active={settingsTab !== null}
-        aria-label="设置"
+        aria-label={t("设置")}
         data-tip={t("设置")}
         onClick={() => {
           // 整页打开时先回主界面：设置浮窗作用于主界面观感
@@ -450,7 +450,7 @@ export function TitleBar() {
         size="small"
         className="np-about-btn"
         icon={ic(Info)}
-        aria-label="关于"
+        aria-label={t("关于")}
         data-tip={
           hasNewVersion
             ? t("关于 X-Dir（发现新版本 {v}）", {

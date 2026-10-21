@@ -2,6 +2,7 @@
 // 工具简介 + 开源地址 + 作者信息 + 更新检查（Gitee 优先，国内网络下载更快）。
 // 更新数据流：lib/update.ts 拉仓库根 update.json 清单，结果存 useUi.updateCheck。
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { t } from "../lib/i18n";
 import { Button, Dialog, DialogBody, DialogFooter } from "@blueprintjs/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Download, Info, Link2, RefreshCw } from "lucide-react";
@@ -66,22 +67,22 @@ export function AboutDialog() {
           <div className="np-dialog-muted">{APP_INTRO}</div>
 
           {/* 更新区块：检查中 / 已最新 / 检查失败 / 发现新版本（四态） */}
-          {busy && <div className="np-dialog-muted">正在检查更新…</div>}
+          {busy && <div className="np-dialog-muted">{t("正在检查更新…")}</div>}
           {!busy && !manifest && check !== null && (
             <div className="np-about-fail">
-              <div>检查更新失败（双源均不可达）：</div>
+              <div>{t("检查更新失败（双源均不可达）：")}</div>
               <div className="np-about-errors">
                 {(check.errors.length ? check.errors : ["原因未知"]).map((e) => (
                   <div key={e}>· {e}</div>
                 ))}
               </div>
               <div className="np-dialog-muted">
-                可点下方开源地址在浏览器验证网络后重试。
+                {t("可点下方开源地址在浏览器验证网络后重试。")}
               </div>
             </div>
           )}
           {!busy && manifest && !hasNew && (
-            <div className="np-dialog-muted">当前已是最新版本。</div>
+            <div className="np-dialog-muted">{t("当前已是最新版本。")}</div>
           )}
           {!busy && manifest && hasNew && (
             <div className="np-about-update">
@@ -97,7 +98,7 @@ export function AboutDialog() {
                 </ul>
               )}
               <div className="np-dialog-muted">
-                Gitee 在国内网络环境下访问与下载更快，建议优先选择。
+                {t("Gitee 在国内网络环境下访问与下载更快，建议优先选择。")}
               </div>
               <div className="np-about-actions">
                 <Button
@@ -106,14 +107,14 @@ export function AboutDialog() {
                   icon={ic(Download)}
                   onClick={() => void openUrl(RELEASE_URLS.gitee)}
                 >
-                  前往 Gitee 下载
+                  {t("前往 Gitee 下载")}
                 </Button>
                 <Button
                   size="small"
                   icon={ic(Link2)}
                   onClick={() => void openUrl(RELEASE_URLS.github)}
                 >
-                  前往 GitHub 下载
+                  {t("前往 GitHub 下载")}
                 </Button>
               </div>
             </div>
@@ -124,7 +125,7 @@ export function AboutDialog() {
             <AboutProp k="开发者" v="王文铖" />
             <AboutProp k="微信公众号" v="效率视界" />
             <div className="np-prop-row">
-              <span className="np-prop-key">开源地址</span>
+              <span className="np-prop-key">{t("开源地址")}</span>
               <span className="np-prop-val np-about-srcs">
                 <button
                   type="button"
@@ -156,14 +157,14 @@ export function AboutDialog() {
               disabled={busy}
               onClick={runCheck}
             >
-              检查更新
+              {t("检查更新")}
             </Button>
             <Button
               size="small"
               intent="primary"
               onClick={() => useUi.getState().closeAbout()}
             >
-              关闭
+              {t("关闭")}
             </Button>
           </>
         }

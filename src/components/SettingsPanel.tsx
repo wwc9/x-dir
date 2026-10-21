@@ -3,6 +3,7 @@
 // 配置；取值统一走 settings.update()（settings.json 集中化）；控件与行布局按 §4.7。
 // 右键菜单已独立为整页（MenuEditorPage），不再归属设置分类。
 import { useEffect, useState, Fragment, type ReactNode } from "react";
+import { useT } from "../lib/i18n";
 import {
   Button,
   ButtonGroup,
@@ -80,6 +81,7 @@ function SetRow({ label, desc, children }: { label: string; desc?: string; child
 }
 
 export function SettingsPanel() {
+  const t = useT();
   const s = useSettings();
   /** 浮窗开合与直达分类状态在 useUi；打开时同步当前 tab（顶栏/其余入口只 set 状态） */
   const settingsTab = useUi((st) => st.settingsTab);
@@ -97,7 +99,7 @@ export function SettingsPanel() {
     <Dialog
       isOpen={settingsTab !== null}
       onClose={() => useUi.getState().closeSettings()}
-      data-tip="设置"
+      data-tip={t("设置")}
       icon={ic(Settings)}
       canOutsideClickClose
       className="np-dialog np-settingsdlg"
@@ -106,21 +108,21 @@ export function SettingsPanel() {
       <DialogBody>
         <div className="np-settings">
       <nav className="np-settings-nav">
-        {TABS.map((t) => (
+        {TABS.map((tb) => (
           <button
-            key={t.id}
-            className={`np-settings-nav-item ${tab === t.id ? "is-on" : ""}`}
-            onClick={() => setTab(t.id)}
+            key={tb.id}
+            className={`np-settings-nav-item ${tab === tb.id ? "is-on" : ""}`}
+            onClick={() => setTab(tb.id)}
           >
-            <AppIcon icon={t.icon} size={DENSITY.iconSm} />
-            <span className="np-ellipsis">{t.label}</span>
+            <AppIcon icon={tb.icon} size={DENSITY.iconSm} />
+            <span className="np-ellipsis">{t(tb.label)}</span>
           </button>
         ))}
       </nav>
       <div className="np-settings-page">
         {tab === "appearance" && (
           <>
-            <SetRow label="主题" desc="跟随 Windows 深浅色自动切换，或固定浅色 / 深色">
+            <SetRow label={t("主题")} desc="跟随 Windows 深浅色自动切换，或固定浅色 / 深色">
               <ButtonGroup className="np-seg" size="small" variant="minimal">
                 {(["system", "light", "dark"] as const).map((t) => (
                   <Button
@@ -139,14 +141,14 @@ export function SettingsPanel() {
                 ))}
               </ButtonGroup>
             </SetRow>
-            <SetRow label="界面缩放" desc="Ctrl +/−/0 或 Ctrl+滚轮，作用于全部界面">
+            <SetRow label={t("界面缩放")} desc="Ctrl +/−/0 或 Ctrl+滚轮，作用于全部界面">
               <NpSelect
                 value={s.uiZoom}
                 options={ZOOM_STEPS.map((z) => ({ value: z, label: `${Math.round(z * 100)}%` }))}
                 onChange={(z) => s.update({ uiZoom: z })}
               />
             </SetRow>
-            <SetRow label="真实文件图标" desc="提取文件关联的系统图标，替代内置线性图标">
+            <SetRow label={t("真实文件图标")} desc="提取文件关联的系统图标，替代内置线性图标">
               <Switch
                 checked={s.realIcons}
                 onChange={(e) => s.update({ realIcons: e.currentTarget.checked })}
@@ -156,23 +158,23 @@ export function SettingsPanel() {
         )}
         {tab === "browse" && (
           <>
-            <SetRow label="新标签默认视图" desc="新开标签页进入的显示模式">
+            <SetRow label={t("新标签默认视图")} desc="新开标签页进入的显示模式">
               <NpSelect
                 value={s.defaultView}
                 options={(["details", "list"] as ViewMode[]).map((v) => ({
                   value: v,
-                  label: VIEW_LABELS[v],
+                  label: t(VIEW_LABELS[v]),
                 }))}
                 onChange={(v) => s.update({ defaultView: v })}
               />
             </SetRow>
-            <SetRow label="新标签默认排序" desc="新开标签页的排序字段与方向">
+            <SetRow label={t("新标签默认排序")} desc="新开标签页的排序字段与方向">
               <span className="np-set-sort">
                 <NpSelect
                   value={s.defaultSort.key}
                   options={(Object.keys(SORT_LABELS) as SortKey[]).map((k) => ({
                     value: k,
-                    label: SORT_LABELS[k],
+                    label: t(SORT_LABELS[k]),
                   }))}
                   onChange={(k) => s.update({ defaultSort: { ...s.defaultSort, key: k } })}
                 />
@@ -196,14 +198,14 @@ export function SettingsPanel() {
                 onChange={(t) => s.update({ terminal: t })}
               />
             </SetRow>
-            <SetRow label="显示隐藏文件" desc="列出带隐藏属性与点开头的文件">
+            <SetRow label={t("显示隐藏文件")} desc="列出带隐藏属性与点开头的文件">
               <Switch
                 checked={s.showHidden}
                 onChange={(e) => s.update({ showHidden: e.currentTarget.checked })}
               />
             </SetRow>
             <SetRow
-              label="记忆目录选中集"
+              label={t("记忆目录选中集")}
               desc="离开目录时快照勾选，回到该目录自动恢复（Ctrl+A / Esc 等显式操作不受影响）"
             >
               <Switch
@@ -211,7 +213,7 @@ export function SettingsPanel() {
                 onChange={(e) => s.update({ rememberSelection: e.currentTarget.checked })}
               />
             </SetRow>
-            <SetRow label="启动时恢复上次会话" desc="重启后还原窗格、标签与路径">
+            <SetRow label={t("启动时恢复上次会话")} desc="重启后还原窗格、标签与路径">
               <Switch
                 checked={s.restoreLastSession}
                 onChange={(e) => s.update({ restoreLastSession: e.currentTarget.checked })}
@@ -221,14 +223,14 @@ export function SettingsPanel() {
         )}
         {tab === "ops" && (
           <>
-            <SetRow label="删除前确认" desc="删除到回收站前弹出确认框">
+            <SetRow label={t("删除前确认")} desc="删除到回收站前弹出确认框">
               <Switch
                 checked={s.confirmDelete}
                 onChange={(e) => s.update({ confirmDelete: e.currentTarget.checked })}
               />
             </SetRow>
             <SetRow
-              label="系统进度与冲突框"
+              label={t("系统进度与冲突框")}
               desc="复制 / 移动走 Windows 原生 IFileOperation（进度/冲突由系统承担，快操作系统不弹进度窗；关闭 = 灵动岛字节级进度 + 应用内冲突框）"
             >
               <Switch
@@ -240,21 +242,21 @@ export function SettingsPanel() {
         )}
         {tab === "search" && (
           <>
-            <SetRow label="预览面板" desc="结果右侧内嵌文件预览，分隔条可拖宽">
+            <SetRow label={t("预览面板")} desc="结果右侧内嵌文件预览，分隔条可拖宽">
               <Switch
                 checked={s.gsearchPreview}
                 onChange={(e) => s.update({ gsearchPreview: e.currentTarget.checked })}
               />
             </SetRow>
             <div className="np-set-hint">
-              索引模式（NTFS 秒搜）开关已移至「全盘搜索」面板底部状态条，点击指示签即可管理。
+              {t("索引模式（NTFS 秒搜）开关已移至「全盘搜索」面板底部状态条，点击指示签即可管理。")}
             </div>
           </>
         )}
         {tab === "rules" && (
           <>
             <div className="np-set-hint">
-              按规则给文件名着色，自上而下首个命中的规则生效（支持 *.ext 或名称包含）。
+              {t("按规则给文件名着色，自上而下首个命中的规则生效（支持 *.ext 或名称包含）。")}
             </div>
             <div className="np-set-rules">
               {s.colorRules.map((r, i) => (
@@ -268,7 +270,7 @@ export function SettingsPanel() {
                   />
                   <NpSelect
                     value={r.color}
-                    options={TAG_COLORS.map((c) => ({ value: c.key, label: c.label }))}
+                    options={TAG_COLORS.map((c) => ({ value: c.key, label: t(c.label) }))}
                     onChange={(color) => setRule(i, { color })}
                   />
                   <span
@@ -277,7 +279,7 @@ export function SettingsPanel() {
                   />
                   <button
                     className="np-rule-del"
-                    data-tip="删除规则"
+                    data-tip={t("删除规则")}
                     onClick={() =>
                       s.update({ colorRules: s.colorRules.filter((_, j) => j !== i) })
                     }
@@ -287,14 +289,14 @@ export function SettingsPanel() {
                 </div>
               ))}
               {!s.colorRules.length && (
-                <div className="np-set-rules-empty">暂无规则</div>
+                <div className="np-set-rules-empty">{t("暂无规则")}</div>
               )}
             </div>
             <Button
               size="small"
               minimal
               icon={ic(Plus)}
-              text="添加规则"
+              text={t("添加规则")}
               onClick={() =>
                 s.update({
                   colorRules: [...s.colorRules, { pattern: "", color: "yellow" }],
@@ -306,9 +308,9 @@ export function SettingsPanel() {
         {tab === "keys" &&
           SHORTCUT_GROUPS.map((g) => (
             <section key={g.title}>
-              <div className="np-set-group-title">{g.title}</div>
+              <div className="np-set-group-title">{t(g.title)}</div>
               {g.items.map((it) => (
-                <SetRow key={it.id} label={it.label}>
+                <SetRow key={it.id} label={t(it.label)}>
                   <span className="np-kbds">
                     {it.keys.map((combo) => (
                       <span key={combo} className="np-kbd-combo">
@@ -327,14 +329,14 @@ export function SettingsPanel() {
           ))}
         {tab === "config" && (
           <>
-            <SetRow label="导出配置文件" desc="打包设置与全部布局方案为单个 JSON">
+            <SetRow label={t("导出配置文件")} desc="打包设置与全部布局方案为单个 JSON">
               <Button minimal size="small" onClick={() => void onExportConfig()}>
-                导出…
+                {t("导出…")}
               </Button>
             </SetRow>
-            <SetRow label="导入配置文件" desc="从导出的 JSON 恢复（覆盖当前设置与同名布局方案）">
+            <SetRow label={t("导入配置文件")} desc="从导出的 JSON 恢复（覆盖当前设置与同名布局方案）">
               <Button minimal size="small" onClick={() => void onImportConfig()}>
-                导入…
+                {t("导入…")}
               </Button>
             </SetRow>
           </>

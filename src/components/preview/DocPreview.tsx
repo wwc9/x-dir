@@ -5,6 +5,7 @@
 // 代码语法高亮（highlight.js 懒加载，≤200KB）。搜索高亮经 CSS Custom Highlight API。
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { t } from "../../lib/i18n";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 
@@ -156,7 +157,7 @@ export function DocPreview({
     <div className="np-pv-doc" ref={bodyRef}>
       {text && (
         <>
-          {!text.content && <div className="np-pv-empty">（空文件）</div>}
+          {!text.content && <div className="np-pv-empty">{t("（空文件）")}</div>}
           {kind === "markdown" && text.content && (
             <div className="np-md" dangerouslySetInnerHTML={{ __html: mdHtml }} />
           )}
@@ -198,7 +199,7 @@ function OfficeSections({ office }: { office: OfficeTextResult }) {
           ) : sec.text ? (
             <pre className="np-pv-pre">{sec.text}</pre>
           ) : (
-            <div className="np-pv-empty">（空）</div>
+            <div className="np-pv-empty">{t("（空）")}</div>
           )}
         </section>
       ))}

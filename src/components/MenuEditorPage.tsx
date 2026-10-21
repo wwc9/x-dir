@@ -4,6 +4,7 @@
 // 内容 = MenuEditor（右键菜单 + 窗格工具栏双区拖拽，共享功能库）。
 // 命令模板功能已下线（2026-10-14 定案），旧档模板数据留档不再渲染。
 import { ArrowLeft } from "lucide-react";
+import { t } from "../lib/i18n";
 
 import { DENSITY } from "../lib/tokens";
 import { MenuEditor } from "./MenuEditor";
@@ -16,13 +17,13 @@ export function MenuEditorPage() {
       <header className="np-menupage-head">
         <button
           className="np-menupage-back"
-          data-tip="返回主界面" data-kbd="Esc"
+          data-tip={t("返回主界面")} data-kbd="Esc"
           onClick={() => useUi.getState().closeMenuPage()}
         >
           <AppIcon icon={ArrowLeft} size={DENSITY.iconSm} />
-          <span>返回主界面</span>
+          <span>{t("返回主界面")}</span>
         </button>
-        <span className="np-menupage-title">定制</span>
+        <span className="np-menupage-title">{t("定制")}</span>
       </header>
       <div className="np-menupage-body">
         <MenuEditor />

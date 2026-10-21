@@ -16,6 +16,7 @@ import { useLayout } from "../stores/layout";
 import { TREE_W_MAX, TREE_W_MIN, treeChildPath, useNavTree } from "../stores/navtree";
 import { usePanes } from "../stores/panes";
 import { useIcons } from "../stores/icons";
+import { t } from "../lib/i18n";
 import { useSettings } from "../stores/settings";
 import { AppIcon } from "./AppIcon";
 
@@ -157,10 +158,10 @@ export function NavTree() {
   return (
     <aside className="np-navtree" style={{ width: dragW ?? width }}>
       <div className="np-side-h">
-        <span>导航树</span>
+        <span>{t("导航树")}</span>
         <button
           className="np-side-add"
-          data-tip="刷新（重新读取已展开的目录）"
+          data-tip={t("刷新（重新读取已展开的目录）")}
           onClick={() => useNavTree.getState().refresh()}
         >
           <AppIcon icon={RefreshCw} size={DENSITY.iconSm} />
@@ -232,7 +233,7 @@ export function NavTree() {
         </div>
       </div>
 
-      <div className="np-tree-resize" onMouseDown={startResize} data-tip="拖动调整宽度" />
+      <div className="np-tree-resize" onMouseDown={startResize} data-tip={t("拖动调整宽度")} />
     </aside>
   );
 }

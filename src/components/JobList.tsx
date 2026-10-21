@@ -2,6 +2,7 @@
 // 逐条任务 = 进度条 + 暂停/继续（仅 copy/move）+ 取消；展开开关在 stores/jobs
 // （灵动岛 pill 与这里共享）。完成/失败经 toast + 灵动岛回执播报（stores/jobs）。
 import { ProgressBar } from "@blueprintjs/core";
+import { t } from "../lib/i18n";
 import {
   Archive,
   ArchiveRestore,
@@ -115,7 +116,7 @@ function JobRow({ job }: { job: JobInfo }) {
       )}
       <button
         className="np-job-cancel"
-        data-tip="取消任务"
+        data-tip={t("取消任务")}
         onClick={() => useJobs.getState().cancel(job.jobId)}
       >
         <AppIcon icon={X} size={DENSITY.iconXs} />

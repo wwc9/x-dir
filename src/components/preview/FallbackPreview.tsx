@@ -2,6 +2,7 @@
 // 展示元信息 + 打开/所在文件夹动作，保证"看不了但有的点"。
 
 import type { FileEntry } from "../../lib/ipc";
+import { t } from "../../lib/i18n";
 import { formatSize, formatTime } from "../../lib/format";
 import { fileIcon, typeName } from "../../lib/fileIcons";
 import { DENSITY } from "../../lib/tokens";
@@ -26,19 +27,19 @@ export function FallbackPreview({
       <div className="np-pv-fallback-name np-ellipsis">{entry.name}</div>
       {note && <div className="np-pv-fallback-note">{note}</div>}
       <div className="np-pv-fallback-rows">
-        <span className="np-pv-k">类型</span>
+        <span className="np-pv-k">{t("类型")}</span>
         <span>{typeName(entry.name, entry.isDir)}</span>
-        <span className="np-pv-k">大小</span>
+        <span className="np-pv-k">{t("大小")}</span>
         <span>{formatSize(entry)}</span>
-        <span className="np-pv-k">修改时间</span>
+        <span className="np-pv-k">{t("修改时间")}</span>
         <span>{formatTime(entry.mtimeMs)}</span>
       </div>
       <div className="np-pv-fallback-actions">
         <button className="np-pv-btn" onClick={onOpen}>
-          打开
+          {t("打开")}
         </button>
         <button className="np-pv-btn" onClick={onReveal}>
-          打开所在文件夹
+          {t("打开所在文件夹")}
         </button>
       </div>
     </div>

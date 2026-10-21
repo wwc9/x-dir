@@ -2,6 +2,7 @@
 // 不随窗格/弹窗组件卸载重建；宽度读写经 ctl 回调注入（两侧寄存不同的 settings 键）。
 // 拖拽中只写内存（setLive），松手 commit 持久化，避免每帧写 settings.json。
 import type { MouseEvent as ReactMouseEvent } from "react";
+import { t } from "../lib/i18n";
 
 let colDragMoved = false;
 
@@ -53,7 +54,7 @@ export function ColGrip<T extends string>({ col, ctl }: { col: T; ctl: ColResize
   return (
     <span
       className="np-col-grip"
-      data-tip="拖动调整列宽 · 双击恢复默认"
+      data-tip={t("拖动调整列宽 · 双击恢复默认")}
       onMouseDown={(e) => startColResize(e, col, ctl)}
       onDoubleClick={() => ctl.reset(col)}
     />

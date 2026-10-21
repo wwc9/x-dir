@@ -2,6 +2,7 @@
 // 宫格拼图。表单行复用 np-bren-form/field/k 基类，分段选择走 np-seg（§4.7）；
 // 编排（api + 任务登记）在 lib/operations.ts，处理后端在 src/img/mod.rs。
 import { useState } from "react";
+import { t } from "../lib/i18n";
 import { Button, ButtonGroup, DialogBody, DialogFooter, InputGroup, Switch } from "@blueprintjs/core";
 
 import { MONTAGE_MAX, montageGrid } from "../lib/imgOps";
@@ -59,7 +60,7 @@ function Footer({
       actions={
         <>
           <Button size="small" onClick={onCancel}>
-            取消
+            {t("取消")}
           </Button>
           <Button size="small" intent="primary" onClick={onOk}>
             {okText}
@@ -178,7 +179,7 @@ export function WatermarkDialog({
                 size="small"
                 value={text}
                 maxLength={40}
-                placeholder="最多 40 字"
+                placeholder={t("最多 40 字")}
                 spellCheck={false}
                 onChange={(e) => setText(e.target.value)}
               />
@@ -189,11 +190,11 @@ export function WatermarkDialog({
                 size="small"
                 value={imagePath}
                 readOnly
-                placeholder="未选择"
+                placeholder={t("未选择")}
                 spellCheck={false}
               />
               <Button size="small" onClick={() => void pickImage()}>
-                选择…
+                {t("选择…")}
               </Button>
             </FormRow>
           )}
@@ -297,7 +298,7 @@ export function ConvertDialog({
           {/* Switch v6 无 small 档，默认即紧凑（AGENTS §4.4） */}
           <Switch
             checked={bakeExif}
-            label="烘焙 EXIF 方向（手机照片转正，顺带抹除位置等元数据）"
+            label={t("烘焙 EXIF 方向（手机照片转正，顺带抹除位置等元数据）")}
             onChange={(e) => setBakeExif(e.currentTarget.checked)}
           />
         </div>
@@ -372,7 +373,7 @@ export function ResizeDialog({
             />
           </FormRow>
           {/* Switch v6 无 small 档，默认即紧凑（AGENTS §4.4） */}
-          <Switch checked={onlyDown} label="仅缩小（不放大会糊）" onChange={(e) => setOnlyDown(e.currentTarget.checked)} />
+          <Switch checked={onlyDown} label={t("仅缩小（不放大会糊）")} onChange={(e) => setOnlyDown(e.currentTarget.checked)} />
         </div>
         <Hint>
           为 {count} 张图片调整尺寸，宽高比恒定，旁写 *_缩放.扩展名（保持原格式）。

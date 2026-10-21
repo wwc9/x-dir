@@ -60,6 +60,7 @@ import {
   useGsColWidths,
 } from "../stores/columns";
 import { useSettings } from "../stores/settings";
+import { useT } from "../lib/i18n";
 import { useIsland } from "../stores/island";
 import { confirmDialog, useUi, type MenuItem } from "../stores/ui";
 import { AppIcon, ic } from "./AppIcon";
@@ -139,6 +140,7 @@ function SearchRowIcon({
  *  唤起：顶栏按钮 / Ctrl+Shift+F（lib/keyboard）；索引模式可用时毫秒级出结果，
  *  否则 Rust 端并行遍历（流式回吐命中批次，边扫边看）。 */
 export function GlobalSearchPage() {
+  const t = useT();
   const open = useUi((s) => s.globalSearch);
   const close = useUi((s) => s.closeGlobalSearch);
   const [query, setQuery] = useState("");
@@ -515,12 +517,20 @@ export function GlobalSearchPage() {
 
   /** 列头单元格：可点排序的带箭头指示，不可点的纯文本 */
   function headLabel(key: ResultSortKey | null, text: string) {
+    text = t(text);
     if (key === null) return <>{text}</>;
     const active = sortKey === key;
     return (
       <button
         className={`np-gsearch-sort${active ? " is-active" : ""}`}
-        data-tip={`按${text}排序${active ? `（${sortDir === "asc" ? "升序" : "降序"}，点击反向）` : ""}`}
+        data-tip={
+          t("按 {x} 排序{tail}", {
+            x: text,
+            tail: active
+              ? t("（{d}，点击反向）", { d: sortDir === "asc" ? t("升序") : t("降序") })
+              : "",
+          })
+        }
         onClick={toggleSort.bind(null, key)}
       >
         {text}
@@ -591,17 +601,17 @@ export function GlobalSearchPage() {
       <header className="np-gsearchpage-head">
         <button
           className="np-menupage-back"
-          data-tip="返回主界面" data-kbd="Esc"
+          data-tip={t("返回主界面")} data-kbd="Esc"
           onClick={close}
         >
           <AppIcon icon={ArrowLeft} size={DENSITY.iconSm} />
-          <span>返回主界面</span>
+          <span>{t("返回主界面")}</span>
         </button>
-        <span className="np-menupage-title">全盘搜索</span>
+        <span className="np-menupage-title">{t("全盘搜索")}</span>
         {/* 空 query 时的最近搜索 chips：收纳在头部右侧（不占独立行，出现/消失不推挤布局） */}
         {!query.trim() && history.length > 0 && (
           <div className="np-gsearch-history">
-            <span className="np-gsearch-hist-label">最近</span>
+            <span className="np-gsearch-hist-label">{t("最近")}</span>
             {history.slice(0, 8).map((h) => (
               <button key={h} className="np-gsearch-chip" onClick={() => setQuery(h)}>
                 {h}
@@ -621,7 +631,7 @@ export function GlobalSearchPage() {
               arrow={false}
               content={
                 <div className="np-gsearch-help">
-                  <div className="np-gsearch-help-title">查询语法速查</div>
+                  <div className="np-gsearch-help-title">{t("查询语法速查")}</div>
                   {[
                     ["词1 词2", "多词 = 且（全部命中）"],
                     ['"报表 2026"', '双引号短语 = 含空格字面'],
@@ -644,7 +654,7 @@ export function GlobalSearchPage() {
                 minimal
                 size="small"
                 icon={ic(CircleHelp)}
-                data-tip="查询语法速查"
+                data-tip={t("查询语法速查")}
                 className="np-gsearch-help-btn"
               />
             </PopoverNext>
@@ -658,7 +668,7 @@ export function GlobalSearchPage() {
         />
           <NpSelect<string>
             value={typeSel}
-            data-tip="类型（选文件/文件夹或常用类型，等同于 ext: 过滤）"
+            data-tip={t("类型（选文件/文件夹或常用类型，等同于 ext: 过滤）")}
             options={SEARCH_TYPE_OPTIONS}
             onChange={setTypeSel}
           />
@@ -667,8 +677,8 @@ export function GlobalSearchPage() {
             size="small"
             leftElement={ic(Filter)}
             value={rowFilter}
-            placeholder="结果过滤…"
-            data-tip="在当前结果中再筛选（名称 / 拼音首字母，不重新搜索）"
+            placeholder={t("结果过滤…")}
+            data-tip={t("在当前结果中再筛选（名称 / 拼音首字母，不重新搜索）")}
             onChange={(e) => setRowFilter(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Escape") {
@@ -681,7 +691,7 @@ export function GlobalSearchPage() {
           />
           <NpSelect<number>
             value={maxResults}
-            data-tip="结果数量上限"
+            data-tip={t("结果数量上限")}
             options={MAX_OPTIONS.map((m) => ({ value: m, label: `上限 ${m}` }))}
             onChange={setMaxResults}
           />
@@ -692,7 +702,7 @@ export function GlobalSearchPage() {
             className="np-gsearch-pv-toggle"
             icon={ic(PanelRight)}
             active={previewOpen}
-            data-tip="显示/隐藏预览面板"
+            data-tip={t("显示/隐藏预览面板")}
             onClick={() => useSettings.getState().update({ gsearchPreview: !previewOpen })}
           />
         </div>
@@ -727,7 +737,7 @@ export function GlobalSearchPage() {
                   {headLabel("size", "大小")}
                   <ColGrip col="size" ctl={gsColCtl} />
                 </span>
-                <span className="np-gsearch-hc np-col-type">类型</span>
+                <span className="np-gsearch-hc np-col-type">{t("类型")}</span>
                 {gsMtimeVisible(panelW) && (
                   <span className="np-gsearch-hc np-col-mtime">
                     {headLabel("mtime", "修改时间")}
@@ -816,7 +826,7 @@ export function GlobalSearchPage() {
                         </span>
                         <span className="np-cell-muted np-col-size">{formatSize(e)}</span>
                         <span className="np-cell-muted np-col-type np-ellipsis">
-                          {typeName(e.name, e.isDir)}
+                          {t(typeName(e.name, e.isDir))}
                         </span>
                         {gsMtimeVisible(panelW) && (
                           <span className="np-cell-muted np-col-mtime">
@@ -834,7 +844,7 @@ export function GlobalSearchPage() {
           {previewOpen && (
             <span
               className="np-gsearch-split"
-              data-tip="拖动调整预览面板宽度"
+              data-tip={t("拖动调整预览面板宽度")}
               onMouseDown={startPreviewResize}
             />
           )}
@@ -853,7 +863,7 @@ export function GlobalSearchPage() {
                   minimal
                   size="small"
                   icon={ic(SquareArrowOutUpRight)}
-                  data-tip="用默认程序打开" data-kbd="Enter"
+                  data-tip={t("用默认程序打开")} data-kbd="Enter"
                   disabled={!pvEntry}
                   onClick={() => pvEntry && activate(pvEntry)}
                 />
@@ -861,7 +871,7 @@ export function GlobalSearchPage() {
                   minimal
                   size="small"
                   icon={ic(FolderOpen)}
-                  data-tip="打开所在文件夹"
+                  data-tip={t("打开所在文件夹")}
                   disabled={!pvEntry}
                   onClick={() => pvEntry && reveal(pvEntry)}
                 />
