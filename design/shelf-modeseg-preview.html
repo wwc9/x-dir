@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>暂存区拖出语义切换钮 · 第二轮样式提案（3 套）</title>
+<style>
+  /* ═══ np token 替身（与 src/index.css 同值，2026-10-21）═══ */
+  .t-light {
+    --np-bg: #e9ecf1; --np-surface: #ffffff; --np-surface-2: #f0f2f5;
+    --np-border: #d6dbe2; --np-fg: #171d26; --np-muted: #66707e;
+    --np-accent: #3574f0; --np-accent-fg: #ffffff;
+    --np-hover: rgba(26, 33, 41, 0.055); --np-sel: rgba(53, 116, 240, 0.12);
+  }
+  .t-dark {
+    --np-bg: #131519; --np-surface: #1b1e23; --np-surface-2: #24282f;
+    --np-border: #3a414b; --np-fg: #e8eaed; --np-muted: #8b929c;
+    --np-accent: #5c9dff; --np-accent-fg: #0d1117;
+    --np-hover: rgba(255, 255, 255, 0.055); --np-sel: rgba(92, 157, 255, 0.16);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 48px; background: #dde2ea; color: #171d26;
+    font-family: system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 13px; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: #66707e; font-size: 12px; margin-bottom: 22px; }
+  .sub b { color: #171d26; }
+  .banner { background: #fff; border: 1px solid #d6dbe2; border-radius: 12px;
+    padding: 10px 14px; margin-bottom: 24px; font-size: 12px; color: #66707e; }
+  .banner code { background: #f0f2f5; border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+
+  section { margin-bottom: 30px; }
+  .sec-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .sec-h .tag { background: #3574f0; color: #fff; font-size: 11px; font-weight: 600;
+    border-radius: 999px; padding: 1px 9px; }
+  .sec-h h2 { font-size: 14px; margin: 0; }
+  .sec-note { font-size: 12px; color: #66707e; margin: 0 0 12px; line-height: 1.7; }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+  .state-label { font-size: 11px; color: #8a93a0; margin-bottom: 6px; }
+
+  /* ═══ 暂存区卡片头部（真实上下文还原：surface 卡 + 标题 + 动作区 + 清空钮）═══ */
+  .shelf-card { background: var(--np-surface); border-radius: 14px; padding: 9px 12px;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.08); min-width: 236px; }
+  .side-h { display: flex; align-items: center; gap: 8px; }
+  .shelf-title { font-weight: 600; font-size: 13px; color: var(--np-fg); }
+  .side-actions { margin-left: auto; display: flex; align-items: center; gap: 5px; }
+  .btn-trash { width: 20px; height: 20px; display: flex; align-items: center;
+    justify-content: center; border: 0; border-radius: 6px; background: none;
+    color: var(--np-muted); cursor: pointer; }
+  .btn-trash:hover { background: var(--np-hover); color: var(--np-fg); }
+
+  /* ══════════════════════════════════════════════════════════
+     方案 D · 双图标直显（icon pair，两态同见、无轨道）
+     ══════════════════════════════════════════════════════════ */
+  .seg-d { display: flex; gap: 2px; }
+  .seg-d button { width: 21px; height: 20px; display: flex; align-items: center;
+    justify-content: center; border: 0; border-radius: 6px; background: none;
+    color: var(--np-muted); cursor: pointer; }
+  .seg-d button:hover { background: var(--np-hover); color: var(--np-fg); }
+  .seg-d button.on { background: var(--np-sel); color: var(--np-accent); }
+
+  /* ══════════════════════════════════════════════════════════
+     方案 E · 图标 + 文字双段分段（现行方案 A 的语义升级）
+     ══════════════════════════════════════════════════════════ */
+  .seg-e { display: flex; height: 20px; padding: 2px; gap: 2px;
+    border-radius: 999px; background: var(--np-surface-2); }
+  .seg-e button { display: flex; align-items: center; gap: 3px; border: 0;
+    border-radius: 999px; padding: 0 7px; background: none;
+    font-size: 11px; color: var(--np-muted); cursor: pointer; }
+  .seg-e button:hover { color: var(--np-fg); }
+  .seg-e button.on { background: var(--np-accent); color: var(--np-accent-fg); }
+
+  /* ══════════════════════════════════════════════════════════
+     方案 F · 滑块式双图标分段（thumb 滑动指示块）
+     ══════════════════════════════════════════════════════════ */
+  .seg-f { position: relative; display: flex; height: 20px; padding: 2px;
+    border-radius: 999px; background: var(--np-surface-2); }
+  .seg-f .thumb { position: absolute; top: 2px; left: 2px; width: 26px; height: 16px;
+    border-radius: 999px; background: var(--np-accent);
+    transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1); }
+  .seg-f[data-mode="copy"] .thumb { transform: translateX(26px); }
+  .seg-f button { position: relative; z-index: 1; width: 26px; height: 16px;
+    display: flex; align-items: center; justify-content: center; border: 0;
+    border-radius: 999px; background: none; color: var(--np-muted); cursor: pointer; }
+  .seg-f button:hover { color: var(--np-fg); }
+  .seg-f button.on { color: var(--np-accent-fg); }
+
+  /* ═══ 深色对照区 ═══ */
+  .dark-wrap { background: var(--np-bg); border-radius: 14px; padding: 16px;
+    display: flex; gap: 14px; flex-wrap: wrap; }
+  .dark-wrap .state-label { color: #8b929c; }
+</style>
+</head>
+<body>
+  <h1>暂存区拖出语义切换钮 · 第二轮样式提案（3 套）</h1>
+  <p class="sub">2026-10-21 · 上一轮（<b>design/shelf-mode-toggle.html</b>）定案方案 A 双段文字迷你分段，即现状；本轮在其基础上再优化。图标均取自 lucide（folder-input / copy / trash），取值同 --np-* token。</p>
+  <div class="banner">
+    落点（定案后）：<code>Sidebar.tsx</code> 暂存区头部 modeseg JSX + <code>index.css .np-shelf-modeseg</code>。
+    三案均可点按交互；语义约定不变：移动 = 拖出到窗格即移动并移出暂存（默认）、复制 = 复制且条目保留。
+    每案各给「移动激活 / 复制激活」两态。
+  </div>
+
+  <!-- ═══════════ 方案 D ═══════════ -->
+  <section>
+    <div class="sec-h"><span class="tag">方案 D</span><h2>双图标直显（icon pair，两态同见、无轨道）</h2></div>
+    <p class="sec-note">
+      两个 21×20 图标钮并排：folder-input = 移动、copy = 复制，激活态 = accent 图标 + sel 淡染底，非激活 = muted。
+      <b>取舍</b>：比现行文字分段更轻、更安静，图形语义（箭头入夹 vs 叠片）天然贴合"拖出"动作，悬停 title 兜底；
+      代价是首次使用需一次悬停学习（图标不像文字自解释）。
+    </p>
+    <div class="row">
+      <div>
+        <div class="state-label">移动激活（默认）</div>
+        <div class="shelf-card t-light"><div class="side-h" data-demo data-mode="move">
+          <span class="shelf-title">暂存区</span>
+          <div class="side-actions">
+            <span class="seg-d" role="group" aria-label="拖出语义：移动/复制">
+              <button class="on" data-mode="move" title="拖出到窗格：移动（原件移走）"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></svg></button>
+              <button data-mode="copy" title="拖出到窗格：复制（保留原件）"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>
+            </span>
+            <button class="btn-trash" title="清空暂存区"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          </div>
+        </div></div>
+      </div>
+      <div>
+        <div class="state-label">复制激活</div>
+        <div class="shelf-card t-light"><div class="side-h" data-demo data-mode="copy">
+          <span class="shelf-title">暂存区</span>
+          <div class="side-actions">
+            <span class="seg-d" role="group" aria-label="拖出语义：移动/复制">
+              <button data-mode="move" title="拖出到窗格：移动（原件移走）"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></svg></button>
+              <button class="on" data-mode="copy" title="拖出到窗格：复制（保留原件）"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>
+            </span>
+            <button class="btn-trash" title="清空暂存区"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          </div>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ 方案 E ═══════════ -->
+  <section>
+    <div class="sec-h"><span class="tag">方案 E</span><h2>图标 + 文字双段分段（现行方案 A 的语义升级）</h2></div>
+    <p class="sec-note">
+      保留现行双段胶囊轨道与 accent 实底激活语言，每段在文字前加 12px 图标。
+      <b>取舍</b>：两态同见 + 图形/文字双通道语义，首次使用零学习成本；代价是头部占宽最大（约 96px），
+      在窄边栏下挤压标题。
+    </p>
+    <div class="row">
+      <div>
+        <div class="state-label">移动激活（默认）</div>
+        <div class="shelf-card t-light"><div class="side-h" data-demo data-mode="move">
+          <span class="shelf-title">暂存区</span>
+          <div class="side-actions">
+            <span class="seg-e" role="group" aria-label="拖出语义：移动/复制">
+              <button class="on" data-mode="move" title="拖出到窗格：移动（原件移走）"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></svg>移动</button>
+              <button data-mode="copy" title="拖出到窗格：复制（保留原件）"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>复制</button>
+            </span>
+            <button class="btn-trash" title="清空暂存区"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          </div>
+        </div></div>
+      </div>
+      <div>
+        <div class="state-label">复制激活</div>
+        <div class="shelf-card t-light"><div class="side-h" data-demo data-mode="copy">
+          <span class="shelf-title">暂存区</span>
+          <div class="side-actions">
+            <span class="seg-e" role="group" aria-label="拖出语义：移动/复制">
+              <button data-mode="move" title="拖出到窗格：移动（原件移走）"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></svg>移动</button>
+              <button class="on" data-mode="copy" title="拖出到窗格：复制（保留原件）"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>复制</button>
+            </span>
+            <button class="btn-trash" title="清空暂存区"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          </div>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ 方案 F ═══════════ -->
+  <section>
+    <div class="sec-h"><span class="tag">方案 F</span><h2>滑块式双图标分段（thumb 滑动指示块）</h2></div>
+    <p class="sec-note">
+      胶囊轨道内放一块 accent 滑块（thumb），点击另一段时滑块平移过去（0.18s），图标色随激活段反白。
+      <b>取舍</b>：当前态最醒目、切换有物理感，双图标同见；宽度与现行文字分段相当（约 60px）；
+      代价是多一层动效实现（transform 过渡），且图标语义仍需一次悬停学习。
+    </p>
+    <div class="row">
+      <div>
+        <div class="state-label">移动激活（默认）</div>
+        <div class="shelf-card t-light"><div class="side-h" data-demo data-mode="move">
+          <span class="shelf-title">暂存区</span>
+          <div class="side-actions">
+            <span class="seg-f" role="group" aria-label="拖出语义：移动/复制" data-mode="move">
+              <span class="thumb" aria-hidden></span>
+              <button class="on" data-mode="move" title="拖出到窗格：移动（原件移走）"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></svg></button>
+              <button data-mode="copy" title="拖出到窗格：复制（保留原件）"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>
+            </span>
+            <button class="btn-trash" title="清空暂存区"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          </div>
+        </div></div>
+      </div>
+      <div>
+        <div class="state-label">复制激活</div>
+        <div class="shelf-card t-light"><div class="side-h" data-demo data-mode="copy">
+          <span class="shelf-title">暂存区</span>
+          <div class="side-actions">
+            <span class="seg-f" role="group" aria-label="拖出语义：移动/复制" data-mode="copy">
+              <span class="thumb" aria-hidden></span>
+              <button data-mode="move" title="拖出到窗格：移动（原件移走）"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></svg></button>
+              <button class="on" data-mode="copy" title="拖出到窗格：复制（保留原件）"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>
+            </span>
+            <button class="btn-trash" title="清空暂存区"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          </div>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ 深色对照 ═══════════ -->
+  <section>
+    <div class="sec-h"><span class="tag">深色对照</span><h2>三案深色（两态）</h2></div>
+    <p class="sec-note">token 随 .dark 整体换档：accent 提亮为 #5c9dff、sel 浓度 0.16，形态不变。</p>
+    <div class="dark-wrap t-dark">
+      <div>
+        <div class="state-label">D · 移动</div>
+        <div class="shelf-card"><div class="side-h" data-demo data-mode="move">
+          <span class="shelf-title">暂存区</span>
+          <div class="side-actions">
+            <span class="seg-d" role="group">
+              <button class="on" data-mode="move" title="移动"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></svg></button>
+              <button data-mode="copy" title="复制"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>
+            </span>
+            <button class="btn-trash" title="清空"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          </div>
+        </div></div>
+      </div>
+      <div>
+        <div class="state-label">D · 复制</div>
+        <div class="shelf-card"><div class="side-h" data-demo data-mode="copy">
+          <span class="shelf-title">暂存区</span>
+          <div class="side-actions">
+            <span class="seg-d" role="group">
+              <button data-mode="move" title="移动"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></svg></button>
+              <button class="on" data-mode="copy" title="复制"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>
+            </span>
+            <button class="btn-trash" title="清空"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          </div>
+        </div></div>
+      </div>
+      <div>
+        <div class="state-label">E · 移动</div>
+        <div class="shelf-card"><div class="side-h" data-demo data-mode="move">
+          <span class="shelf-title">暂存区</span>
+          <div class="side-actions">
+            <span class="seg-e" role="group">
+              <button class="on" data-mode="move" title="移动"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></svg>移动</button>
+              <button data-mode="copy" title="复制"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>复制</button>
+            </span>
+            <button class="btn-trash" title="清空"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          </div>
+        </div></div>
+      </div>
+      <div>
+        <div class="state-label">E · 复制</div>
+        <div class="shelf-card"><div class="side-h" data-demo data-mode="copy">
+          <span class="shelf-title">暂存区</span>
+          <div class="side-actions">
+            <span class="seg-e" role="group">
+              <button data-mode="move" title="移动"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></svg>移动</button>
+              <button class="on" data-mode="copy" title="复制"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>复制</button>
+            </span>
+            <button class="btn-trash" title="清空"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          </div>
+        </div></div>
+      </div>
+      <div>
+        <div class="state-label">F · 移动</div>
+        <div class="shelf-card"><div class="side-h" data-demo data-mode="move">
+          <span class="shelf-title">暂存区</span>
+          <div class="side-actions">
+            <span class="seg-f" role="group" data-mode="move">
+              <span class="thumb" aria-hidden></span>
+              <button class="on" data-mode="move" title="移动"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></svg></button>
+              <button data-mode="copy" title="复制"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>
+            </span>
+            <button class="btn-trash" title="清空"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          </div>
+        </div></div>
+      </div>
+      <div>
+        <div class="state-label">F · 复制</div>
+        <div class="shelf-card"><div class="side-h" data-demo data-mode="copy">
+          <span class="shelf-title">暂存区</span>
+          <div class="side-actions">
+            <span class="seg-f" role="group" data-mode="copy">
+              <span class="thumb" aria-hidden></span>
+              <button data-mode="move" title="移动"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></svg></button>
+              <button class="on" data-mode="copy" title="复制"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>
+            </span>
+            <button class="btn-trash" title="清空"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          </div>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    // 预览交互：点任一段即在该 demo 卡内切换激活态（thumb 位移走 CSS data-mode）
+    document.querySelectorAll("[data-demo]").forEach((demo) => {
+      demo.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-mode]");
+        if (!btn) return;
+        demo.dataset.mode = btn.dataset.mode;
+        demo.querySelectorAll("button[data-mode]").forEach((b) =>
+          b.classList.toggle("on", b.dataset.mode === btn.dataset.mode));
+        const seg = demo.querySelector(".seg-f");
+        if (seg) seg.dataset.mode = btn.dataset.mode;
+      });
+    });
+  </script>
+</body>
+</html>
