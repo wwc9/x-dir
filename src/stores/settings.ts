@@ -119,6 +119,22 @@ function migrateLegacyPrefs(target: Settings, saved: Partial<Settings>) {
   }
 }
 
+/** 原生窗缘底色（顶缘 1px 非客户区 + DWM 窗框，WebView 之外）与画布同色，
+ *  取当前 DOM 主题类计算（COLORREF = 0x00BBGGRR；#e9ecf1 / #131519 与
+ *  index.css --np-bg 同值；Rust 侧默认浅色，深色由本函数同步） */
+function syncBorderColor() {
+  const canvas = document.documentElement.classList.contains("dark")
+    ? 0x131519
+    : 0xe9ecf1;
+  const colorref =
+    ((canvas & 0xff) << 16) | (canvas & 0xff00) | ((canvas >> 16) & 0xff);
+  api.setBorderColor(colorref).catch(() => undefined);
+}
+
+/** 主题圆形扩散在飞标记：揭示期间原生边色不得先行翻色（领先页面揭示即
+ *  "边框先变黑"），延到 vt.finished 再同步；直切路径（无 VT/减少动效）不置位 */
+let themeFxInFlight = false;
+
 export function applyTheme(theme: Settings["theme"]) {
   const dark =
     theme === "dark" ||
@@ -127,13 +143,7 @@ export function applyTheme(theme: Settings["theme"]) {
   document.documentElement.classList.toggle("dark", dark);
   // Blueprint 深色主题经由 bp6-dark 类生效
   document.documentElement.classList.toggle("bp6-dark", dark);
-  // 无边框窗口顶部 1px 非客户区（tao 阴影 insets，WebView 之外）同步画布色：
-  // 系统默认强调色或 COLOR_NONE 的窗口背景亮条都会在顶缘浮出可见横线
-  // （COLORREF = 0x00BBGGRR；#e9ecf1 / #131519 与 index.css --np-bg 同值）
-  const canvas = dark ? 0x131519 : 0xe9ecf1;
-  const colorref =
-    ((canvas & 0xff) << 16) | (canvas & 0xff00) | ((canvas >> 16) & 0xff);
-  api.setBorderColor(colorref).catch(() => undefined);
+  if (!themeFxInFlight) syncBorderColor();
 }
 
 /** 界面缩放走 WebView2 原生 ZoomFactor（与浏览器缩放同源） */
@@ -151,7 +161,10 @@ export function setThemeWithFx(
   origin?: { x: number; y: number },
 ): void {
   const doc = document as Document & {
-    startViewTransition?: (cb: () => void) => { ready: Promise<void> };
+    startViewTransition?: (cb: () => void) => {
+      ready: Promise<void>;
+      finished?: Promise<void>;
+    };
   };
   const reduce =
     typeof matchMedia === "function" &&
@@ -162,6 +175,17 @@ export function setThemeWithFx(
     return;
   }
   const vt = doc.startViewTransition(apply);
+  // 原生边色延到揭示完成再同步（applyTheme 内被 themeFxInFlight 抑制）：
+  // 边色即时翻转会在 450ms 揭示期间呈现"窗框先变黑/先变白"的脱节
+  if (vt.finished) {
+    themeFxInFlight = true;
+    void vt.finished
+      .catch(() => undefined)
+      .then(() => {
+        themeFxInFlight = false;
+        syncBorderColor();
+      });
+  }
   const o = origin ?? { x: innerWidth / 2, y: innerHeight / 2 };
   vt.ready
     .then(() => {
