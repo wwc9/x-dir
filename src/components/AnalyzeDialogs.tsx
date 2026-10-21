@@ -266,7 +266,7 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
       <DialogBody>
         <div className="np-dsiz-head">
           {stack.length > 0 && (
-            <button className="np-dsiz-back" title="上一级" onClick={back}>
+            <button className="np-dsiz-back" title="返回上一级" onClick={back}>
               <AppIcon icon={ArrowLeft} size={DENSITY.iconSm} />
             </button>
           )}

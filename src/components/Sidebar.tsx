@@ -478,14 +478,14 @@ export function Sidebar() {
       <aside className="np-sidebar np-sidebar-collapsed">
         <button
           className="np-side-add"
-          title="展开布局方案"
+          title="展开边栏"
           onClick={() => useSettings.getState().update({ sidebarCollapsed: false })}
         >
           <AppIcon icon={PanelLeftOpen} size={DENSITY.iconSm} />
         </button>
         <button
           className={`np-side-mini${current === DEFAULT_SCHEME ? " on" : ""}`}
-          title="默认方案"
+          title="切换到默认方案"
           onClick={applyDefault}
         >
           <span className="np-side-thumb">

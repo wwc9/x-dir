@@ -368,7 +368,7 @@ export function TitleBar() {
           className="np-pop-trigger"
           icon={ic(LayoutTemplate)}
           active={presetOpen}
-          title="布局预设"
+          title="窗格布局预设"
           onMouseEnter={hoverEnter(() => setPresetOpen(true))}
           onMouseLeave={hoverLeave(() => setPresetOpen(false))}
           onClick={() => {
@@ -389,7 +389,7 @@ export function TitleBar() {
         size="small"
         icon={ic(FolderTree)}
         active={treeVisible}
-        title="导航树（所有窗格共用）"
+        title="显示/隐藏导航树（所有窗格共用）"
         onClick={() => {
           // 整页（全盘搜索/定制）打开时点主界面类按钮：先回主界面再执行
           useUi.getState().exitPages();
@@ -416,7 +416,7 @@ export function TitleBar() {
         icon={ic(WandSparkles)}
         active={menuPage}
         aria-label="定制"
-        title="定制"
+        title="定制右键菜单与工具栏"
         onClick={() =>
           menuPage
             ? useUi.getState().closeMenuPage()
@@ -510,7 +510,7 @@ export function TitleBar() {
       </button>
       <button
         className="np-winbtn np-winbtn-close"
-        title="关闭"
+        title="关闭窗口"
         onClick={() => void getCurrentWindow().close()}
       >
         <AppIcon icon={X} size={DENSITY.iconSm} />

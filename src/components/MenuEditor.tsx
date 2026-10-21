@@ -979,7 +979,7 @@ export function MenuEditor() {
                     >
                       <button
                         className="np-menued-exp"
-                        title="出现条件"
+                        title="出现条件设置"
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={() => setExpanded(expanded === en.id ? null : en.id)}
                       >
@@ -1063,7 +1063,7 @@ export function MenuEditor() {
                     <div
                       className="np-menued-librow"
                       onPointerDown={(e) => beginDrag(e, { src: "sep" })}
-                      title="拖入左侧菜单添加分割线"
+                      title="拖入左侧菜单即可添加分割线"
                     >
                       <AppIcon icon={Minus} size={DENSITY.iconSm} />
                       <span className="np-menued-label">分割线</span>

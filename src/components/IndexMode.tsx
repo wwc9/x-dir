@@ -214,7 +214,7 @@ export function IndexModeBar({ status }: { status: IndexStatus | null }) {
       >
         <button
           className={`np-gsearch-idx np-gsearch-idx-${phase}`}
-          title="索引建立进度——点击查看"
+          title="索引建立进度，点击查看详情"
         >
           <span className="np-gsearch-idx-dot" />
           <span>{PHASE_LABEL[phase]}</span>
@@ -222,7 +222,7 @@ export function IndexModeBar({ status }: { status: IndexStatus | null }) {
       </PopoverNext>
       <Switch
         checked={enabled}
-        title="索引模式（NTFS 秒搜）：毫秒级出结果并实时同步文件变更"
+        title="索引模式：借助 NTFS 索引毫秒级出结果，文件变动实时同步"
         onChange={(e) => onToggle(e.currentTarget.checked)}
       />
     </span>

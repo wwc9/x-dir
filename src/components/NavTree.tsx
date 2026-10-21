@@ -160,7 +160,7 @@ export function NavTree() {
         <span>导航树</span>
         <button
           className="np-side-add"
-          title="刷新（清空展开目录缓存）"
+          title="刷新（重新读取已展开的目录）"
           onClick={() => useNavTree.getState().refresh()}
         >
           <AppIcon icon={RefreshCw} size={DENSITY.iconSm} />

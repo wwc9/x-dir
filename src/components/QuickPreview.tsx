@@ -226,7 +226,7 @@ export function QuickPreviewHost() {
               minimal
               size="small"
               icon={ic(ChevronLeft)}
-              title="上一个 (↑)"
+              title="上一个（↑）"
               disabled={queue.length <= 1}
               onClick={prev}
             />
@@ -234,7 +234,7 @@ export function QuickPreviewHost() {
               minimal
               size="small"
               icon={ic(ChevronRight)}
-              title="下一个 (↓)"
+              title="下一个（↓）"
               disabled={queue.length <= 1}
               onClick={next}
             />
@@ -287,7 +287,7 @@ export function QuickPreviewHost() {
                     minimal
                     size="small"
                     icon={ic(ChevronUp)}
-                    title="上一个命中 (Shift+Enter)"
+                    title="上一个命中（Shift+Enter）"
                     disabled={!matchTotal}
                     onClick={() => stepMatch(-1)}
                   />
@@ -295,7 +295,7 @@ export function QuickPreviewHost() {
                     minimal
                     size="small"
                     icon={ic(ChevronDown)}
-                    title="下一个命中 (Enter)"
+                    title="下一个命中（Enter）"
                     disabled={!matchTotal}
                     onClick={() => stepMatch(1)}
                   />
@@ -303,7 +303,7 @@ export function QuickPreviewHost() {
                     minimal
                     size="small"
                     icon={ic(X)}
-                    title="关闭查找 (Esc)"
+                    title="关闭查找（Esc）"
                     onClick={closeSearch}
                   />
                 </div>
@@ -312,7 +312,7 @@ export function QuickPreviewHost() {
                   minimal
                   size="small"
                   icon={ic(Search)}
-                  title="预览内查找 (Ctrl+F)"
+                  title="预览内查找（Ctrl+F）"
                   onClick={() => setSearchOpen(true)}
                 />
               ))}
@@ -342,7 +342,7 @@ export function QuickPreviewHost() {
               minimal
               size="small"
               icon={ic(SquareArrowOutUpRight)}
-              title="用默认程序打开 (Enter)"
+              title="用默认程序打开（Enter）"
               onClick={() => openDefault(entry)}
             />
             <Button
@@ -356,7 +356,7 @@ export function QuickPreviewHost() {
               minimal
               size="small"
               icon={ic(X)}
-              title="关闭 (Esc / Space)"
+              title="关闭（Esc / Space）"
               onClick={close}
             />
           </header>

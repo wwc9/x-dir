@@ -825,7 +825,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
               />
               <NpSelect
                 value={searchType}
-                title="类型（文件/文件夹或常用类型预设，对应 ext: 过滤词）"
+                title="类型（选文件/文件夹或常用类型，等同于 ext: 过滤）"
                 options={SEARCH_TYPE_OPTIONS}
                 popoverClassName="np-search-type-pop"
                 onChange={(v) => usePanes.getState().setSearchType(tabId, v)}
@@ -1038,7 +1038,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
           <span className="np-filter-count">{(ui?.total ?? 0).toLocaleString()} 项</span>
           <button
             className="np-filter-clear"
-            title="退出过滤 (Esc)"
+            title="退出过滤（Esc）"
             onClick={() => usePanes.getState().setFilter(tabId, null)}
           >
             <AppIcon icon={X} size={DENSITY.iconXs} />

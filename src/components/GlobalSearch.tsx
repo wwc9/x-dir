@@ -658,7 +658,7 @@ export function GlobalSearchPage() {
         />
           <NpSelect<string>
             value={typeSel}
-            title="类型（文件/文件夹或常用类型预设，对应 ext: 过滤词）"
+            title="类型（选文件/文件夹或常用类型，等同于 ext: 过滤）"
             options={SEARCH_TYPE_OPTIONS}
             onChange={setTypeSel}
           />
@@ -668,7 +668,7 @@ export function GlobalSearchPage() {
             leftElement={ic(Filter)}
             value={rowFilter}
             placeholder="结果过滤…"
-            title="对当前结果就地二次过滤（名称 / 拼音首字母，不重新搜索）"
+            title="在当前结果中再筛选（名称 / 拼音首字母，不重新搜索）"
             onChange={(e) => setRowFilter(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Escape") {
@@ -681,7 +681,7 @@ export function GlobalSearchPage() {
           />
           <NpSelect<number>
             value={maxResults}
-            title="结果上限"
+            title="结果数量上限"
             options={MAX_OPTIONS.map((m) => ({ value: m, label: `上限 ${m}` }))}
             onChange={setMaxResults}
           />
@@ -692,7 +692,7 @@ export function GlobalSearchPage() {
             className="np-gsearch-pv-toggle"
             icon={ic(PanelRight)}
             active={previewOpen}
-            title="预览面板"
+            title="显示/隐藏预览面板"
             onClick={() => useSettings.getState().update({ gsearchPreview: !previewOpen })}
           />
         </div>
@@ -853,7 +853,7 @@ export function GlobalSearchPage() {
                   minimal
                   size="small"
                   icon={ic(SquareArrowOutUpRight)}
-                  title="用默认程序打开 (Enter)"
+                  title="用默认程序打开（Enter）"
                   disabled={!pvEntry}
                   onClick={() => pvEntry && activate(pvEntry)}
                 />
