@@ -204,7 +204,8 @@ function Shelf() {
           {/* 拖出语义切换（2026-10-21 定案 · 方案 F 滑块式双图标分段，替换原双段
               文字分段）：thumb 滑块平移指示当前态，folder-input = 移动、copy = 复制，
               两态同见点另一半即切换；移动 = 落窗格即移动并移出暂存（默认）；
-              复制 = 复制到目标窗格、条目保留。预览：design/shelf-modeseg-preview.html */}
+              复制 = 复制到目标窗格、条目保留。几何 2026-10-22 锁定 22+2+22，
+              与布局方案卡标题行 .np-side-add 逐列对齐（见 index.css .np-shelf-modeseg） */}
           <span
             className="np-shelf-modeseg"
             role="group"

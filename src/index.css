@@ -1128,27 +1128,29 @@ body.np-col-resizing .np-menued-grip::after {
 /* 拖出语义切换（2026-10-20 定案双段文字分段 → 2026-10-21 定案 · 方案 F 滑块式
    双图标分段）：胶囊轨道内 accent thumb 平移指示当前态（0.18s transform 过渡），
    folder-input = 移动、copy = 复制，两态同见点另一半即切换；激活钮图标反白，
-   非激活 muted 悬停提亮。几何沿用预览稿 design/shelf-modeseg-preview.html */
+   非激活 muted 悬停提亮。几何锁定（2026-10-22）：轨道总宽 = 22+2+22，与布局
+   方案卡标题行前两枚 .np-side-add + 间隙严格同宽，两卡三个按钮逐列垂直对齐；
+   轨道零内边距，thumb 与轨道左端半圆同心 */
 .np-shelf-modeseg {
   position: relative;
   display: flex;
-  height: 20px;
-  padding: 2px;
+  gap: 2px;
+  height: 22px;
   border-radius: var(--np-radius-pill);
   background: var(--np-surface-2);
 }
 .np-shelf-modeseg-thumb {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 26px;
-  height: 16px;
+  top: 0;
+  left: 0;
+  width: 22px;
+  height: 22px;
   border-radius: var(--np-radius-pill);
   background: var(--np-accent);
   transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .np-shelf-modeseg[data-mode="copy"] .np-shelf-modeseg-thumb {
-  transform: translateX(26px);
+  transform: translateX(24px);
 }
 .np-shelf-modeseg button {
   position: relative;
@@ -1156,8 +1158,8 @@ body.np-col-resizing .np-menued-grip::after {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 16px;
+  width: 22px;
+  height: 22px;
   border: 0;
   border-radius: var(--np-radius-pill);
   background: none;
