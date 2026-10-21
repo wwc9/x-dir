@@ -191,12 +191,15 @@ export default function App() {
 
   return (
     <div className="np-shell">
-      {/* 窗缘盖板（2026-10-17 顶缘 / 2026-10-21 扩四缘）：弹层 portal 触发 WebView2
-          固定层合成 glitch——顶缘 ~2px 蓝线 + backdrop 画不到的最外侧 ~1px 亮边
-          （合成器产物，elementsFromPoint 查无元素 = 逐像素实测定位）。画布色固定条
-          盖住，遮罩在场时叠加同浓度遮罩色（index.css body:has 规则），随主题 token
-          变色，pointer-events none 不挡交互 */}
-      <div className="np-topline-cover" aria-hidden />
+      {/* 窗缘盖板×4（2026-10-17 顶缘 / 2026-10-21 扩四缘并拆小条）：弹层 portal 触发
+          WebView2 固定层合成 glitch——顶缘 ~2px 蓝线 + backdrop 画不到的最外侧 ~1px
+          亮边（合成器产物，elementsFromPoint 查无元素 = 逐像素实测定位）。画布色
+          固定条盖住，遮罩在场时叠加同浓度遮罩色（index.css body:has 规则）；拆四条
+          小条是为避免全视口大固定层在主题切换时与内容层栅格化不同步（弧波伪影） */}
+      <div className="np-winedge np-winedge-top" aria-hidden />
+      <div className="np-winedge np-winedge-bottom" aria-hidden />
+      <div className="np-winedge np-winedge-left" aria-hidden />
+      <div className="np-winedge np-winedge-right" aria-hidden />
       <TitleBar />
       <div className="np-body">
         {menuPage ? (

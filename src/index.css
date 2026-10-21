@@ -482,32 +482,48 @@ button:focus-visible {
 /* ═══ 应用外壳（2026-10-11 改版）：自绘顶栏 + 左侧边栏 + 内容区 ═══
    去系统标题栏（decorations:false），顶栏 = 工具栏 + 拖拽区 + 窗口控制合一行；
    左侧边栏 = 布局方案（工作区）保存与快速切换；全部为浮于 --np-bg 画布的圆角卡片 */
-/* 窗缘盖板（2026-10-17 顶缘 → 2026-10-21 扩四缘）：WebView2 固定层合成 glitch——
+/* 窗缘盖板×4（2026-10-17 顶缘 → 2026-10-21 扩四缘）：WebView2 固定层合成 glitch——
    弹层 portal 触发时窗口顶缘浮出 ~2px 蓝线（合成器产物，DOM 查无元素，逐像素实测
    定位），且 backdrop 画不到窗口最外侧 ~1px（左/右/底实测露未压暗画布）。
-   画布色四缘固定条盖住：顶 4px、左右下 1px，随主题 token 变色，pointer-events
-   none 不挡交互。遮罩在场时（body:has .bp6-overlay-backdrop，对话框/快速预览等
-   一切带 backdrop 的浮层通用，无需 JS 状态）盖板叠加同浓度遮罩色，与 backdrop
-   之下被压暗的画布逐像素一致，遮罩因此视觉上完整盖到窗缘 */
-.np-topline-cover {
-  --np-cover-tint: linear-gradient(transparent, transparent);
+   画布色固定条盖住，pointer-events none 不挡交互；遮罩在场时（body:has
+   .bp6-overlay-backdrop，对话框/快速预览等一切带 backdrop 的浮层通用，无需 JS
+   状态）叠加同浓度遮罩色，与 backdrop 之下被压暗的画布逐像素一致。
+   【2026-10-21 拆条】曾合并为单只 inset:0 全视口元素（背景图层只涂四缘），实测
+   主题切换时全视口大固定层与内容层栅格化时序错开，重绘以弧波扩散、四缘先变黑；
+   拆回四条小尺寸固定条使合成层最小化，主题切换恢复同帧翻转 */
+.np-winedge {
   position: fixed;
-  inset: 0;
   z-index: 2147483647;
   pointer-events: none;
-  /* 元素铺满视口但只在四缘着色：禁用 background-color（会盖住整个应用），
-     画布基色 = 四缘的渐变图层；前四层为遮罩叠色（无遮罩时透明，见下） */
-  background: var(--np-cover-tint) top / 100% 4px no-repeat,
-    var(--np-cover-tint) bottom / 100% 1px no-repeat,
-    var(--np-cover-tint) left / 1px 100% no-repeat,
-    var(--np-cover-tint) right / 1px 100% no-repeat,
-    linear-gradient(var(--np-bg), var(--np-bg)) top / 100% 4px no-repeat,
-    linear-gradient(var(--np-bg), var(--np-bg)) bottom / 100% 1px no-repeat,
-    linear-gradient(var(--np-bg), var(--np-bg)) left / 1px 100% no-repeat,
-    linear-gradient(var(--np-bg), var(--np-bg)) right / 1px 100% no-repeat;
+  background: linear-gradient(var(--np-bg), var(--np-bg));
 }
-body:has(.bp6-overlay-backdrop) .np-topline-cover {
-  --np-cover-tint: linear-gradient(var(--np-overlay), var(--np-overlay));
+.np-winedge-top {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+}
+.np-winedge-bottom {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+.np-winedge-left {
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+.np-winedge-right {
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+body:has(.bp6-overlay-backdrop) .np-winedge {
+  background: linear-gradient(var(--np-overlay), var(--np-overlay)),
+    linear-gradient(var(--np-bg), var(--np-bg));
 }
 .np-shell {
   display: flex;
