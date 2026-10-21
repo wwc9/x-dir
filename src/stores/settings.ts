@@ -31,6 +31,7 @@ interface SettingsStore extends Settings {
 function toPlain(s: SettingsStore): Settings {
   return {
     theme: s.theme,
+    lang: s.lang,
     terminal: s.terminal,
     showHidden: s.showHidden,
     defaultView: s.defaultView,

@@ -39,6 +39,7 @@ import { isUpdateAvailable } from "../lib/update";
 import { useLayout } from "../stores/layout";
 import { usePanes } from "../stores/panes";
 import { setThemeWithFx, useSettings } from "../stores/settings";
+import { useT } from "../lib/i18n";
 import { useHistory } from "../stores/history";
 import { useUi } from "../stores/ui";
 
@@ -73,6 +74,8 @@ export function TitleBar() {
   const theme = useSettings((s) => s.theme);
   const favorites = useSettings((s) => s.favorites);
   const uiZoom = useSettings((s) => s.uiZoom);
+  const lang = useSettings((s) => s.lang);
+  const t = useT();
   // 更新检查结果（启动静默检查 / 关于浮窗写入）：有新版本时关于钮亮角标
   const updateCheck = useUi((s) => s.updateCheck);
   const hasNewVersion = isUpdateAvailable(updateCheck);
@@ -202,7 +205,7 @@ export function TitleBar() {
           <div {...hoverProps(() => setHistOpen(false))}>
           <Menu className="np-hist-menu">
             {recentFolders.length === 0 && (
-              <MenuItem text="暂无浏览记录" disabled />
+              <MenuItem text={t("暂无浏览记录")} disabled />
             )}
             {recentFolders.slice(0, HISTORY_SHOW_MAX).map((p) => (
               <MenuItem
@@ -226,7 +229,7 @@ export function TitleBar() {
                 <MenuDivider />
                 <MenuItem
                   icon={ic(Trash2)}
-                  text="清空浏览记录"
+                  text={t("清空浏览记录")}
                   onClick={() => {
                     useHistory.getState().clear();
                     setHistOpen(false);
@@ -244,7 +247,7 @@ export function TitleBar() {
           className="np-pop-trigger"
           icon={ic(History)}
           active={histOpen}
-          data-tip="浏览记录"
+          data-tip={t("浏览记录")}
           onMouseEnter={hoverEnter(() => setHistOpen(true))}
           onMouseLeave={hoverLeave(() => setHistOpen(false))}
           onClick={() => {
@@ -298,7 +301,7 @@ export function TitleBar() {
                 labelElement={
                   <span
                     className="np-fav-remove"
-                    data-tip="移除收藏"
+                    data-tip={t("移除收藏")}
                     onClick={(e) => {
                       e.stopPropagation();
                       useSettings.getState().removeFavorite(f.path);
@@ -337,7 +340,7 @@ export function TitleBar() {
           className="np-pop-trigger"
           icon={ic(Star)}
           active={favOpen}
-          data-tip="收藏夹"
+          data-tip={t("收藏夹")}
           onMouseEnter={hoverEnter(() => setFavOpen(true))}
           onMouseLeave={hoverLeave(() => setFavOpen(false))}
           onClick={() => {
@@ -368,7 +371,7 @@ export function TitleBar() {
           className="np-pop-trigger"
           icon={ic(LayoutTemplate)}
           active={presetOpen}
-          data-tip="窗格布局预设"
+          data-tip={t("窗格布局预设")}
           onMouseEnter={hoverEnter(() => setPresetOpen(true))}
           onMouseLeave={hoverLeave(() => setPresetOpen(false))}
           onClick={() => {
@@ -389,7 +392,7 @@ export function TitleBar() {
         size="small"
         icon={ic(FolderTree)}
         active={treeVisible}
-        data-tip="显示/隐藏导航树（所有窗格共用）"
+        data-tip={t("显示/隐藏导航树（所有窗格共用）")}
         onClick={() => {
           // 整页（全盘搜索/定制）打开时点主界面类按钮：先回主界面再执行
           useUi.getState().exitPages();
@@ -402,7 +405,7 @@ export function TitleBar() {
         size="small"
         icon={ic(Search)}
         active={gsearchOpen}
-        data-tip="全盘搜索" data-kbd="Ctrl+Shift+F"
+        data-tip={t("全盘搜索")} data-kbd="Ctrl+Shift+F"
         onClick={() =>
           gsearchOpen
             ? useUi.getState().closeGlobalSearch()
@@ -416,7 +419,7 @@ export function TitleBar() {
         icon={ic(WandSparkles)}
         active={menuPage}
         aria-label="定制"
-        data-tip="定制右键菜单与工具栏"
+        data-tip={t("定制右键菜单与工具栏")}
         onClick={() =>
           menuPage
             ? useUi.getState().closeMenuPage()
@@ -433,7 +436,7 @@ export function TitleBar() {
         icon={ic(Settings)}
         active={settingsTab !== null}
         aria-label="设置"
-        data-tip="设置"
+        data-tip={t("设置")}
         onClick={() => {
           // 整页打开时先回主界面：设置浮窗作用于主界面观感
           useUi.getState().exitPages();
@@ -450,8 +453,10 @@ export function TitleBar() {
         aria-label="关于"
         data-tip={
           hasNewVersion
-            ? `关于 X-Dir（发现新版本 v${updateCheck?.manifest?.version}）`
-            : "关于 X-Dir"
+            ? t("关于 X-Dir（发现新版本 {v}）", {
+                v: `v${updateCheck?.manifest?.version}`,
+              })
+            : t("关于 X-Dir")
         }
         onClick={() => useUi.getState().openAbout()}
       >
@@ -462,7 +467,7 @@ export function TitleBar() {
         className="np-drag"
         data-tauri-drag-region
         onDoubleClick={() => void getCurrentWindow().toggleMaximize()}
-        data-tip="拖动窗口 · 双击最大化/还原"
+        data-tip={t("拖动窗口 · 双击最大化/还原")}
       >
         <IslandPill path={activePath} />
       </div>
@@ -470,7 +475,9 @@ export function TitleBar() {
       {/* 界面缩放指示：右簇首位常驻，点击重置 100%（Ctrl+滚轮/Ctrl+加减 调整后在此确认） */}
       <button
         className="np-zoompill"
-        data-tip={`界面缩放 ${Math.round(uiZoom * 100)}% · Ctrl+滚轮 / Ctrl+加减号调整 · 点击重置 100%`}
+        data-tip={t("界面缩放 {p}% · Ctrl+滚轮 / Ctrl+加减号调整 · 点击重置 100%", {
+          p: Math.round(uiZoom * 100),
+        })}
         onClick={() => useSettings.getState().update({ uiZoom: 1 })}
       >
         {Math.round(uiZoom * 100)}%
@@ -481,7 +488,7 @@ export function TitleBar() {
         minimal
         size="small"
         icon={ic(isDark ? Sun : Moon)}
-        data-tip={isDark ? "切换为浅色主题" : "切换为深色主题"}
+        data-tip={isDark ? t("切换为浅色主题") : t("切换为深色主题")}
         onClick={(e) => {
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
           setThemeWithFx(isDark ? "light" : "dark", {
@@ -491,26 +498,37 @@ export function TitleBar() {
         }}
       />
 
+      {/* 界面语言切换（2026-10-21）：明暗切换钮右侧；显示目标语言缩写，点按即换 */}
+      <button
+        className="np-langbtn"
+        data-tip={lang === "zh" ? "切换到英文界面" : "Switch to Chinese"}
+        onClick={() =>
+          useSettings.getState().update({ lang: lang === "zh" ? "en" : "zh" })
+        }
+      >
+        {lang === "zh" ? "EN" : "中"}
+      </button>
+
       {/* 窗口控制与功能钮之间：分组边界 + 安全间距（防误触窗口钮） */}
       <span className="np-tb-sep" aria-hidden />
 
       <button
         className="np-winbtn"
-        data-tip="最小化"
+        data-tip={t("最小化")}
         onClick={() => void getCurrentWindow().minimize()}
       >
         <AppIcon icon={Minus} size={DENSITY.iconSm} />
       </button>
       <button
         className="np-winbtn"
-        data-tip={maximized ? "还原" : "最大化"}
+        data-tip={maximized ? t("还原") : t("最大化")}
         onClick={() => void getCurrentWindow().toggleMaximize()}
       >
         <AppIcon icon={maximized ? Copy : Square} size={DENSITY.iconSm} />
       </button>
       <button
         className="np-winbtn np-winbtn-close"
-        data-tip="关闭窗口"
+        data-tip={t("关闭窗口")}
         onClick={() => void getCurrentWindow().close()}
       >
         <AppIcon icon={X} size={DENSITY.iconSm} />

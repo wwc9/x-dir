@@ -241,6 +241,8 @@ export interface ColorRule {
 
 export interface Settings {
   theme: "system" | "light" | "dark";
+  /** 界面语言（2026-10-21）：zh=中文 / en=English，暂只此两种 */
+  lang: "zh" | "en";
   /** "在终端打开"用的 shell：wt 存在时按它追加命令行，回退经典控制台同规则 */
   terminal: "powershell" | "cmd";
   showHidden: boolean;
@@ -339,6 +341,7 @@ export interface MenuEntry {
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: "system",
+  lang: "zh",
   terminal: "powershell",
   showHidden: false,
   defaultView: "details",

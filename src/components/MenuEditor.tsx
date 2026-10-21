@@ -95,6 +95,7 @@ import {
 } from "../lib/menuCommands";
 import { DENSITY } from "../lib/tokens";
 import { useSettings } from "../stores/settings";
+import { t } from "../lib/i18n";
 
 /** 左栏（启用菜单）宽钳制 */
 const LEFT_W_MIN = 240;
@@ -347,8 +348,8 @@ function entryIcon(en: MenuEntry): LucideIcon {
 }
 
 function entryLabel(en: MenuEntry): string {
-  if (en.kind === "sep") return "—— 分割线 ——";
-  return builtinByKey(en.id.slice("builtin:".length))?.label ?? en.id;
+  if (en.kind === "sep") return t("—— 分割线 ——");
+  return t(builtinByKey(en.id.slice("builtin:".length))?.label ?? en.id);
 }
 
 /** 工具栏回显句：condSentence 去掉右键前缀（作用域按条目出现位置） */
@@ -365,6 +366,8 @@ function toolbarSentence(cond: MenuCond, area: MenuEntry["area"]): string {
 }
 
 export function MenuEditor() {
+  // 订阅语言：entryLabel/分组名走全局 t，切换语言时整页重渲染
+  useSettings((s) => s.lang);
   const s = useSettings();
   const entries = s.menuEntries;
   const toolbarEntries = s.toolbarEntries;
@@ -540,7 +543,7 @@ export function MenuEditor() {
   /** 条件编辑浮层内容（方案 A 分段快选）：右键菜单条目 = 启用时机 + 三条件 + 人话回显 */
   const menuCondPanel = (en: MenuEntry) => (
     <div className="np-menued-cond">
-      <div className="np-menued-cond-name">出现条件 · {entryLabel(en)}</div>
+      <div className="np-menued-cond-name">{t("出现条件")} · {entryLabel(en)}</div>
       <div className="np-menued-frow">
         <span className="np-menued-clabel">启用时机</span>
         <Seg
@@ -979,7 +982,7 @@ export function MenuEditor() {
                     >
                       <button
                         className="np-menued-exp"
-                        data-tip="出现条件设置"
+                        data-tip={t("出现条件设置")}
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={() => setExpanded(expanded === en.id ? null : en.id)}
                       >
@@ -1041,7 +1044,7 @@ export function MenuEditor() {
                   key={g}
                   className={`np-menued-ritem${g === effGroup ? " is-on" : ""}`}
                   onClick={() => jumpToGroup(g)}
-                  data-tip={`跳转到 ${g}`}
+                  data-tip={t("跳转到 {g}", { g })}
                 >
                   {g}
                   <em>{BUILTIN_FNS.filter((f) => f.group === g).length}</em>
@@ -1092,8 +1095,10 @@ export function MenuEditor() {
                             }
                             data-tip={
                               dual
-                                ? `${f.label}（拖入菜单或工具栏对应区域；可两面共享）`
-                                : `${f.label}（仅可拖入工具栏）`
+                                ? t("{label}（拖入菜单或工具栏对应区域；可两面共享）", {
+                                    label: f.label,
+                                  })
+                                : t("{label}（仅可拖入工具栏）", { label: f.label })
                             }
                           >
                             <AppIcon
@@ -1101,7 +1106,7 @@ export function MenuEditor() {
                               size={DENSITY.iconSm}
                             />
                             <span className="np-menued-label np-ellipsis">
-                              {f.label}
+                              {t(f.label)}
                             </span>
                             <span className="np-menued-marks">
                               {used.has(id) && (

@@ -25,6 +25,7 @@ import { useLayout } from "../stores/layout";
 import { usePanes } from "../stores/panes";
 import { usePreview } from "../stores/preview";
 import { useSettings } from "../stores/settings";
+import { useT } from "../lib/i18n";
 import { SEARCH_TYPE_OPTIONS } from "../lib/searchStream";
 import { closePaneConfirmed, type MenuItem as UiMenuItem, useUi } from "../stores/ui";
 import {
@@ -410,22 +411,23 @@ export function Pane({ pane }: { pane: PaneNode }) {
     if (nav) ro.observe(nav);
     return () => ro.disconnect();
   }, [searching]);
+  const t = useT();
   const toolTitle = (key: string) => {
     switch (key) {
       case "up":
-        return "上一级（Backspace）";
+        return t("上一级（Backspace）");
       case "newFolder":
-        return "新建文件夹（Ctrl+Shift+N）";
+        return t("新建文件夹（Ctrl+Shift+N）");
       case "search":
-        return "搜索当前文件夹（Ctrl+F）";
+        return t("搜索当前文件夹（Ctrl+F）");
       case "swap":
-        return "交换窗格（点选目标窗格换位）";
+        return t("交换窗格（点选目标窗格换位）");
       case "openTerminal":
-        return "在终端打开当前文件夹";
+        return t("在终端打开当前文件夹");
       case "addFavorite":
-        return "收藏当前文件夹";
+        return t("收藏当前文件夹");
       default:
-        return builtinByKey(key)?.label ?? key;
+        return t(builtinByKey(key)?.label ?? key);
     }
   };
   const tierCls = (key: string) =>
@@ -654,7 +656,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
             icon={ic(Search)}
             active={searching}
             disabled={toolDisabled(key)}
-            data-tip={`${toolTitle(key)}（再点一次或 Esc 退出）`}
+            data-tip={`${toolTitle(key)}${t("（再点一次或 Esc 退出）")}`}
             onClick={() => runTool(key)}
           />
         </div>
@@ -704,7 +706,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
           className={`${tierCls(key)}${off ? " np-tool-off" : ""}`}
           icon={ic(FN_ICONS[key] ?? List)}
           disabled={off}
-          data-tip={`${toolTitle(key)}${ready ? "" : "（启用条件未满足）"}`}
+          data-tip={`${toolTitle(key)}${ready ? "" : t("（启用条件未满足）")}`}
           onClick={extra?.onClick}
         />
       );
@@ -745,7 +747,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
           className={`${tierCls(key)}${off ? " np-tool-off" : ""}`}
           icon={ic(FN_ICONS[key] ?? List)}
           disabled={off}
-          data-tip={`${toolTitle(key)}${ready ? "" : "（启用条件未满足）"}`}
+          data-tip={`${toolTitle(key)}${ready ? "" : t("（启用条件未满足）")}`}
           onClick={() => {
             const m = getList(tabId)?.builtinMenuItem?.(key, getSelItems());
             if (m && !m.disabled) m.action?.();
@@ -768,7 +770,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
               : undefined
         }
         disabled={off}
-        data-tip={`${toolTitle(key)}${ready ? "" : "（启用条件未满足）"}`}
+        data-tip={`${toolTitle(key)}${ready ? "" : t("（启用条件未满足）")}`}
         onClick={() => runTool(key)}
       />
     );

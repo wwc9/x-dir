@@ -2,6 +2,7 @@ import { Menu, MenuDivider, MenuItem } from "@blueprintjs/core";
 
 import { DENSITY } from "../lib/tokens";
 import { useUi, type MenuItem as UiMenuItem } from "../stores/ui";
+import { t } from "../lib/i18n";
 
 function renderItems(items: UiMenuItem[], close: () => void) {
   return items.map((item, i) => {
@@ -9,7 +10,7 @@ function renderItems(items: UiMenuItem[], close: () => void) {
     return (
       <MenuItem
         key={i}
-        text={item.label ?? ""}
+        text={t(item.label ?? "")}
         disabled={item.disabled}
         intent={item.danger ? "danger" : undefined}
         onClick={() => {

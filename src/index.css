@@ -4166,3 +4166,20 @@ body.np-col-resizing * {
 .np-textarea::placeholder {
   color: var(--np-muted);
 }
+
+/* 界面语言切换钮（2026-10-21）：顶栏明暗切换钮右侧，显示目标语言缩写
+   （中文界面显 EN、英文界面显 中），点按在 zh/en 间切换，词典见 lib/i18n.ts */
+.np-langbtn {
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--np-radius-pill);
+  background: none;
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+  cursor: pointer;
+}
+.np-langbtn:hover {
+  background: var(--np-hover);
+  color: var(--np-fg);
+}
