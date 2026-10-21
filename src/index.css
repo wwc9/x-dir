@@ -495,12 +495,16 @@ button:focus-visible {
   inset: 0;
   z-index: 2147483647;
   pointer-events: none;
-  background-color: var(--np-bg);
-  background-image: var(--np-cover-tint), var(--np-cover-tint), var(--np-cover-tint),
-    var(--np-cover-tint);
-  background-position: top, bottom, left, right;
-  background-size: 100% 4px, 100% 1px, 1px 100%, 1px 100%;
-  background-repeat: no-repeat;
+  /* 元素铺满视口但只在四缘着色：禁用 background-color（会盖住整个应用），
+     画布基色 = 四缘的渐变图层；前四层为遮罩叠色（无遮罩时透明，见下） */
+  background: var(--np-cover-tint) top / 100% 4px no-repeat,
+    var(--np-cover-tint) bottom / 100% 1px no-repeat,
+    var(--np-cover-tint) left / 1px 100% no-repeat,
+    var(--np-cover-tint) right / 1px 100% no-repeat,
+    linear-gradient(var(--np-bg), var(--np-bg)) top / 100% 4px no-repeat,
+    linear-gradient(var(--np-bg), var(--np-bg)) bottom / 100% 1px no-repeat,
+    linear-gradient(var(--np-bg), var(--np-bg)) left / 1px 100% no-repeat,
+    linear-gradient(var(--np-bg), var(--np-bg)) right / 1px 100% no-repeat;
 }
 body:has(.bp6-overlay-backdrop) .np-topline-cover {
   --np-cover-tint: linear-gradient(var(--np-overlay), var(--np-overlay));
