@@ -226,7 +226,7 @@ export function QuickPreviewHost() {
               minimal
               size="small"
               icon={ic(ChevronLeft)}
-              title="上一个（↑）"
+              data-tip="上一个" data-kbd="↑"
               disabled={queue.length <= 1}
               onClick={prev}
             />
@@ -234,7 +234,7 @@ export function QuickPreviewHost() {
               minimal
               size="small"
               icon={ic(ChevronRight)}
-              title="下一个（↓）"
+              data-tip="下一个" data-kbd="↓"
               disabled={queue.length <= 1}
               onClick={next}
             />
@@ -243,7 +243,7 @@ export function QuickPreviewHost() {
                 minimal
                 size="small"
                 icon={ic(RotateCw)}
-                title="顺时针旋转 90°"
+                data-tip="顺时针旋转 90°"
                 onClick={() => setRotateTick((t) => t + 1)}
               />
             )}
@@ -253,7 +253,7 @@ export function QuickPreviewHost() {
                 size="small"
                 icon={ic(WrapText)}
                 active={!textWrap}
-                title={textWrap ? "自动换行：开（点击改为不换行 + 行号）" : "自动换行：关（点击恢复）"}
+                data-tip={textWrap ? "自动换行：开（点击改为不换行 + 行号）" : "自动换行：关（点击恢复）"}
                 onClick={() => setTextWrap((w) => !w)}
               />
             )}
@@ -287,7 +287,7 @@ export function QuickPreviewHost() {
                     minimal
                     size="small"
                     icon={ic(ChevronUp)}
-                    title="上一个命中（Shift+Enter）"
+                    data-tip="上一个命中" data-kbd="Shift+Enter"
                     disabled={!matchTotal}
                     onClick={() => stepMatch(-1)}
                   />
@@ -295,7 +295,7 @@ export function QuickPreviewHost() {
                     minimal
                     size="small"
                     icon={ic(ChevronDown)}
-                    title="下一个命中（Enter）"
+                    data-tip="下一个命中" data-kbd="Enter"
                     disabled={!matchTotal}
                     onClick={() => stepMatch(1)}
                   />
@@ -303,7 +303,7 @@ export function QuickPreviewHost() {
                     minimal
                     size="small"
                     icon={ic(X)}
-                    title="关闭查找（Esc）"
+                    data-tip="关闭查找" data-kbd="Esc"
                     onClick={closeSearch}
                   />
                 </div>
@@ -312,7 +312,7 @@ export function QuickPreviewHost() {
                   minimal
                   size="small"
                   icon={ic(Search)}
-                  title="预览内查找（Ctrl+F）"
+                  data-tip="预览内查找" data-kbd="Ctrl+F"
                   onClick={() => setSearchOpen(true)}
                 />
               ))}
@@ -320,21 +320,21 @@ export function QuickPreviewHost() {
               minimal
               size="small"
               icon={ic(Copy)}
-              title="复制完整路径"
+              data-tip="复制完整路径"
               onClick={() => copyPath(entry)}
             />
             <Button
               minimal
               size="small"
               icon={ic(ClipboardCopy)}
-              title="复制文件（可在窗格中粘贴）"
+              data-tip="复制文件（可在窗格中粘贴）"
               onClick={() => copyFile(entry)}
             />
             <Button
               minimal
               size="small"
               icon={ic(Trash2)}
-              title="删除到回收站"
+              data-tip="删除到回收站"
               className="np-pv-danger"
               onClick={() => removeFile(entry)}
             />
@@ -342,21 +342,21 @@ export function QuickPreviewHost() {
               minimal
               size="small"
               icon={ic(SquareArrowOutUpRight)}
-              title="用默认程序打开（Enter）"
+              data-tip="用默认程序打开" data-kbd="Enter"
               onClick={() => openDefault(entry)}
             />
             <Button
               minimal
               size="small"
               icon={ic(FolderOpen)}
-              title="打开所在文件夹"
+              data-tip="打开所在文件夹"
               onClick={() => reveal(entry)}
             />
             <Button
               minimal
               size="small"
               icon={ic(X)}
-              title="关闭（Esc / Space）"
+              data-tip="关闭" data-kbd="Esc / Space"
               onClick={close}
             />
           </header>

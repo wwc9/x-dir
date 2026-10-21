@@ -27,6 +27,7 @@ import { useLayout } from "./stores/layout";
 import { useUi } from "./stores/ui";
 import { useIsland } from "./stores/island";
 import { applyTheme, useSettings } from "./stores/settings";
+import { initTooltip } from "./lib/tooltip";
 import { AboutDialog } from "./components/AboutDialog";
 import { ContextMenu } from "./components/ContextMenu";
 import { DialogHost } from "./components/DialogHost";
@@ -188,6 +189,9 @@ export default function App() {
     mq.addEventListener("change", h);
     return () => mq.removeEventListener("change", h);
   }, []);
+
+  // 自绘悬浮提示全局单例（2026-10-21 定案 · 方案 B）：替代原生 title，见 lib/tooltip.ts
+  useEffect(() => initTooltip(), []);
 
   return (
     <div className="np-shell">

@@ -160,7 +160,7 @@ export function NavTree() {
         <span>导航树</span>
         <button
           className="np-side-add"
-          title="刷新（重新读取已展开的目录）"
+          data-tip="刷新（重新读取已展开的目录）"
           onClick={() => useNavTree.getState().refresh()}
         >
           <AppIcon icon={RefreshCw} size={DENSITY.iconSm} />
@@ -191,7 +191,7 @@ export function NavTree() {
                     paddingLeft: 6 + n.depth * 16,
                   } as CSSProperties
                 }
-                title={n.path}
+                data-tip={n.path}
                 onClick={() => openPath(n.path)}
                 onMouseDown={(e) => {
                   // 中键 = 在活动窗格新标签打开（与列表行中键同语义）
@@ -204,7 +204,7 @@ export function NavTree() {
               >
                 <span
                   className={`np-tree-chev${n.open ? " open" : ""}`}
-                  title={n.open ? "收起" : "展开"}
+                  data-tip={n.open ? "收起" : "展开"}
                   onClick={(e) => {
                     e.stopPropagation();
                     useNavTree.getState().toggleDir(n.path);
@@ -232,7 +232,7 @@ export function NavTree() {
         </div>
       </div>
 
-      <div className="np-tree-resize" onMouseDown={startResize} title="拖动调整宽度" />
+      <div className="np-tree-resize" onMouseDown={startResize} data-tip="拖动调整宽度" />
     </aside>
   );
 }

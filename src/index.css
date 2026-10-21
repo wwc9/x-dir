@@ -256,6 +256,42 @@ body {
 .bp6-overlay {
   z-index: 100;
 }
+/* 自绘悬浮提示（2026-10-21 定案 · 方案 B 卡片键帽，120ms）：全局单例
+   lib/tooltip.ts 委托 data-tip/data-kbd 渲染，替代原生 title（仅交互控件，
+   内容截断场景仍用原生 title）。surface 卡片 + 发丝线 ring + np 阴影与
+   菜单/弹层同语言；键帽 = surface-2 底 + mono + muted。层级高于全部应用
+   浮层、低于窗缘盖板 */
+.np-tip {
+  position: fixed;
+  z-index: 2147483000;
+  max-width: 300px;
+  padding: 6px 10px;
+  border-radius: var(--np-radius-lg);
+  background: var(--np-surface);
+  color: var(--np-fg);
+  font-size: var(--np-font-sm);
+  line-height: 1.5;
+  box-shadow: var(--np-shadow), 0 0 0 1px var(--np-border);
+  opacity: 0;
+  transform: scale(0.96);
+  transition: opacity 0.14s ease-out, transform 0.14s ease-out;
+  pointer-events: none;
+}
+.np-tip.np-tip-on {
+  opacity: 1;
+  transform: scale(1);
+}
+.np-tip kbd {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-style: normal;
+  font-size: var(--np-font-sm);
+  margin-left: 7px;
+  padding: 0 5px;
+  border-radius: var(--np-radius);
+  background: var(--np-surface-2);
+  border: 1px solid var(--np-border);
+  color: var(--np-muted);
+}
 /* ═══ 弹层统一规范（2026-10-12 定案）：所有浮层面板一张"脸" ═══
    面板 = --np-surface 底 + --np-radius-xl(Dialog)/--np-radius-lg(浮层) + --np-shadow；
    Dialog 三段 header/body/footer 全部透明（覆写 Blueprint 白头灰身默认值），

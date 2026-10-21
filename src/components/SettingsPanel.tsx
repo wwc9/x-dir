@@ -97,7 +97,7 @@ export function SettingsPanel() {
     <Dialog
       isOpen={settingsTab !== null}
       onClose={() => useUi.getState().closeSettings()}
-      title="设置"
+      data-tip="设置"
       icon={ic(Settings)}
       canOutsideClickClose
       className="np-dialog np-settingsdlg"
@@ -277,7 +277,7 @@ export function SettingsPanel() {
                   />
                   <button
                     className="np-rule-del"
-                    title="删除规则"
+                    data-tip="删除规则"
                     onClick={() =>
                       s.update({ colorRules: s.colorRules.filter((_, j) => j !== i) })
                     }

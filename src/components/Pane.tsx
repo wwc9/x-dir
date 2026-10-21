@@ -493,7 +493,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
       const arrow = (prevTarget: string) => (
         <button
           className="np-crumb-tail"
-          title="浏览子文件夹"
+          data-tip="浏览子文件夹"
           onClick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
             openChildMenu(prevTarget, r.left, r.bottom + 4);
@@ -508,7 +508,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
       nodes.push({
         key: "pc",
         el: (
-          <button className="np-crumb" title="此电脑" onClick={() => go(THIS_PC)}>
+          <button className="np-crumb" data-tip="此电脑" onClick={() => go(THIS_PC)}>
             <AppIcon icon={Computer} size={DENSITY.iconSm} />
           </button>
         ),
@@ -524,7 +524,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
           el: (
             <button
               className={`np-crumb${gi === crumbs.length - 1 ? " np-crumb-last" : ""}`}
-              title={c.target}
+              data-tip={c.target}
               onClick={() => go(c.target)}
             >
               <span className="np-ellipsis">{label}</span>
@@ -538,7 +538,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
           el: (
             <button
               className="np-crumb np-crumb-more"
-              title="更多上级目录"
+              data-tip="更多上级目录"
               onClick={(e) => {
                 if (!hiddenCrumbs.length) return;
                 const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -561,7 +561,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
         <div
           key={en.id}
           className="np-addrwrap"
-          title={path}
+          data-tip={path}
           ref={addrWrapRef}
           onMouseDown={(e) => {
             // 编辑态 = 原生输入行为；面包屑按钮（层级段/箭头/省略号）自带 onClick。
@@ -584,7 +584,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
             value={addr === THIS_PC ? "" : addr}
             placeholder={addr === THIS_PC ? "此电脑" : undefined}
             intent={ui?.error ? "danger" : undefined}
-            title={ui?.error ?? undefined}
+            data-tip={ui?.error ?? undefined}
             onChange={(e) => {
               setAddr(e.target.value);
               setAddrDirty(true);
@@ -654,7 +654,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
             icon={ic(Search)}
             active={searching}
             disabled={toolDisabled(key)}
-            title={`${toolTitle(key)}（再点一次或 Esc 退出）`}
+            data-tip={`${toolTitle(key)}（再点一次或 Esc 退出）`}
             onClick={() => runTool(key)}
           />
         </div>
@@ -686,7 +686,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
               size="small"
               icon={ic(FN_ICONS[key] ?? List)}
               disabled={toolDisabled(key)}
-              title={toolTitle(key)}
+              data-tip={toolTitle(key)}
             />
           </PopoverNext>
         </div>
@@ -704,7 +704,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
           className={`${tierCls(key)}${off ? " np-tool-off" : ""}`}
           icon={ic(FN_ICONS[key] ?? List)}
           disabled={off}
-          title={`${toolTitle(key)}${ready ? "" : "（启用条件未满足）"}`}
+          data-tip={`${toolTitle(key)}${ready ? "" : "（启用条件未满足）"}`}
           onClick={extra?.onClick}
         />
       );
@@ -745,7 +745,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
           className={`${tierCls(key)}${off ? " np-tool-off" : ""}`}
           icon={ic(FN_ICONS[key] ?? List)}
           disabled={off}
-          title={`${toolTitle(key)}${ready ? "" : "（启用条件未满足）"}`}
+          data-tip={`${toolTitle(key)}${ready ? "" : "（启用条件未满足）"}`}
           onClick={() => {
             const m = getList(tabId)?.builtinMenuItem?.(key, getSelItems());
             if (m && !m.disabled) m.action?.();
@@ -768,7 +768,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
               : undefined
         }
         disabled={off}
-        title={`${toolTitle(key)}${ready ? "" : "（启用条件未满足）"}`}
+        data-tip={`${toolTitle(key)}${ready ? "" : "（启用条件未满足）"}`}
         onClick={() => runTool(key)}
       />
     );
@@ -825,7 +825,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
               />
               <NpSelect
                 value={searchType}
-                title="类型（选文件/文件夹或常用类型，等同于 ext: 过滤）"
+                data-tip="类型（选文件/文件夹或常用类型，等同于 ext: 过滤）"
                 options={SEARCH_TYPE_OPTIONS}
                 popoverClassName="np-search-type-pop"
                 onChange={(v) => usePanes.getState().setSearchType(tabId, v)}
@@ -909,7 +909,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
               </Menu>
             }
           >
-            <Button minimal size="small" icon={ic(MoreHorizontal)} title="更多" />
+            <Button minimal size="small" icon={ic(MoreHorizontal)} data-tip="更多" />
           </PopoverNext>
         </div>
         <Button
@@ -918,7 +918,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
           icon={ic(X)}
           disabled={dfsPanes(useLayout.getState().tree!).length <= 1}
           onClick={() => closePaneConfirmed(pane.id)}
-          title="关闭窗格（Ctrl+Shift+W）"
+          data-tip="关闭窗格" data-kbd="Ctrl+Shift+W"
         />
       </div>
 
@@ -1038,7 +1038,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
           <span className="np-filter-count">{(ui?.total ?? 0).toLocaleString()} 项</span>
           <button
             className="np-filter-clear"
-            title="退出过滤（Esc）"
+            data-tip="退出过滤" data-kbd="Esc"
             onClick={() => usePanes.getState().setFilter(tabId, null)}
           >
             <AppIcon icon={X} size={DENSITY.iconXs} />

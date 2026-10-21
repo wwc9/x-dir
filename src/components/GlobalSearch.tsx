@@ -520,7 +520,7 @@ export function GlobalSearchPage() {
     return (
       <button
         className={`np-gsearch-sort${active ? " is-active" : ""}`}
-        title={`按${text}排序${active ? `（${sortDir === "asc" ? "升序" : "降序"}，点击反向）` : ""}`}
+        data-tip={`按${text}排序${active ? `（${sortDir === "asc" ? "升序" : "降序"}，点击反向）` : ""}`}
         onClick={toggleSort.bind(null, key)}
       >
         {text}
@@ -591,7 +591,7 @@ export function GlobalSearchPage() {
       <header className="np-gsearchpage-head">
         <button
           className="np-menupage-back"
-          title="返回主界面（Esc）"
+          data-tip="返回主界面" data-kbd="Esc"
           onClick={close}
         >
           <AppIcon icon={ArrowLeft} size={DENSITY.iconSm} />
@@ -644,7 +644,7 @@ export function GlobalSearchPage() {
                 minimal
                 size="small"
                 icon={ic(CircleHelp)}
-                title="查询语法速查"
+                data-tip="查询语法速查"
                 className="np-gsearch-help-btn"
               />
             </PopoverNext>
@@ -658,7 +658,7 @@ export function GlobalSearchPage() {
         />
           <NpSelect<string>
             value={typeSel}
-            title="类型（选文件/文件夹或常用类型，等同于 ext: 过滤）"
+            data-tip="类型（选文件/文件夹或常用类型，等同于 ext: 过滤）"
             options={SEARCH_TYPE_OPTIONS}
             onChange={setTypeSel}
           />
@@ -668,7 +668,7 @@ export function GlobalSearchPage() {
             leftElement={ic(Filter)}
             value={rowFilter}
             placeholder="结果过滤…"
-            title="在当前结果中再筛选（名称 / 拼音首字母，不重新搜索）"
+            data-tip="在当前结果中再筛选（名称 / 拼音首字母，不重新搜索）"
             onChange={(e) => setRowFilter(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Escape") {
@@ -681,7 +681,7 @@ export function GlobalSearchPage() {
           />
           <NpSelect<number>
             value={maxResults}
-            title="结果数量上限"
+            data-tip="结果数量上限"
             options={MAX_OPTIONS.map((m) => ({ value: m, label: `上限 ${m}` }))}
             onChange={setMaxResults}
           />
@@ -692,7 +692,7 @@ export function GlobalSearchPage() {
             className="np-gsearch-pv-toggle"
             icon={ic(PanelRight)}
             active={previewOpen}
-            title="显示/隐藏预览面板"
+            data-tip="显示/隐藏预览面板"
             onClick={() => useSettings.getState().update({ gsearchPreview: !previewOpen })}
           />
         </div>
@@ -810,7 +810,7 @@ export function GlobalSearchPage() {
                         </span>
                         <span
                           className="np-cell-muted np-col-loc np-ellipsis"
-                          title={e.path}
+                          data-tip={e.path}
                         >
                           {parentPath(e.path) ?? e.path}
                         </span>
@@ -834,7 +834,7 @@ export function GlobalSearchPage() {
           {previewOpen && (
             <span
               className="np-gsearch-split"
-              title="拖动调整预览面板宽度"
+              data-tip="拖动调整预览面板宽度"
               onMouseDown={startPreviewResize}
             />
           )}
@@ -853,7 +853,7 @@ export function GlobalSearchPage() {
                   minimal
                   size="small"
                   icon={ic(SquareArrowOutUpRight)}
-                  title="用默认程序打开（Enter）"
+                  data-tip="用默认程序打开" data-kbd="Enter"
                   disabled={!pvEntry}
                   onClick={() => pvEntry && activate(pvEntry)}
                 />
@@ -861,7 +861,7 @@ export function GlobalSearchPage() {
                   minimal
                   size="small"
                   icon={ic(FolderOpen)}
-                  title="打开所在文件夹"
+                  data-tip="打开所在文件夹"
                   disabled={!pvEntry}
                   onClick={() => pvEntry && reveal(pvEntry)}
                 />

@@ -113,7 +113,7 @@ export function PresetPicker() {
         <button
           key={p.id}
           className="np-layouttile"
-          title={p.tip}
+          data-tip={p.tip}
           onClick={() => useLayout.getState().preset(p.id)}
         >
           <span className="np-side-thumb">
@@ -211,7 +211,7 @@ function Shelf() {
             <span className="np-shelf-modeseg-thumb" aria-hidden />
             <button
               className={stagingMode === "move" ? "on" : ""}
-              title={
+              data-tip={
                 stagingMode === "move"
                   ? "移动：拖动条目到窗格即移动，并移出暂存（当前模式）"
                   : "切换为移动：拖动条目到窗格即移动，并移出暂存"
@@ -224,7 +224,7 @@ function Shelf() {
             </button>
             <button
               className={stagingMode === "copy" ? "on" : ""}
-              title={
+              data-tip={
                 stagingMode === "copy"
                   ? "复制：拖动条目到窗格即复制，保留原件（当前模式）"
                   : "切换为复制：拖动条目到窗格即复制，保留原件"
@@ -238,7 +238,7 @@ function Shelf() {
           </span>
           <button
             className="np-side-add"
-            title="清空暂存区"
+            data-tip="清空暂存区"
             disabled={!items.length}
             onClick={() => useSettings.getState().clearShelf()}
           >
@@ -264,7 +264,7 @@ function Shelf() {
               <div
                 key={p.toLowerCase()}
                 className="np-shelf-row"
-                title={p}
+                data-tip={p}
                 onMouseDown={(e) => armRowDrag(e, p)}
               >
                 {realIcons ? (
@@ -286,7 +286,7 @@ function Shelf() {
                 <span className="np-shelf-name">{name}</span>
                 <button
                   className="np-shelf-del"
-                  title="移出暂存区"
+                  data-tip="移出暂存区"
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={() => useSettings.getState().removeShelf(p)}
                 >
@@ -486,14 +486,14 @@ export function Sidebar() {
       <aside className="np-sidebar np-sidebar-collapsed">
         <button
           className="np-side-add"
-          title="展开边栏"
+          data-tip="展开边栏"
           onClick={() => useSettings.getState().update({ sidebarCollapsed: false })}
         >
           <AppIcon icon={PanelLeftOpen} size={DENSITY.iconSm} />
         </button>
         <button
           className={`np-side-mini${current === DEFAULT_SCHEME ? " on" : ""}`}
-          title="切换到默认方案"
+          data-tip="切换到默认方案"
           onClick={applyDefault}
         >
           <span className="np-side-thumb">
@@ -505,7 +505,7 @@ export function Sidebar() {
           <button
             key={it.name}
             className={`np-side-mini${current === it.name ? " on" : ""}`}
-            title={it.name}
+            data-tip={it.name}
             onClick={() => void apply(it.name)}
           >
             {it.tree && (
@@ -531,21 +531,21 @@ export function Sidebar() {
         <div className="np-side-actions">
           <button
             className="np-side-add"
-            title="保存当前布局到选中方案"
+            data-tip="保存当前布局到选中方案"
             onClick={() => void saveToCurrent()}
           >
             <AppIcon icon={Save} size={DENSITY.iconSm} />
           </button>
           <button
             className="np-side-add"
-            title="把当前窗口组合另存为新方案"
+            data-tip="把当前窗口组合另存为新方案"
             onClick={() => void saveCurrent()}
           >
             <AppIcon icon={SaveAll} size={DENSITY.iconSm} />
           </button>
           <button
             className="np-side-add"
-            title="折叠边栏"
+            data-tip="折叠边栏"
             onClick={() => useSettings.getState().update({ sidebarCollapsed: true })}
           >
             <AppIcon icon={PanelLeftClose} size={DENSITY.iconSm} />
@@ -557,7 +557,7 @@ export function Sidebar() {
         <div
           className={`np-side-item${current === DEFAULT_SCHEME ? " on" : ""}`}
           onClick={applyDefault}
-          title={
+          data-tip={
             current === DEFAULT_SCHEME
               ? "当前方案（改动后点上方保存覆盖）"
               : "应用默认方案（可保存覆盖；不可删除）"
@@ -574,7 +574,7 @@ export function Sidebar() {
             key={it.name}
             className={`np-side-item${current === it.name ? " on" : ""}`}
             onClick={() => void apply(it.name)}
-            title={current === it.name ? "当前方案（改动后点上方保存图标覆盖）" : "点击切换到此布局"}
+            data-tip={current === it.name ? "当前方案（改动后点上方保存图标覆盖）" : "点击切换到此布局"}
           >
             {it.tree && (
               <span className="np-side-thumb">
@@ -584,7 +584,7 @@ export function Sidebar() {
             <span className="np-side-name">{it.name}</span>
             <button
               className="np-side-del"
-              title="删除方案"
+              data-tip="删除方案"
               onClick={(e) => {
                 e.stopPropagation();
                 void remove(it.name);
@@ -607,12 +607,12 @@ export function Sidebar() {
       <div
         className="np-side-split"
         onMouseDown={startSplit}
-        title="拖动调整上下高度"
+        data-tip="拖动调整上下高度"
       />
 
       <Shelf />
 
-      <div className="np-side-resize" onMouseDown={startResize} title="拖动调整宽度" />
+      <div className="np-side-resize" onMouseDown={startResize} data-tip="拖动调整宽度" />
     </aside>
   );
 }

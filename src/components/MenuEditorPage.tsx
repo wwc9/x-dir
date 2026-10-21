@@ -16,7 +16,7 @@ export function MenuEditorPage() {
       <header className="np-menupage-head">
         <button
           className="np-menupage-back"
-          title="返回主界面（Esc）"
+          data-tip="返回主界面" data-kbd="Esc"
           onClick={() => useUi.getState().closeMenuPage()}
         >
           <AppIcon icon={ArrowLeft} size={DENSITY.iconSm} />

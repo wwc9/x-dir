@@ -23,7 +23,7 @@ export function Seg<T>({
   return (
     <ButtonGroup className="np-seg" size="small" variant="minimal">
       {options.map((o) => (
-        <Button key={String(o.value)} active={value === o.value} title={o.title} onClick={() => onChange(o.value)}>
+        <Button key={String(o.value)} active={value === o.value} data-tip={o.title} onClick={() => onChange(o.value)}>
           {o.label}
         </Button>
       ))}

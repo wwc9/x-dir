@@ -251,7 +251,7 @@ function Seg<T extends string>({
           key={o.value}
           active={o.value === value}
           disabled={o.disabled}
-          title={o.title}
+          data-tip={o.title}
           text={o.label}
           onClick={() => onChange(o.value)}
         />
@@ -588,7 +588,7 @@ export function MenuEditor() {
           size="small"
           value={en.cond.exts}
           placeholder="如 pdf, txt（空 = 不限）"
-          title={
+          data-tip={
             en.cond.target !== "file"
               ? "对象类型为「仅文件」时可配置"
               : "逗号/空格分隔扩展名白名单，不区分大小写"
@@ -661,7 +661,7 @@ export function MenuEditor() {
           size="small"
           value={en.cond.exts}
           placeholder="如 pdf, txt（空 = 不限）"
-          title={
+          data-tip={
             en.cond.target !== "file"
               ? "对象类型为「仅文件」时可配置"
               : "逗号/空格分隔扩展名白名单，不区分大小写"
@@ -862,7 +862,7 @@ export function MenuEditor() {
             icon={ic(LayoutTemplate)}
             text="重置为默认方案"
             onClick={applyToolbarDefault}
-            title="恢复默认工具栏排列（地址框保留常驻）"
+            data-tip="恢复默认工具栏排列（地址框保留常驻）"
           />
         </div>
         <div className="np-menued-tbar">
@@ -890,7 +890,7 @@ export function MenuEditor() {
                 <div
                   data-toolbar-row={en.id}
                   className={rowCls}
-                  title={`${builtinByKey(key)?.label ?? en.id} · ${toolbarSentence(en.cond, en.area)}`}
+                  data-tip={`${builtinByKey(key)?.label ?? en.id} · ${toolbarSentence(en.cond, en.area)}`}
                   onPointerDown={(e) => beginDrag(e, { src: "toolbar", id: en.id })}
                 >
                   <AppIcon icon={FN_ICONS[key] ?? List} size={DENSITY.iconSm} />
@@ -942,7 +942,7 @@ export function MenuEditor() {
                 icon={ic(LayoutTemplate)}
                 text="重置为默认方案"
                 onClick={applyMenuDefault}
-                title="恢复默认菜单布局（七项基础功能保留）"
+                data-tip="恢复默认菜单布局（七项基础功能保留）"
               />
             </span>
           </div>
@@ -979,7 +979,7 @@ export function MenuEditor() {
                     >
                       <button
                         className="np-menued-exp"
-                        title="出现条件设置"
+                        data-tip="出现条件设置"
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={() => setExpanded(expanded === en.id ? null : en.id)}
                       >
@@ -1003,7 +1003,7 @@ export function MenuEditor() {
         <div
           className="np-menued-grip"
           onPointerDown={startLeftResize}
-          title="拖动调整两栏宽度"
+          data-tip="拖动调整两栏宽度"
         />
         <div className="np-menued-pane">
           <div className="np-menued-title np-menued-libhead">
@@ -1041,7 +1041,7 @@ export function MenuEditor() {
                   key={g}
                   className={`np-menued-ritem${g === effGroup ? " is-on" : ""}`}
                   onClick={() => jumpToGroup(g)}
-                  title={`跳转到 ${g}`}
+                  data-tip={`跳转到 ${g}`}
                 >
                   {g}
                   <em>{BUILTIN_FNS.filter((f) => f.group === g).length}</em>
@@ -1063,7 +1063,7 @@ export function MenuEditor() {
                     <div
                       className="np-menued-librow"
                       onPointerDown={(e) => beginDrag(e, { src: "sep" })}
-                      title="拖入左侧菜单即可添加分割线"
+                      data-tip="拖入左侧菜单即可添加分割线"
                     >
                       <AppIcon icon={Minus} size={DENSITY.iconSm} />
                       <span className="np-menued-label">分割线</span>
@@ -1090,7 +1090,7 @@ export function MenuEditor() {
                             onPointerDown={(e) =>
                               beginDrag(e, { src: "builtin", key: f.key })
                             }
-                            title={
+                            data-tip={
                               dual
                                 ? `${f.label}（拖入菜单或工具栏对应区域；可两面共享）`
                                 : `${f.label}（仅可拖入工具栏）`
@@ -1107,7 +1107,7 @@ export function MenuEditor() {
                               {used.has(id) && (
                                 <span
                                   className="np-menued-mark is-menu"
-                                  title="已启用 · 右键菜单"
+                                  data-tip="已启用 · 右键菜单"
                                 >
                                   <AppIcon icon={MenuIcon} size={DENSITY.iconXs} />
                                 </span>
@@ -1115,7 +1115,7 @@ export function MenuEditor() {
                               {toolbarUsed.has(id) && (
                                 <span
                                   className="np-menued-mark is-tool"
-                                  title="已启用 · 窗格工具栏"
+                                  data-tip="已启用 · 窗格工具栏"
                                 >
                                   <AppIcon icon={PanelTop} size={DENSITY.iconXs} />
                                 </span>

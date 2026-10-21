@@ -266,7 +266,7 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
       <DialogBody>
         <div className="np-dsiz-head">
           {stack.length > 0 && (
-            <button className="np-dsiz-back" title="返回上一级" onClick={back}>
+            <button className="np-dsiz-back" data-tip="返回上一级" onClick={back}>
               <AppIcon icon={ArrowLeft} size={DENSITY.iconSm} />
             </button>
           )}
@@ -287,7 +287,7 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
                 key={r.path}
                 className="np-dsiz-row"
                 onClick={() => r.isDir && drill(r.path)}
-                title={r.isDir ? "查看子目录体积" : undefined}
+                data-tip={r.isDir ? "查看子目录体积" : undefined}
               >
                 <span
                   className={`np-dsiz-name np-ellipsis${r.isDir ? " is-dir" : ""}`}
@@ -444,7 +444,7 @@ export function CompareDialog({
               size="small"
               disabled={!selB.size}
               onClick={() => syncTo("b")}
-              title={`把勾选的 ${selB.size} 项从 ${bName} 复制到 ${aName}`}
+              data-tip={`把勾选的 ${selB.size} 项从 ${bName} 复制到 ${aName}`}
             >
               {bName} → {aName}
             </Button>
@@ -453,7 +453,7 @@ export function CompareDialog({
               intent="primary"
               disabled={!selA.size}
               onClick={() => syncTo("a")}
-              title={`把勾选的 ${selA.size} 项从 ${aName} 复制到 ${bName}`}
+              data-tip={`把勾选的 ${selA.size} 项从 ${aName} 复制到 ${bName}`}
             >
               {aName} → {bName}
             </Button>

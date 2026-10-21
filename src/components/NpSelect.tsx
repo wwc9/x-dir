@@ -51,7 +51,7 @@ export function NpSelect<T extends string | number>({
               <MenuItem
                 key={String(o.value)}
                 text={o.label}
-                title={o.title}
+                data-tip={o.title}
                 disabled={o.disabled}
                 active={o.value === value}
                 labelElement={o.value === value ? ic(Check) : undefined}
@@ -69,7 +69,7 @@ export function NpSelect<T extends string | number>({
         minimal
         size="small"
         className={`np-select${open ? " is-open" : ""}${className ? ` ${className}` : ""}`}
-        title={title}
+        data-tip={title}
         text={current?.label ?? ""}
         rightIcon={
           <span className="np-select-chev">{ic(ChevronDown)}</span>

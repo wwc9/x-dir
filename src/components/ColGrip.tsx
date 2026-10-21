@@ -53,7 +53,7 @@ export function ColGrip<T extends string>({ col, ctl }: { col: T; ctl: ColResize
   return (
     <span
       className="np-col-grip"
-      title="拖动调整列宽 · 双击恢复默认"
+      data-tip="拖动调整列宽 · 双击恢复默认"
       onMouseDown={(e) => startColResize(e, col, ctl)}
       onDoubleClick={() => ctl.reset(col)}
     />

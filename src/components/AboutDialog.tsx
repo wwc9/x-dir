@@ -129,7 +129,7 @@ export function AboutDialog() {
                 <button
                   type="button"
                   className="np-linkbtn is-url"
-                  title={`在浏览器打开：${REPO_URLS.gitee}`}
+                  data-tip={`在浏览器打开：${REPO_URLS.gitee}`}
                   onClick={() => void openUrl(REPO_URLS.gitee)}
                 >
                   {REPO_URLS.gitee}
@@ -137,7 +137,7 @@ export function AboutDialog() {
                 <button
                   type="button"
                   className="np-linkbtn is-url"
-                  title={`在浏览器打开：${REPO_URLS.github}`}
+                  data-tip={`在浏览器打开：${REPO_URLS.github}`}
                   onClick={() => void openUrl(REPO_URLS.github)}
                 >
                   {REPO_URLS.github}

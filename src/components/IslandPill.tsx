@@ -186,7 +186,7 @@ export function IslandPill({ path }: { path: string }) {
         type="button"
         className={cls}
         onClick={onClick}
-        title={islandTitle(view)}
+        data-tip={islandTitle(view)}
       >
         {inner}
       </button>

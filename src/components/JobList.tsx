@@ -103,7 +103,7 @@ function JobRow({ job }: { job: JobInfo }) {
       {(job.mode === "copy" || job.mode === "move") && job.phase !== "queued" && (
         <button
           className="np-job-cancel"
-          title={job.phase === "paused" ? "继续任务" : "暂停任务"}
+          data-tip={job.phase === "paused" ? "继续任务" : "暂停任务"}
           onClick={() =>
             job.phase === "paused"
               ? useJobs.getState().resume(job.jobId)
@@ -115,7 +115,7 @@ function JobRow({ job }: { job: JobInfo }) {
       )}
       <button
         className="np-job-cancel"
-        title="取消任务"
+        data-tip="取消任务"
         onClick={() => useJobs.getState().cancel(job.jobId)}
       >
         <AppIcon icon={X} size={DENSITY.iconXs} />
