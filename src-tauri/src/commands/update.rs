@@ -10,8 +10,14 @@ use serde::{Deserialize, Serialize};
 /// Gitee 直取 raw.giteeusercontent.com（免 gitee.com 一跳 302；裸地址实测可用、
 /// 不需要签名参数）。
 const MANIFEST_SOURCES: &[(&str, &str)] = &[
-    ("Gitee", "https://raw.giteeusercontent.com/wwc9/x-dir/raw/main/update.json"),
-    ("GitHub", "https://raw.githubusercontent.com/wwc9/x-dir/main/update.json"),
+    (
+        "Gitee",
+        "https://raw.giteeusercontent.com/wwc9/x-dir/raw/main/update.json",
+    ),
+    (
+        "GitHub",
+        "https://raw.githubusercontent.com/wwc9/x-dir/main/update.json",
+    ),
 ];
 
 const FETCH_TIMEOUT_SECS: u64 = 8;
@@ -116,7 +122,7 @@ pub async fn fetch_update_manifest() -> UpdateFetchResult {
                         return UpdateFetchResult {
                             manifest: Some(dto),
                             errors,
-                        }
+                        };
                     }
                     Err(msg) => errors.push(format!("{label}：{msg}")),
                 },

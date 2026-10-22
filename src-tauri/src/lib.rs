@@ -214,6 +214,7 @@ pub fn run() {
             commands::fake::fake_list_dir,
             commands::search::search_dir,
             commands::search::search_all,
+            commands::search::search_content,
             commands::search::suggest_paths,
             commands::search::cancel_search,
             commands::index::index_status,

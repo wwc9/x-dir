@@ -60,6 +60,30 @@ export interface GlobalSearchResult {
   fallbackReason: string | null;
 }
 
+/** 内容搜索命中行（行号 1 起，text = 原始行内容） */
+export interface ContentLine {
+  line: number;
+  text: string;
+}
+
+/** 内容搜索命中文件：附至多 3 条命中行片段 */
+export interface ContentMatch {
+  path: string;
+  name: string;
+  size: number;
+  mtimeMs: number;
+  lines: ContentLine[];
+}
+
+/** 内容搜索结果（限定目录范围，无索引；scanned = 实际扫描文件数） */
+export interface ContentSearchResult {
+  matches: ContentMatch[];
+  scanned: number;
+  skippedBinary: number;
+  truncated: boolean;
+  elapsedMs: number;
+}
+
 /** search-batch 事件载荷：遍历命中的流式批次（前端按 reqId 累积渲染） */
 export interface SearchBatchEvent {
   reqId: number;
@@ -441,6 +465,20 @@ export const api = {
       maxResults: o.maxResults,
       roots: o.roots,
       typeFilter: o.typeFilter,
+      reqId: o.reqId,
+    }),
+  /** 内容搜索（2026-10-22）：限定目录范围内做文件内容关键词匹配（无索引，有界范围）。
+   *  多词 AND、大小写不敏感；单文件 2MB 上限 + 二进制嗅探 + 命中数封顶（语义见 fs::content） */
+  searchContent: (o: {
+    root: string;
+    query: string;
+    exts?: string;
+    reqId?: number;
+  }) =>
+    cmd<ContentSearchResult>("search_content", {
+      root: o.root,
+      query: o.query,
+      exts: o.exts,
       reqId: o.reqId,
     }),
   /** 取消指定槽位（reqId）正在进行的搜索 */

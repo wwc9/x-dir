@@ -60,6 +60,7 @@ import {
   useGsColWidths,
 } from "../stores/columns";
 import { useSettings } from "../stores/settings";
+import type { ContentSearchResult } from "../lib/ipc";
 import { useT } from "../lib/i18n";
 import { useIsland } from "../stores/island";
 import { confirmDialog, useUi, type MenuItem } from "../stores/ui";
@@ -144,6 +145,11 @@ export function GlobalSearchPage() {
   const open = useUi((s) => s.globalSearch);
   const close = useUi((s) => s.closeGlobalSearch);
   const [query, setQuery] = useState("");
+  // 内容搜索模式（2026-10-22）：名称 / 内容；范围目录默认取活动窗格当前目录
+  const [mode, setMode] = useState<"name" | "content">("name");
+  const [cRoot, setCRoot] = useState("");
+  const [cExts, setCExts] = useState("");
+  const [cRes, setCRes] = useState<ContentSearchResult | null>(null);
   const [stream, setStream] = useState<StreamState>(EMPTY_STREAM);
   const [res, setRes] = useState<GlobalSearchResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -287,6 +293,78 @@ export function GlobalSearchPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, open, maxResults, typeSel, indexReady]);
+
+  // 内容搜索（2026-10-22）：范围目录 + 关键词（多词 AND），防抖 350ms，
+  // 发起前取消上一轮（与名称搜索共用 reqId 槽位，Esc/关闭统一取消）
+  useEffect(() => {
+    if (!open || mode !== "content") return;
+    const q = query.trim();
+    const root = cRoot.trim();
+    if (!q || !root) {
+      const req = activeReq.current;
+      if (req !== null) api.cancelSearch(req).catch(() => undefined);
+      activeReq.current = null;
+      setCRes(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    let stale = false;
+    const timer = window.setTimeout(() => {
+      const prev = activeReq.current;
+      if (prev !== null) api.cancelSearch(prev).catch(() => undefined);
+      const reqId = nextGlobalSearchReq();
+      activeReq.current = reqId;
+      api
+        .searchContent({ root, query: q, exts: cExts.trim() || undefined, reqId })
+        .then((r) => {
+          if (stale || activeReq.current !== reqId) return;
+          setCRes(r);
+          setLoading(false);
+        })
+        .catch(() => {
+          if (stale || activeReq.current !== reqId) return;
+          setCRes(null);
+          setLoading(false);
+        });
+    }, 350);
+    return () => {
+      stale = true;
+      window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, mode, query, cRoot, cExts]);
+
+  // 切到内容模式且范围为空：预填活动窗格当前目录
+  const switchMode = (next: "name" | "content") => {
+    setMode(next);
+    if (next === "content" && !cRoot) {
+      const pane = useLayout.getState().activePane();
+      const tabId = pane?.tabs[pane.activeTab]?.id;
+      const ui = tabId ? usePanes.getState().tabs[tabId] : undefined;
+      const cwd = ui ? ui.history[ui.historyIndex] : "";
+      if (cwd) setCRoot(cwd);
+    }
+  };
+
+  /** 命中行关键词高亮（多词交替着色，大小写不敏感） */
+  function HiLine({ text, q }: { text: string; q: string }) {
+    const terms = Array.from(new Set(q.trim().toLowerCase().split(/\s+/).filter(Boolean)));
+    if (!terms.length) return <>{text}</>;
+    const escaped = terms.map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const parts = text.split(new RegExp(`(${escaped.join("|")})`, "gi"));
+    return (
+      <>
+        {parts.map((seg, i) =>
+          i % 2 === 1 ? (
+            <mark key={i} className="np-gsearch-mark">{seg}</mark>
+          ) : (
+            <span key={i}>{seg}</span>
+          ),
+        )}
+      </>
+    );
+  }
 
   const liveEntries = res?.entries ?? stream.entries;
   const entries = useMemo(() => {
@@ -621,6 +699,14 @@ export function GlobalSearchPage() {
         )}
       </header>
         <div className="np-gsearch-filters">
+          <div className="np-gsearch-modeseg" role="group" aria-label={t("搜索模式")}>
+            <button className={mode === "name" ? "on" : ""} onClick={() => switchMode("name")}>
+              {t("文件名")}
+            </button>
+            <button className={mode === "content" ? "on" : ""} onClick={() => switchMode("content")}>
+              {t("内容")}
+            </button>
+          </div>
           <InputGroup
           inputRef={inputRef}
           className="np-gsearch-input"
@@ -660,7 +746,11 @@ export function GlobalSearchPage() {
             </PopoverNext>
           }
           value={query}
-          placeholder={'搜索所有磁盘 · ext: size: dm: 过滤 · !排除 · "短语" · 拼音首字母'}
+          placeholder={
+            mode === "content"
+              ? t("搜索文件内容（多词空格分隔，大小写不敏感）")
+              : t('搜索所有磁盘 · ext: size: dm: 过滤 · !排除 · "短语" · 拼音首字母')
+          }
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onInputKey}
           spellCheck={false}
@@ -706,7 +796,64 @@ export function GlobalSearchPage() {
             onClick={() => useSettings.getState().update({ gsearchPreview: !previewOpen })}
           />
         </div>
-        <div className="np-gsearch-main">
+        {mode === "content" && (
+          <div className="np-gsearch-crow">
+            <span className="np-gsearch-crow-label">{t("范围")}</span>
+            <input
+              className="np-gsearch-croot"
+              value={cRoot}
+              spellCheck={false}
+              placeholder={t("范围目录（如 D:\\资料）")}
+              onChange={(e) => setCRoot(e.target.value)}
+            />
+            <input
+              className="np-gsearch-cext"
+              value={cExts}
+              spellCheck={false}
+              placeholder={t("扩展名（如 txt,md，空 = 全部）")}
+              onChange={(e) => setCExts(e.target.value)}
+            />
+          </div>
+        )}
+        <div className={"np-gsearch-main" + (mode === "content" ? " is-content" : "")}>
+          {mode === "content" && (
+            <div className="np-gsearch-cwrap">
+              {cRes?.matches.length === 0 && !loading && (
+                <div className="np-list-empty np-gsearch-empty">{t("没有匹配的文件内容")}</div>
+              )}
+              {cRes?.matches.map((m) => (
+                <div
+                  key={m.path}
+                  className="np-gsearch-crow2"
+                  onClick={() =>
+                    reveal({ path: m.path, name: m.name, isDir: false } as FileEntry)
+                  }
+                >
+                  <div className="np-gsearch-cname">
+                    <span className="np-gsearch-cname-n">{m.name}</span>
+                    <span className="np-gsearch-cpath np-ellipsis">
+                      {parentPath(m.path) ?? m.path}
+                    </span>
+                  </div>
+                  {m.lines.map((l) => (
+                    <div key={l.line} className="np-gsearch-cline">
+                      <span className="np-gsearch-cline-no">{l.line}</span>
+                      <span className="np-gsearch-cline-t">
+                        <HiLine text={l.text} q={query} />
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              {loading && mode === "content" && (
+                <div className="np-list-empty np-gsearch-empty">
+                  <span className="np-spin">
+                    <AppIcon icon={LoaderCircle} size={DENSITY.iconLg} />
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
           <div
             ref={panelRef}
             className="np-gsearch-panel"
@@ -841,7 +988,7 @@ export function GlobalSearchPage() {
             </div>
           </div>
           {/* 分隔条：隐形沟槽，悬停/拖拽以强调色轻染（§4.1） */}
-          {previewOpen && (
+          {previewOpen && mode === "name" && (
             <span
               className="np-gsearch-split"
               data-tip={t("拖动调整预览面板宽度")}
@@ -855,7 +1002,7 @@ export function GlobalSearchPage() {
                   <AppIcon icon={pvSpec.icon} size={DENSITY.iconMd} colorVar={pvSpec.colorVar} />
                 )}
                 <span className="np-gsearch-pv-name np-ellipsis">
-                  {pvEntry ? pvEntry.name : "未选中结果"}
+                  {pvEntry ? pvEntry.name : t("未选中结果")}
                 </span>
                 {pvEntry && <span className="np-pv-badge">{PREVIEW_LABELS[pvKind]}</span>}
                 <span className="np-gsearch-pv-spacer" />
@@ -880,7 +1027,7 @@ export function GlobalSearchPage() {
                 entry={pvEntry}
                 onOpen={activate}
                 onReveal={reveal}
-                emptyHint="选择结果以预览"
+                emptyHint={t("选择结果以预览")}
               />
             </aside>
           )}
@@ -889,8 +1036,19 @@ export function GlobalSearchPage() {
         <div className="np-gsearch-status">
           <IndexModeBar status={indexStatus} />
           <span className="np-gsearch-status-text np-ellipsis">
-            {statusText}
-            {statusSuffix}
+            {mode === "content"
+              ? t("命中 {n} 个文件 · 扫描 {s} 个{tail} · {ms}ms", {
+                  n: cRes?.matches.length ?? 0,
+                  s: cRes?.scanned ?? 0,
+                  tail: cRes?.truncated ? t("（已达上限，缩小范围或加扩展名过滤）") : "",
+                  ms: cRes?.elapsedMs ?? 0,
+                })
+              : (
+                <>
+                  {statusText}
+                  {statusSuffix}
+                </>
+              )}
           </span>
         </div>
     </section>

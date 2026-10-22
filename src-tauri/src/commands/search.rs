@@ -7,6 +7,7 @@ use serde::Serialize;
 use tauri::Emitter;
 
 use super::files::AppError;
+use crate::fs::content::ContentSearchResult;
 use crate::fs::entry::{FileEntry, path_exists};
 use crate::fs::matcher::{Query, TypeFilter};
 use crate::fs::search::{
@@ -156,6 +157,38 @@ pub async fn search_all(
         r.fallback_reason = fallback_reason;
     }
     out
+}
+
+/// 内容搜索（2026-10-22）：限定目录范围内做文件内容关键词匹配（无内容索引，
+/// 有界范围保证可用性）。多词 AND、大小写不敏感；单文件 2MB 上限 + 二进制
+/// 嗅探；命中文件数/扫描数封顶。语义见 fs::content。
+#[tauri::command]
+pub async fn search_content(
+    root: String,
+    query: String,
+    exts: Option<String>,
+    req_id: Option<u64>,
+) -> Result<ContentSearchResult, AppError> {
+    let terms_lower: Vec<String> = query.split_whitespace().map(|s| s.to_lowercase()).collect();
+    if terms_lower.is_empty() {
+        return Ok(ContentSearchResult::empty());
+    }
+    let exts_lower = exts.map(|e| {
+        e.split([',', ';', '；'])
+            .map(|s| s.trim().trim_start_matches('.').to_lowercase())
+            .filter(|s| !s.is_empty())
+            .collect()
+    });
+    let req_id = req_id.unwrap_or(0);
+    let cancel = register_search(req_id);
+    let cancel_in = cancel.clone();
+    let out = tauri::async_runtime::spawn_blocking(move || {
+        crate::fs::content::search_content(&root, &terms_lower, exts_lower, &cancel_in)
+    })
+    .await
+    .unwrap_or_else(|_| ContentSearchResult::empty());
+    unregister_search(req_id, &cancel);
+    Ok(out)
 }
 
 /// 取消指定槽位正在进行的搜索（Esc / 输入变化时由前端调用）
