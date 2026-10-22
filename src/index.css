@@ -1286,25 +1286,28 @@ body.np-col-resizing .np-menued-grip::after {
   align-items: center;
   gap: var(--np-gutter);
   height: var(--np-nav-h);
-  padding: 0 6px 0 14px;
+  padding: 0 6px 0 16px;
   border-bottom: 1px solid var(--np-hairline);
 }
-/* 返回钮：两个整页（定制/全盘搜索）共用，加大命中区方便点击（2026-10-16 定案） */
+/* 返回钮：两个整页（定制/全盘搜索）共用，加大命中区方便点击（2026-10-16 定案）。
+   2026-10-22 定稿「方案 A 淡染胶囊」（design/back-button-preview.html）：sel 淡染底 +
+   accent 箭头文字，pill 全圆角，hover 加深至 20%；按钮块左缘 = 头部行内容基准线
+   （全盘搜索 12px / 定制 16px，各随其页内容左缘，不再有按钮内缩进叠加） */
 .np-menupage-back {
   display: inline-flex;
   align-items: center;
   gap: var(--np-gutter);
-  height: 30px;
-  padding: 0 14px;
+  height: 28px;
+  padding: 0 12px;
   border: 0;
-  background: transparent;
-  border-radius: var(--np-radius);
+  background: var(--np-sel);
+  border-radius: var(--np-radius-pill);
   font-size: var(--np-font-ui);
-  color: var(--np-fg);
+  color: var(--np-accent);
   cursor: pointer;
 }
 .np-menupage-back:hover {
-  background: var(--np-hover);
+  background: color-mix(in srgb, var(--np-accent) 20%, transparent);
 }
 .np-menupage-title {
   font-size: var(--np-font-ui);
