@@ -384,6 +384,11 @@ export function Pane({ pane }: { pane: PaneNode }) {
       const t = e.target as HTMLElement | null;
       if (!t) return;
       if (usePreview.getState().queue.length) return;
+      // 预览/对话框遮罩（Blueprint backdrop）的按下是浮层自身的关闭操作：Blueprint
+      // 在 React 根容器上处理 backdrop mousedown，早于本 window 监听就把 preview
+      // queue 清空——上面的 queue 守卫因此拦不住（实测遮罩一点搜索即被误退），
+      // 2026-10-22 起点名 backdrop 放行：关预览归关预览，搜索结果原地不动
+      if (t.closest(".bp6-overlay-backdrop")) return;
       if (t.closest(".np-search-anchor") || t.closest(".np-search-pop")) return;
       // 类型选择下拉（portal 弹层）的点击属于搜索操作，不退出搜索
       if (t.closest(".np-search-type-pop")) return;
