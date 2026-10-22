@@ -373,6 +373,9 @@ export function Pane({ pane }: { pane: PaneNode }) {
   };
   // 搜索浮层的外点退出：豁免仅限搜索框本体与窗格内的结果行/表头（排序、列宽
   // 属于搜索结果的操作）；其余一律退出——含本窗格空白处（如「此电脑」页面）。
+  // 结果行/表头豁免仅在确有搜索内容时生效（有关键词，或选了文件/文件夹类型
+  // 过滤）：空输入的搜索还没产生结果集，列表渲染的就是本目录常态内容
+  // （FileList 空查询不触发递归扫描），窗格内任意点击即退出（2026-10-22）。
   // 快速预览打开期间暂停外点退出：关闭预览/点预览遮罩的按下不属于"去别处操作"，
   // 不该退掉搜索结果（2026-10-17；预览关闭后恢复监听）
   useEffect(() => {
@@ -384,8 +387,12 @@ export function Pane({ pane }: { pane: PaneNode }) {
       if (t.closest(".np-search-anchor") || t.closest(".np-search-pop")) return;
       // 类型选择下拉（portal 弹层）的点击属于搜索操作，不退出搜索
       if (t.closest(".np-search-type-pop")) return;
+      // getState 现取现判，不进依赖：输入/类型变化不重挂监听
+      const st = usePanes.getState().tabs[tabId];
+      const hasContent =
+        !!(st?.search ?? "").trim() || (st?.searchType ?? "all") !== "all";
       const inPane = !!t.closest(`[data-pane-id="${pane.id}"]`);
-      if (inPane && (t.closest(".np-row") || t.closest(".np-head-clip"))) return;
+      if (hasContent && inPane && (t.closest(".np-row") || t.closest(".np-head-clip"))) return;
       usePanes.getState().setSearch(tabId, null);
     };
     window.addEventListener("mousedown", onDown);

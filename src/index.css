@@ -464,9 +464,11 @@ button:focus-visible {
   background: var(--np-surface);
   box-shadow: var(--np-ring);
 }
-/* 激活窗格：地址栏提亮为表面色——在导航栏的强调色淡染上形成层次，
-   非激活窗格保持灰底填充以弱化层级 */
-.np-pane-active .np-nav .np-addr .bp6-input {
+/* 激活窗格：地址栏提亮为表面色——输入框与非聚焦态的面包屑覆盖层必须同底，
+   否则覆盖层（surface-2 灰底）会盖住白底让激活态不可见（2026-10-22 补覆盖层）。
+   在导航栏的强调色淡染上形成层次，非激活窗格保持灰底填充以弱化层级 */
+.np-pane-active .np-nav .np-addr .bp6-input,
+.np-pane-active .np-nav .np-addr-crumbs {
   background: var(--np-surface);
 }
 
