@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>返回主界面按钮 · 样式提案（3 套）</title>
+<style>
+  /* ═══ np token 替身（与 src/index.css 同值，2026-10-22）═══ */
+  .t-light {
+    --np-surface: #ffffff; --np-surface-2: #f0f2f5; --np-border: #d6dbe2;
+    --np-hairline: rgba(16, 24, 40, 0.06); --np-fg: #171d26; --np-muted: #66707e;
+    --np-accent: #3574f0; --np-accent-fg: #ffffff;
+    --np-hover: rgba(26, 33, 41, 0.055); --np-sel: rgba(53, 116, 240, 0.12);
+    --np-accent-border: color-mix(in srgb, var(--np-accent) 45%, var(--np-border));
+  }
+  .t-dark {
+    --np-surface: #1b1e23; --np-surface-2: #24282f; --np-border: #3a414b;
+    --np-hairline: rgba(255, 255, 255, 0.08); --np-fg: #e8eaed; --np-muted: #8b929c;
+    --np-accent: #5c9dff; --np-accent-fg: #0d1117;
+    --np-hover: rgba(255, 255, 255, 0.055); --np-sel: rgba(92, 157, 255, 0.16);
+    --np-accent-border: color-mix(in srgb, var(--np-accent) 55%, var(--np-border));
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 48px; background: #dde2ea; color: #171d26;
+    font-family: system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 13px; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: #66707e; font-size: 12px; margin-bottom: 22px; }
+  .banner { background: #fff; border: 1px solid #d6dbe2; border-radius: 12px;
+    padding: 10px 14px; margin-bottom: 24px; font-size: 12px; color: #66707e;
+    line-height: 1.8; }
+  .banner b { color: #171d26; }
+  .banner code { background: #f0f2f5; border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+
+  section { margin-bottom: 34px; }
+  .sec-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .sec-h .tag { background: #3574f0; color: #fff; font-size: 11px; font-weight: 600;
+    border-radius: 999px; padding: 1px 9px; }
+  .sec-h h2 { font-size: 14px; margin: 0; }
+  .sec-note { font-size: 12px; color: #66707e; margin: 0 0 12px; line-height: 1.7; }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+  .state-label { font-size: 11px; color: #8a93a0; margin: 10px 0 6px; }
+  .state-row { display: flex; gap: 18px; align-items: center; }
+  .state-row > div > div:first-child { font-size: 11px; color: #8a93a0; margin-bottom: 6px; }
+
+  /* ═══ 整页头部 mock（真实上下文：surface 卡 + 头部行 + 控制条）═══
+     对齐口径（三案通用）：头部行与控制条左 padding 统一 12px，
+     返回钮块自身左缘即落在 12px 基准线上——与下方搜索框严格对齐 */
+  .page-card { width: 470px; background: var(--np-surface); border: 1px solid var(--np-border);
+    border-radius: 14px; overflow: hidden;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.08); }
+  .t-dark .page-card { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
+  .page-head { display: flex; align-items: center; gap: 8px; height: 34px;
+    padding: 0 12px; border-bottom: 1px solid var(--np-hairline); }
+  .page-title { color: var(--np-muted); }
+  .page-head .spacer { flex: 1; }
+  .ph-pill { width: 64px; height: 16px; border-radius: 999px; background: var(--np-surface-2); }
+  .page-filters { display: flex; align-items: center; gap: 8px; padding: 7px 12px; }
+  .mock-input { width: 216px; height: 24px; border-radius: 6px; background: var(--np-surface-2);
+    display: flex; align-items: center; gap: 6px; padding: 0 8px;
+    color: var(--np-muted); font-size: 11px; }
+  .mock-select { height: 24px; border-radius: 6px; background: var(--np-surface-2);
+    display: flex; align-items: center; gap: 5px; padding: 0 8px;
+    color: var(--np-fg); font-size: 12px; }
+  .mock-select .car { width: 0; height: 0; border: 4px solid transparent;
+    border-top-color: currentColor; margin-top: 4px; }
+
+  /* ═══ 返回钮公共骨架（高 28、横 padding 12、字 13）═══ */
+  .back { display: inline-flex; align-items: center; gap: 7px; height: 28px;
+    padding: 0 12px; border: 0; background: transparent; font: inherit;
+    font-size: 13px; color: var(--np-fg); cursor: pointer; }
+  .back svg { flex: 0 0 auto; }
+
+  /* ══════════════════════════════════════════════════════════
+     方案 A · 淡染胶囊（最轻）：accent 12% 淡染底 + accent 字，
+     pill 全圆角；hover 淡染加深。与「分段控件激活态」同语言
+     ══════════════════════════════════════════════════════════ */
+  .back-a { border-radius: 999px; background: var(--np-sel); color: var(--np-accent); }
+  .back-a:hover { background: color-mix(in srgb, var(--np-accent) 20%, transparent); }
+
+  /* ══════════════════════════════════════════════════════════
+     方案 B · 描边实体钮（居中）：surface 卡 + 1px 描边，
+     箭头装 18px 圆徽章；hover 描边转 accent 淡染、徽章点亮
+     ══════════════════════════════════════════════════════════ */
+  .back-b { border-radius: 10px; background: var(--np-surface);
+    border: 1px solid var(--np-border); padding: 0 12px 0 8px; }
+  .back-b .bdg { width: 18px; height: 18px; border-radius: 999px;
+    background: var(--np-surface-2); color: var(--np-muted);
+    display: flex; align-items: center; justify-content: center; }
+  .back-b:hover { border-color: var(--np-accent-border);
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06); }
+  .t-dark .back-b:hover { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
+  .back-b:hover .bdg { background: var(--np-sel); color: var(--np-accent); }
+
+  /* ══════════════════════════════════════════════════════════
+     方案 C · accent 实心（最重）：主操作按钮同规格（accent 实心 +
+     accent-fg 字，radius 6 与对话框主按钮一致）；hover 加深 15%
+     ══════════════════════════════════════════════════════════ */
+  .back-c { border-radius: 6px; background: var(--np-accent); color: var(--np-accent-fg); }
+  .back-c:hover { background: color-mix(in srgb, var(--np-accent) 85%, #000); }
+</style>
+</head>
+<body>
+<h1>返回主界面按钮 · 样式提案（3 套）</h1>
+<div class="sub">全盘搜索页 / 定制页共用返回钮（np-menupage-back）· 2026-10-22 · 对齐修正 + 三档明显度</div>
+
+<div class="banner">
+  <b>现状两处问题</b>：① <b>不对齐</b>——头部行 padding（12/14px）与按钮内 padding（14px）双重缩进，
+  箭头距页缘 26px，而下方控制条 / 内容左缘只有 12px，错位约 14px；② <b>不明显</b>——默认态无底色无描边，
+  和旁边灰色标题几乎同权重。三案共同修正：<b>按钮块左缘落在 12px 内容基准线上</b>（与下方输入框严格对齐），
+  三案只差"明显度"档位。
+</div>
+
+<!-- ═══ 方案 A ═══ -->
+<section>
+  <div class="sec-h"><span class="tag">方案 A</span><h2>淡染胶囊 · 最轻</h2></div>
+  <p class="sec-note">accent 12% 淡染底 + accent 箭头文字，pill 全圆角；hover 淡染加深至 20%。
+     与窗格分段控件激活态（np-seg accent 淡染）同语言，安静但一眼可辨。</p>
+  <div class="row">
+    <div class="t-light page-card">
+      <div class="page-head">
+        <button class="back back-a">
+          <svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+          <span>返回主界面</span>
+        </button>
+        <span class="page-title">全盘搜索</span>
+        <span class="spacer"></span><span class="ph-pill"></span>
+      </div>
+      <div class="page-filters">
+        <div class="mock-input">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          搜索所有磁盘 · ext: size: dm: 过滤…
+        </div>
+        <div class="mock-select">全部 <span class="car"></span></div>
+      </div>
+    </div>
+    <div class="t-dark page-card">
+      <div class="page-head">
+        <button class="back back-a">
+          <svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+          <span>返回主界面</span>
+        </button>
+        <span class="page-title">定制</span>
+        <span class="spacer"></span><span class="ph-pill"></span>
+      </div>
+      <div class="page-filters">
+        <div class="mock-input">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          输入框占位（12px 左缘基准线）
+        </div>
+        <div class="mock-select">全部 <span class="car"></span></div>
+      </div>
+    </div>
+  </div>
+  <div class="t-light">
+    <div class="state-label">浅色 · 状态</div>
+    <div class="state-row">
+      <div><div>默认</div><button class="back back-a"><svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg><span>返回主界面</span></button></div>
+      <div><div>悬停</div><button class="back back-a" style="background:color-mix(in srgb, var(--np-accent) 20%, transparent)"><svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg><span>返回主界面</span></button></div>
+    </div>
+  </div>
+  <div class="t-dark" style="margin-top:14px">
+    <div class="state-label">深色 · 状态</div>
+    <div class="state-row">
+      <div><div>默认</div><button class="back back-a"><svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg><span>返回主界面</span></button></div>
+      <div><div>悬停</div><button class="back back-a" style="background:color-mix(in srgb, var(--np-accent) 20%, transparent)"><svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg><span>返回主界面</span></button></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 方案 B ═══ -->
+<section>
+  <div class="sec-h"><span class="tag">方案 B</span><h2>描边实体钮 + 圆形箭头徽章 · 居中</h2></div>
+  <p class="sec-note">surface 卡 + 1px 描边（radius 10），箭头装在 18px 圆形徽章里；
+     hover 描边转 accent 淡染描边、徽章点亮为淡染底 accent 箭头。实体感最强、最"像按钮"，
+     与填充式输入框的描边语言互为呼应。</p>
+  <div class="row">
+    <div class="t-light page-card">
+      <div class="page-head">
+        <button class="back back-b">
+          <span class="bdg"><svg class="arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></span>
+          <span>返回主界面</span>
+        </button>
+        <span class="page-title">全盘搜索</span>
+        <span class="spacer"></span><span class="ph-pill"></span>
+      </div>
+      <div class="page-filters">
+        <div class="mock-input">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          搜索所有磁盘 · ext: size: dm: 过滤…
+        </div>
+        <div class="mock-select">全部 <span class="car"></span></div>
+      </div>
+    </div>
+    <div class="t-dark page-card">
+      <div class="page-head">
+        <button class="back back-b">
+          <span class="bdg"><svg class="arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></span>
+          <span>返回主界面</span>
+        </button>
+        <span class="page-title">定制</span>
+        <span class="spacer"></span><span class="ph-pill"></span>
+      </div>
+      <div class="page-filters">
+        <div class="mock-input">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          输入框占位（12px 左缘基准线）
+        </div>
+        <div class="mock-select">全部 <span class="car"></span></div>
+      </div>
+    </div>
+  </div>
+  <div class="t-light">
+    <div class="state-label">浅色 · 状态</div>
+    <div class="state-row">
+      <div><div>默认</div><button class="back back-b"><span class="bdg"><svg class="arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></span><span>返回主界面</span></button></div>
+      <div><div>悬停</div><button class="back back-b" style="border-color:var(--np-accent-border)"><span class="bdg" style="background:var(--np-sel);color:var(--np-accent)"><svg class="arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></span><span>返回主界面</span></button></div>
+    </div>
+  </div>
+  <div class="t-dark" style="margin-top:14px">
+    <div class="state-label">深色 · 状态</div>
+    <div class="state-row">
+      <div><div>默认</div><button class="back back-b"><span class="bdg"><svg class="arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></span><span>返回主界面</span></button></div>
+      <div><div>悬停</div><button class="back back-b" style="border-color:var(--np-accent-border)"><span class="bdg" style="background:var(--np-sel);color:var(--np-accent)"><svg class="arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></span><span>返回主界面</span></button></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 方案 C ═══ -->
+<section>
+  <div class="sec-h"><span class="tag">方案 C</span><h2>accent 实心 · 最重</h2></div>
+  <p class="sec-note">主操作按钮同规格：accent 实心底 + accent-fg 反白字，radius 6 与对话框主按钮一致；
+     hover 加深 15%。引导最强，一眼锁定出口；但"返回"是离开语义，占主操作色权重，需权衡。</p>
+  <div class="row">
+    <div class="t-light page-card">
+      <div class="page-head">
+        <button class="back back-c">
+          <svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+          <span>返回主界面</span>
+        </button>
+        <span class="page-title">全盘搜索</span>
+        <span class="spacer"></span><span class="ph-pill"></span>
+      </div>
+      <div class="page-filters">
+        <div class="mock-input">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          搜索所有磁盘 · ext: size: dm: 过滤…
+        </div>
+        <div class="mock-select">全部 <span class="car"></span></div>
+      </div>
+    </div>
+    <div class="t-dark page-card">
+      <div class="page-head">
+        <button class="back back-c">
+          <svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+          <span>返回主界面</span>
+        </button>
+        <span class="page-title">定制</span>
+        <span class="spacer"></span><span class="ph-pill"></span>
+      </div>
+      <div class="page-filters">
+        <div class="mock-input">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          输入框占位（12px 左缘基准线）
+        </div>
+        <div class="mock-select">全部 <span class="car"></span></div>
+      </div>
+    </div>
+  </div>
+  <div class="t-light">
+    <div class="state-label">浅色 · 状态</div>
+    <div class="state-row">
+      <div><div>默认</div><button class="back back-c"><svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg><span>返回主界面</span></button></div>
+      <div><div>悬停</div><button class="back back-c" style="background:color-mix(in srgb, var(--np-accent) 85%, #000)"><svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg><span>返回主界面</span></button></div>
+    </div>
+  </div>
+  <div class="t-dark" style="margin-top:14px">
+    <div class="state-label">深色 · 状态</div>
+    <div class="state-row">
+      <div><div>默认</div><button class="back back-c"><svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg><span>返回主界面</span></button></div>
+      <div><div>悬停</div><button class="back back-c" style="background:color-mix(in srgb, var(--np-accent) 85%, #000)"><svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg><span>返回主界面</span></button></div>
+    </div>
+  </div>
+</section>
+
+<div class="banner">
+  <b>定稿后落地</b>：只需改 index.css 一处共用样式 <code>.np-menupage-back</code>（两页头部
+  <code>.np-menupage-head</code> / <code>.np-gsearchpage-head</code> 的 padding-left 同步对齐到 12px），
+  并回写 features.md「全盘搜索面板」行的返回钮描述。
+</div>
+</body>
+</html>
