@@ -357,10 +357,15 @@ const EN: Record<string, string> = {
   "反对角线": "Anti-diagonal",
   "奇数页": "Odd pages",
   "字号（5–99）": "Font size (5–99)",
-  "对角线": "Diagonal",
   "拖动调整顺序": "Drag to reorder",
   "支持占位符，见下方说明": "Placeholders supported — see below",
-  "文字支持占位符：[原文件名] [原文件夹名] [页码] [页面标签] [日期时间]（页码按上方格式渲染，页面标签暂以页码代替）。输出旁写 <名称>_水印.pdf，不覆盖原文件。": "Text supports placeholders: [原文件名] [原文件夹名] [页码] [页面标签] [日期时间] (page numbers use the format above; page labels fall back to numbers for now). Writes <name>_水印.pdf next to the original — originals are never overwritten.",
+  "点击插入占位符": "Click to insert",
+  "文字沿左上→右下 45° 缩放铺满":
+    "Text scales to fill each page at 45° along the top-left → bottom-right diagonal",
+  "文字沿右上→左下 45° 缩放铺满":
+    "Text scales to fill each page at 45° along the top-right → bottom-left diagonal",
+  "文字与输出名支持占位符，点击输入框下方的按钮即可插入；页码按「页码格式」渲染，[页面标签] 暂以页码代替。输出旁写 <名称>_水印.pdf，不覆盖原文件。":
+    "Placeholders work in both the watermark text and the output name — click the buttons under an input to insert one; page numbers use the page number format above, and [页面标签] falls back to numbers for now. Writes <name>_水印.pdf next to the original — originals are never overwritten.",
   "日期格式": "Date format",
   "楷体": "KaiTi",
   "正对角线": "Main diagonal",

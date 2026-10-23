@@ -420,7 +420,7 @@ export function PdfMergeDialog({
   );
 }
 
-/** 位置九宫格（3×3） */
+/** 位置九宫格（3×3），选中点由 index.css 的 ::after 圆点承担 */
 const WM_POS_CELLS: { value: string; tip: string }[] = [
   { value: "left-top", tip: "左上" },
   { value: "mid-top", tip: "中上" },
@@ -440,11 +440,9 @@ function PosGrid({ value, onChange }: { value: string; onChange: (v: string) => 
         <button
           key={c.value}
           className={"np-wm-cell" + (value === c.value ? " on" : "")}
-          title={c.tip}
+          data-tip={c.tip}
           onClick={() => onChange(c.value)}
-        >
-          {value === c.value ? "●" : ""}
-        </button>
+        />
       ))}
     </div>
   );
@@ -463,8 +461,9 @@ export interface PdfWatermarkSettings {
   datetimeFormat: string;
 }
 
-/** PDF 加水印参数对话框（2026-10-22 参数化）：文字占位符 / 字体 / 字号 /
- *  8 色 / 九宫格+对角线位置 / 透明度 / 边距 / 页范围 / 页码与日期格式 */
+/** PDF 加水印参数对话框（2026-10-23 布局重排 §4.9 双列网格）：水印文字 /
+ *  字体|字号 / 8 色 / 透明度 Slider / 位置（九宫格 + 对角线合并互斥行）/
+ *  边距|页面范围 / 页码与日期格式 / 输出名模板；占位符 chips 随输入框纵排 */
 export function PdfWatermarkDialog({
   entries,
   onDone,
@@ -484,58 +483,71 @@ export function PdfWatermarkDialog({
   const [pageNumberFormat, setPageNumberFormat] = useState("cn");
   const [datetimeFormat, setDatetimeFormat] = useState("cn");
 
-  const [outName, setOutName] = useState('[原文件名]-水印');
-  const firstPath = entries[0]?.path ?? '';
+  const [outName, setOutName] = useState("[原文件名]-水印");
+  const firstPath = entries[0]?.path ?? "";
   const stemOf = (p: string) => {
-    const i = p.lastIndexOf('\\');
+    const i = p.lastIndexOf("\\");
     const stem = i > 0 ? p.slice(i + 1) : p;
-    return stem.replace(/\.pdf$/i, '');
+    return stem.replace(/\.pdf$/i, "");
   };
   const dirOf = (p: string) => {
-    const i = p.lastIndexOf('\\');
+    const i = p.lastIndexOf("\\");
     return i > 0 ? p.slice(0, i) : p;
   };
   const nowDate = new Date();
-  const mm2 = String(nowDate.getMonth() + 1).padStart(2, '0');
-  const dd2 = String(nowDate.getDate()).padStart(2, '0');
-  const dtText = datetimeFormat === 'slash'
-    ? nowDate.getFullYear() + '/' + mm2 + '/' + dd2
-    : datetimeFormat === 'dash'
-      ? nowDate.getFullYear() + '-' + mm2 + '-' + dd2
-      : nowDate.getFullYear() + '年' + mm2 + '月' + dd2 + '日';
+  const mm2 = String(nowDate.getMonth() + 1).padStart(2, "0");
+  const dd2 = String(nowDate.getDate()).padStart(2, "0");
+  const dtText = datetimeFormat === "slash"
+    ? nowDate.getFullYear() + "/" + mm2 + "/" + dd2
+    : datetimeFormat === "dash"
+      ? nowDate.getFullYear() + "-" + mm2 + "-" + dd2
+      : nowDate.getFullYear() + "年" + mm2 + "月" + dd2 + "日";
+  // 预览与 Rust 端同口径：目录 = 文件所在目录（parent_dir），name 无 .pdf 后缀时补上
   const renderedName =
-    outName.split('[原文件名]').join(stemOf(firstPath))
-      .split('[原文件夹名]').join(dirOf(dirOf(firstPath)))
-      .split('[日期时间]').join(dtText) || '水印.pdf';
+    outName.split("[原文件名]").join(stemOf(firstPath))
+      .split("[原文件夹名]").join(dirOf(firstPath))
+      .split("[日期时间]").join(dtText) || "水印.pdf";
+  const previewPath =
+    dirOf(firstPath) +
+    "\\" +
+    (/\.pdf$/i.test(renderedName) ? renderedName : renderedName + ".pdf");
   const valid = text.trim().length > 0;
+  // 九宫格与对角线共用 position 单一状态，互斥高亮（选对角线时九宫格全熄）
+  const isDiag = position === "diag-main" || position === "diag-reverse";
+  const diagOpts: { value: string; label: string; title?: string }[] = [
+    { value: "diag-main", label: t2("正对角线"), title: t2("文字沿左上→右下 45° 缩放铺满") },
+    { value: "diag-reverse", label: t2("反对角线"), title: t2("文字沿右上→左下 45° 缩放铺满") },
+  ];
   return (
     <>
       <DialogBody>
-        <div className="np-pdfmform">
+        <div className="np-pdfmform np-two-col">
           <FormRow k={t2("水印文字")} wide>
-            <InputGroup
-              size="small"
-              value={text}
-              spellCheck={false}
-              placeholder={t2("支持占位符，见下方说明")}
-              onChange={(e) => setText(e.target.value)}
-            />
-            <div className="np-wm-chips">
-              {["[原文件名]", "[原文件夹名]", "[页码]", "[页面标签]", "[日期时间]"].map((ph) => (
-                <button
-                  key={ph}
-                  className="np-wm-chip"
-                  title={t2("点击插入占位符")}
-                  onClick={() => setText((v) => v + ph)}
-                >
-                  {ph}
-                </button>
-              ))}
+            <div className="np-wm-stack">
+              <InputGroup
+                size="small"
+                value={text}
+                spellCheck={false}
+                placeholder={t2("支持占位符，见下方说明")}
+                onChange={(e) => setText(e.target.value)}
+              />
+              <div className="np-wm-chips">
+                {["[原文件名]", "[原文件夹名]", "[页码]", "[页面标签]", "[日期时间]"].map((ph) => (
+                  <button
+                    key={ph}
+                    className="np-wm-chip"
+                    data-tip={t2("点击插入占位符")}
+                    onClick={() => setText((v) => v + ph)}
+                  >
+                    {ph}
+                  </button>
+                ))}
+              </div>
             </div>
           </FormRow>
           <FormRow k={t2("字体")}>
-            <Seg<"kaiti" | "heiti" | "fangsong" | "dengxian">
-              value={fontName as "heiti"}
+            <Seg
+              value={fontName}
               onChange={setFontName}
               options={[
                 { value: "kaiti", label: t2("楷体") },
@@ -572,20 +584,7 @@ export function PdfWatermarkDialog({
               ]}
             />
           </FormRow>
-          <FormRow k={t2("位置")}>
-            <PosGrid value={position} onChange={setPosition} />
-          </FormRow>
-          <FormRow k={t2("对角线")}>
-            <Seg<"diag-main" | "diag-reverse">
-              value={position === "diag-main" || position === "diag-reverse" ? position : "diag-main"}
-              onChange={(v) => setPosition(v)}
-              options={[
-                { value: "diag-main", label: t2("正对角线") },
-                { value: "diag-reverse", label: t2("反对角线") },
-              ]}
-            />
-          </FormRow>
-          <FormRow k={t2("透明度（0–10）")}>
+          <FormRow k={t2("透明度（0–10）")} wide>
             <Slider
               min={0}
               max={10}
@@ -594,6 +593,12 @@ export function PdfWatermarkDialog({
               value={transparency}
               onChange={(v) => setTransparency(Array.isArray(v) ? v[0] : v)}
             />
+          </FormRow>
+          <FormRow k={t2("位置")} wide>
+            <div className="np-wm-pos">
+              <PosGrid value={isDiag ? "" : position} onChange={setPosition} />
+              <Seg value={position} onChange={setPosition} options={diagOpts} />
+            </div>
           </FormRow>
           <FormRow k={t2("边距（像素）")}>
             <InputGroup
@@ -607,8 +612,8 @@ export function PdfWatermarkDialog({
             />
           </FormRow>
           <FormRow k={t2("页面范围")}>
-            <Seg<"all" | "odd" | "even">
-              value={pageRange as "all"}
+            <Seg
+              value={pageRange}
               onChange={setPageRange}
               options={[
                 { value: "all", label: t2("全部页面") },
@@ -641,34 +646,35 @@ export function PdfWatermarkDialog({
               ]}
             />
           </FormRow>
-          <FormRow k={t2("输出文件名")}>
-            <InputGroup
-              size="small"
-              value={outName}
-              spellCheck={false}
-              onChange={(e) => setOutName(e.target.value)}
-            />
-            <div className="np-wm-chips">
-              {["[原文件名]", "[原文件夹名]", "[日期时间]"].map((ph) => (
-                <button
-                  key={ph}
-                  className="np-wm-chip"
-                  title={t2("点击插入占位符")}
-                  onClick={() => setOutName((v) => v + ph)}
-                >
-                  {ph}
-                </button>
-              ))}
+          <FormRow k={t2("输出文件名")} wide>
+            <div className="np-wm-stack">
+              <InputGroup
+                size="small"
+                value={outName}
+                spellCheck={false}
+                onChange={(e) => setOutName(e.target.value)}
+              />
+              <div className="np-wm-chips">
+                {["[原文件名]", "[原文件夹名]", "[日期时间]"].map((ph) => (
+                  <button
+                    key={ph}
+                    className="np-wm-chip"
+                    data-tip={t2("点击插入占位符")}
+                    onClick={() => setOutName((v) => v + ph)}
+                  >
+                    {ph}
+                  </button>
+                ))}
+              </div>
             </div>
           </FormRow>
         </div>
         <div className="np-dialog-muted">
-          {t2("文字支持占位符：[原文件名] [原文件夹名] [页码] [页面标签] [日期时间]（页码按上方格式渲染，页面标签暂以页码代替）。输出旁写 <名称>_水印.pdf，不覆盖原文件。")}
+          {t2(
+            "文字与输出名支持占位符，点击输入框下方的按钮即可插入；页码按「页码格式」渲染，[页面标签] 暂以页码代替。输出旁写 <名称>_水印.pdf，不覆盖原文件。",
+          )}
+          {t2("输出预览：{out}", { out: previewPath })}
         </div>
-          {t2("输出预览：{dir}\{name}.pdf", {
-            dir: dirOf(dirOf(firstPath)),
-            name: renderedName,
-          })}
       </DialogBody>
       <Footer
         okText={t2("加水印")}

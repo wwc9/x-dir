@@ -4409,8 +4409,9 @@ mark.np-gsearch-mark {
   flex: 1;
   width: auto;
 }
-/* 2 列参数网格（2026-10-22）：参数行 1 列或 2 列按信息量选择——
-   短控件成对排布（字体|字号、透明度|边距），长控件/多选项行整行（wide） */
+/* 2 列参数网格（2026-10-22；水印对话框 2026-10-23 重排落地）：参数行 1 列
+   或 2 列按信息量选择——短控件成对（字体|字号、边距|页面范围），长控件/
+   多选项行整行（wide） */
 .np-pdfmform.np-two-col {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4422,6 +4423,31 @@ mark.np-gsearch-mark {
 }
 .np-pdfmform.np-two-col .np-bren-field > .bp6-input-group {
   width: 100%;
+}
+/* 半列里的 Slider（水印透明度行）：撑满字段剩余宽度 */
+.np-pdfmform .np-bren-field > .bp6-slider {
+  flex: 1;
+  min-width: 0;
+}
+/* 水印对话框输入 + 占位符 chips 纵排堆叠（2026-10-23）：chips 挪到输入框
+   下方，不再与输入框同排挤占宽度 */
+.np-wm-stack {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.np-wm-stack .bp6-input-group {
+  width: 100%;
+}
+/* 位置合并行：九宫格 + 对角线 Seg 水平成组（互斥共用 position 状态） */
+.np-wm-pos {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 .np-pdfmlist-item {
   display: flex;
@@ -4446,7 +4472,8 @@ mark.np-gsearch-mark {
   font-family: Consolas, 'Cascadia Mono', monospace;
 }
 
-/* PDF 加水印位置九宫格（2026-10-22）：3×3 选点 + 选中 accent 实底 */
+/* PDF 加水印位置九宫格（2026-10-22；2026-10-23 选中点改 ::after 圆点）：
+   3×3 选点 + 选中 accent 实底白点 */
 .np-wm-grid {
   display: grid;
   grid-template-columns: repeat(3, 26px);
@@ -4460,15 +4487,25 @@ mark.np-gsearch-mark {
   border: 0;
   border-radius: var(--np-radius);
   background: var(--np-surface-2);
-  color: var(--np-accent-fg);
-  font-size: 9px;
   cursor: pointer;
+}
+.np-wm-cell::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-muted);
+  opacity: 0.45;
 }
 .np-wm-cell:hover {
   background: var(--np-hover);
 }
 .np-wm-cell.on {
   background: var(--np-accent);
+}
+.np-wm-cell.on::after {
+  background: var(--np-accent-fg);
+  opacity: 1;
 }
 
 /* 着色规则快速添加（2026-10-22）：输入回车即加规则（默认色按标签色循环），
