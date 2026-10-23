@@ -461,9 +461,10 @@ export interface PdfWatermarkSettings {
   datetimeFormat: string;
 }
 
-/** PDF 加水印参数对话框（2026-10-23 布局重排 §4.9 双列网格）：水印文字 /
- *  字体|字号 / 8 色 / 透明度 Slider / 位置（九宫格 + 对角线合并互斥行）/
- *  边距|页面范围 / 页码与日期格式 / 输出名模板；占位符 chips 随输入框纵排 */
+/** PDF 加水印参数对话框（2026-10-23 用户定案：单列纵排 + 标签列/控件列
+ *  分别左对齐，np-wm-form 网格）：水印文字 / 字体 / 字号 / 颜色 / 不透明度 /
+ *  位置（九宫格+对角线合并互斥行）/ 边距 / 页面范围 / 页码与日期格式 /
+ *  输出名模板；占位符 chips 随输入框纵排 */
 export function PdfWatermarkDialog({
   entries,
   onDone,
@@ -521,31 +522,33 @@ export function PdfWatermarkDialog({
   return (
     <>
       <DialogBody>
-        <div className="np-pdfmform np-two-col">
-          <FormRow k={t2("水印文字")} wide>
-            <div className="np-wm-stack">
-              <InputGroup
-                size="small"
-                value={text}
-                spellCheck={false}
-                placeholder={t2("支持占位符，见下方说明")}
-                onChange={(e) => setText(e.target.value)}
-              />
-              <div className="np-wm-chips">
-                {["[原文件名]", "[原文件夹名]", "[页码]", "[页面标签]", "[日期时间]"].map((ph) => (
-                  <button
-                    key={ph}
-                    className="np-wm-chip"
-                    data-tip={t2("点击插入占位符")}
-                    onClick={() => setText((v) => v + ph)}
-                  >
-                    {ph}
-                  </button>
-                ))}
-              </div>
+        <div className="np-wm-form">
+          <span className="np-bren-k">{t2("水印文字")}</span>
+          <div className="np-wm-ctl">
+            <InputGroup
+              className="np-wm-fill"
+              size="small"
+              value={text}
+              spellCheck={false}
+              placeholder={t2("支持占位符，见下方说明")}
+              onChange={(e) => setText(e.target.value)}
+            />
+            <div className="np-wm-chips">
+              {["[原文件名]", "[原文件夹名]", "[页码]", "[页面标签]", "[日期时间]"].map((ph) => (
+                <button
+                  key={ph}
+                  className="np-wm-chip"
+                  data-tip={t2("点击插入占位符")}
+                  onClick={() => setText((v) => v + ph)}
+                >
+                  {ph}
+                </button>
+              ))}
             </div>
-          </FormRow>
-          <FormRow k={t2("字体")}>
+          </div>
+
+          <span className="np-bren-k">{t2("字体")}</span>
+          <div className="np-wm-ctl">
             <Seg
               value={fontName}
               onChange={setFontName}
@@ -556,8 +559,10 @@ export function PdfWatermarkDialog({
                 { value: "dengxian", label: t2("等线") },
               ]}
             />
-          </FormRow>
-          <FormRow k={t2("字号（5–99）")}>
+          </div>
+
+          <span className="np-bren-k">{t2("字号（5–99）")}</span>
+          <div className="np-wm-ctl">
             <InputGroup
               size="small"
               value={String(fontSize)}
@@ -567,8 +572,10 @@ export function PdfWatermarkDialog({
                 if (!Number.isNaN(n)) setFontSize(Math.min(99, Math.max(5, n)));
               }}
             />
-          </FormRow>
-          <FormRow k={t2("颜色")} wide>
+          </div>
+
+          <span className="np-bren-k">{t2("颜色")}</span>
+          <div className="np-wm-ctl">
             <Seg
               value={fontColor}
               onChange={setFontColor}
@@ -583,8 +590,10 @@ export function PdfWatermarkDialog({
                 { value: "purple", label: t2("紫") },
               ]}
             />
-          </FormRow>
-          <FormRow k={t2("不透明度（0–10）")} wide>
+          </div>
+
+          <span className="np-bren-k">{t2("不透明度（0–10）")}</span>
+          <div className="np-wm-ctl">
             <Slider
               min={0}
               max={10}
@@ -593,14 +602,18 @@ export function PdfWatermarkDialog({
               value={transparency}
               onChange={(v) => setTransparency(Array.isArray(v) ? v[0] : v)}
             />
-          </FormRow>
-          <FormRow k={t2("位置")} wide>
+          </div>
+
+          <span className="np-bren-k">{t2("位置")}</span>
+          <div className="np-wm-ctl">
             <div className="np-wm-pos">
               <PosGrid value={isDiag ? "" : position} onChange={setPosition} />
               <Seg value={position} onChange={setPosition} options={diagOpts} />
             </div>
-          </FormRow>
-          <FormRow k={t2("边距（像素）")}>
+          </div>
+
+          <span className="np-bren-k">{t2("边距（像素）")}</span>
+          <div className="np-wm-ctl">
             <InputGroup
               size="small"
               value={String(margin)}
@@ -610,8 +623,10 @@ export function PdfWatermarkDialog({
                 if (!Number.isNaN(n)) setMargin(Math.max(0, n));
               }}
             />
-          </FormRow>
-          <FormRow k={t2("页面范围")}>
+          </div>
+
+          <span className="np-bren-k">{t2("页面范围")}</span>
+          <div className="np-wm-ctl">
             <Seg
               value={pageRange}
               onChange={setPageRange}
@@ -621,8 +636,10 @@ export function PdfWatermarkDialog({
                 { value: "even", label: t2("偶数页") },
               ]}
             />
-          </FormRow>
-          <FormRow k={t2("页码格式")} wide>
+          </div>
+
+          <span className="np-bren-k">{t2("页码格式")}</span>
+          <div className="np-wm-ctl">
             <Seg
               value={pageNumberFormat}
               onChange={setPageNumberFormat}
@@ -634,8 +651,10 @@ export function PdfWatermarkDialog({
                 { value: "cnfrac", label: t2("第1页/共N页") },
               ]}
             />
-          </FormRow>
-          <FormRow k={t2("日期格式")} wide>
+          </div>
+
+          <span className="np-bren-k">{t2("日期格式")}</span>
+          <div className="np-wm-ctl">
             <Seg
               value={datetimeFormat}
               onChange={setDatetimeFormat}
@@ -645,29 +664,30 @@ export function PdfWatermarkDialog({
                 { value: "dash", label: "yyyy-MM-dd" },
               ]}
             />
-          </FormRow>
-          <FormRow k={t2("输出文件名")} wide>
-            <div className="np-wm-stack">
-              <InputGroup
-                size="small"
-                value={outName}
-                spellCheck={false}
-                onChange={(e) => setOutName(e.target.value)}
-              />
-              <div className="np-wm-chips">
-                {["[原文件名]", "[原文件夹名]", "[日期时间]"].map((ph) => (
-                  <button
-                    key={ph}
-                    className="np-wm-chip"
-                    data-tip={t2("点击插入占位符")}
-                    onClick={() => setOutName((v) => v + ph)}
-                  >
-                    {ph}
-                  </button>
-                ))}
-              </div>
+          </div>
+
+          <span className="np-bren-k">{t2("输出文件名")}</span>
+          <div className="np-wm-ctl">
+            <InputGroup
+              className="np-wm-fill"
+              size="small"
+              value={outName}
+              spellCheck={false}
+              onChange={(e) => setOutName(e.target.value)}
+            />
+            <div className="np-wm-chips">
+              {["[原文件名]", "[原文件夹名]", "[日期时间]"].map((ph) => (
+                <button
+                  key={ph}
+                  className="np-wm-chip"
+                  data-tip={t2("点击插入占位符")}
+                  onClick={() => setOutName((v) => v + ph)}
+                >
+                  {ph}
+                </button>
+              ))}
             </div>
-          </FormRow>
+          </div>
         </div>
         <div className="np-dialog-muted">
           {t2(

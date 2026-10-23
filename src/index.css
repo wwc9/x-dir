@@ -4423,32 +4423,41 @@ mark.np-gsearch-mark {
 }
 .np-pdfmform.np-two-col .np-bren-field > .bp6-input-group {
   /* 数字等短输入走全局 120px 基线（同 np-bren-form），避免撑满半列
-     形成突兀的大数字框；长输入在水印对话框内经 np-wm-stack 撑满 */
+     形成突兀的大数字框 */
   width: 120px;
 }
-.np-pdfmform.np-two-col .np-wm-stack .bp6-input-group {
-  width: 100%;
+/* 水印参数面板（2026-10-23 用户定案）：单列纵排 + 标签列/控件列分别
+   左对齐——grid 两列（max-content 标签列 + 1fr 控件列），全部标签左对齐
+   成列、全部控件同一 x 起始；行序 = 文字/字体/字号/颜色/不透明度/位置/
+   边距/页面范围/页码格式/日期格式/输出文件名 */
+.np-wm-form {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 10px 12px;
+  align-items: start;
+  margin: 10px 0 var(--np-gutter);
 }
-/* 半列里的 Slider（水印透明度行）：撑满字段剩余宽度 */
-.np-pdfmform .np-bren-field > .bp6-slider {
-  flex: 1;
-  min-width: 0;
+/* 标签行高对齐单行控件（24px），多行控件格内顶对齐 */
+.np-wm-form .np-bren-k {
+  line-height: var(--np-ctl-h);
 }
-/* 水印对话框输入 + 占位符 chips 纵排堆叠（2026-10-23）：chips 挪到输入框
-   下方，不再与输入框同排挤占宽度 */
-.np-wm-stack {
-  flex: 1;
+/* 控件格：chips 等附属行纵排其下；数字输入走 120px 基线，
+   长文本输入（np-wm-fill）与 Slider 撑满列宽 */
+.np-wm-ctl {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-.np-wm-stack .bp6-input-group {
+.np-wm-ctl > .bp6-input-group {
+  width: 120px;
+}
+.np-wm-ctl > .np-wm-fill,
+.np-wm-ctl > .bp6-slider {
   width: 100%;
 }
 /* 位置合并行：九宫格 + 对角线 Seg 水平成组（互斥共用 position 状态） */
 .np-wm-pos {
-  flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
