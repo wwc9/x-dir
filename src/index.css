@@ -4441,8 +4441,8 @@ mark.np-gsearch-mark {
 .np-wm-form .np-bren-k {
   line-height: var(--np-ctl-h);
 }
-/* 控件格：chips 等附属行纵排其下；数字输入走 120px 基线，
-   长文本输入（np-wm-fill）与 Slider 撑满列宽 */
+/* 控件格：chips 等附属行纵排其下；数字输入 120px、长文本输入与 Slider
+   320px（适合内容的固定宽，不随列宽拉满），分段钮自然宽 */
 .np-wm-ctl {
   min-width: 0;
   display: flex;
@@ -4454,7 +4454,8 @@ mark.np-gsearch-mark {
 }
 .np-wm-ctl > .np-wm-fill,
 .np-wm-ctl > .bp6-slider {
-  width: 100%;
+  width: 320px;
+  max-width: 100%;
 }
 /* 位置合并行：九宫格 + 对角线 Seg 水平成组（互斥共用 position 状态） */
 .np-wm-pos {
