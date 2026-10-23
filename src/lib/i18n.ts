@@ -349,6 +349,7 @@ const EN: Record<string, string> = {
   "按文件夹合并 PDF…": "Merge folders into PDFs…",
   "合并为 PDF": "Merge into PDF",
   "按文件夹合并 PDF": "Merge folders into PDFs",
+  "默认按名称排序（数字感知），拖动行可调整合并顺序": "Default order is by name (numeric-aware) — drag rows to adjust the merge order",
   "每个选中的文件夹递归收集 PDF 与图片，各自输出 合并结果-<文件夹名>-<时间戳>.pdf": "Each selected folder is scanned recursively for PDFs and images, writing 合并结果-<folder>-<timestamp>.pdf per folder",
   "搜索模式": "Search mode",
   "文件名": "File name",

@@ -150,13 +150,14 @@ export async function mergePdfs(
     autoBlank: boolean;
     blankFirst: boolean;
     name: string;
+    paths: string[];
   } | null>({ type: "pdfMerge", variant, entries });
   if (!res) return;
-  if (variant === "files" && entries.length < 2 && !res.autoBlank) {
+  if (variant === "files" && res.paths.length < 2 && !res.autoBlank) {
     useUi.getState().toast("至少选择 2 个文件，或启用空白页凑偶数", "error");
     return;
   }
-  const paths = entries.map((e) => e.path);
+  const paths = res.paths;
   const byFolder = variant === "folders";
   const output = byFolder
     ? ""

@@ -2,11 +2,11 @@
 // 表单行复用 np-bren-form/field/k 基类、分段选择走 np-seg（Seg 自 ImgDialogs
 // 导出共用）、预览行复用 np-bren-preview/row（§4.7 二级页面规范）；
 // 编排（api + 任务登记）在 lib/operations.ts，名单预演纯函数在 lib/folderBatch。
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { t, useT } from "../lib/i18n";
 import type { FileEntry } from "../lib/ipc";
 import { Button, DialogBody, DialogFooter, InputGroup } from "@blueprintjs/core";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, GripVertical } from "lucide-react";
 
 import { FOLDER_BATCH_CAP, planFolders } from "../lib/folderBatch";
 import { AppIcon } from "./AppIcon";
@@ -225,9 +225,10 @@ export function XlsxMergeDialog({
   );
 }
 
-/** PDF 合并扩展对话框（2026-10-22）：待处理清单 + 模式/空白页/位置按 §4.7。
- *  清单 = 待合并的文件/文件夹路径（surface-2 凹陷列表，路径省略号悬停可见）；
- *  分组模式的每组输出 = 合并结果-<文件夹名>-<时间戳>.pdf（时间戳 Rust 侧生成） */
+/** PDF 合并扩展对话框（2026-10-22）：
+ *  files 变体 = 待合并清单（默认按名称自然序，可拖动调整合并顺序）；
+ *  folders 变体 = 选中的文件夹（各递归收集，各自输出 合并结果-<名>-<ts>.pdf，
+ *  支持 1 个文件夹）；清单 = surface-2 凹陷列表（§4.7 内嵌列表层级） */
 export function PdfMergeDialog({
   variant,
   entries,
@@ -239,32 +240,87 @@ export function PdfMergeDialog({
     autoBlank: boolean;
     blankFirst: boolean;
     name: string;
+    /** files 变体的合并顺序（拖动调整后）；folders 变体 = 文件夹路径 */
+    paths: string[];
   } | null): void;
 }) {
   const t2 = useT();
+  const byFolder = variant === "folders";
   const parentOf = (p: string) => {
     const i = p.lastIndexOf("\\");
     return i > 0 ? p.slice(0, i) : "";
   };
-  const dirs = new Set(entries.map((e) => parentOf(e.path)));
-  const byFolder = variant === "folders";
+  const nameOf = (p: string) => p.slice(p.lastIndexOf("\\") + 1);
+  // 默认排序：名称（数字感知自然序，1 → 2 → 10）；拖动行即调整合并顺序
+  const collator = new Intl.Collator("zh-Hans-CN", { numeric: true, sensitivity: "base" });
+  const [items, setItems] = useState<string[]>(() =>
+    entries.map((e) => e.path).sort((a, b) => collator.compare(nameOf(a), nameOf(b))),
+  );
   const [autoBlank, setAutoBlank] = useState(false);
   const [blankFirst, setBlankFirst] = useState(false);
   const [name, setName] = useState("合并文档.pdf");
   const valid = byFolder || name.trim().length > 0;
   const output = `${parentOf(entries[0]?.path ?? "") ?? ""}\\${name.trim() || "合并文档.pdf"}`;
+
+  const dragIdx = useRef<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
+  const moveItem = (from: number, to: number) => {
+    if (from === to) return;
+    setItems((arr) => {
+      const next = [...arr];
+      const [it] = next.splice(from, 1);
+      next.splice(to, 0, it);
+      return next;
+    });
+  };
+
   return (
     <>
       <DialogBody>
         <span className="np-bren-k">{t2("待处理清单")}</span>
         <div className="np-pdfmlist">
-          {entries.map((e) => (
-            <div key={e.path} className="np-pdfmlist-item" title={e.path}>
-              <span className="np-pdfmlist-kind">{e.isDir ? t2("文件夹") : t2("文件")}</span>
-              <span className="np-ellipsis">{e.path}</span>
-            </div>
-          ))}
+          {byFolder
+            ? entries.map((e) => (
+                <div key={e.path} className="np-pdfmlist-item" title={e.path}>
+                  <span className="np-pdfmlist-kind">{t2("文件夹")}</span>
+                  <span className="np-ellipsis">{e.path}</span>
+                </div>
+              ))
+            : items.map((p, i) => (
+                <div
+                  key={p}
+                  className={
+                    "np-pdfmlist-item" + (overIdx === i && dragIdx.current !== null ? " np-drag-over" : "")
+                  }
+                  draggable
+                  title={p}
+                  onDragStart={() => {
+                    dragIdx.current = i;
+                  }}
+                  onDragEnter={() => setOverIdx(i)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (dragIdx.current !== null) moveItem(dragIdx.current, i);
+                    dragIdx.current = null;
+                    setOverIdx(null);
+                  }}
+                  onDragEnd={() => {
+                    dragIdx.current = null;
+                    setOverIdx(null);
+                  }}
+                >
+                  <span className="np-pdfmlist-grip">
+                    <AppIcon icon={GripVertical} size={DENSITY.iconXs} />
+                  </span>
+                  <span className="np-ellipsis np-pdfmlist-name">{nameOf(p)}</span>
+                </div>
+              ))}
         </div>
+        {variant === "files" && (
+          <div className="np-dialog-muted" style={{ margin: "2px 0 0" }}>
+            {t2("默认按名称排序（数字感知），拖动行可调整合并顺序")}
+          </div>
+        )}
         <div className="np-bren-form" style={{ marginTop: 8 }}>
           {variant === "folders" && (
             <div className="np-dialog-muted" style={{ margin: "0 0 6px" }}>
@@ -280,7 +336,7 @@ export function PdfMergeDialog({
                 onChange={(e) => setName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && valid)
-                    onDone({ autoBlank, blankFirst, name });
+                    onDone({ autoBlank, blankFirst, name, paths: items });
                 }}
               />
             </FormRow>
@@ -312,7 +368,7 @@ export function PdfMergeDialog({
           {variant === "files"
             ? t2("统一合并输出：{out}", { out: output })
             : t2("按文件夹分别合并：{n} 个范围，各组输出 合并结果-<文件夹名>-<时间戳>.pdf", {
-                n: dirs.size,
+                n: entries.length,
               })}
           {t2("；缺失或不可读的文件自动跳过，不覆盖原文件。")}
         </div>
@@ -320,7 +376,14 @@ export function PdfMergeDialog({
       <Footer
         okText={t2("合并")}
         disabled={!valid}
-        onOk={() => onDone({ autoBlank, blankFirst, name })}
+        onOk={() =>
+          onDone({
+            autoBlank,
+            blankFirst,
+            name,
+            paths: byFolder ? entries.map((e) => e.path) : items,
+          })
+        }
         onCancel={() => onDone(null)}
       />
     </>

@@ -108,7 +108,7 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
     });
     expect(builtinByKey("pdfMergeFolders")?.cond).toMatchObject({
       target: "dir",
-      minCount: 2,
+      minCount: 1,
     });
     // 双区域能力位 + 粘贴默认不限（列表排满无空白处时也可右键粘贴）
     expect(builtinByKey("paste")?.area).toBe("both");
@@ -201,7 +201,7 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
     expect(builtinToolbarEntry("pdfMergeFolders").area).toBe("sel");
     expect(builtinToolbarEntry("pdfMergeFolders").cond).toMatchObject({
       target: "dir",
-      minCount: 2,
+      minCount: 1,
     });
     expect(builtinToolbarEntry("delete").area).toBe("sel");
     expect(builtinToolbarEntry("delete").cond).toMatchObject({ target: "all" });

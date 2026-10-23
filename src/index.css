@@ -4341,3 +4341,23 @@ mark.np-gsearch-mark {
   background: var(--np-surface);
   color: var(--np-muted);
 }
+
+/* PDF 合并清单（2026-10-22）：files 变体行可拖动排序（grab 手感 + 落点
+   顶部 accent 指示线）；folders 变体静态行 */
+.np-pdfmlist-item[draggable="true"] {
+  cursor: grab;
+}
+.np-pdfmlist-item[draggable="true"]:active {
+  cursor: grabbing;
+}
+.np-pdfmlist-item.np-drag-over {
+  box-shadow: inset 0 2px 0 var(--np-accent);
+}
+.np-pdfmlist-grip {
+  flex: none;
+  display: flex;
+  color: var(--np-muted);
+}
+.np-pdfmlist-name {
+  color: var(--np-fg);
+}
