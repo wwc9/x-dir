@@ -285,8 +285,10 @@ pub fn rasterize_text(font: &FontVec, text: &str, px: f32, rgb: [u8; 3]) -> Stam
         let Some(outline) = scaled.outline_glyph(g.clone()) else {
             continue;
         };
-        let ox = b.min.x as i64;
-        let oy = b.min.y as i64;
+        // draw 回调给的是 px_bounds 内 0 基像素索引；缓冲原点是全局 min，
+        // 偏移量 = 该字形 bounds 相对全局 min（四舍五入对齐像素网格）
+        let ox = (b.min.x - min_x).round() as i64;
+        let oy = (b.min.y - min_y).round() as i64;
         outline.draw(|x, y, c| {
             let ax = x as i64 + ox;
             let ay = y as i64 + oy;
@@ -409,6 +411,8 @@ fn stamp_page_at(
     x: f32,
     y: f32,
 ) -> Result<(), String> {
+    let bw = bm.width as f32;
+    let bh = bm.height as f32;
     let img_id = add_image_xobject(doc, bm)?;
     let alpha = opts.transparency as f32 / 10.0;
     let ext_gstate = dictionary! {
@@ -421,13 +425,15 @@ fn stamp_page_at(
         operations: vec![
             lopdf::content::Operation::new("q", vec![]),
             lopdf::content::Operation::new("gs", vec![Object::Name("WmGs".into())]),
+            // Image XObject 画在 1×1 单位正方形，cm 必须缩放到位图实际尺寸
+            //（1px ≈ 1pt），否则只渲染出 1pt 的点
             lopdf::content::Operation::new(
                 "cm",
                 vec![
-                    Object::Real(1.0),
+                    Object::Real(bw),
                     Object::Real(0.0),
                     Object::Real(0.0),
-                    Object::Real(1.0),
+                    Object::Real(bh),
                     Object::Real(x),
                     Object::Real(y),
                 ],
@@ -698,5 +704,127 @@ mod tests {
         assert_eq!(WmDtFmt::Cn.render(2026, 10, 22), "2026年10月22日");
         assert_eq!(WmDtFmt::Slash.render(2026, 10, 22), "2026/10/22");
         assert_eq!(WmDtFmt::Dash.render(2026, 10, 22), "2026-10-22");
+    }
+
+    /// 光栅化覆盖率平面必须有非零像素（文字真实画了出来）
+    #[test]
+    fn rasterize_produces_coverage() {
+        let font = load_font(&["simhei.ttf"]).expect("测试机需有系统字体");
+        let bm = rasterize_text(&font, "水印测试-1", 14.0, [0, 0, 0]);
+        assert!(bm.width > 1 && bm.height > 1);
+        let covered = bm.alpha.iter().filter(|&&a| a > 0).count();
+        assert!(covered > 20, "覆盖率平面几乎为空：covered={covered}");
+    }
+
+    /// 端到端：造一页带文字的 PDF → 盖章 → 输出页必须新增内容流与资源，
+    /// 落盘文件供人工目检（路径打印于 --nocapture）
+    #[test]
+    fn stamp_end_to_end_writes_stream_and_resources() {
+        use lopdf::{StringFormat, content::Operation};
+
+        let mut doc = lopdf::Document::with_version("1.5");
+        let font_id = doc.add_object(Object::Dictionary(dictionary! {
+            "Type" => "Font",
+            "Subtype" => "Type1",
+            "BaseFont" => "Helvetica",
+        }));
+        let content = Content {
+            operations: vec![
+                Operation::new("BT", vec![]),
+                Operation::new("Tf", vec!["F1".into(), 24.into()]),
+                Operation::new("Td", vec![100.into(), 700.into()]),
+                Operation::new(
+                    "Tj",
+                    vec![Object::String(
+                        b"Sample audit report page".to_vec(),
+                        StringFormat::Literal,
+                    )],
+                ),
+                Operation::new("ET", vec![]),
+            ],
+        };
+        let content_id = doc.add_object(Object::Stream(Stream::new(
+            Dictionary::new(),
+            content.encode().unwrap(),
+        )));
+        let pages_id = doc.add_object(Object::Dictionary(dictionary! {
+            "Type" => "Pages",
+            "Count" => 1,
+        }));
+        let page_id = doc.add_object(Object::Dictionary(dictionary! {
+            "Type" => "Page",
+            "Parent" => pages_id,
+            "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
+            "Contents" => content_id,
+            "Resources" => Object::Dictionary(dictionary! {
+                "Font" => Object::Dictionary(dictionary! { "F1" => font_id }),
+            }),
+        }));
+        if let Object::Dictionary(d) = doc.get_object_mut(pages_id).unwrap() {
+            d.set("Kids", vec![Object::Reference(page_id)]);
+        }
+        let catalog_id = doc.add_object(Object::Dictionary(dictionary! {
+            "Type" => "Catalog",
+            "Pages" => pages_id,
+        }));
+        doc.trailer.set("Root", catalog_id);
+
+        let opts = WatermarkOpts {
+            text: "审计底稿-第1页".into(),
+            out_name: "[原文件名]-水印".into(),
+            font_name: "heiti".into(),
+            font_size: 14,
+            rgb: [0, 0, 0],
+            pos: WmPos::RightTop,
+            transparency: 9,
+            margin: 20,
+            range: WmRange::All,
+            num_fmt: WmNumFmt::Cn,
+            dt_fmt: WmDtFmt::Cn,
+        };
+        stamp_document_ex(&mut doc, &opts, "底稿A", "审计项目组").expect("盖章应成功");
+
+        // 结构断言：Contents 追加一条；资源挂上 WmIm / WmGs
+        let page = doc.get_object(page_id).unwrap().as_dict().unwrap();
+        let Object::Array(contents) = page.get(b"Contents").unwrap() else {
+            panic!("Contents 应为数组");
+        };
+        assert_eq!(contents.len(), 2, "原内容流之后应追加水印流");
+        let Object::Reference(wm_stream) = contents[1] else {
+            panic!("水印流应为引用");
+        };
+        let Object::Stream(s) = doc.get_object(wm_stream).unwrap() else {
+            panic!("水印流应为流对象");
+        };
+        let mut s = s.clone();
+        s.decompress().expect("水印流应可解压");
+        let raw = String::from_utf8_lossy(&s.content);
+        assert!(raw.contains("/WmGs gs"), "应设置透明度 ExtGState：{raw}");
+        assert!(raw.contains("/WmIm Do"), "应绘制水印图像：{raw}");
+        // cm 必须缩放到位图实际尺寸（Image Do 画在单位正方形，
+        // 缩放系数 = 1 会被渲染成 1pt 的点——回归防护）
+        let toks: Vec<&str> = raw.split_whitespace().collect();
+        let cm_idx = toks
+            .iter()
+            .position(|&t| t == "cm")
+            .expect("应有 cm 变换：{raw}");
+        let scale_a: f32 = toks[cm_idx - 6].parse().expect("cm 首操作数应为数字");
+        assert!(
+            scale_a > 5.0,
+            "cm 水平缩放应等于位图宽度（pt），实际 {scale_a}"
+        );
+
+        let res = page.get(b"Resources").unwrap().as_dict().unwrap();
+        let xobjs = res.get(b"XObject").unwrap().as_dict().unwrap();
+        assert!(xobjs.get(b"WmIm").is_ok());
+        let gs = res.get(b"ExtGState").unwrap().as_dict().unwrap();
+        assert!(gs.get(b"WmGs").is_ok());
+
+        // 落盘供目检
+        let out = std::env::temp_dir().join("xdir_wm_e2e.pdf");
+        doc.save(crate::fs::path::to_extended(&out.to_string_lossy()))
+            .unwrap();
+        println!("目检文件：{}", out.display());
+        assert!(out.exists());
     }
 }

@@ -376,7 +376,7 @@ const EN: Record<string, string> = {
   "第1页/共N页": "Page 1 of N",
   "等线": "DengXian",
   "边距（像素）": "Margin (px)",
-  "透明度（0–10）": "Opacity (0–10)",
+  "不透明度（0–10）": "Opacity (0–10)",
   "页码格式": "Page number format",
   "页面范围": "Page range",
   "颜色": "Color",

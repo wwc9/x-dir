@@ -998,7 +998,7 @@ mod tests {
             "Contents" => Object::Reference(content_id),
             "Resources" => dictionary! {},
         });
-        build_page_tree(&mut doc, vec![Object::Reference(page_id)]);
+        build_page_tree(&mut doc, vec![Object::Reference(page_id)]).unwrap();
         doc
     }
 
@@ -1283,9 +1283,6 @@ mod tests {
         let mut doc = Document::load(&path).unwrap();
         let opts = stamp::WatermarkOpts {
             text: "绝密".into(),
-            out_name: "[原文件名]-水印".into(),
-            out_name: "[原文件名]-水印".into(),
-            out_name: "[原文件名]-水印".into(),
             out_name: "[原文件名]-水印".into(),
             font_name: "heiti".into(),
             font_size: 48,

@@ -4422,6 +4422,11 @@ mark.np-gsearch-mark {
   grid-column: 1 / -1;
 }
 .np-pdfmform.np-two-col .np-bren-field > .bp6-input-group {
+  /* 数字等短输入走全局 120px 基线（同 np-bren-form），避免撑满半列
+     形成突兀的大数字框；长输入在水印对话框内经 np-wm-stack 撑满 */
+  width: 120px;
+}
+.np-pdfmform.np-two-col .np-wm-stack .bp6-input-group {
   width: 100%;
 }
 /* 半列里的 Slider（水印透明度行）：撑满字段剩余宽度 */

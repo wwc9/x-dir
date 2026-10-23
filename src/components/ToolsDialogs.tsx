@@ -584,7 +584,7 @@ export function PdfWatermarkDialog({
               ]}
             />
           </FormRow>
-          <FormRow k={t2("透明度（0–10）")} wide>
+          <FormRow k={t2("不透明度（0–10）")} wide>
             <Slider
               min={0}
               max={10}
