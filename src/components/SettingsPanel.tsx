@@ -86,6 +86,7 @@ export function SettingsPanel() {
   /** 浮窗开合与直达分类状态在 useUi；打开时同步当前 tab（顶栏/其余入口只 set 状态） */
   const settingsTab = useUi((st) => st.settingsTab);
   const [tab, setTab] = useState<TabId>(settingsTab ?? "appearance");
+  const [quickRule, setQuickRule] = useState("");
   useEffect(() => {
     if (settingsTab) setTab(settingsTab);
   }, [settingsTab]);
@@ -258,6 +259,31 @@ export function SettingsPanel() {
             <div className="np-set-hint">
               {t("按规则给文件名着色，自上而下首个命中的规则生效（支持 *.ext 或名称包含）。")}
             </div>
+            <div className="np-set-quickadd">
+              <input
+                className="np-set-quickadd-input"
+                value={quickRule}
+                spellCheck={false}
+                placeholder={t("快速添加：输入规则文本回车确认（如 *.pdf 或 合同）")}
+                onChange={(e) => setQuickRule(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  const pattern = quickRule.trim();
+                  if (!pattern) return;
+                  const palette: TagColor[] = [
+                    "red",
+                    "orange",
+                    "yellow",
+                    "green",
+                    "blue",
+                    "purple",
+                  ];
+                  const color = palette[s.colorRules.length % palette.length];
+                  s.update({ colorRules: [...s.colorRules, { pattern, color }] });
+                  setQuickRule("");
+                }}
+              />
+            </div>
             <div className="np-set-rules">
               {s.colorRules.map((r, i) => (
                 <div key={i} className="np-set-rule">
@@ -299,7 +325,8 @@ export function SettingsPanel() {
               text={t("添加规则")}
               onClick={() =>
                 s.update({
-                  colorRules: [...s.colorRules, { pattern: "", color: "yellow" }],
+                  // 默认值（2026-10-22）：*.pdf + 红（审计场景高频起点）
+                  colorRules: [...s.colorRules, { pattern: "*.pdf", color: "red" }],
                 })
               }
             />

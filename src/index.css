@@ -4262,21 +4262,11 @@ body.np-col-resizing * {
   flex: 1;
   height: 24px;
   padding: 0 8px;
-  border: 0;
-  border-radius: var(--np-radius);
-  background: var(--np-surface-2);
-  color: var(--np-fg);
-  font-size: var(--np-font-ui);
 }
 .np-gsearch-cext {
   width: 200px;
   height: 24px;
   padding: 0 8px;
-  border: 0;
-  border-radius: var(--np-radius);
-  background: var(--np-surface-2);
-  color: var(--np-fg);
-  font-size: var(--np-font-ui);
 }
 .np-gsearch-main.is-content > .np-gsearch-panel {
   display: none;
@@ -4419,6 +4409,20 @@ mark.np-gsearch-mark {
   flex: 1;
   width: auto;
 }
+/* 2 列参数网格（2026-10-22）：参数行 1 列或 2 列按信息量选择——
+   短控件成对排布（字体|字号、透明度|边距），长控件/多选项行整行（wide） */
+.np-pdfmform.np-two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  align-items: start;
+}
+.np-pdfmform.np-two-col .np-wide {
+  grid-column: 1 / -1;
+}
+.np-pdfmform.np-two-col .np-bren-field > .bp6-input-group {
+  width: 100%;
+}
 .np-pdfmlist-item {
   display: flex;
   align-items: center;
@@ -4465,4 +4469,25 @@ mark.np-gsearch-mark {
 }
 .np-wm-cell.on {
   background: var(--np-accent);
+}
+
+/* 着色规则快速添加（2026-10-22）：输入回车即加规则（默认色按标签色循环），
+   输入框 = 统一填充式基线（全局 input 规则），宽度撑满规则面板 */
+.np-set-quickadd {
+  margin-bottom: 6px;
+}
+.np-set-quickadd-input {
+  width: 100%;
+  height: var(--np-ctl-h);
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--np-radius);
+  background: var(--np-surface-2);
+  color: var(--np-fg);
+  font-size: var(--np-font-ui);
+}
+.np-set-quickadd-input:focus {
+  background: var(--np-surface);
+  box-shadow: var(--np-ring);
+  outline: none;
 }

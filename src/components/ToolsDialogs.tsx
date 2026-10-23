@@ -13,9 +13,18 @@ import { AppIcon } from "./AppIcon";
 import { Seg } from "./ImgDialogs";
 import { DENSITY } from "../lib/tokens";
 
-function FormRow({ k, children }: { k: string; children: React.ReactNode }) {
+function FormRow({
+  k,
+  wide,
+  children,
+}: {
+  k: string;
+  /** 宽行：在 2 列参数网格中独占整行（长控件/多选项行使用） */
+  wide?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <span className="np-bren-field">
+    <span className={"np-bren-field" + (wide ? " np-wide" : "")}>
       <span className="np-bren-k">{k}</span>
       {children}
     </span>
@@ -342,7 +351,7 @@ export function PdfMergeDialog({
                 </div>
               ))}
         </div>
-        <div className="np-pdfmform">
+        <div className="np-pdfmform np-two-col">
           {variant === "folders" && (
             <div className="np-dialog-muted" style={{ margin: 0 }}>
               {t2("每个选中的文件夹递归收集 PDF 与图片，各自输出 合并结果-<文件夹名>-<时间戳>.pdf")}
@@ -478,7 +487,7 @@ export function PdfWatermarkDialog({
     <>
       <DialogBody>
         <div className="np-bren-form">
-          <FormRow k={t2("水印文字")}>
+          <FormRow k={t2("水印文字")} wide>
             <InputGroup
               size="small"
               value={text}
@@ -510,7 +519,7 @@ export function PdfWatermarkDialog({
               }}
             />
           </FormRow>
-          <FormRow k={t2("颜色")}>
+          <FormRow k={t2("颜色")} wide>
             <Seg
               value={fontColor}
               onChange={setFontColor}
@@ -571,7 +580,7 @@ export function PdfWatermarkDialog({
               ]}
             />
           </FormRow>
-          <FormRow k={t2("页码格式")}>
+          <FormRow k={t2("页码格式")} wide>
             <Seg
               value={pageNumberFormat}
               onChange={setPageNumberFormat}
@@ -584,7 +593,7 @@ export function PdfWatermarkDialog({
               ]}
             />
           </FormRow>
-          <FormRow k={t2("日期格式")}>
+          <FormRow k={t2("日期格式")} wide>
             <Seg
               value={datetimeFormat}
               onChange={setDatetimeFormat}
