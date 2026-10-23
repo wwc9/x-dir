@@ -4361,3 +4361,47 @@ mark.np-gsearch-mark {
 .np-pdfmlist-name {
   color: var(--np-fg);
 }
+
+/* PDF 合并对话框（2026-10-22 布局重排）：分区标题行 + 表单纵排（字段
+   各占一行，不再 wrap 挤行）；清单行序号右对齐、把手 grab 手感 */
+.np-pdfmsec {
+  display: flex;
+  align-items: baseline;
+  gap: var(--np-gutter);
+  margin-bottom: 4px;
+}
+.np-pdfmform {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 10px 0 var(--np-gutter);
+}
+.np-pdfmform .np-bren-field {
+  width: 100%;
+}
+.np-pdfmform .np-bren-field > .bp6-input-group {
+  flex: 1;
+  width: auto;
+}
+.np-pdfmlist-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.np-pdfmlist-grip {
+  flex: none;
+  display: flex;
+  color: var(--np-muted);
+  cursor: grab;
+  touch-action: none;
+}
+.np-pdfmlist-grip:active {
+  cursor: grabbing;
+}
+.np-pdfmlist-pos {
+  flex: none;
+  margin-left: auto;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  font-family: Consolas, 'Cascadia Mono', monospace;
+}

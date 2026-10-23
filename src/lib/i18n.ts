@@ -363,6 +363,8 @@ const EN: Record<string, string> = {
   "搜索文件内容（多词空格分隔，大小写不敏感）": "Search file contents (words separated by spaces, case-insensitive)",
   "未选中结果": "No result selected",
   "选择结果以预览": "Select a result to preview",
+  "合并顺序": "Merge order",
+  "输出预览：{out}": "Output preview: {out}",
   "待处理清单": "Pending files",
   "统一合并输出：{out}": "Single output: {out}",
   "按文件夹分别合并：{n} 个范围，各组输出 合并结果-<文件夹名>-<时间戳>.pdf": "Merge per folder: {n} scopes, each writes 合并结果-<folder>-<timestamp>.pdf",

@@ -226,9 +226,10 @@ export function XlsxMergeDialog({
 }
 
 /** PDF 合并扩展对话框（2026-10-22）：
- *  files 变体 = 待合并清单（默认按名称自然序，可拖动调整合并顺序）；
+ *  files 变体 = 待合并清单（默认按名称自然序，行可拖动实时调整合并顺序——
+ *  Pointer 事件实现：应用窗口注册了 OLE 拖放，HTML5 DnD 事件被拦截不可用）；
  *  folders 变体 = 选中的文件夹（各递归收集，各自输出 合并结果-<名>-<ts>.pdf，
- *  支持 1 个文件夹）；清单 = surface-2 凹陷列表（§4.7 内嵌列表层级） */
+ *  支持 1 个文件夹）。布局分区：合并顺序 → 输出 → 打印补页 → 输出预览 */
 export function PdfMergeDialog({
   variant,
   entries,
@@ -246,12 +247,12 @@ export function PdfMergeDialog({
 }) {
   const t2 = useT();
   const byFolder = variant === "folders";
+  const nameOf = (p: string) => p.slice(p.lastIndexOf("\\") + 1);
   const parentOf = (p: string) => {
     const i = p.lastIndexOf("\\");
     return i > 0 ? p.slice(0, i) : "";
   };
-  const nameOf = (p: string) => p.slice(p.lastIndexOf("\\") + 1);
-  // 默认排序：名称（数字感知自然序，1 → 2 → 10）；拖动行即调整合并顺序
+  // 默认排序：名称（数字感知自然序，1 → 2 → 10）；拖行 = 实时调整合并顺序
   const collator = new Intl.Collator("zh-Hans-CN", { numeric: true, sensitivity: "base" });
   const [items, setItems] = useState<string[]>(() =>
     entries.map((e) => e.path).sort((a, b) => collator.compare(nameOf(a), nameOf(b))),
@@ -260,25 +261,61 @@ export function PdfMergeDialog({
   const [blankFirst, setBlankFirst] = useState(false);
   const [name, setName] = useState("合并文档.pdf");
   const valid = byFolder || name.trim().length > 0;
-  const output = `${parentOf(entries[0]?.path ?? "") ?? ""}\\${name.trim() || "合并文档.pdf"}`;
+  const output = parentOf(entries[0]?.path ?? '') + "\\" + (name.trim() || "合并文档.pdf");
 
-  const dragIdx = useRef<number | null>(null);
-  const [overIdx, setOverIdx] = useState<number | null>(null);
-  const moveItem = (from: number, to: number) => {
-    if (from === to) return;
-    setItems((arr) => {
-      const next = [...arr];
-      const [it] = next.splice(from, 1);
-      next.splice(to, 0, it);
-      return next;
-    });
-  };
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const dragFrom = useRef<number | null>(null);
+
+  /** 指针拖拽：按下把手捕获指针，移动时按行中点实时换位（矩形每次现查，
+   *  换位后行序即新序），松手收尾 */
+  function beginRowDrag(e: React.PointerEvent, idx: number) {
+    if (e.button !== 0 || !listRef.current) return;
+    e.preventDefault();
+    dragFrom.current = idx;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    const onMove = (ev: PointerEvent) => {
+      if (dragFrom.current === null || !listRef.current) return;
+      const rows = Array.from(
+        listRef.current.querySelectorAll<HTMLElement>("[data-row]"),
+      );
+      let target = rows.length - 1;
+      for (let i = 0; i < rows.length; i++) {
+        const rect = rows[i].getBoundingClientRect();
+        if (ev.clientY < rect.top + rect.height / 2) {
+          target = i;
+          break;
+        }
+      }
+      if (target !== dragFrom.current) {
+        const from = dragFrom.current;
+        setItems((arr) => {
+          const next = [...arr];
+          const [it] = next.splice(from, 1);
+          next.splice(target, 0, it);
+          return next;
+        });
+        dragFrom.current = target;
+      }
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      dragFrom.current = null;
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
 
   return (
     <>
       <DialogBody>
-        <span className="np-bren-k">{t2("待处理清单")}</span>
-        <div className="np-pdfmlist">
+        <div className="np-pdfmsec">
+          <span className="np-bren-k">{t2("合并顺序")}</span>
+          <span className="np-dialog-muted">
+            {t2("默认按名称排序（数字感知），拖动行可调整合并顺序")}
+          </span>
+        </div>
+        <div className="np-pdfmlist" ref={listRef}>
           {byFolder
             ? entries.map((e) => (
                 <div key={e.path} className="np-pdfmlist-item" title={e.path}>
@@ -289,41 +326,25 @@ export function PdfMergeDialog({
             : items.map((p, i) => (
                 <div
                   key={p}
-                  className={
-                    "np-pdfmlist-item" + (overIdx === i && dragIdx.current !== null ? " np-drag-over" : "")
-                  }
-                  draggable
+                  data-row={i}
+                  className="np-pdfmlist-item"
                   title={p}
-                  onDragStart={() => {
-                    dragIdx.current = i;
-                  }}
-                  onDragEnter={() => setOverIdx(i)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => {
-                    if (dragIdx.current !== null) moveItem(dragIdx.current, i);
-                    dragIdx.current = null;
-                    setOverIdx(null);
-                  }}
-                  onDragEnd={() => {
-                    dragIdx.current = null;
-                    setOverIdx(null);
-                  }}
                 >
-                  <span className="np-pdfmlist-grip">
+                  <span
+                    className="np-pdfmlist-grip"
+                    title={t2("拖动调整顺序")}
+                    onPointerDown={(e) => beginRowDrag(e, i)}
+                  >
                     <AppIcon icon={GripVertical} size={DENSITY.iconXs} />
                   </span>
                   <span className="np-ellipsis np-pdfmlist-name">{nameOf(p)}</span>
+                  <span className="np-pdfmlist-pos">{i + 1}</span>
                 </div>
               ))}
         </div>
-        {variant === "files" && (
-          <div className="np-dialog-muted" style={{ margin: "2px 0 0" }}>
-            {t2("默认按名称排序（数字感知），拖动行可调整合并顺序")}
-          </div>
-        )}
-        <div className="np-bren-form" style={{ marginTop: 8 }}>
+        <div className="np-pdfmform">
           {variant === "folders" && (
-            <div className="np-dialog-muted" style={{ margin: "0 0 6px" }}>
+            <div className="np-dialog-muted" style={{ margin: 0 }}>
               {t2("每个选中的文件夹递归收集 PDF 与图片，各自输出 合并结果-<文件夹名>-<时间戳>.pdf")}
             </div>
           )}
@@ -342,31 +363,31 @@ export function PdfMergeDialog({
             </FormRow>
           )}
           <FormRow k={t2("空白页凑偶数")}>
-            <Seg<"no" | "yes">
+            <Seg
               value={autoBlank ? "yes" : "no"}
               onChange={(v) => setAutoBlank(v === "yes")}
               options={[
                 { value: "no", label: t2("否"), title: t2("保持原页数") },
                 { value: "yes", label: t2("是"), title: t2("自动补 A4 空白页使总页数凑成偶数（审计底稿打印场景常用）") },
               ]}
-            />
+            </Seg>
           </FormRow>
           {autoBlank && (
             <FormRow k={t2("空白页位置")}>
-              <Seg<"last" | "first">
+              <Seg
                 value={blankFirst ? "first" : "last"}
                 onChange={(v) => setBlankFirst(v === "first")}
                 options={[
                   { value: "last", label: t2("最后1页之后") },
                   { value: "first", label: t2("第1页之前") },
                 ]}
-              />
+              </Seg>
             </FormRow>
           )}
         </div>
         <div className="np-dialog-muted">
           {variant === "files"
-            ? t2("统一合并输出：{out}", { out: output })
+            ? t2("输出预览：{out}", { out: output })
             : t2("按文件夹分别合并：{n} 个范围，各组输出 合并结果-<文件夹名>-<时间戳>.pdf", {
                 n: entries.length,
               })}
