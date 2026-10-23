@@ -109,20 +109,48 @@ pub fn pdf_split(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn pdf_watermark(
     app: AppHandle,
     state: State<'_, AppState>,
     paths: Vec<String>,
     text: String,
+    font_name: Option<String>,
+    font_size: Option<u32>,
+    font_color: Option<String>,
+    position: Option<String>,
+    transparency: Option<u8>,
+    margin: Option<u32>,
+    page_range: Option<String>,
+    page_number_format: Option<String>,
+    datetime_format: Option<String>,
 ) -> Result<JobId, AppError> {
     reject_not_pdf(&paths)?;
     let text = text.trim().to_string();
     if text.is_empty() || text.chars().count() > 100 {
         return Err(AppError::new("E_INVALID_NAME", "水印文字需为 1–100 个字符"));
     }
+    let opts = crate::pdf::stamp::WatermarkOpts {
+        text,
+        font_name: font_name.unwrap_or_else(|| "heiti".into()),
+        font_size: font_size.unwrap_or(14).clamp(5, 99),
+        rgb: crate::pdf::stamp::parse_color(&font_color.unwrap_or_else(|| "black".into())),
+        pos: crate::pdf::stamp::WmPos::parse(&position.unwrap_or_else(|| "right-top".into()))
+            .unwrap_or(crate::pdf::stamp::WmPos::RightTop),
+        transparency: transparency.unwrap_or(9).min(10),
+        margin: margin.unwrap_or(20),
+        range: crate::pdf::stamp::WmRange::parse(&page_range.unwrap_or_else(|| "all".into()))
+            .unwrap_or(crate::pdf::stamp::WmRange::All),
+        num_fmt: crate::pdf::stamp::WmNumFmt::parse(
+            &page_number_format.unwrap_or_else(|| "cn".into()),
+        )
+        .unwrap_or(crate::pdf::stamp::WmNumFmt::Cn),
+        dt_fmt: crate::pdf::stamp::WmDtFmt::parse(&datetime_format.unwrap_or_else(|| "cn".into()))
+            .unwrap_or(crate::pdf::stamp::WmDtFmt::Cn),
+    };
     Ok(JobId {
         job_id: state.jobs.enqueue(
-            JobKind::PdfWatermark { text },
+            JobKind::PdfWatermark { opts },
             paths,
             None,
             Policy::Skip,

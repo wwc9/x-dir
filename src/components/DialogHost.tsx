@@ -32,7 +32,12 @@ import {
   WatermarkDialog,
 } from "./ImgDialogs";
 import { NpSelect } from "./NpSelect";
-import { NewFoldersDialog, PdfMergeDialog, XlsxMergeDialog } from "./ToolsDialogs";
+import {
+  NewFoldersDialog,
+  PdfMergeDialog,
+  PdfWatermarkDialog,
+  XlsxMergeDialog,
+} from "./ToolsDialogs";
 import { DENSITY } from "../lib/tokens";
 import { useUi, type DialogKind, type DialogSpec } from "../stores/ui";
 
@@ -82,7 +87,9 @@ export function DialogHost() {
                     ? "批量新建文件夹"
                     : dialog?.type === "pdfMerge"
                       ? "PDF 合并"
-                      : dialog?.type === "xlsxMerge"
+                      : dialog?.type === "pdfWatermark"
+                        ? "PDF 加水印"
+                        : dialog?.type === "xlsxMerge"
                       ? "Excel 合并"
                       : dialog?.type === "imgCompress"
                   ? "图片压缩"
@@ -119,6 +126,7 @@ export function DialogHost() {
           dialog?.type === "dirsizes" ||
           dialog?.type === "compare" ||
           dialog?.type === "pdfMerge" ||
+          dialog?.type === "pdfWatermark" ||
           dialog?.type === "emptyScan"
             ? "min(680px, 92vw)"
             : dialog?.type.startsWith("img")
@@ -215,6 +223,10 @@ export function DialogHost() {
           entries={dialog.entries}
           onDone={(v) => resolve(v)}
         />
+      )}
+
+      {dialog?.type === "pdfWatermark" && (
+        <PdfWatermarkDialog onDone={(v) => resolve(v)} />
       )}
 
       {dialog?.type === "imgCompress" && (

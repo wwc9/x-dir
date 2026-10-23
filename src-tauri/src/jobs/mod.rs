@@ -67,9 +67,9 @@ pub enum JobKind {
     PdfSplit {
         out_dir: String,
     },
-    /// PDF 文字水印（半透明 45° 对角），旁写 <stem>_水印.pdf
+    /// PDF 文字水印（2026-10-22 参数化：占位符/字体/颜色/位置/透明度/页范围）
     PdfWatermark {
-        text: String,
+        opts: crate::pdf::stamp::WatermarkOpts,
     },
     /// PDF 提取页（spec 选中的页）→ output 新文件
     PdfExtractPages {
@@ -458,7 +458,7 @@ impl JobManager {
                         );
                     }
                 }
-                JobKind::PdfWatermark { text } => {
+                JobKind::PdfWatermark { opts } => {
                     for s in &sources {
                         if let Some(par) = parent_of(s) {
                             dirty_dirs.push(par);
@@ -466,7 +466,7 @@ impl JobManager {
                     }
                     crate::pdf::run_watermark(
                         &sources,
-                        text,
+                        opts,
                         &cancel,
                         &mut prog,
                         &mut em,

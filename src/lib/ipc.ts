@@ -520,8 +520,35 @@ export const api = {
     }),
   pdfSplit: (path: string, outDir: string) =>
     cmd<{ jobId: number }>("pdf_split", { path, outDir }),
-  pdfWatermark: (paths: string[], text: string) =>
-    cmd<{ jobId: number }>("pdf_watermark", { paths, text }),
+  /** PDF 加水印参数（2026-10-22 参数化）：文字支持占位符 [原文件名]
+   *  [原文件夹名] [页码] [页面标签] [日期时间]；字体 4 种（嵌入渲染）、
+   *  8 色、11 位置（九宫格 + 对角线）、透明度 0–10、页范围、页码/日期格式 */
+  pdfWatermark: (o: {
+    paths: string[];
+    text: string;
+    fontName?: string;
+    fontSize?: number;
+    fontColor?: string;
+    position?: string;
+    transparency?: number;
+    margin?: number;
+    pageRange?: string;
+    pageNumberFormat?: string;
+    datetimeFormat?: string;
+  }) =>
+    cmd<{ jobId: number }>("pdf_watermark", {
+      paths: o.paths,
+      text: o.text,
+      fontName: o.fontName,
+      fontSize: o.fontSize,
+      fontColor: o.fontColor,
+      position: o.position,
+      transparency: o.transparency,
+      margin: o.margin,
+      pageRange: o.pageRange,
+      pageNumberFormat: o.pageNumberFormat,
+      datetimeFormat: o.datetimeFormat,
+    }),
   /** 图片压缩：target 0=Auto 1=JPEG 2=PNG8 3=无损优化；quality = JPEG 质量 1–100 */
   imgCompress: (paths: string[], target: 0 | 1 | 2 | 3, quality: number) =>
     cmd<{ jobId: number }>("img_compress", { paths, target, quality }),

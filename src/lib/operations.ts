@@ -197,18 +197,28 @@ export async function splitPdf(entry: FileEntry, dir: string): Promise<void> {
 
 /** 文字水印（深灰 45° 对角半透明），旁写 "<名称>_水印.pdf"，不改原文件 */
 export async function watermarkPdfs(entries: FileEntry[], dir: string): Promise<void> {
-  const paths = entries.map((e) => e.path);
-  const text = await useUi.getState().openDialog<string | null>({
-    type: "input",
-    title: "PDF 加水印",
-    label: `为 ${paths.length} 个 PDF 加文字水印（深灰 45° 半透明，旁写*_水印.pdf）`,
-    initial: "",
-    okText: "加水印",
-    validate: (v) => (v.trim() ? null : "请输入水印文字"),
-  });
-  if (!text || !text.trim()) return;
+  if (!entries.length) return;
+  const opts = await useUi.getState().openDialog<
+    | {
+        text: string;
+        fontName: string;
+        fontSize: number;
+        fontColor: string;
+        position: string;
+        transparency: number;
+        margin: number;
+        pageRange: string;
+        pageNumberFormat: string;
+        datetimeFormat: string;
+      }
+    | null
+  >({ type: "pdfWatermark", entries });
+  if (!opts) return;
   try {
-    const { jobId } = await api.pdfWatermark(paths, text.trim());
+    const { jobId } = await api.pdfWatermark({
+      paths: entries.map((e) => e.path),
+      ...opts,
+    });
     useJobs.getState().register(jobId, "pdfwatermark", dir, [dir]);
   } catch (e) {
     useUi.getState().toast(`加水印失败：${String(e)}`, "error");

@@ -1,15 +1,204 @@
-//! 水印文字 → 位图 → PDF 叠层：
-//! 1. 运行时读系统字体（msyh.ttc → simhei → simsun → arial 回退链，不打包字体避免再分发问题）
-//! 2. ab_glyph 排版 + 自带光栅化（逐像素覆盖率回调，免额外光栅化依赖）
-//! 3. lopdf 写入 DeviceRGB 恒色 + DeviceGray SMask 的 Image XObject，
-//!    每页追加 `q /WmGs gs 旋转平移 cm 缩放平移 cm /WmIm Do Q` 内容流（45° 对角居中）
+//! 水印文字引擎（2026-10-22 参数化改造）：
+//! 1. 运行时读系统字体（楷体 simkai / 黑体 simhei / 仿宋 simfang / 等线 Deng，
+//!    缺失回退 msyh → simhei → simsun → arial；不打包字体避免再分发问题）
+//! 2. ab_glyph 排版 + 自带光栅化（逐像素覆盖率），RGB 恒色平面颜色可选（8 色）
+//! 3. lopdf 写入 DeviceRGB + DeviceGray SMask 的 Image XObject，逐页追加内容流：
+//!    九宫格位置（边距偏移）或对角线（±45° 居中，缩放对角 0.8）；
+//!    透明度经 ExtGState ca（0–10 → 0–1.0）
+//! 4. 文字模板支持占位符：[原文件名] [原文件夹名] [页码] [页面标签] [日期时间]，
+//!    页码渲染格式与日期格式可配；页面范围 全部/奇数/偶数
+//! 5. 位图按文字内容缓存：无占位符的水印整份文档只光栅化一次
 
 use ab_glyph::{Font, FontVec, ScaleFont};
 use lopdf::{Dictionary, Object, ObjectId, Stream, content::Content, dictionary};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, OnceLock};
 
-/// 深灰水印色（RGB 恒值，可见度由 SMask 决定），与 pdf/mod.rs 的 STAMP_GRAY 一致
-const STAMP_GRAY: u8 = 64;
+/// 单目录收集/页面遍历的通用护栏在调用方；本模块按文字缓存位图
+static BITMAP_CACHE: OnceLock<Mutex<HashMap<String, StampBitmap>>> = OnceLock::new();
 
+fn bitmap_cache() -> &'static Mutex<HashMap<String, StampBitmap>> {
+    BITMAP_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+// ── 位置：九宫格 + 对角线 ──
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum WmPos {
+    LeftTop,
+    MidTop,
+    RightTop,
+    LeftMid,
+    Center,
+    RightMid,
+    LeftBottom,
+    MidBottom,
+    RightBottom,
+    DiagMain,
+    DiagReverse,
+}
+
+impl WmPos {
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "left-top" => Self::LeftTop,
+            "mid-top" => Self::MidTop,
+            "right-top" => Self::RightTop,
+            "left-mid" => Self::LeftMid,
+            "center" => Self::Center,
+            "right-mid" => Self::RightMid,
+            "left-bottom" => Self::LeftBottom,
+            "mid-bottom" => Self::MidBottom,
+            "right-bottom" => Self::RightBottom,
+            "diag-main" => Self::DiagMain,
+            "diag-reverse" => Self::DiagReverse,
+            _ => return None,
+        })
+    }
+}
+
+// ── 页面范围 ──
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum WmRange {
+    All,
+    Odd,
+    Even,
+}
+
+impl WmRange {
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "all" => Self::All,
+            "odd" => Self::Odd,
+            "even" => Self::Even,
+            _ => return None,
+        })
+    }
+    /// 页码 1 起算：奇数页 = 第 1/3/5… 页
+    pub fn hits(self, page: u32) -> bool {
+        match self {
+            Self::All => true,
+            Self::Odd => page % 2 == 1,
+            Self::Even => page.is_multiple_of(2),
+        }
+    }
+}
+
+// ── 页码占位符渲染格式 ──
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum WmNumFmt {
+    Plain,
+    Dash,
+    Cn,
+    Frac,
+    CnFrac,
+}
+
+impl WmNumFmt {
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "plain" => Self::Plain,
+            "dash" => Self::Dash,
+            "cn" => Self::Cn,
+            "frac" => Self::Frac,
+            "cnfrac" => Self::CnFrac,
+            _ => return None,
+        })
+    }
+    pub fn render(self, page: u32, total: u32) -> String {
+        match self {
+            Self::Plain => page.to_string(),
+            Self::Dash => format!("-{page}-"),
+            Self::Cn => format!("第{page}页"),
+            Self::Frac => format!("{page}/{total}"),
+            Self::CnFrac => format!("第{page}页/共{total}页"),
+        }
+    }
+}
+
+// ── 日期占位符渲染格式 ──
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum WmDtFmt {
+    Cn,
+    Slash,
+    Dash,
+}
+
+impl WmDtFmt {
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "cn" => Self::Cn,
+            "slash" => Self::Slash,
+            "dash" => Self::Dash,
+            _ => return None,
+        })
+    }
+    pub fn render(self, y: i64, m: u32, d: u32) -> String {
+        match self {
+            Self::Cn => format!("{y}年{m:02}月{d:02}日"),
+            Self::Slash => format!("{y}/{m:02}/{d:02}"),
+            Self::Dash => format!("{y}-{m:02}-{d:02}"),
+        }
+    }
+}
+
+/// 天数（自 UNIX 纪元）→ (年, 月, 日)：Howard Hinnant civil_from_days
+fn civil_from_days(days: i64) -> (i64, u32, u32) {
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y, m as u32, d as u32)
+}
+
+/// 当前本机日期（UTC 近似，水印用途足够）
+pub fn today() -> (i64, u32, u32) {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    civil_from_days((secs / 86_400) as i64)
+}
+
+// ── 选项（命令层解析字符串码后装配）──
+#[derive(Clone, Debug, PartialEq)]
+pub struct WatermarkOpts {
+    pub text: String,
+    /// kaiti | heiti | fangsong | dengxian
+    pub font_name: String,
+    /// 5–99（像素 ≈ 磅）
+    pub font_size: u32,
+    pub rgb: [u8; 3],
+    pub pos: WmPos,
+    /// 0–10（10 = 不透明）
+    pub transparency: u8,
+    /// 边距（像素 ≈ 磅）
+    pub margin: u32,
+    pub range: WmRange,
+    pub num_fmt: WmNumFmt,
+    pub dt_fmt: WmDtFmt,
+}
+
+/// 8 色板（与 V2 标签色同源的取值，黑/白/灰为中性色）
+pub fn parse_color(code: &str) -> [u8; 3] {
+    match code {
+        "gray" => [136, 136, 136],
+        "red" => [201, 56, 64],
+        "white" => [255, 255, 255],
+        "green" => [35, 131, 76],
+        "yellow" => [154, 124, 10],
+        "blue" => [53, 116, 240],
+        "purple" => [125, 100, 216],
+        _ => [0, 0, 0], // black
+    }
+}
+
+#[derive(Clone)]
 pub struct StampBitmap {
     pub width: u32,
     pub height: u32,
@@ -19,27 +208,40 @@ pub struct StampBitmap {
     pub alpha: Vec<u8>,
 }
 
-/// 系统中文字体加载（TTC 取 index 0）
-pub fn load_cjk_font() -> Option<FontVec> {
+/// 按优先级加载系统字体（prefer = Fonts 目录下的字体文件名，如 "simkai.ttf"）；
+/// prefer 全部缺失时回退 msyh → simhei → simsun → arial。Arc 共享免克隆。
+pub fn load_font(prefer: &[&str]) -> Option<Arc<FontVec>> {
+    static CACHE: OnceLock<Mutex<HashMap<String, Arc<FontVec>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     let windir = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into());
+    let mut candidates: Vec<String> = prefer.iter().map(|f| format!("Fonts\\{f}")).collect();
     for f in [
         "Fonts\\msyh.ttc",
         "Fonts\\simhei.ttf",
         "Fonts\\simsun.ttc",
         "Fonts\\arial.ttf",
     ] {
-        let path = std::path::Path::new(&windir).join(f);
-        if let Ok(font) = std::fs::read(&path).and_then(|data| {
-            FontVec::try_from_vec_and_index(data, 0).map_err(|_| std::io::Error::other("font"))
-        }) {
-            return Some(font);
+        candidates.push(f.to_string());
+    }
+    for f in candidates {
+        if let Some(hit) = cache.lock().unwrap().get(&f) {
+            return Some(Arc::clone(hit));
+        }
+        let path = std::path::Path::new(&windir).join(&f);
+        if let Ok(data) = std::fs::read(&path)
+            && let Ok(font) =
+                FontVec::try_from_vec_and_index(data, 0).map_err(|_| std::io::Error::other("font"))
+        {
+            let arc = Arc::new(font);
+            cache.lock().unwrap().insert(f, Arc::clone(&arc));
+            return Some(arc);
         }
     }
     None
 }
 
-/// 单行文字光栅化：RGB 恒色平面 + 抗锯齿覆盖率平面
-pub fn rasterize_text(font: &FontVec, text: &str, px: f32) -> StampBitmap {
+/// 单行文字光栅化：RGB 恒色平面（颜色可选）+ 抗锯齿覆盖率平面
+pub fn rasterize_text(font: &FontVec, text: &str, px: f32, rgb: [u8; 3]) -> StampBitmap {
     let scaled = font.as_scaled(px);
     let mut pen = 0f32;
     let mut min_x = f32::MAX;
@@ -64,7 +266,7 @@ pub fn rasterize_text(font: &FontVec, text: &str, px: f32) -> StampBitmap {
         return StampBitmap {
             width: 1,
             height: 1,
-            rgb: vec![STAMP_GRAY, STAMP_GRAY, STAMP_GRAY],
+            rgb: vec![rgb[0], rgb[1], rgb[2]],
             alpha: vec![0],
         };
     }
@@ -96,19 +298,195 @@ pub fn rasterize_text(font: &FontVec, text: &str, px: f32) -> StampBitmap {
     StampBitmap {
         width: width as u32,
         height: height as u32,
-        rgb: vec![STAMP_GRAY; (width * height) * 3],
+        rgb: vec![rgb[0], rgb[1], rgb[2]]
+            .into_iter()
+            .flat_map(|c| std::iter::repeat_n(c, width * height))
+            .collect(),
         alpha,
     }
 }
 
-/// 整份文档每页叠水印（共享一个 Image XObject）
-pub fn stamp_document(doc: &mut lopdf::Document, bm: &StampBitmap) -> Result<(), String> {
-    let img_id = add_image_xobject(doc, bm)?;
-    let page_ids: Vec<ObjectId> = doc.get_pages().into_values().collect();
-    for page_id in page_ids {
-        stamp_page(doc, page_id, img_id, bm)?;
+/// 文字模板渲染：占位符替换（页码格式 / 日期格式在调用方装配）
+pub fn render_text(
+    template: &str,
+    file_stem: &str,
+    folder_name: &str,
+    page_text: &str,
+    label: &str,
+    datetime: &str,
+) -> String {
+    template
+        .replace("[原文件名]", file_stem)
+        .replace("[原文件夹名]", folder_name)
+        .replace("[页码]", page_text)
+        .replace("[页面标签]", label)
+        .replace("[日期时间]", datetime)
+}
+
+/// 整份文档逐页叠水印：页面范围过滤 + 逐页占位符渲染 + 位图缓存
+pub fn stamp_document_ex(
+    doc: &mut lopdf::Document,
+    opts: &WatermarkOpts,
+    file_stem: &str,
+    folder_name: &str,
+) -> Result<(), String> {
+    let prefer: &[&str] = match opts.font_name.as_str() {
+        "kaiti" => &["simkai.ttf"],
+        "heiti" => &["simhei.ttf"],
+        "fangsong" => &["simfang.ttf"],
+        "dengxian" => &["Deng.ttf", "Dengb.ttf"],
+        _ => &[],
+    };
+    let font =
+        load_font(prefer).ok_or("未找到可用的系统字体（simkai/simhei/simfang/Deng/msyh）")?;
+    let total = doc.get_pages().len() as u32;
+    let pages: Vec<(u32, ObjectId)> = doc.get_pages().into_iter().collect();
+    let (ty, tm, td) = today();
+    let datetime = opts.dt_fmt.render(ty, tm, td);
+    let folder = folder_name.to_string();
+    let stem = file_stem.to_string();
+    let style = opts.clone();
+
+    for (page_no, page_id) in pages {
+        if !opts.range.hits(page_no) {
+            continue;
+        }
+        // 页面标签 v1：未解析 /PageLabels 时回落页码
+        let label = page_no.to_string();
+        let page_text = opts.num_fmt.render(page_no, total);
+        let text = render_text(&opts.text, &stem, &folder, &page_text, &label, &datetime);
+        let bitmap = {
+            let mut cache = bitmap_cache().lock().unwrap();
+            match cache.get(&text) {
+                Some(bm) => bm.clone(),
+                None => {
+                    let bm = rasterize_text(&font, &text, opts.font_size as f32, opts.rgb);
+                    cache.insert(text, bm.clone());
+                    bm
+                }
+            }
+        };
+        match opts.pos {
+            WmPos::DiagMain | WmPos::DiagReverse => {
+                stamp_page_diag(doc, page_id, &bitmap, opts)?;
+            }
+            grid => {
+                let (w, h) = page_size(doc, page_id);
+                let margin = style.margin as f32;
+                let bw = bitmap.width as f32;
+                let bh = bitmap.height as f32;
+                let x = match grid {
+                    WmPos::LeftTop | WmPos::LeftMid | WmPos::LeftBottom => margin,
+                    WmPos::MidTop | WmPos::Center | WmPos::MidBottom => ((w - bw) / 2.0).max(0.0),
+                    _ => (w - bw - margin).max(0.0),
+                };
+                let y = match grid {
+                    WmPos::LeftTop | WmPos::MidTop | WmPos::RightTop => (h - bh - margin).max(0.0),
+                    WmPos::LeftMid | WmPos::Center | WmPos::RightMid => ((h - bh) / 2.0).max(0.0),
+                    _ => margin,
+                };
+                stamp_page_at(doc, page_id, &bitmap, opts, x, y)?;
+            }
+        }
     }
     Ok(())
+}
+
+/// 九宫格位置：内容流 q gs cm(1,0,0,1,x,y) Do Q（位图像素 ≈ 磅 1:1）
+fn stamp_page_at(
+    doc: &mut lopdf::Document,
+    page_id: ObjectId,
+    bm: &StampBitmap,
+    opts: &WatermarkOpts,
+    x: f32,
+    y: f32,
+) -> Result<(), String> {
+    let img_id = add_image_xobject(doc, bm)?;
+    let alpha = opts.transparency as f32 / 10.0;
+    let ext_gstate = dictionary! {
+        "Type" => "ExtGState",
+        "ca" => Object::Real(alpha),
+        "CA" => Object::Real(alpha),
+    };
+    mount_resources(doc, page_id, img_id, ext_gstate)?;
+    let content = Content {
+        operations: vec![
+            lopdf::content::Operation::new("q", vec![]),
+            lopdf::content::Operation::new("gs", vec![Object::Name("WmGs".into())]),
+            lopdf::content::Operation::new(
+                "cm",
+                vec![
+                    Object::Real(1.0),
+                    Object::Real(0.0),
+                    Object::Real(0.0),
+                    Object::Real(1.0),
+                    Object::Real(x),
+                    Object::Real(y),
+                ],
+            ),
+            lopdf::content::Operation::new("Do", vec![Object::Name("WmIm".into())]),
+            lopdf::content::Operation::new("Q", vec![]),
+        ],
+    };
+    append_content_stream(doc, page_id, &content)
+}
+
+/// 对角线位置：±45° 旋转居中（沿对角缩放 0.8），透明度同九宫格
+fn stamp_page_diag(
+    doc: &mut lopdf::Document,
+    page_id: ObjectId,
+    bm: &StampBitmap,
+    opts: &WatermarkOpts,
+) -> Result<(), String> {
+    let (w, h) = page_size(doc, page_id);
+    let img_id = add_image_xobject(doc, bm)?;
+    let alpha = opts.transparency as f32 / 10.0;
+    let ext_gstate = dictionary! {
+        "Type" => "ExtGState",
+        "ca" => Object::Real(alpha),
+        "CA" => Object::Real(alpha),
+    };
+    mount_resources(doc, page_id, img_id, ext_gstate)?;
+    let diag = (w * w + h * h).sqrt();
+    let disp_w = diag * 0.8;
+    let disp_h = disp_w * bm.height as f32 / bm.width.max(1) as f32;
+    let sign = if opts.pos == WmPos::DiagReverse {
+        -1.0
+    } else {
+        1.0
+    };
+    let (sin, cos) = (45f32.to_radians().sin() * sign, 45f32.to_radians().cos());
+    let content = Content {
+        operations: vec![
+            lopdf::content::Operation::new("q", vec![]),
+            lopdf::content::Operation::new("gs", vec![Object::Name("WmGs".into())]),
+            lopdf::content::Operation::new(
+                "cm",
+                vec![
+                    Object::Real(cos),
+                    Object::Real(sin),
+                    Object::Real(-sin),
+                    Object::Real(cos),
+                    Object::Real(w / 2.0),
+                    Object::Real(h / 2.0),
+                ],
+            ),
+            lopdf::content::Operation::new(
+                "cm",
+                vec![
+                    Object::Real(disp_w),
+                    Object::Real(0.0),
+                    Object::Real(0.0),
+                    Object::Real(disp_h),
+                    Object::Real(-disp_w / 2.0),
+                    Object::Real(-disp_h / 2.0),
+                ],
+            ),
+            lopdf::content::Operation::new("Do", vec![Object::Name("WmIm".into())]),
+            lopdf::content::Operation::new("Q", vec![]),
+        ],
+    };
+    append_content_stream(doc, page_id, &content)
 }
 
 fn add_image_xobject(doc: &mut lopdf::Document, bm: &StampBitmap) -> Result<ObjectId, String> {
@@ -140,47 +518,13 @@ fn add_image_xobject(doc: &mut lopdf::Document, bm: &StampBitmap) -> Result<Obje
     Ok(doc.add_object(Object::Stream(img)))
 }
 
-/// 读页面 MediaBox 宽高（缺省按 letter 竖版兜底）
-fn page_size(doc: &lopdf::Document, page_id: ObjectId) -> (f32, f32) {
-    const DEFAULT: f32 = 612.0;
-    const DEFAULT_H: f32 = 792.0;
-    let Ok(Object::Dictionary(d)) = doc.get_object(page_id) else {
-        return (DEFAULT, DEFAULT_H);
-    };
-    let Some(Object::Array(items)) = d.get(b"MediaBox").ok() else {
-        return (DEFAULT, DEFAULT_H);
-    };
-    let nums: Vec<f32> = items
-        .iter()
-        .filter_map(|o| match o {
-            Object::Integer(i) => Some(*i as f32),
-            Object::Real(r) => Some(*r),
-            _ => None,
-        })
-        .collect();
-    if nums.len() == 4 {
-        (
-            (nums[2] - nums[0]).abs().max(1.0),
-            (nums[3] - nums[1]).abs().max(1.0),
-        )
-    } else {
-        (DEFAULT, DEFAULT_H)
-    }
-}
-
-fn stamp_page(
+/// 资源挂载：Resources 可能是共享引用，解析到实际字典再改
+fn mount_resources(
     doc: &mut lopdf::Document,
     page_id: ObjectId,
     img_id: ObjectId,
-    bm: &StampBitmap,
+    ext_gstate: Dictionary,
 ) -> Result<(), String> {
-    let (w, h) = page_size(doc, page_id);
-    let ext_gstate = dictionary! {
-        "Type" => "ExtGState",
-        "ca" => super::STAMP_ALPHA,
-        "CA" => super::STAMP_ALPHA,
-    };
-    // 资源挂载：Resources 可能是共享引用，解析到实际字典再改
     let resources_id: Option<ObjectId> = {
         let Ok(Object::Dictionary(d)) = doc.get_object(page_id) else {
             return Err("页面不是字典".into());
@@ -222,42 +566,15 @@ fn stamp_page(
             }
         }
     }
+    Ok(())
+}
 
-    // 内容流：外层 cm = 平移到页心 + 旋转 45°；内层 cm = 图片缩放并中心对齐原点
-    let diag = (w * w + h * h).sqrt();
-    let disp_w = diag * 0.8;
-    let disp_h = disp_w * bm.height as f32 / bm.width.max(1) as f32;
-    let (sin, cos) = (45f32.to_radians().sin(), 45f32.to_radians().cos());
-    let content = Content {
-        operations: vec![
-            lopdf::content::Operation::new("q", vec![]),
-            lopdf::content::Operation::new("gs", vec![Object::Name("WmGs".into())]),
-            lopdf::content::Operation::new(
-                "cm",
-                vec![
-                    Object::Real(cos),
-                    Object::Real(sin),
-                    Object::Real(-sin),
-                    Object::Real(cos),
-                    Object::Real(w / 2.0),
-                    Object::Real(h / 2.0),
-                ],
-            ),
-            lopdf::content::Operation::new(
-                "cm",
-                vec![
-                    Object::Real(disp_w),
-                    Object::Real(0.0),
-                    Object::Real(0.0),
-                    Object::Real(disp_h),
-                    Object::Real(-disp_w / 2.0),
-                    Object::Real(-disp_h / 2.0),
-                ],
-            ),
-            lopdf::content::Operation::new("Do", vec![Object::Name("WmIm".into())]),
-            lopdf::content::Operation::new("Q", vec![]),
-        ],
-    };
+/// /Contents 追加：引用 → 数组[原…, 新]；原数组 → 追加
+fn append_content_stream(
+    doc: &mut lopdf::Document,
+    page_id: ObjectId,
+    content: &Content,
+) -> Result<(), String> {
     let encoded = content.encode().map_err(|e| e.to_string())?;
     let stream = Stream::new(
         dictionary! {
@@ -266,8 +583,6 @@ fn stamp_page(
         super::zlib(&encoded),
     );
     let stream_id = doc.add_object(Object::Stream(stream));
-
-    // /Contents 追加：引用 → 数组[原…, 新]；原数组 → 追加
     let page = doc
         .get_object_mut(page_id)
         .map_err(|e| e.to_string())?
@@ -283,6 +598,33 @@ fn stamp_page(
     Ok(())
 }
 
+fn page_size(doc: &lopdf::Document, page_id: ObjectId) -> (f32, f32) {
+    const DEFAULT: f32 = 612.0;
+    const DEFAULT_H: f32 = 792.0;
+    let Ok(Object::Dictionary(d)) = doc.get_object(page_id) else {
+        return (DEFAULT, DEFAULT_H);
+    };
+    let Some(Object::Array(items)) = d.get(b"MediaBox").ok() else {
+        return (DEFAULT, DEFAULT_H);
+    };
+    let nums: Vec<f32> = items
+        .iter()
+        .filter_map(|o| match o {
+            Object::Integer(i) => Some(*i as f32),
+            Object::Real(r) => Some(*r),
+            _ => None,
+        })
+        .collect();
+    if nums.len() == 4 {
+        (
+            (nums[2] - nums[0]).abs().max(1.0),
+            (nums[3] - nums[1]).abs().max(1.0),
+        )
+    } else {
+        (DEFAULT, DEFAULT_H)
+    }
+}
+
 fn set_xobject_and_gs(res: &mut Dictionary, img_id: ObjectId, ext_gstate: Dictionary) {
     let mut xobjs = match res.get(b"XObject") {
         Ok(Object::Dictionary(d)) => d.clone(),
@@ -296,4 +638,57 @@ fn set_xobject_and_gs(res: &mut Dictionary, img_id: ObjectId, ext_gstate: Dictio
     };
     gs.set("WmGs", Object::Dictionary(ext_gstate));
     res.set("ExtGState", Object::Dictionary(gs));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn render_text_placeholders() {
+        let out = render_text(
+            "[原文件夹名]-[原文件名]-[页码]-[页面标签]-[日期时间]",
+            "底稿A",
+            "审计",
+            "第2页",
+            "2",
+            "2026/10/22",
+        );
+        assert_eq!(out, "审计-底稿A-第2页-2-2026/10/22");
+    }
+
+    #[test]
+    fn page_num_formats() {
+        assert_eq!(WmNumFmt::Plain.render(3, 9), "3");
+        assert_eq!(WmNumFmt::Dash.render(3, 9), "-3-");
+        assert_eq!(WmNumFmt::Cn.render(3, 9), "第3页");
+        assert_eq!(WmNumFmt::Frac.render(3, 9), "3/9");
+        assert_eq!(WmNumFmt::CnFrac.render(3, 9), "第3页/共9页");
+    }
+
+    #[test]
+    fn range_hits() {
+        assert!(WmRange::All.hits(1) && WmRange::All.hits(2));
+        assert!(WmRange::Odd.hits(1) && !WmRange::Odd.hits(2));
+        assert!(WmRange::Even.hits(2) && !WmRange::Even.hits(3));
+    }
+
+    #[test]
+    fn parse_codes() {
+        assert_eq!(WmPos::parse("right-top"), Some(WmPos::RightTop));
+        assert_eq!(WmPos::parse("diag-reverse"), Some(WmPos::DiagReverse));
+        assert_eq!(WmPos::parse("nope"), None);
+        assert_eq!(WmRange::parse("even"), Some(WmRange::Even));
+        assert_eq!(WmNumFmt::parse("cnfrac"), Some(WmNumFmt::CnFrac));
+        assert_eq!(WmDtFmt::parse("dash"), Some(WmDtFmt::Dash));
+        assert_eq!(parse_color("red"), [201, 56, 64]);
+        assert_eq!(parse_color("black"), [0, 0, 0]);
+    }
+
+    #[test]
+    fn dt_formats() {
+        assert_eq!(WmDtFmt::Cn.render(2026, 10, 22), "2026年10月22日");
+        assert_eq!(WmDtFmt::Slash.render(2026, 10, 22), "2026/10/22");
+        assert_eq!(WmDtFmt::Dash.render(2026, 10, 22), "2026-10-22");
+    }
 }

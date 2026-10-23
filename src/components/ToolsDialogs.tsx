@@ -5,7 +5,7 @@
 import { useMemo, useRef, useState } from "react";
 import { t, useT } from "../lib/i18n";
 import type { FileEntry } from "../lib/ipc";
-import { Button, DialogBody, DialogFooter, InputGroup } from "@blueprintjs/core";
+import { Button, DialogBody, DialogFooter, InputGroup, Slider } from "@blueprintjs/core";
 import { ArrowRight, GripVertical } from "lucide-react";
 
 import { FOLDER_BATCH_CAP, planFolders } from "../lib/folderBatch";
@@ -403,6 +403,218 @@ export function PdfMergeDialog({
             blankFirst,
             name,
             paths: byFolder ? entries.map((e) => e.path) : items,
+          })
+        }
+        onCancel={() => onDone(null)}
+      />
+    </>
+  );
+}
+
+/** 位置九宫格（3×3） */
+const WM_POS_CELLS: { value: string; tip: string }[] = [
+  { value: "left-top", tip: "左上" },
+  { value: "mid-top", tip: "中上" },
+  { value: "right-top", tip: "右上" },
+  { value: "left-mid", tip: "左中" },
+  { value: "center", tip: "正中" },
+  { value: "right-mid", tip: "右中" },
+  { value: "left-bottom", tip: "左下" },
+  { value: "mid-bottom", tip: "中下" },
+  { value: "right-bottom", tip: "右下" },
+];
+
+function PosGrid({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="np-wm-grid">
+      {WM_POS_CELLS.map((c) => (
+        <button
+          key={c.value}
+          className={"np-wm-cell" + (value === c.value ? " on" : "")}
+          title={c.tip}
+          onClick={() => onChange(c.value)}
+        >
+          {value === c.value ? "●" : ""}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export interface PdfWatermarkSettings {
+  text: string;
+  fontName: string;
+  fontSize: number;
+  fontColor: string;
+  position: string;
+  transparency: number;
+  margin: number;
+  pageRange: string;
+  pageNumberFormat: string;
+  datetimeFormat: string;
+}
+
+/** PDF 加水印参数对话框（2026-10-22 参数化）：文字占位符 / 字体 / 字号 /
+ *  8 色 / 九宫格+对角线位置 / 透明度 / 边距 / 页范围 / 页码与日期格式 */
+export function PdfWatermarkDialog({
+  onDone,
+}: {
+  entries?: FileEntry[];
+  onDone(v: PdfWatermarkSettings | null): void;
+}) {
+  const t2 = useT();
+  const [text, setText] = useState("");
+  const [fontName, setFontName] = useState("heiti");
+  const [fontSize, setFontSize] = useState(14);
+  const [fontColor, setFontColor] = useState("black");
+  const [position, setPosition] = useState("right-top");
+  const [transparency, setTransparency] = useState(9);
+  const [margin, setMargin] = useState(20);
+  const [pageRange, setPageRange] = useState("all");
+  const [pageNumberFormat, setPageNumberFormat] = useState("cn");
+  const [datetimeFormat, setDatetimeFormat] = useState("cn");
+  const valid = text.trim().length > 0;
+  return (
+    <>
+      <DialogBody>
+        <div className="np-bren-form">
+          <FormRow k={t2("水印文字")}>
+            <InputGroup
+              size="small"
+              value={text}
+              spellCheck={false}
+              placeholder={t2("支持占位符，见下方说明")}
+              onChange={(e) => setText(e.target.value)}
+            />
+          </FormRow>
+          <FormRow k={t2("字体")}>
+            <Seg<"kaiti" | "heiti" | "fangsong" | "dengxian">
+              value={fontName as "heiti"}
+              onChange={setFontName}
+              options={[
+                { value: "kaiti", label: t2("楷体") },
+                { value: "heiti", label: t2("黑体") },
+                { value: "fangsong", label: t2("仿宋") },
+                { value: "dengxian", label: t2("等线") },
+              ]}
+            />
+          </FormRow>
+          <FormRow k={t2("字号（5–99）")}>
+            <InputGroup
+              size="small"
+              value={String(fontSize)}
+              spellCheck={false}
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
+                if (!Number.isNaN(n)) setFontSize(Math.min(99, Math.max(5, n)));
+              }}
+            />
+          </FormRow>
+          <FormRow k={t2("颜色")}>
+            <Seg
+              value={fontColor}
+              onChange={setFontColor}
+              options={[
+                { value: "black", label: t2("黑") },
+                { value: "gray", label: t2("灰") },
+                { value: "red", label: t2("红") },
+                { value: "white", label: t2("白") },
+                { value: "green", label: t2("绿") },
+                { value: "yellow", label: t2("黄") },
+                { value: "blue", label: t2("蓝") },
+                { value: "purple", label: t2("紫") },
+              ]}
+            />
+          </FormRow>
+          <FormRow k={t2("位置")}>
+            <PosGrid value={position} onChange={setPosition} />
+          </FormRow>
+          <FormRow k={t2("对角线")}>
+            <Seg<"diag-main" | "diag-reverse">
+              value={position === "diag-main" || position === "diag-reverse" ? position : "diag-main"}
+              onChange={(v) => setPosition(v)}
+              options={[
+                { value: "diag-main", label: t2("正对角线") },
+                { value: "diag-reverse", label: t2("反对角线") },
+              ]}
+            />
+          </FormRow>
+          <FormRow k={t2("透明度（0–10）")}>
+            <Slider
+              min={0}
+              max={10}
+              stepSize={1}
+              labelValues={[0, 5, 10]}
+              value={transparency}
+              onChange={(v) => setTransparency(Array.isArray(v) ? v[0] : v)}
+            />
+          </FormRow>
+          <FormRow k={t2("边距（像素）")}>
+            <InputGroup
+              size="small"
+              value={String(margin)}
+              spellCheck={false}
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
+                if (!Number.isNaN(n)) setMargin(Math.max(0, n));
+              }}
+            />
+          </FormRow>
+          <FormRow k={t2("页面范围")}>
+            <Seg<"all" | "odd" | "even">
+              value={pageRange as "all"}
+              onChange={setPageRange}
+              options={[
+                { value: "all", label: t2("全部页面") },
+                { value: "odd", label: t2("奇数页") },
+                { value: "even", label: t2("偶数页") },
+              ]}
+            />
+          </FormRow>
+          <FormRow k={t2("页码格式")}>
+            <Seg
+              value={pageNumberFormat}
+              onChange={setPageNumberFormat}
+              options={[
+                { value: "plain", label: "1" },
+                { value: "dash", label: "-1-" },
+                { value: "cn", label: t2("第1页") },
+                { value: "frac", label: "1/6" },
+                { value: "cnfrac", label: t2("第1页/共N页") },
+              ]}
+            />
+          </FormRow>
+          <FormRow k={t2("日期格式")}>
+            <Seg
+              value={datetimeFormat}
+              onChange={setDatetimeFormat}
+              options={[
+                { value: "cn", label: t2("yyyy年MM月dd日") },
+                { value: "slash", label: "yyyy/MM/dd" },
+                { value: "dash", label: "yyyy-MM-dd" },
+              ]}
+            />
+          </FormRow>
+        </div>
+        <div className="np-dialog-muted">
+          {t2("文字支持占位符：[原文件名] [原文件夹名] [页码] [页面标签] [日期时间]（页码按上方格式渲染，页面标签暂以页码代替）。输出旁写 <名称>_水印.pdf，不覆盖原文件。")}
+        </div>
+      </DialogBody>
+      <Footer
+        okText={t2("加水印")}
+        disabled={!valid}
+        onOk={() =>
+          onDone({
+            text: text.trim(),
+            fontName,
+            fontSize,
+            fontColor,
+            position,
+            transparency,
+            margin,
+            pageRange,
+            pageNumberFormat,
+            datetimeFormat,
           })
         }
         onCancel={() => onDone(null)}

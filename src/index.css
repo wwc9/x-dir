@@ -4441,3 +4441,28 @@ mark.np-gsearch-mark {
   color: var(--np-muted);
   font-family: Consolas, 'Cascadia Mono', monospace;
 }
+
+/* PDF 加水印位置九宫格（2026-10-22）：3×3 选点 + 选中 accent 实底 */
+.np-wm-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 26px);
+  grid-auto-rows: 22px;
+  gap: 2px;
+}
+.np-wm-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--np-radius);
+  background: var(--np-surface-2);
+  color: var(--np-accent-fg);
+  font-size: 9px;
+  cursor: pointer;
+}
+.np-wm-cell:hover {
+  background: var(--np-hover);
+}
+.np-wm-cell.on {
+  background: var(--np-accent);
+}

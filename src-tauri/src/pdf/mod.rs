@@ -16,9 +16,6 @@ use lopdf::{Document, Object, ObjectId, Stream, dictionary};
 use crate::fs::path::to_extended;
 use crate::jobs::{EmitterState, FailItem, JobProgress, is_cancelled};
 
-/// 水印不透明度（文字本色深灰，常量在 stamp.rs）
-const STAMP_ALPHA: f32 = 0.16;
-
 fn zlib(data: &[u8]) -> Vec<u8> {
     let mut enc = ZlibEncoder::new(Vec::new(), Compression::default());
     let _ = enc.write_all(data);
@@ -543,30 +540,24 @@ pub(crate) fn run_split(
 /// 水印：每份输出旁写 "<stem>_水印.pdf"（不覆盖原文件）
 pub(crate) fn run_watermark(
     paths: &[String],
-    text: &str,
+    opts: &stamp::WatermarkOpts,
     cancel: &AtomicBool,
     prog: &mut JobProgress,
     em: &mut EmitterState,
     failed: &mut Vec<FailItem>,
 ) {
     prog.total_files = paths.len() as u64;
-    let Some(font) = stamp::load_cjk_font() else {
-        failed.push(FailItem {
-            path: "-".to_string(),
-            message: "未找到可用的系统字体（msyh/simhei/simsun/arial）".into(),
-        });
-        return;
-    };
-    let bitmap = stamp::rasterize_text(&font, text, 64.0);
     for p in paths {
         if is_cancelled(cancel) {
             return;
         }
         prog.current_path = p.clone();
         let out = format!("{}\\{}_水印.pdf", parent_dir(p), stem_of(p));
+        let file_stem = stem_of(p);
+        let folder = parent_dir(p);
         let result = (|| -> Result<(), String> {
             let mut doc = Document::load(to_extended(p)).map_err(|e| e.to_string())?;
-            stamp::stamp_document(&mut doc, &bitmap)?;
+            stamp::stamp_document_ex(&mut doc, opts, &file_stem, &folder)?;
             doc.save(to_extended(&out))
                 .map(|_| ())
                 .map_err(|e| e.to_string())
@@ -1272,9 +1263,19 @@ mod tests {
         let path = tmp.join("w.pdf");
         write_doc(&mut make_doc(2), path.to_str().unwrap());
         let mut doc = Document::load(&path).unwrap();
-        let font = stamp::load_cjk_font().expect("Windows 测试机应有系统中文字体");
-        let bitmap = stamp::rasterize_text(&font, "绝密", 48.0);
-        stamp::stamp_document(&mut doc, &bitmap).unwrap();
+        let opts = stamp::WatermarkOpts {
+            text: "绝密".into(),
+            font_name: "heiti".into(),
+            font_size: 48,
+            rgb: [64, 64, 64],
+            pos: stamp::WmPos::DiagMain,
+            transparency: 9,
+            margin: 20,
+            range: stamp::WmRange::All,
+            num_fmt: stamp::WmNumFmt::Cn,
+            dt_fmt: stamp::WmDtFmt::Cn,
+        };
+        stamp::stamp_document_ex(&mut doc, &opts, "w", "tmp").unwrap();
         assert_eq!(doc.get_pages().len(), 2);
         let out = tmp.join("w_out.pdf");
         doc.save(&out).unwrap();

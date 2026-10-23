@@ -476,7 +476,7 @@ pub(crate) fn run_watermark(
     prog.total_files = paths.len() as u64;
     // 文字水印：字体与位图一次光栅化，全批共用（同 PDF 水印）
     let text_tile: Option<RgbaImage> = if opts.image_path.is_none() {
-        let Some(font) = crate::pdf::stamp::load_cjk_font() else {
+        let Some(font) = crate::pdf::stamp::load_font(&[]) else {
             failed.push(FailItem {
                 path: "-".into(),
                 message: "未找到可用的系统字体（msyh/simhei/simsun/arial）".into(),
@@ -484,7 +484,7 @@ pub(crate) fn run_watermark(
             return;
         };
         // 字号基准 96px 光栅化，贴图时按短边比例缩放
-        let bmp = crate::pdf::stamp::rasterize_text(&font, &opts.text, 96.0);
+        let bmp = crate::pdf::stamp::rasterize_text(&font, &opts.text, 96.0, [64, 64, 64]);
         Some(rgba_from_stamp(&bmp, [64, 64, 64], opts.opacity))
     } else {
         None
