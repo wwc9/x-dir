@@ -142,7 +142,13 @@ export async function createEntry(
 /** 按选中序合并为一个 PDF，输出到当前目录（同名覆盖） */
 export async function mergePdfs(entries: FileEntry[], dir: string): Promise<void> {
   // 文件夹混选：文件夹递归收集 pdf/图片；纯文件列表按顺序合并
-  const hasDir = entries.some((e) => e.isDir);
+  const dirs = new Set(
+    entries.map((e) => {
+      const i = e.path.lastIndexOf("\\");
+      return i > 0 ? e.path.slice(0, i) : e.path;
+    }),
+  );
+  const hasDir = entries.some((e) => e.isDir) || dirs.size >= 2;
   const res = await useUi.getState().openDialog<{
     mode: "single" | "byFolder";
     autoBlank: boolean;

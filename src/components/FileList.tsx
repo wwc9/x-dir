@@ -963,8 +963,37 @@ export function FileList({
               .catch((err) => useUi.getState().toast(String(err), "error")),
         };
       }
-      case "pdfMerge":
-        return { label: t("PDF 合并…"), action: () => void mergePdfs(sel, path) };
+      case "pdfMerge": {
+        // 记忆选集合并（2026-10-22）：当前选中 ∪ 本标签各目录记忆选中（去重保序，
+        // 目录序 = 记忆写入序）——跨目录选完文件后，空白处右键也能对记住的路径合并
+        const mem = ui?.selMemory ?? {};
+        const seen = new Set(sel.map((e) => e.path));
+        const mergeList: FileEntry[] = [...sel];
+        for (const m of Object.values(mem)) {
+          for (const p of m.paths) {
+            if (seen.has(p)) continue;
+            seen.add(p);
+            // 记忆里只有路径：mergePdfs 仅消费 path/isDir，其余字段置零值
+            mergeList.push({
+              path: p,
+              name: parentPath(p) ? p.slice((parentPath(p) as string).length + 1) : p,
+              isDir: false,
+              size: 0,
+              mtimeMs: 0,
+              ctimeMs: 0,
+              attrs: { hidden: false, system: false, readonly: false },
+              py: null,
+            });
+          }
+        }
+        if (!mergeList.length) {
+          useUi
+            .getState()
+            .toast(t("没有可合并的文件（先选中文件，或开启记忆目录选中集）"), "error");
+          return { label: t("PDF 合并…"), action: () => undefined };
+        }
+        return { label: t("PDF 合并…"), action: () => void mergePdfs(mergeList, path) };
+      }
       case "pdfSplit":
         return { label: t("PDF 拆分为单页…"), action: () => void splitPdf(entry0, path) };
       case "pdfWatermark":
