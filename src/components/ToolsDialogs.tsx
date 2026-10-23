@@ -511,7 +511,7 @@ export function PdfWatermarkDialog({
   return (
     <>
       <DialogBody>
-        <div className="np-pdfmform np-two-col">
+        <div className="np-pdfmform">
           <FormRow k={t2("水印文字")} wide>
             <InputGroup
               size="small"
