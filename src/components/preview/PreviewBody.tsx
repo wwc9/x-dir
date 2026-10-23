@@ -324,7 +324,9 @@ export function PreviewBody({
             }
           >
             <PdfPreview
-              url={convertFileSrc(entry.path)}
+              // mtime 作查询参数缓存击穿：水印/压缩等旁写覆盖同名文件后，
+              // 路径不变若 URL 也不变，pdf.js 会拿旧字节（改色不生效的假象）
+              url={`${convertFileSrc(entry.path)}?v=${entry.mtimeMs}`}
               onDocInfo={setPdfPages}
               onError={(m) => setMediaError(m || "PDF 加载失败（加密或损坏的文件不支持预览）")}
               search={search}
