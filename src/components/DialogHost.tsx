@@ -116,6 +116,7 @@ export function DialogHost() {
           dialog?.type === "duplicates" ||
           dialog?.type === "dirsizes" ||
           dialog?.type === "compare" ||
+          dialog?.type === "pdfMerge" ||
           dialog?.type === "emptyScan"
             ? "min(680px, 92vw)"
             : dialog?.type.startsWith("img")
@@ -207,11 +208,7 @@ export function DialogHost() {
       )}
 
       {dialog?.type === "pdfMerge" && (
-        <PdfMergeDialog
-          count={dialog.count}
-          hasDir={dialog.hasDir}
-          onDone={(v) => resolve(v)}
-        />
+        <PdfMergeDialog entries={dialog.entries} onDone={(v) => resolve(v)} />
       )}
 
       {dialog?.type === "imgCompress" && (

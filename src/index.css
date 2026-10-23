@@ -4309,3 +4309,35 @@ mark.np-gsearch-mark {
   border-radius: 2px;
   padding: 0 1px;
 }
+
+/* PDF 合并对话框（2026-10-22）：待处理清单 = surface-2 凹陷列表（§4.7
+   内嵌列表层级），路径单行省略、悬停 title 全文 */
+.np-pdfmlist {
+  display: block;
+  max-height: 132px;
+  overflow-y: auto;
+  margin-top: 4px;
+  padding: 4px;
+  border-radius: var(--np-radius);
+  background: var(--np-surface-2);
+}
+.np-pdfmlist-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 1px 4px;
+  font-size: var(--np-font-sm);
+  color: var(--np-fg);
+  min-width: 0;
+}
+.np-pdfmlist-item > span:last-child {
+  min-width: 0;
+  flex: 1;
+}
+.np-pdfmlist-kind {
+  flex: none;
+  padding: 0 4px;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-surface);
+  color: var(--np-muted);
+}

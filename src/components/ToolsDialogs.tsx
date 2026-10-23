@@ -4,6 +4,7 @@
 // 编排（api + 任务登记）在 lib/operations.ts，名单预演纯函数在 lib/folderBatch。
 import { useMemo, useState } from "react";
 import { t, useT } from "../lib/i18n";
+import type { FileEntry } from "../lib/ipc";
 import { Button, DialogBody, DialogFooter, InputGroup } from "@blueprintjs/core";
 import { ArrowRight } from "lucide-react";
 
@@ -224,14 +225,14 @@ export function XlsxMergeDialog({
   );
 }
 
-/** PDF 合并扩展对话框（2026-10-22）：混列 PDF/图片 + 按文件夹分组 + 空白页凑偶数 */
+/** PDF 合并扩展对话框（2026-10-22）：待处理清单 + 模式/空白页/位置按 §4.7。
+ *  清单 = 待合并的文件/文件夹路径（surface-2 凹陷列表，路径省略号悬停可见）；
+ *  分组模式的每组输出 = 合并结果-<文件夹名>-<时间戳>.pdf（时间戳 Rust 侧生成） */
 export function PdfMergeDialog({
-  count,
-  hasDir,
+  entries,
   onDone,
 }: {
-  count: number;
-  hasDir: boolean;
+  entries: FileEntry[];
   onDone(v: {
     mode: "single" | "byFolder";
     autoBlank: boolean;
@@ -240,15 +241,33 @@ export function PdfMergeDialog({
   } | null): void;
 }) {
   const t2 = useT();
-  const [mode, setMode] = useState<"single" | "byFolder">(hasDir ? "byFolder" : "single");
+  const hasDir = entries.some((e) => e.isDir);
+  const parentOf = (p: string) => {
+    const i = p.lastIndexOf("\\");
+    return i > 0 ? p.slice(0, i) : "";
+  };
+  const dirs = new Set(entries.map((e) => parentOf(e.path)));
+  const [mode, setMode] = useState<"single" | "byFolder">(
+    hasDir || dirs.size >= 2 ? "byFolder" : "single",
+  );
   const [autoBlank, setAutoBlank] = useState(false);
   const [blankFirst, setBlankFirst] = useState(false);
   const [name, setName] = useState("合并文档.pdf");
   const valid = mode === "byFolder" || name.trim().length > 0;
+  const output = `${parentOf(entries[0]?.path ?? "") ?? ""}\\${name.trim() || "合并文档.pdf"}`;
   return (
     <>
       <DialogBody>
-        <div className="np-bren-form">
+        <span className="np-bren-k">{t2("待处理清单")}</span>
+        <div className="np-pdfmlist">
+          {entries.map((e) => (
+            <div key={e.path} className="np-pdfmlist-item" title={e.path}>
+              <span className="np-pdfmlist-kind">{e.isDir ? t2("文件夹") : t2("文件")}</span>
+              <span className="np-ellipsis">{e.path}</span>
+            </div>
+          ))}
+        </div>
+        <div className="np-bren-form" style={{ marginTop: 8 }}>
           <FormRow k={t2("方式")}>
             <Seg<"single" | "byFolder">
               value={mode}
@@ -297,11 +316,16 @@ export function PdfMergeDialog({
           )}
         </div>
         <div className="np-dialog-muted">
-          {t("按当前顺序合并 {n} 个文件（PDF 与 jpg/png 图片混列均可），缺失或不可读的文件自动跳过，生成新文件不覆盖原文件。", { n: count })}
+          {mode === "single"
+            ? t2("统一合并输出：{out}", { out: output })
+            : t2("按文件夹分别合并：{n} 个范围，各组输出 合并结果-<文件夹名>-<时间戳>.pdf", {
+                n: dirs.size,
+              })}
+          {t2("；缺失或不可读的文件自动跳过，不覆盖原文件。")}
         </div>
       </DialogBody>
       <Footer
-        okText={t("合并")}
+        okText={t2("合并")}
         disabled={!valid}
         onOk={() => onDone({ mode, autoBlank, blankFirst, name })}
         onCancel={() => onDone(null)}
