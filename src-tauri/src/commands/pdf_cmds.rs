@@ -142,24 +142,6 @@ pub fn pdf_watermark(
                 v.to_string()
             }
         },
-        out_name: {
-            let v = out_name.unwrap_or_default();
-            let v = v.trim();
-            if v.is_empty() {
-                "[原文件名]-水印".to_string()
-            } else {
-                v.to_string()
-            }
-        },
-        out_name: {
-            let v = out_name.unwrap_or_default();
-            let v = v.trim();
-            if v.is_empty() {
-                "[原文件名]-水印".to_string()
-            } else {
-                v.to_string()
-            }
-        },
         font_name: font_name.unwrap_or_else(|| "heiti".into()),
         font_size: font_size.unwrap_or(14).clamp(5, 99),
         rgb: crate::pdf::stamp::parse_color(&font_color.unwrap_or_else(|| "black".into())),
