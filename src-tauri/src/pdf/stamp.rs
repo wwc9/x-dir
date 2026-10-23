@@ -1,7 +1,9 @@
 //! 水印文字引擎（2026-10-22 参数化改造）：
 //! 1. 运行时读系统字体（楷体 simkai / 黑体 simhei / 仿宋 simfang / 等线 Deng，
 //!    缺失回退 msyh → simhei → simsun → arial；不打包字体避免再分发问题）
-//! 2. ab_glyph 排版 + 自带光栅化（逐像素覆盖率），RGB 恒色平面颜色可选（8 色）
+//! 2. ab_glyph 排版 + 自带光栅化（逐像素覆盖率），RGB 恒色平面颜色可选（8 色）；
+//!    PDF 路径按位图量自适应 2–4× 超采样（小字 4× ≈ 288 DPI），避免
+//!    1px ≈ 1pt 位图图层在放大/打印时发糊，cm 绘制时除回物理尺寸
 //! 3. lopdf 写入 DeviceRGB + DeviceGray SMask 的 Image XObject，逐页追加内容流：
 //!    九宫格位置（边距偏移）或对角线（±45° 居中，缩放对角 0.8）；
 //!    透明度经 ExtGState ca（0–10 → 0–1.0）
@@ -13,6 +15,11 @@ use ab_glyph::{Font, FontVec, ScaleFont};
 use lopdf::{Dictionary, Object, ObjectId, Stream, content::Content, dictionary};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
+
+/// 位图缓存上限（条）。带占位符的水印逐页产生不同文字，放任累积会
+/// 随文档页数无限增长；满员即清空，命中主要收益在"同一文字批量多文件"
+/// 与"无占位符整档一次"两个场景
+const BITMAP_CACHE_CAP: usize = 4;
 
 /// 单目录收集/页面遍历的通用护栏在调用方；本模块按文字缓存位图
 static BITMAP_CACHE: OnceLock<Mutex<HashMap<String, StampBitmap>>> = OnceLock::new();
@@ -210,6 +217,9 @@ pub fn parse_color(code: &str) -> [u8; 3] {
 pub struct StampBitmap {
     pub width: u32,
     pub height: u32,
+    /// 像素密度（位图像素 / 物理磅）：超采样倍率。绘制物理宽(pt) = width / scale；
+    /// 图片水印 1:1 贴图恒为 1
+    pub scale: f32,
     /// DeviceRGB 三通道恒色（width*height*3）
     pub rgb: Vec<u8>,
     /// DeviceGray 覆盖率（width*height）
@@ -248,8 +258,19 @@ pub fn load_font(prefer: &[&str]) -> Option<Arc<FontVec>> {
     None
 }
 
-/// 单行文字光栅化：RGB 恒色平面（颜色可选）+ 抗锯齿覆盖率平面
+/// 单行文字光栅化（1 像素 = 1 单位；图片水印 1:1 贴图用）
 pub fn rasterize_text(font: &FontVec, text: &str, px: f32, rgb: [u8; 3]) -> StampBitmap {
+    rasterize_at(font, text, px, rgb, 1.0)
+}
+
+/// 按 ss 倍超采样光栅化：位图像素 = 物理尺寸(pt) × ss。PDF 水印用——
+/// 位图图层若按 1px ≈ 1pt（约 72 DPI）绘制，放大/打印即发糊；
+/// 高密度光栅化后 cm 除回物理尺寸，视觉锐度随 ss 提升
+fn rasterize_ss(font: &FontVec, text: &str, pt: f32, rgb: [u8; 3], ss: f32) -> StampBitmap {
+    rasterize_at(font, text, pt * ss, rgb, ss)
+}
+
+fn rasterize_at(font: &FontVec, text: &str, px: f32, rgb: [u8; 3], scale: f32) -> StampBitmap {
     let scaled = font.as_scaled(px);
     let mut pen = 0f32;
     let mut min_x = f32::MAX;
@@ -274,6 +295,7 @@ pub fn rasterize_text(font: &FontVec, text: &str, px: f32, rgb: [u8; 3]) -> Stam
         return StampBitmap {
             width: 1,
             height: 1,
+            scale,
             rgb: vec![rgb[0], rgb[1], rgb[2]],
             alpha: vec![0],
         };
@@ -308,6 +330,7 @@ pub fn rasterize_text(font: &FontVec, text: &str, px: f32, rgb: [u8; 3]) -> Stam
     StampBitmap {
         width: width as u32,
         height: height as u32,
+        scale,
         rgb: vec![rgb[0], rgb[1], rgb[2]]
             .into_iter()
             .flat_map(|c| std::iter::repeat_n(c, width * height))
@@ -367,11 +390,32 @@ pub fn stamp_document_ex(
         let text = render_text(&opts.text, &stem, &folder, &page_text, &label, &datetime);
         let bitmap = {
             let mut cache = bitmap_cache().lock().unwrap();
-            match cache.get(&text) {
+            // 键含样式参数：同文字不同字体/字号/颜色的两次任务不得串用位图
+            let key = format!(
+                "{}|{}|{:?}|{}",
+                opts.font_name, opts.font_size, opts.rgb, text
+            );
+            match cache.get(&key) {
                 Some(bm) => bm.clone(),
                 None => {
-                    let bm = rasterize_text(&font, &text, opts.font_size as f32, opts.rgb);
-                    cache.insert(text, bm.clone());
+                    // 超采样档位按基准像素量自适应（小字 4× ≈ 288 DPI 打印级，
+                    // 大字长字降档防内存膨胀），满员清空防跨任务无限累积
+                    let base_px =
+                        text.chars().count() as f32 * opts.font_size as f32 * opts.font_size as f32;
+                    let ss = if base_px <= 100_000.0 {
+                        4.0
+                    } else if base_px <= 500_000.0 {
+                        3.0
+                    } else if base_px <= 2_000_000.0 {
+                        2.0
+                    } else {
+                        1.0
+                    };
+                    let bm = rasterize_ss(&font, &text, opts.font_size as f32, opts.rgb, ss);
+                    if cache.len() >= BITMAP_CACHE_CAP {
+                        cache.clear();
+                    }
+                    cache.insert(key, bm.clone());
                     bm
                 }
             }
@@ -383,8 +427,9 @@ pub fn stamp_document_ex(
             grid => {
                 let (w, h) = page_size(doc, page_id);
                 let margin = style.margin as f32;
-                let bw = bitmap.width as f32;
-                let bh = bitmap.height as f32;
+                // 绘制物理尺寸 = 位图尺寸 / 超采样倍率
+                let bw = bitmap.width as f32 / bitmap.scale;
+                let bh = bitmap.height as f32 / bitmap.scale;
                 let x = match grid {
                     WmPos::LeftTop | WmPos::LeftMid | WmPos::LeftBottom => margin,
                     WmPos::MidTop | WmPos::Center | WmPos::MidBottom => ((w - bw) / 2.0).max(0.0),
@@ -402,7 +447,8 @@ pub fn stamp_document_ex(
     Ok(())
 }
 
-/// 九宫格位置：内容流 q gs cm(1,0,0,1,x,y) Do Q（位图像素 ≈ 磅 1:1）
+/// 九宫格位置：内容流 q gs cm(缩放到位图物理尺寸,平移) Do Q（cm 缩放 =
+/// 位图 w×h 除以超采样倍率；Image Do 画在 1×1 单位正方形，必须显式缩放）
 fn stamp_page_at(
     doc: &mut lopdf::Document,
     page_id: ObjectId,
@@ -411,8 +457,9 @@ fn stamp_page_at(
     x: f32,
     y: f32,
 ) -> Result<(), String> {
-    let bw = bm.width as f32;
-    let bh = bm.height as f32;
+    // 绘制物理尺寸 = 位图尺寸 / 超采样倍率
+    let bw = bm.width as f32 / bm.scale;
+    let bh = bm.height as f32 / bm.scale;
     let img_id = add_image_xobject(doc, bm)?;
     let alpha = opts.transparency as f32 / 10.0;
     let ext_gstate = dictionary! {
