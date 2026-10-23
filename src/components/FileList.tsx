@@ -1477,6 +1477,8 @@ export function FileList({
         onContextMenu={(e) => {
           if ((e.target as HTMLElement).closest(".np-row")) return;
           e.preventDefault();
+          // Explorer 惯例：右键空白处清空选择（空白菜单针对目录本身）
+          usePanes.getState().setSelected(tabId, [], null);
           if (isThisPc) {
             useUi
               .getState()
@@ -1590,6 +1592,16 @@ export function FileList({
                           if (e.button === 1) {
                             e.preventDefault();
                             if (entry.isDir) useLayout.getState().newTab(paneId, entry.path);
+                            return;
+                          }
+                          if (e.button === 2) {
+                            // 右键（2026-10-22 修复）：已选中项保持多选不动
+                            //（此前详情视图右键也走 clickSelect，多选被替换成
+                            // 单项——列表视图同款修复见列表行分支）
+                            const uiNow = usePanes.getState().tabs[tabId];
+                            if (uiNow && !uiNow.selected.includes(entry.path)) {
+                              clickSelect(e, entry);
+                            }
                             return;
                           }
                           clickSelect(e, entry);
