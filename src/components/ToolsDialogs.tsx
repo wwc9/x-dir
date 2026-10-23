@@ -473,7 +473,7 @@ export function PdfWatermarkDialog({
   onDone(v: PdfWatermarkSettings | null): void;
 }) {
   const t2 = useT();
-  const [text, setText] = useState("");
+  const [text, setText] = useState("[原文件名]-[页码]");
   const [fontName, setFontName] = useState("heiti");
   const [fontSize, setFontSize] = useState(14);
   const [fontColor, setFontColor] = useState("black");
