@@ -4314,21 +4314,29 @@ mark.np-gsearch-mark {
    内嵌列表层级），路径单行省略、悬停 title 全文 */
 .np-pdfmlist {
   display: block;
-  max-height: 132px;
+  max-height: 168px;
   overflow-y: auto;
   margin-top: 4px;
-  padding: 4px;
+  padding: 5px;
   border-radius: var(--np-radius);
   background: var(--np-surface-2);
 }
 .np-pdfmlist-item {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
-  padding: 1px 4px;
+  min-height: var(--np-row-h);
+  padding: 0 6px;
+  border-radius: var(--np-radius);
   font-size: var(--np-font-sm);
   color: var(--np-fg);
   min-width: 0;
+}
+.np-pdfmlist-item + .np-pdfmlist-item {
+  margin-top: 2px;
+}
+.np-pdfmlist-item:hover {
+  background: var(--np-surface);
 }
 .np-pdfmlist-item > span:last-child {
   min-width: 0;
