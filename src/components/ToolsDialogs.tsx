@@ -351,7 +351,7 @@ export function PdfMergeDialog({
                 </div>
               ))}
         </div>
-        <div className="np-pdfmform np-two-col">
+        <div className="np-pdfmform">
           {variant === "folders" && (
             <div className="np-dialog-muted" style={{ margin: 0 }}>
               {t2("每个选中的文件夹递归收集 PDF 与图片，各自输出 合并结果-<文件夹名>-<时间戳>.pdf")}
@@ -486,7 +486,7 @@ export function PdfWatermarkDialog({
   return (
     <>
       <DialogBody>
-        <div className="np-bren-form">
+        <div className="np-pdfmform np-two-col">
           <FormRow k={t2("水印文字")} wide>
             <InputGroup
               size="small"
