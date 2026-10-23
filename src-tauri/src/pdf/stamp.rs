@@ -165,10 +165,18 @@ pub fn today() -> (i64, u32, u32) {
     civil_from_days((secs / 86_400) as i64)
 }
 
+/// 当前日期按格式渲染
+pub fn today_formatted(fmt: WmDtFmt) -> String {
+    let (y, m, d) = today();
+    fmt.render(y, m, d)
+}
 // ── 选项（命令层解析字符串码后装配）──
 #[derive(Clone, Debug, PartialEq)]
 pub struct WatermarkOpts {
     pub text: String,
+    /// 输出文件名模板（不含扩展名）：支持 [原文件名] [原文件夹名] [日期时间]，
+    /// 默认 "[原文件名]-水印" → 底稿A-水印.pdf
+    pub out_name: String,
     /// kaiti | heiti | fangsong | dengxian
     pub font_name: String,
     /// 5–99（像素 ≈ 磅）

@@ -226,7 +226,7 @@ export function DialogHost() {
       )}
 
       {dialog?.type === "pdfWatermark" && (
-        <PdfWatermarkDialog onDone={(v) => resolve(v)} />
+        <PdfWatermarkDialog entries={dialog.entries} onDone={(v) => resolve(v)} />
       )}
 
       {dialog?.type === "imgCompress" && (

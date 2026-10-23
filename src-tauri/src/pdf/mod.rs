@@ -552,7 +552,25 @@ pub(crate) fn run_watermark(
             return;
         }
         prog.current_path = p.clone();
-        let out = format!("{}\\{}_水印.pdf", parent_dir(p), stem_of(p));
+        let dir = parent_dir(p);
+        let file_stem = stem_of(p);
+        let folder = parent_dir(p);
+        // 输出名模板（2026-10-22）：[原文件名]/[原文件夹名]/[日期时间] 可组合，
+        // 默认 "[原文件名]-水印"；无扩展名时补 .pdf
+        let name = stamp::render_text(
+            &opts.out_name,
+            &file_stem,
+            &folder,
+            "",
+            "",
+            &stamp::today_formatted(opts.dt_fmt),
+        );
+        let name = if name.to_ascii_lowercase().ends_with(".pdf") {
+            name
+        } else {
+            format!("{name}.pdf")
+        };
+        let out = format!("{dir}\\{name}");
         let file_stem = stem_of(p);
         let folder = parent_dir(p);
         let result = (|| -> Result<(), String> {
@@ -1265,6 +1283,10 @@ mod tests {
         let mut doc = Document::load(&path).unwrap();
         let opts = stamp::WatermarkOpts {
             text: "绝密".into(),
+            out_name: "[原文件名]-水印".into(),
+            out_name: "[原文件名]-水印".into(),
+            out_name: "[原文件名]-水印".into(),
+            out_name: "[原文件名]-水印".into(),
             font_name: "heiti".into(),
             font_size: 48,
             rgb: [64, 64, 64],

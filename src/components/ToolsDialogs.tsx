@@ -466,9 +466,10 @@ export interface PdfWatermarkSettings {
 /** PDF 加水印参数对话框（2026-10-22 参数化）：文字占位符 / 字体 / 字号 /
  *  8 色 / 九宫格+对角线位置 / 透明度 / 边距 / 页范围 / 页码与日期格式 */
 export function PdfWatermarkDialog({
+  entries,
   onDone,
 }: {
-  entries?: FileEntry[];
+  entries: FileEntry[];
   onDone(v: PdfWatermarkSettings | null): void;
 }) {
   const t2 = useT();
@@ -482,6 +483,30 @@ export function PdfWatermarkDialog({
   const [pageRange, setPageRange] = useState("all");
   const [pageNumberFormat, setPageNumberFormat] = useState("cn");
   const [datetimeFormat, setDatetimeFormat] = useState("cn");
+
+  const [outName, setOutName] = useState('[原文件名]-水印');
+  const firstPath = entries[0]?.path ?? '';
+  const stemOf = (p: string) => {
+    const i = p.lastIndexOf('\\');
+    const stem = i > 0 ? p.slice(i + 1) : p;
+    return stem.replace(/\.pdf$/i, '');
+  };
+  const dirOf = (p: string) => {
+    const i = p.lastIndexOf('\\');
+    return i > 0 ? p.slice(0, i) : p;
+  };
+  const nowDate = new Date();
+  const mm2 = String(nowDate.getMonth() + 1).padStart(2, '0');
+  const dd2 = String(nowDate.getDate()).padStart(2, '0');
+  const dtText = datetimeFormat === 'slash'
+    ? nowDate.getFullYear() + '/' + mm2 + '/' + dd2
+    : datetimeFormat === 'dash'
+      ? nowDate.getFullYear() + '-' + mm2 + '-' + dd2
+      : nowDate.getFullYear() + '年' + mm2 + '月' + dd2 + '日';
+  const renderedName =
+    outName.split('[原文件名]').join(stemOf(firstPath))
+      .split('[原文件夹名]').join(dirOf(dirOf(firstPath)))
+      .split('[日期时间]').join(dtText) || '水印.pdf';
   const valid = text.trim().length > 0;
   return (
     <>
@@ -604,10 +629,34 @@ export function PdfWatermarkDialog({
               ]}
             />
           </FormRow>
+          <FormRow k={t2("输出文件名")}>
+            <InputGroup
+              size="small"
+              value={outName}
+              spellCheck={false}
+              onChange={(e) => setOutName(e.target.value)}
+            />
+            <div className="np-wm-chips">
+              {["[原文件名]", "[原文件夹名]", "[日期时间]"].map((ph) => (
+                <button
+                  key={ph}
+                  className="np-wm-chip"
+                  title={t2("点击插入占位符")}
+                  onClick={() => setOutName((v) => v + ph)}
+                >
+                  {ph}
+                </button>
+              ))}
+            </div>
+          </FormRow>
         </div>
         <div className="np-dialog-muted">
           {t2("文字支持占位符：[原文件名] [原文件夹名] [页码] [页面标签] [日期时间]（页码按上方格式渲染，页面标签暂以页码代替）。输出旁写 <名称>_水印.pdf，不覆盖原文件。")}
         </div>
+          {t2("输出预览：{dir}\{name}.pdf", {
+            dir: dirOf(dirOf(firstPath)),
+            name: renderedName,
+          })}
       </DialogBody>
       <Footer
         okText={t2("加水印")}

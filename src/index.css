@@ -4491,3 +4491,22 @@ mark.np-gsearch-mark {
   box-shadow: var(--np-ring);
   outline: none;
 }
+
+/* PDF 加水印输出名占位符 chips（2026-10-22）：点击插入 [原文件名] 等占位符 */
+.np-wm-chips {
+  display: flex;
+  gap: 4px;
+}
+.np-wm-chip {
+  border: 0;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-surface-2);
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+  padding: 1px 6px;
+  cursor: pointer;
+}
+.np-wm-chip:hover {
+  background: var(--np-hover);
+  color: var(--np-fg);
+}

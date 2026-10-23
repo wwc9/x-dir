@@ -201,6 +201,7 @@ export async function watermarkPdfs(entries: FileEntry[], dir: string): Promise<
   const opts = await useUi.getState().openDialog<
     | {
         text: string;
+        outName: string;
         fontName: string;
         fontSize: number;
         fontColor: string;

@@ -526,6 +526,8 @@ export const api = {
   pdfWatermark: (o: {
     paths: string[];
     text: string;
+    /** 输出名模板：[原文件名]/[原文件夹名]/[日期时间] 可组合，默认 [原文件名]-水印 */
+    outName?: string;
     fontName?: string;
     fontSize?: number;
     fontColor?: string;
@@ -539,6 +541,7 @@ export const api = {
     cmd<{ jobId: number }>("pdf_watermark", {
       paths: o.paths,
       text: o.text,
+      outName: o.outName,
       fontName: o.fontName,
       fontSize: o.fontSize,
       fontColor: o.fontColor,
