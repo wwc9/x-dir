@@ -357,7 +357,6 @@ const EN: Record<string, string> = {
   "搜索文件内容（多词空格分隔，大小写不敏感）": "Search file contents (words separated by spaces, case-insensitive)",
   "未选中结果": "No result selected",
   "选择结果以预览": "Select a result to preview",
-  "没有可合并的文件（先选中文件，或开启记忆目录选中集）": "Nothing to merge — select files first, or enable “remember folder selections” in Settings",
   "搜索所有磁盘 · ext: size: dm: 过滤 · !排除 · \"短语\" · 拼音首字母": "Search all disks · ext: size: dm: filters · !exclude · \"phrases\" · pinyin initials",
   "全局": "Global",
   "列表选择": "List selection",
