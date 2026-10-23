@@ -315,7 +315,12 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
   },
 
   update(p) {
+    // 未完成 load 前仅内存生效、不写盘（2026-10-22 修复）：启动早期（会话恢复
+    // 等）的 update 会把未加载的默认态（menuEntries/toolbarEntries 为空数组）
+    // 写盘覆盖用户方案，下一次 load 固化——表现为重启后菜单/工具栏方案"丢失"。
+    // load() 自身走 set 直写不经此处；load 完成后（loaded=true）恢复落盘
     set(p);
+    if (!get().loaded) return;
     if (p.theme) applyTheme(p.theme);
     if (p.uiZoom !== undefined) applyZoom(p.uiZoom);
     api.saveSettings(toPlain(get())).catch(() => undefined);
