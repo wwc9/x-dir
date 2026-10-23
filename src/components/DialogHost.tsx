@@ -32,7 +32,7 @@ import {
   WatermarkDialog,
 } from "./ImgDialogs";
 import { NpSelect } from "./NpSelect";
-import { NewFoldersDialog, XlsxMergeDialog } from "./ToolsDialogs";
+import { NewFoldersDialog, PdfMergeDialog, XlsxMergeDialog } from "./ToolsDialogs";
 import { DENSITY } from "../lib/tokens";
 import { useUi, type DialogKind, type DialogSpec } from "../stores/ui";
 
@@ -204,6 +204,14 @@ export function DialogHost() {
 
       {dialog?.type === "xlsxMerge" && (
         <XlsxMergeDialog count={dialog.count} onDone={(v) => resolve(v)} />
+      )}
+
+      {dialog?.type === "pdfMerge" && (
+        <PdfMergeDialog
+          count={dialog.count}
+          hasDir={dialog.hasDir}
+          onDone={(v) => resolve(v)}
+        />
       )}
 
       {dialog?.type === "imgCompress" && (

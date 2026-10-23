@@ -202,6 +202,258 @@ pub(crate) fn run_merge(
     }
 }
 
+/// 空白 A4 页插入（2026-10-22）：审计底稿打印场景凑偶数页。
+/// 在合并产物（已重建 /Pages 树）的 Kids 头/尾插入一张 595×842 空白页
+pub(crate) fn insert_blank_page(doc: &mut Document, at_start: bool) -> Result<(), String> {
+    let pages_dict = doc.catalog().map_err(|_| "Catalog 读取失败")?;
+    let pages_id: ObjectId = pages_dict
+        .get(b"Pages")
+        .map_err(|_| "Pages 根缺失")?
+        .as_reference()
+        .map_err(|_| "Pages 根缺失")?;
+    let page_id = doc.add_object(dictionary! {
+        "Type" => "Page",
+        "Parent" => Object::Reference(pages_id),
+        "MediaBox" => Object::Array(vec![
+            Object::Integer(0),
+            Object::Integer(0),
+            Object::Integer(595),
+            Object::Integer(842),
+        ]),
+        "Resources" => dictionary! {},
+    });
+    let pages = match doc.get_object_mut(pages_id) {
+        Ok(o) => o.as_dict_mut().map_err(|_| "Pages 字典无效")?,
+        Err(_) => return Err("Pages 根失效".into()),
+    };
+    let kids = pages.get_mut(b"Kids").map_err(|_| "Pages /Kids 缺失")?;
+    match kids {
+        Object::Array(arr) => {
+            if at_start {
+                arr.insert(0, Object::Reference(page_id));
+            } else {
+                arr.push(Object::Reference(page_id));
+            }
+        }
+        _ => return Err("Pages /Kids 类型无效".into()),
+    }
+    let count = pages.get_mut(b"Count").map_err(|_| "Pages /Count 缺失")?;
+    if let Object::Integer(n) = count {
+        *n += 1;
+    }
+    Ok(())
+}
+
+/// 文件名安全时间戳标签（UTC 近似，yyyymmdd_HHMMSS）：std 无 chrono，天数→日期走
+/// Howard Hinnant civil_from_days 算法
+fn stamp_label() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let days = (secs / 86_400) as i64;
+    let rem = secs % 86_400;
+    let (h, mi, s) = (rem / 3600, (rem % 3600) / 60, rem % 60);
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    format!("{y:04}{m:02}{d:02}_{h:02}{mi:02}{s:02}")
+}
+
+/// 合并可接受扩展名：pdf + image_to_rgb 支持的图片（jpg/jpeg/png）
+fn is_mergeable_ext(name_lower: &str) -> bool {
+    let ext = name_lower.rsplit('.').next().unwrap_or("");
+    matches!(ext, "pdf" | "jpg" | "jpeg" | "png")
+}
+
+/// 递归收集目录下可合并文件（跳过系统回收站/还原目录，按名称序不稳定无妨）
+fn collect_mergeable(dir: &std::path::Path, out: &mut Vec<String>) {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for e in rd.flatten() {
+        let Ok(ft) = e.file_type() else { continue };
+        let name = e.file_name().to_string_lossy().to_lowercase();
+        if ft.is_dir() {
+            if name != "$recycle.bin" && name != "system volume information" {
+                collect_mergeable(&e.path(), out);
+            }
+        } else if is_mergeable_ext(&name) {
+            out.push(e.path().to_string_lossy().into_owned());
+        }
+    }
+}
+
+/// 分组：merge_by_folder = 文件夹路径各自递归收集成组（输出 <组目录>\合并结果-
+/// <文件夹名>-<ts>.pdf），文件路径按父目录归组；否则全部并入单组（输出 =
+/// fallback_output）。返回 (组目录, 文件列表, 输出路径)
+fn group_merge_paths(
+    paths: &[String],
+    by_folder: bool,
+    ts: &str,
+    fallback_output: &str,
+) -> Vec<(String, Vec<String>, String)> {
+    let mut groups: Vec<(String, Vec<String>, String)> = vec![];
+    if by_folder {
+        for p in paths {
+            let path = std::path::Path::new(p);
+            if path.is_dir() {
+                let mut files = Vec::new();
+                collect_mergeable(path, &mut files);
+                if files.is_empty() {
+                    continue;
+                }
+                let dirname = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| p.trim_end_matches(['\\', '/', ':']).to_string());
+                let output = format!(
+                    "{}\\合并结果-{dirname}-{ts}.pdf",
+                    p.trim_end_matches(['\\', '/'])
+                );
+                groups.push((p.clone(), files, output));
+            } else if path.is_file() {
+                let dir = path
+                    .parent()
+                    .map(|d| d.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let dirname = path
+                    .parent()
+                    .and_then(|d| d.file_name())
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| dir.trim_end_matches(['\\', '/', ':']).to_string());
+                let output = format!("{dir}\\合并结果-{dirname}-{ts}.pdf");
+                let hit = groups
+                    .iter_mut()
+                    .find(|(d, _, _)| d == &dir)
+                    .map(|(_, f, _)| f.push(p.clone()));
+                if hit.is_none() {
+                    groups.push((dir, vec![p.clone()], output));
+                }
+            }
+        }
+    } else {
+        let mut files = Vec::new();
+        for p in paths {
+            let path = std::path::Path::new(p);
+            if path.is_dir() {
+                collect_mergeable(path, &mut files);
+            } else {
+                files.push(p.clone());
+            }
+        }
+        groups.push((String::new(), files, fallback_output.to_string()));
+    }
+    groups
+}
+
+/// 合并扩展（2026-10-22）：支持 PDF/图片混列、按文件夹分组合并、空白页凑偶数。
+/// 缺失/不可读源逐条记入 failed（自动跳过语义）；输出路径见 group_merge_paths
+/// 合并扩展参数（收敛实参数量，clippy too_many_arguments）
+pub(crate) struct MergeExOpts<'a> {
+    pub merge_by_folder: bool,
+    pub auto_blank: bool,
+    pub blank_first: bool,
+    /// 统一合并模式的输出路径（分组模式忽略，各组自动命名）
+    pub fallback_output: &'a str,
+}
+
+pub(crate) fn run_merge_ex(
+    paths: &[String],
+    opts: &MergeExOpts,
+    cancel: &AtomicBool,
+    prog: &mut JobProgress,
+    em: &mut EmitterState,
+    failed: &mut Vec<FailItem>,
+) {
+    let ts = stamp_label();
+    let groups = group_merge_paths(paths, opts.merge_by_folder, &ts, opts.fallback_output);
+    prog.total_files = groups.iter().map(|(_, f, _)| f.len()).sum::<usize>() as u64;
+    for (dir, files, output) in groups {
+        if is_cancelled(cancel) {
+            return;
+        }
+        let _ = dir;
+        let mut docs: Vec<Document> = Vec::new();
+        for p in &files {
+            if is_cancelled(cancel) {
+                return;
+            }
+            prog.current_path = p.clone();
+            if p.to_ascii_lowercase().ends_with(".pdf") {
+                match Document::load(to_extended(p)) {
+                    Ok(d) => docs.push(d),
+                    Err(e) => failed.push(FailItem {
+                        path: p.clone(),
+                        message: e.to_string(),
+                    }),
+                }
+            } else {
+                let mut doc = Document::with_version("1.5");
+                match image_page(&mut doc, p) {
+                    Ok(_) => docs.push(doc),
+                    Err(e) => failed.push(FailItem {
+                        path: p.clone(),
+                        message: e,
+                    }),
+                }
+            }
+            prog.done_files += 1;
+            em.progress(prog);
+        }
+        if is_cancelled(cancel) {
+            return;
+        }
+        if docs.is_empty() {
+            failed.push(FailItem {
+                path: output.clone(),
+                message: "没有可合并的 PDF/图片".into(),
+            });
+            continue;
+        }
+        let refs: Vec<&Document> = docs.iter().collect();
+        let mut merged = match merge_docs(refs) {
+            Ok(d) => d,
+            Err(e) => {
+                failed.push(FailItem {
+                    path: output.clone(),
+                    message: e,
+                });
+                continue;
+            }
+        };
+        // 空白页凑偶数：总页数为奇数时按指定位置补 A4 空白页
+        if opts.auto_blank
+            && merged.get_pages().len() % 2 == 1
+            && insert_blank_page(&mut merged, opts.blank_first)
+                .inspect_err(|e| {
+                    failed.push(FailItem {
+                        path: output.clone(),
+                        message: e.clone(),
+                    });
+                })
+                .is_err()
+        {
+            // 空白页插入失败已记入 failed，继续保存偶数差一页的合并产物
+        }
+        if let Err(e) = merged.save(to_extended(&output)) {
+            failed.push(FailItem {
+                path: output.clone(),
+                message: e.to_string(),
+            });
+        }
+        prog.current_path = output.clone();
+        em.progress(prog);
+    }
+}
+
 /// 拆分：每页一个独立 PDF，输出 out_dir\\<stem>_p0001.pdf…
 pub(crate) fn run_split(
     path: &str,
@@ -684,6 +936,117 @@ fn merge_docs(docs: Vec<&Document>) -> Result<Document, String> {
 mod tests {
     use super::*;
     use lopdf::Stream;
+
+    fn one_page_doc() -> Document {
+        let mut doc = Document::with_version("1.5");
+        let content_id = doc.add_object(Object::Stream(Stream::new(
+            dictionary! {},
+            b"1 0 0 1 0 0 cm".to_vec(),
+        )));
+        let page_id = doc.add_object(dictionary! {
+            "Type" => "Page",
+            "MediaBox" => Object::Array(vec![
+                Object::Integer(0),
+                Object::Integer(0),
+                Object::Integer(100),
+                Object::Integer(100),
+            ]),
+            "Contents" => Object::Reference(content_id),
+            "Resources" => dictionary! {},
+        });
+        build_page_tree(&mut doc, vec![Object::Reference(page_id)]);
+        doc
+    }
+
+    #[test]
+    fn blank_page_insert_start_and_end() {
+        // 头插：空白 A4 页成为第 1 页
+        let mut doc = one_page_doc();
+        insert_blank_page(&mut doc, true).unwrap();
+        let pages: Vec<ObjectId> = doc.get_pages().into_values().collect();
+        assert_eq!(pages.len(), 2);
+        let first = doc.get_object(pages[0]).unwrap();
+        if let Object::Dictionary(d) = first {
+            let box_ok = matches!(
+                d.get(b"MediaBox"),
+                Ok(Object::Array(a)) if a.len() == 4
+            );
+            assert!(box_ok, "第 1 页应为 595×842 空白页");
+        } else {
+            panic!("第 1 页不是字典");
+        }
+
+        // 尾插：空白 A4 页成为最后一页
+        let mut doc = one_page_doc();
+        insert_blank_page(&mut doc, false).unwrap();
+        let pages: Vec<ObjectId> = doc.get_pages().into_values().collect();
+        assert_eq!(pages.len(), 2);
+        let last = doc.get_object(pages[1]).unwrap();
+        if let Object::Dictionary(d) = last {
+            let box_ok = matches!(
+                d.get(b"MediaBox"),
+                Ok(Object::Array(a)) if a.len() == 4
+            );
+            assert!(box_ok, "最后一页应为 595×842 空白页");
+        } else {
+            panic!("最后一页不是字典");
+        }
+    }
+
+    #[test]
+    fn group_merge_paths_folder_mode() {
+        let base = std::env::temp_dir().join(format!("xdir-pdfmerge-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let f1 = base.join("f1");
+        let f2 = base.join("f2");
+        std::fs::create_dir_all(&f1).unwrap();
+        std::fs::create_dir_all(&f2).unwrap();
+        std::fs::write(f1.join("a.pdf"), b"x").unwrap();
+        std::fs::write(f1.join("junk.exe"), b"x").unwrap();
+        std::fs::write(f2.join("b.png"), b"x").unwrap();
+
+        let groups = group_merge_paths(
+            &[
+                f1.to_string_lossy().into_owned(),
+                f2.to_string_lossy().into_owned(),
+            ],
+            true,
+            "TS",
+            "ignored.pdf",
+        );
+        assert_eq!(groups.len(), 2, "两个文件夹各自成组");
+        let (d1, files1, out1) = &groups[0];
+        assert_eq!(files1.len(), 1, "junk.exe 不入合并清单");
+        assert!(files1[0].ends_with("a.pdf"));
+        assert!(out1.contains("合并结果-f1-TS.pdf"), "out1 = {out1}");
+        assert!(out1.starts_with(d1.as_str()));
+
+        // 单文件路径走父目录归组
+        let fp = f1.join("a.pdf").to_string_lossy().into_owned();
+        let groups = group_merge_paths(&[fp], true, "TS", "ignored.pdf");
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].1.len(), 1);
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn group_merge_paths_single_mode() {
+        let groups = group_merge_paths(
+            &[
+                "C:\\x\\a.pdf".into(),
+                "C:\\x\\b.png".into(),
+                "C:\\y\\c.pdf".into(),
+            ],
+            false,
+            "TS",
+            "C:\\x\\out.pdf",
+        );
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].0, "");
+        assert_eq!(groups[0].1.len(), 3, "统一合并 = 全部保留原序");
+        assert_eq!(groups[0].2, "C:\\x\\out.pdf");
+    }
 
     /// 生成 N 页最小 PDF（有 MediaBox + 空内容流）
     fn make_doc(pages: u32) -> Document {

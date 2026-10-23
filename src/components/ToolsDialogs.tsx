@@ -3,7 +3,7 @@
 // 导出共用）、预览行复用 np-bren-preview/row（§4.7 二级页面规范）；
 // 编排（api + 任务登记）在 lib/operations.ts，名单预演纯函数在 lib/folderBatch。
 import { useMemo, useState } from "react";
-import { t } from "../lib/i18n";
+import { t, useT } from "../lib/i18n";
 import { Button, DialogBody, DialogFooter, InputGroup } from "@blueprintjs/core";
 import { ArrowRight } from "lucide-react";
 
@@ -218,6 +218,92 @@ export function XlsxMergeDialog({
         okText="合并"
         disabled={!valid}
         onOk={() => onDone({ mode, name })}
+        onCancel={() => onDone(null)}
+      />
+    </>
+  );
+}
+
+/** PDF 合并扩展对话框（2026-10-22）：混列 PDF/图片 + 按文件夹分组 + 空白页凑偶数 */
+export function PdfMergeDialog({
+  count,
+  hasDir,
+  onDone,
+}: {
+  count: number;
+  hasDir: boolean;
+  onDone(v: {
+    mode: "single" | "byFolder";
+    autoBlank: boolean;
+    blankFirst: boolean;
+    name: string;
+  } | null): void;
+}) {
+  const t2 = useT();
+  const [mode, setMode] = useState<"single" | "byFolder">(hasDir ? "byFolder" : "single");
+  const [autoBlank, setAutoBlank] = useState(false);
+  const [blankFirst, setBlankFirst] = useState(false);
+  const [name, setName] = useState("合并文档.pdf");
+  const valid = mode === "byFolder" || name.trim().length > 0;
+  return (
+    <>
+      <DialogBody>
+        <div className="np-bren-form">
+          <FormRow k={t2("方式")}>
+            <Seg<"single" | "byFolder">
+              value={mode}
+              onChange={setMode}
+              options={[
+                { value: "single", label: t2("统一合并"), title: t2("全部文件按顺序合成一个 PDF") },
+                { value: "byFolder", label: t2("按文件夹分别合并"), title: t2("每个文件夹内的文件各自合成一个独立 PDF（输出 合并结果-<文件夹名>-<时间戳>.pdf）") },
+              ]}
+            />
+          </FormRow>
+          {mode === "single" && (
+            <FormRow k={t2("输出名")}>
+              <InputGroup
+                size="small"
+                value={name}
+                spellCheck={false}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && valid)
+                    onDone({ mode, autoBlank, blankFirst, name });
+                }}
+              />
+            </FormRow>
+          )}
+          <FormRow k={t2("空白页凑偶数")}>
+            <Seg<"no" | "yes">
+              value={autoBlank ? "yes" : "no"}
+              onChange={(v) => setAutoBlank(v === "yes")}
+              options={[
+                { value: "no", label: t2("否"), title: t2("保持原页数") },
+                { value: "yes", label: t2("是"), title: t2("自动补 A4 空白页使总页数凑成偶数（审计底稿打印场景常用）") },
+              ]}
+            />
+          </FormRow>
+          {autoBlank && (
+            <FormRow k={t2("空白页位置")}>
+              <Seg<"last" | "first">
+                value={blankFirst ? "first" : "last"}
+                onChange={(v) => setBlankFirst(v === "first")}
+                options={[
+                  { value: "last", label: t2("最后1页之后") },
+                  { value: "first", label: t2("第1页之前") },
+                ]}
+              />
+            </FormRow>
+          )}
+        </div>
+        <div className="np-dialog-muted">
+          {t("按当前顺序合并 {n} 个文件（PDF 与 jpg/png 图片混列均可），缺失或不可读的文件自动跳过，生成新文件不覆盖原文件。", { n: count })}
+        </div>
+      </DialogBody>
+      <Footer
+        okText={t("合并")}
+        disabled={!valid}
+        onOk={() => onDone({ mode, autoBlank, blankFirst, name })}
         onCancel={() => onDone(null)}
       />
     </>

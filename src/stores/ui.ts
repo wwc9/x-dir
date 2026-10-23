@@ -52,7 +52,9 @@ export type DialogSpec =
   /** 批量新建文件夹（右键"批量新建文件夹"，2026-10-17）：名单/序号模板预演后创建 */
   | { type: "newFolders"; dir: string; existing: string[] }
   /** Excel 合并（右键"Excel 合并"，2026-10-17）：模式 + 输出名一次成形 */
-  | { type: "xlsxMerge"; count: number };;
+  | { type: "xlsxMerge"; count: number }
+  /** PDF 合并扩展（2026-10-22）：混列 PDF/图片 + 按文件夹分组 + 空白页凑偶数 */
+  | { type: "pdfMerge"; count: number; hasDir: boolean };;
 
 /** 提示弹窗语义级别：info=主操作、warn=警示、danger=不可逆/错误 */
 export type DialogKind = "info" | "warn" | "danger";

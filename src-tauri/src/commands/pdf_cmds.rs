@@ -39,7 +39,33 @@ pub fn pdf_merge(
     state: State<'_, AppState>,
     paths: Vec<String>,
     output: String,
+    merge_by_folder: Option<bool>,
+    auto_insert_blank_page: Option<bool>,
+    blank_page_position: Option<String>,
 ) -> Result<JobId, AppError> {
+    let auto_blank = auto_insert_blank_page.unwrap_or(false);
+    let blank_first = matches!(blank_page_position.as_deref(), Some("第1页之前"));
+    if merge_by_folder.unwrap_or(false) || auto_blank {
+        // 扩展路径：文件夹递归收集 pdf/图片，缺失/不可读源在任务内自动跳过
+        if paths.is_empty() {
+            return Err(AppError::new("E_INVALID_NAME", "未选择任何文件或文件夹"));
+        }
+        return Ok(JobId {
+            job_id: state.jobs.enqueue(
+                JobKind::PdfMergeEx {
+                    merge_by_folder: merge_by_folder.unwrap_or(false),
+                    auto_blank,
+                    blank_first,
+                    output,
+                },
+                paths,
+                None,
+                Policy::Skip,
+                false,
+                app,
+            ),
+        });
+    }
     if paths.len() < 2 {
         return Err(AppError::new("E_INVALID_NAME", "合并至少需要 2 个 PDF"));
     }

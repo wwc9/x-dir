@@ -500,8 +500,24 @@ export const api = {
   restoreFromTrash: (paths: string[]) =>
     cmd<{ restored: number; missing: number }>("restore_trash", { paths }),
   pdfPageCount: (path: string) => cmd<number>("pdf_page_count", { path }),
-  pdfMerge: (paths: string[], output: string) =>
-    cmd<{ jobId: number }>("pdf_merge", { paths, output }),
+  /** PDF 合并（2026-10-22 扩展）：mergeByFolder = 按文件夹分组合并（各组输出
+   *  合并结果-<文件夹名>-<时间戳>.pdf，output 忽略）；autoInsertBlankPage =
+   *  空白 A4 页凑偶数（blankPagePosition = 第1页之前 | 最后1页之后）；
+   *  PDF/图片混列均可（jpg/jpeg/png），缺失/不可读源自动跳过 */
+  pdfMerge: (
+    paths: string[],
+    output: string,
+    mergeByFolder?: boolean,
+    autoInsertBlankPage?: boolean,
+    blankPagePosition?: "第1页之前" | "最后1页之后",
+  ) =>
+    cmd<{ jobId: number }>("pdf_merge", {
+      paths,
+      output,
+      mergeByFolder,
+      autoInsertBlankPage,
+      blankPagePosition,
+    }),
   pdfSplit: (path: string, outDir: string) =>
     cmd<{ jobId: number }>("pdf_split", { path, outDir }),
   pdfWatermark: (paths: string[], text: string) =>

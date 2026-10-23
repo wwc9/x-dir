@@ -55,6 +55,14 @@ pub enum JobKind {
     PdfMerge {
         output: String,
     },
+    /// PDF 合并扩展（2026-10-22）：按文件夹分组合并 + 空白页凑偶数；
+    /// output 仅在 merge_by_folder=false 时作为统一输出
+    PdfMergeEx {
+        merge_by_folder: bool,
+        auto_blank: bool,
+        blank_first: bool,
+        output: String,
+    },
     /// PDF 拆分单页 → out_dir 输出目录
     PdfSplit {
         out_dir: String,
@@ -372,6 +380,39 @@ impl JobManager {
                     crate::pdf::run_merge(
                         &sources,
                         output,
+                        &cancel,
+                        &mut prog,
+                        &mut em,
+                        &mut failed,
+                    );
+                }
+                JobKind::PdfMergeEx {
+                    merge_by_folder,
+                    auto_blank,
+                    blank_first,
+                    output,
+                } => {
+                    // 分组模式的输出写在各组目录（= 选中文件夹自身）内
+                    if let Some(par) = parent_of(output) {
+                        dirty_dirs.push(par);
+                    }
+                    for s in &sources {
+                        if std::path::Path::new(s).is_dir() {
+                            dirty_dirs.push(s.clone());
+                        }
+                        if let Some(par) = parent_of(s) {
+                            dirty_dirs.push(par);
+                        }
+                    }
+                    let opts = crate::pdf::MergeExOpts {
+                        merge_by_folder: *merge_by_folder,
+                        auto_blank: *auto_blank,
+                        blank_first: *blank_first,
+                        fallback_output: output.as_str(),
+                    };
+                    crate::pdf::run_merge_ex(
+                        &sources,
+                        &opts,
                         &cancel,
                         &mut prog,
                         &mut em,

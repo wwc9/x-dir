@@ -141,19 +141,32 @@ export async function createEntry(
 
 /** 按选中序合并为一个 PDF，输出到当前目录（同名覆盖） */
 export async function mergePdfs(entries: FileEntry[], dir: string): Promise<void> {
+  // 文件夹混选：文件夹递归收集 pdf/图片；纯文件列表按顺序合并
+  const hasDir = entries.some((e) => e.isDir);
+  const res = await useUi.getState().openDialog<{
+    mode: "single" | "byFolder";
+    autoBlank: boolean;
+    blankFirst: boolean;
+    name: string;
+  } | null>({ type: "pdfMerge", count: entries.length, hasDir });
+  if (!res) return;
+  if (res.mode === "single" && entries.length < 2 && !res.autoBlank) {
+    useUi.getState().toast("至少选择 2 个文件，或启用空白页凑偶数", "error");
+    return;
+  }
   const paths = entries.map((e) => e.path);
-  const name = await useUi.getState().openDialog<string | null>({
-    type: "input",
-    title: "PDF 合并",
-    label: `按当前顺序合并 ${paths.length} 个 PDF（同名覆盖）`,
-    initial: "合并文档.pdf",
-    okText: "合并",
-    validate: (v) => (v.trim() ? null : "请输入文件名"),
-  });
-  if (!name) return;
-  const output = joinPath(dir, name.toLowerCase().endsWith(".pdf") ? name : `${name.trim()}.pdf`);
+  const byFolder = res.mode === "byFolder";
+  const output = byFolder
+    ? ""
+    : joinPath(dir, res.name.toLowerCase().endsWith(".pdf") ? res.name : `${res.name.trim()}.pdf`);
   try {
-    const { jobId } = await api.pdfMerge(paths, output);
+    const { jobId } = await api.pdfMerge(
+      paths,
+      output,
+      byFolder,
+      res.autoBlank,
+      res.autoBlank ? (res.blankFirst ? "第1页之前" : "最后1页之后") : undefined,
+    );
     useJobs.getState().register(jobId, "pdfmerge", dir, [dir]);
   } catch (e) {
     useUi.getState().toast(`合并失败：${String(e)}`, "error");
