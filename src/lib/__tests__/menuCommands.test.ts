@@ -100,8 +100,16 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
     expect(builtinByKey("properties")?.cond.maxCount).toBe(1);
     expect(builtinByKey("openTab")?.cond).toMatchObject({ target: "dir", maxCount: 1 });
     expect(builtinByKey("batchRename")?.cond.minCount).toBe(2);
-    // 2026-10-22：文件夹也支持合并（target all + minCount 1，执行端校验有效性）
-    expect(builtinByKey("pdfMerge")?.cond).toMatchObject({ target: "all", minCount: 1 });
+    // 2026-10-22 拆分：文件合并（≥2 个 pdf/图片）+ 按文件夹合并（≥2 个文件夹）
+    expect(builtinByKey("pdfMerge")?.cond).toMatchObject({
+      target: "file",
+      minCount: 2,
+      exts: "pdf,jpg,jpeg,png",
+    });
+    expect(builtinByKey("pdfMergeFolders")?.cond).toMatchObject({
+      target: "dir",
+      minCount: 2,
+    });
     // 双区域能力位 + 粘贴默认不限（列表排满无空白处时也可右键粘贴）
     expect(builtinByKey("paste")?.area).toBe("both");
     expect(builtinByKey("paste")?.supportsSel).toBe(true);
@@ -186,8 +194,14 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
     expect(builtinToolbarEntry("openTerminal").area).toBe("blank");
     expect(builtinToolbarEntry("pdfMerge").area).toBe("sel");
     expect(builtinToolbarEntry("pdfMerge").cond).toMatchObject({
-      target: "all",
-      minCount: 1,
+      target: "file",
+      minCount: 2,
+      exts: "pdf,jpg,jpeg,png",
+    });
+    expect(builtinToolbarEntry("pdfMergeFolders").area).toBe("sel");
+    expect(builtinToolbarEntry("pdfMergeFolders").cond).toMatchObject({
+      target: "dir",
+      minCount: 2,
     });
     expect(builtinToolbarEntry("delete").area).toBe("sel");
     expect(builtinToolbarEntry("delete").cond).toMatchObject({ target: "all" });

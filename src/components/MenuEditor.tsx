@@ -164,6 +164,7 @@ export const FN_ICONS: Record<string, LucideIcon> = {
   sysMenu: List,
   openTerminal: Terminal,
   pdfMerge: Files,
+  pdfMergeFolders: FolderInput,
   pdfSplit: FileOutput,
   pdfExtract: FileDown,
   pdfRemove: FileMinus,

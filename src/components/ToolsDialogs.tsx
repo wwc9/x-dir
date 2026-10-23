@@ -229,31 +229,29 @@ export function XlsxMergeDialog({
  *  清单 = 待合并的文件/文件夹路径（surface-2 凹陷列表，路径省略号悬停可见）；
  *  分组模式的每组输出 = 合并结果-<文件夹名>-<时间戳>.pdf（时间戳 Rust 侧生成） */
 export function PdfMergeDialog({
+  variant,
   entries,
   onDone,
 }: {
+  variant: "files" | "folders";
   entries: FileEntry[];
   onDone(v: {
-    mode: "single" | "byFolder";
     autoBlank: boolean;
     blankFirst: boolean;
     name: string;
   } | null): void;
 }) {
   const t2 = useT();
-  const hasDir = entries.some((e) => e.isDir);
   const parentOf = (p: string) => {
     const i = p.lastIndexOf("\\");
     return i > 0 ? p.slice(0, i) : "";
   };
   const dirs = new Set(entries.map((e) => parentOf(e.path)));
-  const [mode, setMode] = useState<"single" | "byFolder">(
-    hasDir || dirs.size >= 2 ? "byFolder" : "single",
-  );
+  const byFolder = variant === "folders";
   const [autoBlank, setAutoBlank] = useState(false);
   const [blankFirst, setBlankFirst] = useState(false);
   const [name, setName] = useState("合并文档.pdf");
-  const valid = mode === "byFolder" || name.trim().length > 0;
+  const valid = byFolder || name.trim().length > 0;
   const output = `${parentOf(entries[0]?.path ?? "") ?? ""}\\${name.trim() || "合并文档.pdf"}`;
   return (
     <>
@@ -268,17 +266,12 @@ export function PdfMergeDialog({
           ))}
         </div>
         <div className="np-bren-form" style={{ marginTop: 8 }}>
-          <FormRow k={t2("方式")}>
-            <Seg<"single" | "byFolder">
-              value={mode}
-              onChange={setMode}
-              options={[
-                { value: "single", label: t2("统一合并"), title: t2("全部文件按顺序合成一个 PDF") },
-                { value: "byFolder", label: t2("按文件夹分别合并"), title: t2("每个文件夹内的文件各自合成一个独立 PDF（输出 合并结果-<文件夹名>-<时间戳>.pdf）") },
-              ]}
-            />
-          </FormRow>
-          {mode === "single" && (
+          {variant === "folders" && (
+            <div className="np-dialog-muted" style={{ margin: "0 0 6px" }}>
+              {t2("每个选中的文件夹递归收集 PDF 与图片，各自输出 合并结果-<文件夹名>-<时间戳>.pdf")}
+            </div>
+          )}
+          {variant === "files" && (
             <FormRow k={t2("输出名")}>
               <InputGroup
                 size="small"
@@ -287,7 +280,7 @@ export function PdfMergeDialog({
                 onChange={(e) => setName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && valid)
-                    onDone({ mode, autoBlank, blankFirst, name });
+                    onDone({ autoBlank, blankFirst, name });
                 }}
               />
             </FormRow>
@@ -316,7 +309,7 @@ export function PdfMergeDialog({
           )}
         </div>
         <div className="np-dialog-muted">
-          {mode === "single"
+          {variant === "files"
             ? t2("统一合并输出：{out}", { out: output })
             : t2("按文件夹分别合并：{n} 个范围，各组输出 合并结果-<文件夹名>-<时间戳>.pdf", {
                 n: dirs.size,
@@ -327,7 +320,7 @@ export function PdfMergeDialog({
       <Footer
         okText={t2("合并")}
         disabled={!valid}
-        onOk={() => onDone({ mode, autoBlank, blankFirst, name })}
+        onOk={() => onDone({ autoBlank, blankFirst, name })}
         onCancel={() => onDone(null)}
       />
     </>

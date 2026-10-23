@@ -140,21 +140,24 @@ export async function createEntry(
 /// ── PDF 处理（lopdf，走任务引擎）：合并 / 拆分单页 / 文字水印 ──
 
 /** 按选中序合并为一个 PDF，输出到当前目录（同名覆盖） */
-export async function mergePdfs(entries: FileEntry[], dir: string): Promise<void> {
+export async function mergePdfs(
+  entries: FileEntry[],
+  dir: string,
+  variant: "files" | "folders",
+): Promise<void> {
   // 文件夹混选：文件夹递归收集 pdf/图片；纯文件列表按顺序合并
   const res = await useUi.getState().openDialog<{
-    mode: "single" | "byFolder";
     autoBlank: boolean;
     blankFirst: boolean;
     name: string;
-  } | null>({ type: "pdfMerge", entries });
+  } | null>({ type: "pdfMerge", variant, entries });
   if (!res) return;
-  if (res.mode === "single" && entries.length < 2 && !res.autoBlank) {
+  if (variant === "files" && entries.length < 2 && !res.autoBlank) {
     useUi.getState().toast("至少选择 2 个文件，或启用空白页凑偶数", "error");
     return;
   }
   const paths = entries.map((e) => e.path);
-  const byFolder = res.mode === "byFolder";
+  const byFolder = variant === "folders";
   const output = byFolder
     ? ""
     : joinPath(dir, res.name.toLowerCase().endsWith(".pdf") ? res.name : `${res.name.trim()}.pdf`);

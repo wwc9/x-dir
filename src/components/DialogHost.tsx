@@ -80,7 +80,9 @@ export function DialogHost() {
                   ? "空文件清理"
                   : dialog?.type === "newFolders"
                     ? "批量新建文件夹"
-                    : dialog?.type === "xlsxMerge"
+                    : dialog?.type === "pdfMerge"
+                      ? "PDF 合并"
+                      : dialog?.type === "xlsxMerge"
                       ? "Excel 合并"
                       : dialog?.type === "imgCompress"
                   ? "图片压缩"
@@ -208,7 +210,11 @@ export function DialogHost() {
       )}
 
       {dialog?.type === "pdfMerge" && (
-        <PdfMergeDialog entries={dialog.entries} onDone={(v) => resolve(v)} />
+        <PdfMergeDialog
+          variant={dialog.variant}
+          entries={dialog.entries}
+          onDone={(v) => resolve(v)}
+        />
       )}
 
       {dialog?.type === "imgCompress" && (

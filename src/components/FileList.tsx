@@ -964,7 +964,12 @@ export function FileList({
         };
       }
       case "pdfMerge":
-        return { label: t("PDF 合并…"), action: () => void mergePdfs(sel, path) };
+        return { label: t("合并为 PDF…"), action: () => void mergePdfs(sel, path, "files") };
+      case "pdfMergeFolders":
+        return {
+          label: t("按文件夹合并 PDF…"),
+          action: () => void mergePdfs(sel, path, "folders"),
+        };
       case "pdfSplit":
         return { label: t("PDF 拆分为单页…"), action: () => void splitPdf(entry0, path) };
       case "pdfWatermark":
