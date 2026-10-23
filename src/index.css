@@ -450,8 +450,36 @@ button:focus-visible {
 }
 /* Toast 独立窗口已移除（2026-10-15 定案）：全部提示经 useUi.toast 路由为
    灵动岛回执（error→fail 6s / 其余→ok 4s），样式见 .np-island 段 */
+/* 输入统一（2026-10-22）：全项目文本输入一律现代填充式——surface-2 填充、
+   无描边、聚焦提亮为 surface + accent ring（与导航栏语言同源）。覆盖
+   Blueprint 默认白底描边与散落各处的原生 input 样式；既有上下文特例
+   （np-pane-active 地址栏提亮 / np-filter-input 透明 / np-rename 行内）
+   以更高优先级或更后位置继续生效——基线选择器用 :where() 归零权重，
+   任何组件覆盖均可生效 */
 .bp6-input {
   border-radius: var(--np-radius);
+  background: var(--np-surface-2);
+  box-shadow: none;
+  color: var(--np-fg);
+}
+.bp6-input.bp6-input:focus {
+  background: var(--np-surface);
+  box-shadow: var(--np-ring);
+}
+.bp6-input::placeholder,
+input::placeholder {
+  color: var(--np-muted);
+}
+input:where(:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"])) {
+  border: none;
+  border-radius: var(--np-radius);
+  background: var(--np-surface-2);
+  color: var(--np-fg);
+  outline: none;
+}
+input:where(:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"])):focus {
+  background: var(--np-surface);
+  box-shadow: var(--np-ring);
 }
 /* 填充式输入：导航栏内的输入框常态无边框，聚焦才亮描边 */
 .np-nav .bp6-input-group .bp6-input {
