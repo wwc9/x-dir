@@ -327,14 +327,17 @@ fn rasterize_at(font: &FontVec, text: &str, px: f32, rgb: [u8; 3], scale: f32) -
         .into_iter()
         .map(|c| (c.clamp(0.0, 1.0) * 255.0) as u8)
         .collect();
+    // PDF 图像数据为逐像素交错布局（RGB RGB RGB…）；逐通道平面布局会被
+    // 渲染器读成三条横向色带（上半截浅、下半截深，任何颜色都显灰）
+    let mut plane = Vec::with_capacity(3 * width * height);
+    for _ in 0..width * height {
+        plane.extend_from_slice(&rgb);
+    }
     StampBitmap {
         width: width as u32,
         height: height as u32,
         scale,
-        rgb: vec![rgb[0], rgb[1], rgb[2]]
-            .into_iter()
-            .flat_map(|c| std::iter::repeat_n(c, width * height))
-            .collect(),
+        rgb: plane,
         alpha,
     }
 }
@@ -757,10 +760,16 @@ mod tests {
     #[test]
     fn rasterize_produces_coverage() {
         let font = load_font(&["simhei.ttf"]).expect("测试机需有系统字体");
-        let bm = rasterize_text(&font, "水印测试-1", 14.0, [0, 0, 0]);
+        // 用非黑颜色：黑色会掩盖通道布局错误（三条横带全黑看不出来）
+        let bm = rasterize_text(&font, "水印测试-1", 14.0, [201, 56, 64]);
         assert!(bm.width > 1 && bm.height > 1);
         let covered = bm.alpha.iter().filter(|&&a| a > 0).count();
         assert!(covered > 20, "覆盖率平面几乎为空：covered={covered}");
+        // 交错布局回归锁：首像素必须 = [R,G,B]（平面布局会读出 [R,R,R] 灰）
+        let wh = bm.width as usize * bm.height as usize;
+        assert_eq!(bm.rgb.len(), 3 * wh);
+        assert_eq!(&bm.rgb[..3], &[201, 56, 64], "RGB 必须逐像素交错");
+        assert_eq!(&bm.rgb[(wh - 1) * 3..wh * 3], &[201, 56, 64]);
     }
 
     /// 端到端：造一页带文字的 PDF → 盖章 → 输出页必须新增内容流与资源，
@@ -821,7 +830,7 @@ mod tests {
             out_name: "[原文件名]-水印".into(),
             font_name: "heiti".into(),
             font_size: 14,
-            rgb: [0, 0, 0],
+            rgb: [201, 56, 64],
             pos: WmPos::RightTop,
             transparency: 9,
             margin: 20,
