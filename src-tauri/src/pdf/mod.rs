@@ -268,22 +268,44 @@ fn stamp_label() -> String {
 }
 
 /// 合并可接受扩展名：pdf + image_to_rgb 支持的图片（jpg/jpeg/png）
+/// 递归收集目录数上限：超大目录树限时让位（取消旗标即时生效）
+const COLLECT_BUDGET: usize = 100_000;
+
 fn is_mergeable_ext(name_lower: &str) -> bool {
     let ext = name_lower.rsplit('.').next().unwrap_or("");
     matches!(ext, "pdf" | "jpg" | "jpeg" | "png")
 }
 
 /// 递归收集目录下可合并文件（跳过系统回收站/还原目录，按名称序不稳定无妨）
-fn collect_mergeable(dir: &std::path::Path, out: &mut Vec<String>) {
+fn collect_mergeable(
+    dir: &std::path::Path,
+    out: &mut Vec<String>,
+    visited: &mut std::collections::HashSet<std::path::PathBuf>,
+    cancel: &AtomicBool,
+    budget: &mut usize,
+) {
+    if *budget == 0 || is_cancelled(cancel) {
+        return;
+    }
+    let Ok(canonical) = dir.canonicalize() else {
+        return;
+    };
+    if !visited.insert(canonical) {
+        return; // junction/符号链接环路：已访问过即剪枝
+    }
     let Ok(rd) = std::fs::read_dir(dir) else {
         return;
     };
     for e in rd.flatten() {
+        if *budget == 0 || is_cancelled(cancel) {
+            return;
+        }
+        *budget -= 1;
         let Ok(ft) = e.file_type() else { continue };
         let name = e.file_name().to_string_lossy().to_lowercase();
         if ft.is_dir() {
             if name != "$recycle.bin" && name != "system volume information" {
-                collect_mergeable(&e.path(), out);
+                collect_mergeable(&e.path(), out, visited, cancel, budget);
             }
         } else if is_mergeable_ext(&name) {
             out.push(e.path().to_string_lossy().into_owned());
@@ -299,6 +321,7 @@ fn group_merge_paths(
     by_folder: bool,
     ts: &str,
     fallback_output: &str,
+    cancel: &AtomicBool,
 ) -> Vec<(String, Vec<String>, String)> {
     let mut groups: Vec<(String, Vec<String>, String)> = vec![];
     if by_folder {
@@ -306,7 +329,9 @@ fn group_merge_paths(
             let path = std::path::Path::new(p);
             if path.is_dir() {
                 let mut files = Vec::new();
-                collect_mergeable(path, &mut files);
+                let mut visited = std::collections::HashSet::new();
+                let mut budget = COLLECT_BUDGET;
+                collect_mergeable(path, &mut files, &mut visited, cancel, &mut budget);
                 if files.is_empty() {
                     continue;
                 }
@@ -341,10 +366,12 @@ fn group_merge_paths(
         }
     } else {
         let mut files = Vec::new();
+        let mut visited = std::collections::HashSet::new();
+        let mut budget = COLLECT_BUDGET;
         for p in paths {
             let path = std::path::Path::new(p);
             if path.is_dir() {
-                collect_mergeable(path, &mut files);
+                collect_mergeable(path, &mut files, &mut visited, cancel, &mut budget);
             } else {
                 files.push(p.clone());
             }
@@ -374,7 +401,13 @@ pub(crate) fn run_merge_ex(
     failed: &mut Vec<FailItem>,
 ) {
     let ts = stamp_label();
-    let groups = group_merge_paths(paths, opts.merge_by_folder, &ts, opts.fallback_output);
+    let groups = group_merge_paths(
+        paths,
+        opts.merge_by_folder,
+        &ts,
+        opts.fallback_output,
+        cancel,
+    );
     prog.total_files = groups.iter().map(|(_, f, _)| f.len()).sum::<usize>() as u64;
     for (dir, files, output) in groups {
         if is_cancelled(cancel) {
@@ -936,6 +969,8 @@ fn merge_docs(docs: Vec<&Document>) -> Result<Document, String> {
 mod tests {
     use super::*;
     use lopdf::Stream;
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
 
     fn one_page_doc() -> Document {
         let mut doc = Document::with_version("1.5");
@@ -995,6 +1030,7 @@ mod tests {
 
     #[test]
     fn group_merge_paths_folder_mode() {
+        let cancel = Arc::new(AtomicBool::new(false));
         let base = std::env::temp_dir().join(format!("xdir-pdfmerge-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let f1 = base.join("f1");
@@ -1013,6 +1049,7 @@ mod tests {
             true,
             "TS",
             "ignored.pdf",
+            &cancel,
         );
         assert_eq!(groups.len(), 2, "两个文件夹各自成组");
         let (d1, files1, out1) = &groups[0];
@@ -1023,7 +1060,7 @@ mod tests {
 
         // 单文件路径走父目录归组
         let fp = f1.join("a.pdf").to_string_lossy().into_owned();
-        let groups = group_merge_paths(&[fp], true, "TS", "ignored.pdf");
+        let groups = group_merge_paths(&[fp], true, "TS", "ignored.pdf", &cancel);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].1.len(), 1);
 
@@ -1032,6 +1069,7 @@ mod tests {
 
     #[test]
     fn group_merge_paths_single_mode() {
+        let cancel = Arc::new(AtomicBool::new(false));
         let groups = group_merge_paths(
             &[
                 "C:\\x\\a.pdf".into(),
@@ -1041,6 +1079,7 @@ mod tests {
             false,
             "TS",
             "C:\\x\\out.pdf",
+            &cancel,
         );
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].0, "");
