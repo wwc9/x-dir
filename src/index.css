@@ -4441,12 +4441,15 @@ mark.np-gsearch-mark {
 .np-wm-form .np-bren-k {
   line-height: var(--np-ctl-h);
 }
-/* 控件格：chips 等附属行纵排其下；数字输入 120px、长文本输入与 Slider
-   320px（适合内容的固定宽，不随列宽拉满），分段钮自然宽 */
+/* 控件格：chips 等附属行纵排其下；flex-start 防止分段钮等自然宽控件被
+   拉伸满列（Blueprint ButtonGroup 在纵向 flex 里默认 stretch 散开）；
+   数字输入 120px、长文本输入与 Slider 320px（适合内容的固定宽），
+   分段钮自然宽 */
 .np-wm-ctl {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 6px;
 }
 .np-wm-ctl > .bp6-input-group {
@@ -4455,6 +4458,11 @@ mark.np-gsearch-mark {
 .np-wm-ctl > .np-wm-fill,
 .np-wm-ctl > .bp6-slider {
   width: 320px;
+  max-width: 100%;
+}
+/* 分段钮显式收缩到内容宽：纵向 flex 的 stretch/按钮均分会把它拉满列 */
+.np-wm-ctl .np-seg {
+  width: max-content;
   max-width: 100%;
 }
 /* 位置合并行：九宫格 + 对角线 Seg 水平成组（互斥共用 position 状态） */
