@@ -520,6 +520,18 @@ export function PdfWatermarkDialog({
               placeholder={t2("支持占位符，见下方说明")}
               onChange={(e) => setText(e.target.value)}
             />
+            <div className="np-wm-chips">
+              {["[原文件名]", "[原文件夹名]", "[页码]", "[页面标签]", "[日期时间]"].map((ph) => (
+                <button
+                  key={ph}
+                  className="np-wm-chip"
+                  title={t2("点击插入占位符")}
+                  onClick={() => setText((v) => v + ph)}
+                >
+                  {ph}
+                </button>
+              ))}
+            </div>
           </FormRow>
           <FormRow k={t2("字体")}>
             <Seg<"kaiti" | "heiti" | "fangsong" | "dengxian">
