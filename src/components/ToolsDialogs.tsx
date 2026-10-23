@@ -363,7 +363,7 @@ export function PdfMergeDialog({
             </FormRow>
           )}
           <FormRow k={t2("空白页凑偶数")}>
-            <Seg
+            <Seg>
               value={autoBlank ? "yes" : "no"}
               onChange={(v) => setAutoBlank(v === "yes")}
               options={[
@@ -374,7 +374,7 @@ export function PdfMergeDialog({
           </FormRow>
           {autoBlank && (
             <FormRow k={t2("空白页位置")}>
-              <Seg
+              <Seg>
                 value={blankFirst ? "first" : "last"}
                 onChange={(v) => setBlankFirst(v === "first")}
                 options={[
