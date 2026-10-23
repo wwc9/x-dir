@@ -363,25 +363,25 @@ export function PdfMergeDialog({
             </FormRow>
           )}
           <FormRow k={t2("空白页凑偶数")}>
-            <Seg>
+            <Seg
               value={autoBlank ? "yes" : "no"}
-              onChange={(v) => setAutoBlank(v === "yes")}
+              onChange={(v: "no" | "yes") => setAutoBlank(v === "yes")}
               options={[
                 { value: "no", label: t2("否"), title: t2("保持原页数") },
                 { value: "yes", label: t2("是"), title: t2("自动补 A4 空白页使总页数凑成偶数（审计底稿打印场景常用）") },
               ]}
-            </Seg>
+            />
           </FormRow>
           {autoBlank && (
             <FormRow k={t2("空白页位置")}>
-              <Seg>
+              <Seg
                 value={blankFirst ? "first" : "last"}
-                onChange={(v) => setBlankFirst(v === "first")}
+                onChange={(v: "last" | "first") => setBlankFirst(v === "first")}
                 options={[
                   { value: "last", label: t2("最后1页之后") },
                   { value: "first", label: t2("第1页之前") },
                 ]}
-              </Seg>
+              />
             </FormRow>
           )}
         </div>
