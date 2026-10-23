@@ -1688,6 +1688,15 @@ export function FileList({
                           if (entry.isDir) useLayout.getState().newTab(paneId, entry.path);
                           return;
                         }
+                        if (e.button === 2) {
+                          // 右键（2026-10-22 修复）：已选中项保持多选不动——此前右键
+                          // 也走 clickSelect，把多选替换成单项，菜单里合并就"丢选中"
+                          const uiNow = usePanes.getState().tabs[tabId];
+                          if (uiNow && !uiNow.selected.includes(entry.path)) {
+                            clickSelect(e, entry);
+                          }
+                          return;
+                        }
                         clickSelect(e, entry);
                         armRowDrag(e, entry);
                       }}

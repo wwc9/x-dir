@@ -90,7 +90,7 @@ export const BUILTIN_FNS: BuiltinFn[] = [
   { key: "dirSizes", label: "空间分析", group: "整理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "dir", maxCount: 1 }) },
   { key: "compareFolders", label: "文件夹比较", group: "整理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "dir", minCount: 2 }) },
   // ── PDF ──
-  { key: "pdfMerge", label: "PDF 合并", group: "PDF", area: "both", supportsSel: true, supportsBlank: true, cond: C({ target: "all", minCount: 1 }) },
+  { key: "pdfMerge", label: "PDF 合并", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "all", minCount: 1 }) },
   { key: "pdfSplit", label: "PDF 拆分为单页", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", maxCount: 1, exts: "pdf" }) },
   { key: "pdfExtract", label: "PDF 提取页", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", maxCount: 1, exts: "pdf" }) },
   { key: "pdfRemove", label: "PDF 删除页", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", maxCount: 1, exts: "pdf" }) },
