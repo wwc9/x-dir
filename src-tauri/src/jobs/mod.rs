@@ -290,7 +290,31 @@ impl JobManager {
                     current_path: String::new(),
                 },
             );
-            let _guard = slot.lock().unwrap();
+            // 排队等待可取消（2026-10-22 修复）：此前直接 slot.lock() 阻塞——
+            // 全局槽被长任务/暂停任务占用时，排队中的任务连取消旗标都读不到
+            //（要等拿到槽才开始读），任务卡永远停在「排队中」且取消无效。
+            // 改为 80ms 轮询：排队期间取消 = 直接以 job-done(cancelled) 收尾
+            //（无 dirty_dirs，缓存无需失效），前端移除任务卡
+            let _guard = loop {
+                if cancel.load(Ordering::SeqCst) {
+                    let _ = app.emit(
+                        "job-done",
+                        &JobDone {
+                            job_id: id,
+                            ok: true,
+                            cancelled: true,
+                            failed: vec![],
+                        },
+                    );
+                    cancels.lock().unwrap().remove(&id);
+                    pauses.lock().unwrap().remove(&id);
+                    return;
+                }
+                match slot.try_lock() {
+                    Ok(g) => break g,
+                    Err(_) => std::thread::sleep(std::time::Duration::from_millis(80)),
+                }
+            };
             // 暂停旗标装配进线程本地（仅 Copy/Move；批处理类瞬态任务不响应暂停）
             if matches!(kind, JobKind::Copy | JobKind::Move) {
                 JOB_PAUSED.with(|p| *p.borrow_mut() = Some(Arc::clone(&paused)));
