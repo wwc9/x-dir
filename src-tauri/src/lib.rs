@@ -57,6 +57,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // 截图（§3.6）：全局热键 + 位图剪贴板（注册时机由前端设置驱动，
+        // 见 commands/shot.rs 的 shot_register_hotkey）
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_clipboard_manager::init())
         // 日志：exe 旁 logs/，5MB 滚动（§6.9/§6.10；release=info / dev=debug）
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -83,6 +87,9 @@ pub fn run() {
             std::panic::set_hook(Box::new(|info| {
                 log::error!("panic: {info}");
             }));
+            // 上次会话/贴图残留的临时 PNG 清理（截图会话文件随窗销毁即删，
+            // 崩溃/强杀残留由此兜底）
+            commands::shot::cleanup_stale();
             // 索引模式预热：后台把已建索引 mmap prefault 进文件缓存，消除首次查询冷映射
             crate::index::warm_views_async();
             // 无边框窗口带阴影时，tao 在 Win11 顶部留 1px 非客户区（WM_NCCALCSIZE
@@ -232,6 +239,12 @@ pub fn run() {
             commands::native::show_context_menu,
             commands::native::start_drag,
             commands::native::set_border_color,
+            commands::shot::shot_begin,
+            commands::shot::shot_close,
+            commands::shot::shot_copy,
+            commands::shot::shot_pin,
+            commands::shot::shot_save_data,
+            commands::shot::shot_register_hotkey,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

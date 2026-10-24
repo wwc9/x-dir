@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
-  "windows": ["main"],
+  "description": "main 主窗 + 截图遮罩窗(shot) + 贴图窗(pin-*)；shot/pin 仅使用 invoke 与窗口定位/尺寸/关闭",
+  "windows": ["main", "shot", "pin-*"],
   "permissions": [
     "core:default",
     "opener:default",
@@ -13,6 +13,8 @@
     "core:window:allow-start-dragging",
     "core:window:allow-is-maximized",
     "core:window:allow-set-title",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "core:webview:allow-set-webview-zoom"

@@ -82,6 +82,14 @@ color_quant = "1"
 kamadak-exif = "0.6"
 rust_xlsxwriter = "0.99.1"
 
+# 截图与贴图（2026-10-24）：xcap Apache-2.0 显示器捕获（截屏引擎）；
+# base64 MIT/Apache-2.0 解码前端 PNG dataURL；global-shortcut 与
+# clipboard-manager 为 Tauri 官方插件（MIT/Apache-2.0，全局热键 + 位图剪贴板）
+xcap = "0.9"
+base64 = "0.22"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-clipboard-manager = "2"
+
 # Windows 专属：关闭 WebView2 浏览器加速键（F5/Ctrl+R 重载、Ctrl+F 查找栏、
 # Ctrl+P 打印、F12 DevTools——全局快捷键由前端 lib/keyboard.ts 全权路由），
 # 编辑类按键（Ctrl+C/V/X/A/Z 等）不受影响；与 wry 同版本保证类型统一
