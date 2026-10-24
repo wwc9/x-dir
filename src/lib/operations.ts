@@ -195,11 +195,12 @@ export async function splitPdf(entry: FileEntry, dir: string): Promise<void> {
   }
 }
 
-/** 文字水印（深灰 45° 对角半透明），旁写 "<名称>_水印.pdf"，不改原文件 */
+/** 文字水印（参数化 + 待处理清单可拖动排序），旁写 "<名称>_水印.pdf"，不改原文件 */
 export async function watermarkPdfs(entries: FileEntry[], dir: string): Promise<void> {
   if (!entries.length) return;
   const opts = await useUi.getState().openDialog<
     | {
+        paths: string[];
         text: string;
         outName: string;
         fontName: string;
@@ -216,10 +217,8 @@ export async function watermarkPdfs(entries: FileEntry[], dir: string): Promise<
   >({ type: "pdfWatermark", entries });
   if (!opts) return;
   try {
-    const { jobId } = await api.pdfWatermark({
-      paths: entries.map((e) => e.path),
-      ...opts,
-    });
+    // paths = 清单拖动排序后的处理顺序
+    const { jobId } = await api.pdfWatermark(opts);
     useJobs.getState().register(jobId, "pdfwatermark", dir, [dir]);
   } catch (e) {
     useUi.getState().toast(`加水印失败：${String(e)}`, "error");

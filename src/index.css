@@ -4483,6 +4483,9 @@ mark.np-gsearch-mark {
   color: var(--np-muted);
   cursor: grab;
   touch-action: none;
+  /* 扩大命中区：12px 图标对指针拖拽过小，padding +负 margin 保持视觉位 */
+  padding: 5px;
+  margin: -5px;
 }
 .np-pdfmlist-grip:active {
   cursor: grabbing;

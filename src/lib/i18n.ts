@@ -360,6 +360,9 @@ const EN: Record<string, string> = {
   "拖动调整顺序": "Drag to reorder",
   "支持占位符，见下方说明": "Placeholders supported — see below",
   "点击插入占位符": "Click to insert",
+  "处理顺序": "Processing order",
+  "默认按名称排序（数字感知），拖动行可调整处理顺序":
+    "Default order is by name (numeric-aware) — drag rows to adjust the processing order",
   "文字沿左上→右下 45° 缩放铺满":
     "Text scales to fill each page at 45° along the top-left → bottom-right diagonal",
   "文字沿右上→左下 45° 缩放铺满":
