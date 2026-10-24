@@ -203,19 +203,22 @@ body {
 .bp6-menu-item {
   border-radius: var(--np-radius);
 }
-/* 分段选择（§4.3：Blueprint ButtonGroup 现成件，激活态 = accent 填充）：
-   surface-2 轨道 + pill 段块，未激活段文字 muted、悬停浮现；设置/搜索等通用 */
+/* 分段选择（§4.3：Blueprint ButtonGroup 现成件）。2026-10-24 定案 = 方案 A
+   描边勾选 chip（design/wm-seg-proposals.html），替代 surface-2 轨道 + accent
+   实心填充——纯文字多段时唯一选中信号太弱，且 accent 整块填充会吞掉语义色
+   （水印颜色行选「红」时按蓝底）：无轨道，每项独立 chip 描边兜边界，
+   选中 = sel 淡染底 + accent 描边 + accent 字重 600 + ✓ 前缀，三重信号；
+   设置/菜单编辑/工具箱对话框通用 */
 .np-seg {
-  gap: 2px;
-  padding: 2px;
-  background: var(--np-surface-2);
-  border-radius: var(--np-radius-pill);
+  gap: var(--np-gutter);
 }
 .np-seg .bp6-button {
-  min-height: calc(var(--np-ctl-h) - 4px);
-  padding: 1px 10px;
+  min-height: var(--np-ctl-h);
+  padding: 1px var(--np-gutter);
+  border: 1px solid var(--np-border);
   border-radius: var(--np-radius-pill);
   font-size: var(--np-font-ui);
+  font-weight: 400;
   color: var(--np-muted);
 }
 .np-seg .bp6-button:hover {
@@ -225,12 +228,20 @@ body {
 .np-seg .bp6-button.bp6-active,
 .np-seg .bp6-button.bp6-active:hover,
 /* Blueprint v6 自带 .bp6-button-group.bp6-minimal .bp6-button.bp6-active（0-4-0）
-   会压过上面的 0-3-0 规则，此处以 0-5-0 双类写法保证 accent 填充生效 */
+   会压过上面的 0-3-0 规则，此处以 0-5-0 双类写法保证 chip 激活态生效 */
 .bp6-button-group.np-seg .bp6-button.bp6-active.bp6-active,
 .bp6-button-group.np-seg .bp6-button.bp6-active.bp6-active:hover {
-  background-color: var(--np-accent);
+  background-color: var(--np-sel);
   background-image: none;
-  color: var(--np-accent-fg);
+  border-color: var(--np-accent);
+  color: var(--np-accent);
+  font-weight: 600;
+}
+/* 选中 ✓ 前缀：::before 占位，选中态 chip 略增宽（提案稿同款行为） */
+.np-seg .bp6-button.bp6-active::before {
+  content: "✓";
+  font-size: var(--np-font-sm);
+  margin-right: var(--np-gap);
 }
 /* Popover 面板统一（菜单 / 布局选择器 / 设置面板 / 地址历史等共用一张"脸"）：
    与 .bp6-menu 同款 surface 卡片 + 大圆角 + np 阴影，深浅主题随 token 自适应 */
@@ -3953,7 +3964,7 @@ body.np-col-resizing * {
 .np-menued-ritem:hover {
   background: var(--np-hover);
 }
-/* 目录激活 = accent 填充（np-seg 同源语言），计数徽标反白 */
+/* 目录激活 = accent 填充，计数徽标反白 */
 .np-menued-ritem.is-on {
   background: var(--np-accent);
   color: var(--np-accent-fg);
