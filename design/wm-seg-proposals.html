@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>水印对话框 · 字体/颜色分段切换 · 3 套替代方案</title>
+<style>
+  /* ═══ np token 替身（与 src/index.css 同值，2026-10-24）═══ */
+  .t-light {
+    --np-bg: #e9ecf1; --np-surface: #ffffff; --np-surface-2: #f0f2f5;
+    --np-border: #d6dbe2; --np-hairline: rgba(16, 24, 40, 0.06);
+    --np-fg: #171d26; --np-muted: #66707e;
+    --np-accent: #3574f0; --np-accent-fg: #ffffff;
+    --np-hover: rgba(26, 33, 41, 0.055); --np-sel: rgba(53, 116, 240, 0.12);
+  }
+  .t-dark {
+    --np-bg: #131519; --np-surface: #1b1e23; --np-surface-2: #24282f;
+    --np-border: #3a414b; --np-hairline: rgba(255, 255, 255, 0.08);
+    --np-fg: #e8eaed; --np-muted: #8b929c;
+    --np-accent: #5c9dff; --np-accent-fg: #0d1117;
+    --np-hover: rgba(255, 255, 255, 0.055); --np-sel: rgba(92, 157, 255, 0.16);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 48px; background: #dde2ea; color: #171d26;
+    font-family: system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 13px; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: #66707e; font-size: 12px; margin-bottom: 18px; }
+  .banner { background: #fff; border: 1px solid #d6dbe2; border-radius: 12px;
+    padding: 10px 14px; margin-bottom: 24px; font-size: 12px; color: #66707e;
+    line-height: 1.8; max-width: 980px; }
+  .banner b { color: #171d26; }
+  .banner code { background: #f0f2f5; border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+
+  section { margin-bottom: 34px; }
+  .sec-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .sec-h .tag { background: #3574f0; color: #fff; font-size: 11px; font-weight: 600;
+    border-radius: 999px; padding: 1px 9px; }
+  .sec-h .tag.gray { background: #8a93a0; }
+  .sec-h h2 { font-size: 14px; margin: 0; }
+  .sec-note { font-size: 12px; color: #66707e; margin: 0 0 12px; line-height: 1.8; max-width: 980px; }
+  .sec-note b { color: #171d26; }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: stretch; }
+
+  /* ═══ 真实上下文还原：水印对话框 surface 卡 + 表单行（标签列 + 控件列）═══ */
+  .dlg { background: var(--np-surface); border-radius: 14px; padding: 16px 18px;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.08); width: 430px; }
+  .dlg-title { font-weight: 600; font-size: 13px; color: var(--np-fg); margin-bottom: 14px; }
+  .frow { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .frow:last-child { margin-bottom: 2px; }
+  .frow .k { flex: 0 0 96px; color: var(--np-muted); font-size: 12px; line-height: 24px; }
+  .frow .ctl { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+
+  /* 状态自检小字：实时回显当前选中值，验证点击交互 */
+  .echo { font-size: 11px; color: var(--np-muted); }
+  .echo b { color: var(--np-fg); font-weight: 600; }
+
+  /* ══════════════════════════════════════════════════════════
+     现状基线：np-seg 轨道 + accent 实心填充（对照组，不可点）
+     ══════════════════════════════════════════════════════════ */
+  .seg-cur { display: inline-flex; gap: 2px; padding: 2px;
+    background: var(--np-surface-2); border-radius: 999px; }
+  .seg-cur button { border: 0; background: none; cursor: default;
+    min-height: 20px; padding: 1px 10px; border-radius: 999px;
+    font-size: 13px; font-family: inherit; color: var(--np-muted); }
+  .seg-cur button.on { background: var(--np-accent); color: var(--np-accent-fg); }
+
+  /* ══════════════════════════════════════════════════════════
+     方案 A · 描边勾选 chip（radio-chip）
+     无轨道；每项独立 chip，hairline 描边兜住边界；
+     选中 = sel 淡染底 + accent 描边 + accent 字重 600 + ✓，
+     accent 不再整块填充 → 与"颜色"行的语义色不打架，
+     选中态靠「描边 + 对勾 + 字重」三重信号，扫视最跳
+     ══════════════════════════════════════════════════════════ */
+  .seg-a { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+  .seg-a button { display: inline-flex; align-items: center; gap: 5px;
+    border: 1px solid var(--np-border); background: none; cursor: pointer;
+    min-height: 24px; padding: 1px 11px; border-radius: 999px;
+    font-size: 13px; font-family: inherit; color: var(--np-muted);
+    transition: border-color 0.12s, background-color 0.12s, color 0.12s; }
+  .seg-a button:hover { background: var(--np-hover); color: var(--np-fg); }
+  .seg-a button .ck { display: none; font-size: 11px; line-height: 1; }
+  .seg-a button.on { background: var(--np-sel); border-color: var(--np-accent);
+    color: var(--np-accent); font-weight: 600; }
+  .seg-a button.on .ck { display: inline; }
+  .seg-a button:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--np-sel); }
+
+  /* ══════════════════════════════════════════════════════════
+     方案 B · 轨道 + 白 thumb 滑块（现行轨道式的指示器中性化）
+     保留 surface-2 轨道语言，但指示块从 accent 实心换成
+     白 surface thumb + 发丝影（iOS 分段控件同款）；
+     选中 = thumb 位移动画 + 字重 600 / 未选中 muted 的字重对比。
+     指示器中性 → "红/蓝"等语义字不会被蓝底吞掉；
+     位移动画让「刚才选的是谁、现在是谁」一眼可见
+     ══════════════════════════════════════════════════════════ */
+  .seg-b { position: relative; display: inline-flex; gap: 2px; padding: 2px;
+    background: var(--np-surface-2); border-radius: 999px; }
+  .seg-b .thumb { position: absolute; top: 2px; left: 0; height: 20px;
+    border-radius: 999px; background: var(--np-surface);
+    box-shadow: 0 0 0 1px var(--np-hairline), 0 1px 3px rgba(16, 24, 40, 0.18);
+    transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), width 0.18s cubic-bezier(0.4, 0, 0.2, 1); }
+  .seg-b button { position: relative; z-index: 1; border: 0; background: none; cursor: pointer;
+    min-height: 20px; padding: 1px 11px; border-radius: 999px;
+    font-size: 13px; font-family: inherit; color: var(--np-muted);
+    transition: color 0.12s; }
+  .seg-b button:hover { color: var(--np-fg); }
+  .seg-b button.on { color: var(--np-fg); font-weight: 600; }
+
+  /* ══════════════════════════════════════════════════════════
+     方案 C · 内容自证（色点 + 字体样本），选中 = accent ring
+     选项本身可视化：颜色段画真实色点（白点带 hairline 圈），
+     字体段用各自真字渲染（楷体/黑体/仿宋/等线）；
+     选中 = accent ring 描边 + sel 淡染底 + ✓，
+     语义色与指示色彻底分离，深浅主题都成立
+     ══════════════════════════════════════════════════════════ */
+  .seg-c { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+  .seg-c button { display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid transparent; background: none; cursor: pointer;
+    min-height: 24px; padding: 1px 10px 1px 8px; border-radius: 999px;
+    font-size: 13px; font-family: inherit; color: var(--np-muted);
+    transition: border-color 0.12s, background-color 0.12s, color 0.12s; }
+  .seg-c button:hover { background: var(--np-hover); color: var(--np-fg); }
+  .seg-c .dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto;
+    box-shadow: inset 0 0 0 1px var(--np-hairline); }
+  .seg-c .spec-kai { font-family: "KaiTi", "楷体", STKaiti, serif; }
+  .seg-c .spec-hei { font-family: "SimHei", "黑体", sans-serif; }
+  .seg-c .spec-fang { font-family: "FangSong", "仿宋", STFangsong, serif; }
+  .seg-c .spec-deng { font-family: "DengXian", "等线", sans-serif; }
+  .seg-c button .ck { display: none; font-size: 11px; line-height: 1; }
+  .seg-c button.on { background: var(--np-sel); border-color: var(--np-accent);
+    color: var(--np-fg); font-weight: 600; }
+  .seg-c button.on .ck { display: inline; color: var(--np-accent); }
+</style>
+</head>
+<body>
+<h1>水印对话框 · 字体/颜色分段切换 · 3 套替代方案</h1>
+<div class="sub">现状 <code>np-seg</code>（surface-2 轨道 + accent 实心填充）被反馈「不够清晰」——以下均为<b>可点击</b>交互原型，浅/深主题并排，行内小字实时回显选中值。</div>
+
+<div class="banner">
+  <b>现状问题分析：</b>① 选中信号只有「accent 实心块」一种，8 段纯文字时扫视对比弱；
+  ② 颜色行语义冲突——选「红」时按的是<b>蓝底</b>白字，指示色吞掉语义色；
+  ③ 字体行四项同为默认字形，看不出各自长什么样。<br>
+  三套方案分别从 <b>描边+对勾</b>（A）、<b>中性 thumb+字重</b>（B）、<b>选项内容自证</b>（C）三个方向解决。
+</div>
+
+<!-- ═══════════ 现状基线（对照组）═══════════ -->
+<section>
+  <div class="sec-h"><span class="tag gray">现状</span><h2>基线对照 · accent 实心填充（不可点）</h2></div>
+  <div class="row">
+    <div class="dlg t-light">
+      <div class="dlg-title">PDF 加水印</div>
+      <div class="frow"><span class="k">字体</span><span class="ctl"><span class="seg-cur" data-static>
+        <button>楷体</button><button class="on">黑体</button><button>仿宋</button><button>等线</button></span></span></div>
+      <div class="frow"><span class="k">颜色</span><span class="ctl"><span class="seg-cur" data-static>
+        <button class="on">黑</button><button>灰</button><button>红</button><button>白</button><button>绿</button><button>黄</button><button>蓝</button><button>紫</button></span></span></div>
+    </div>
+    <div class="dlg t-dark">
+      <div class="dlg-title">PDF 加水印</div>
+      <div class="frow"><span class="k">字体</span><span class="ctl"><span class="seg-cur" data-static>
+        <button>楷体</button><button class="on">黑体</button><button>仿宋</button><button>等线</button></span></span></div>
+      <div class="frow"><span class="k">颜色</span><span class="ctl"><span class="seg-cur" data-static>
+        <button class="on">黑</button><button>灰</button><button>红</button><button>白</button><button>绿</button><button>黄</button><button>蓝</button><button>紫</button></span></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 方案 A ═══════════ -->
+<section>
+  <div class="sec-h"><span class="tag">方案 A</span><h2>描边勾选 chip（radio-chip）</h2></div>
+  <div class="sec-note"><b>做法：</b>去掉轨道，每项独立 chip（hairline 描边兜边界）；选中 = sel 淡染底 + accent 描边 + accent 字重 600 + ✓ 前缀。
+    <b>为什么更清晰：</b>「描边 + 对勾 + 字重」三重选中信号，不依赖底色块扫视；accent 只上描边与文字不整块填充，与颜色行语义色不打架。未选项的描边让可点范围也比现状明确。
+    <b>代价：</b>视觉重量比轨道式散，8 项颜色行占宽略增（可换行）。</div>
+  <div class="row">
+    <div class="dlg t-light">
+      <div class="dlg-title">PDF 加水印</div>
+      <div class="frow"><span class="k">字体</span><span class="ctl">
+        <span class="seg-a" data-echo="font">
+          <button class="on"><span class="ck">✓</span>楷体</button>
+          <button><span class="ck">✓</span>黑体</button>
+          <button><span class="ck">✓</span>仿宋</button>
+          <button><span class="ck">✓</span>等线</button>
+        </span>
+        <span class="echo">当前选中：<b>楷体</b></span></span></div>
+      <div class="frow"><span class="k">颜色</span><span class="ctl">
+        <span class="seg-a" data-echo="color">
+          <button class="on"><span class="ck">✓</span>黑</button>
+          <button><span class="ck">✓</span>灰</button>
+          <button><span class="ck">✓</span>红</button>
+          <button><span class="ck">✓</span>白</button>
+          <button><span class="ck">✓</span>绿</button>
+          <button><span class="ck">✓</span>黄</button>
+          <button><span class="ck">✓</span>蓝</button>
+          <button><span class="ck">✓</span>紫</button>
+        </span>
+        <span class="echo">当前选中：<b>黑</b></span></span></div>
+    </div>
+    <div class="dlg t-dark">
+      <div class="dlg-title">PDF 加水印</div>
+      <div class="frow"><span class="k">字体</span><span class="ctl">
+        <span class="seg-a" data-echo="font">
+          <button class="on"><span class="ck">✓</span>楷体</button>
+          <button><span class="ck">✓</span>黑体</button>
+          <button><span class="ck">✓</span>仿宋</button>
+          <button><span class="ck">✓</span>等线</button>
+        </span>
+        <span class="echo">当前选中：<b>楷体</b></span></span></div>
+      <div class="frow"><span class="k">颜色</span><span class="ctl">
+        <span class="seg-a" data-echo="color">
+          <button class="on"><span class="ck">✓</span>黑</button>
+          <button><span class="ck">✓</span>灰</button>
+          <button><span class="ck">✓</span>红</button>
+          <button><span class="ck">✓</span>白</button>
+          <button><span class="ck">✓</span>绿</button>
+          <button><span class="ck">✓</span>黄</button>
+          <button><span class="ck">✓</span>蓝</button>
+          <button><span class="ck">✓</span>紫</button>
+        </span>
+        <span class="echo">当前选中：<b>黑</b></span></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 方案 B ═══════════ -->
+<section>
+  <div class="sec-h"><span class="tag">方案 B</span><h2>轨道 + 白 thumb 滑块（现行轨道式 · 指示器中性化）</h2></div>
+  <div class="sec-note"><b>做法：</b>保留 surface-2 轨道语言，指示块从 accent 实心换成白 surface thumb（发丝圈 + 投影，iOS 分段控件同款），点击时 thumb 平滑滑动；选中文字 = fg + 字重 600，未选中保持 muted。
+    <b>为什么更清晰：</b>指示器与语义色彻底解耦——选「红」不再出现蓝块；滑动动画让「刚才选的是谁、现在是谁」一眼可见；字重对比给第二重信号。整组视觉语言与其余 np-seg（页面范围/页码格式等）保持一致，全对话框可一并换。
+    <b>代价：</b>多一组 thumb 定位逻辑；纯静态截图里 clarity 提升不如 A/C 直观（动效是主要增益）。</div>
+  <div class="row">
+    <div class="dlg t-light">
+      <div class="dlg-title">PDF 加水印</div>
+      <div class="frow"><span class="k">字体</span><span class="ctl">
+        <span class="seg-b" data-echo="font"><span class="thumb"></span>
+          <button class="on">楷体</button><button>黑体</button><button>仿宋</button><button>等线</button>
+        </span>
+        <span class="echo">当前选中：<b>楷体</b></span></span></div>
+      <div class="frow"><span class="k">颜色</span><span class="ctl">
+        <span class="seg-b" data-echo="color"><span class="thumb"></span>
+          <button class="on">黑</button><button>灰</button><button>红</button><button>白</button><button>绿</button><button>黄</button><button>蓝</button><button>紫</button>
+        </span>
+        <span class="echo">当前选中：<b>黑</b></span></span></div>
+    </div>
+    <div class="dlg t-dark">
+      <div class="dlg-title">PDF 加水印</div>
+      <div class="frow"><span class="k">字体</span><span class="ctl">
+        <span class="seg-b" data-echo="font"><span class="thumb"></span>
+          <button class="on">楷体</button><button>黑体</button><button>仿宋</button><button>等线</button>
+        </span>
+        <span class="echo">当前选中：<b>楷体</b></span></span></div>
+      <div class="frow"><span class="k">颜色</span><span class="ctl">
+        <span class="seg-b" data-echo="color"><span class="thumb"></span>
+          <button class="on">黑</button><button>灰</button><button>红</button><button>白</button><button>绿</button><button>黄</button><button>蓝</button><button>紫</button>
+        </span>
+        <span class="echo">当前选中：<b>黑</b></span></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 方案 C ═══════════ -->
+<section>
+  <div class="sec-h"><span class="tag">方案 C</span><h2>内容自证：色点 + 字体真字样本（选中 = accent ring）</h2></div>
+  <div class="sec-note"><b>做法：</b>让选项自己说明自己——颜色段每项画真实色点（白点带 hairline 圈防隐形），字体段用各自真字渲染（楷体/黑体/仿宋/等线）；选中 = accent 描边 ring + sel 淡染底 + ✓。
+    <b>为什么更清晰：</b>信息量提升最大的一套——不用选中任何项就能看出「红是什么红、楷体长什么样」，选择前即可决策；选中信号独立于内容色，深色主题下色点依然成立（水印输出色是绝对色）。
+    <b>代价：</b>字体真字依赖系统字体（KaiTi/SimHei/FangSong/DengXian，Win 自带）；chip 数量多时行宽最大，8 色行需允许换行。</div>
+  <div class="row">
+    <div class="dlg t-light">
+      <div class="dlg-title">PDF 加水印</div>
+      <div class="frow"><span class="k">字体</span><span class="ctl">
+        <span class="seg-c" data-echo="font">
+          <button class="on"><span class="spec-kai">楷体</span><span class="ck">✓</span></button>
+          <button><span class="spec-hei">黑体</span><span class="ck">✓</span></button>
+          <button><span class="spec-fang">仿宋</span><span class="ck">✓</span></button>
+          <button><span class="spec-deng">等线</span><span class="ck">✓</span></button>
+        </span>
+        <span class="echo">当前选中：<b>楷体</b></span></span></div>
+      <div class="frow"><span class="k">颜色</span><span class="ctl">
+        <span class="seg-c" data-echo="color">
+          <button class="on"><span class="dot" style="background:#111"></span>黑<span class="ck">✓</span></button>
+          <button><span class="dot" style="background:#888"></span>灰<span class="ck">✓</span></button>
+          <button><span class="dot" style="background:#d64545"></span>红<span class="ck">✓</span></button>
+          <button><span class="dot" style="background:#ffffff"></span>白<span class="ck">✓</span></button>
+          <button><span class="dot" style="background:#2e9e5b"></span>绿<span class="ck">✓</span></button>
+          <button><span class="dot" style="background:#e0a106"></span>黄<span class="ck">✓</span></button>
+          <button><span class="dot" style="background:#3574f0"></span>蓝<span class="ck">✓</span></button>
+          <button><span class="dot" style="background:#7d64d8"></span>紫<span class="ck">✓</span></button>
+        </span>
+        <span class="echo">当前选中：<b>黑</b></span></span></div>
+    </div>
+    <div class="dlg t-dark">
+      <div class="dlg-title">PDF 加水印</div>
+      <div class="frow"><span class="k">字体</span><span class="ctl">
+        <span class="seg-c" data-echo="font">
+          <button class="on"><span class="spec-kai">楷体</span><span class="ck">✓</span></button>
+          <button><span class="spec-hei">黑体</span><span class="ck">✓</span></button>
+          <button><span class="spec-fang">仿宋</span><span class="ck">✓</span></button>
+          <button><span class="spec-deng">等线</span><span class="ck">✓</span></button>
+        </span>
+        <span class="echo">当前选中：<b>楷体</b></span></span></div>
+      <div class="frow"><span class="k">颜色</span><span class="ctl">
+        <span class="seg-c" data-echo="color">
+          <button class="on"><span class="dot" style="background:#111"></span>黑<span class="ck">✓</span></button>
+          <button><span class="dot" style="background:#888"></span>灰<span class="ck">✓</span></button>
+          <button><span class="dot" style="background:#d64545"></span>红<span class="ck">✓</span></button>
+          <button><span class="dot" style="background:#ffffff"></span>白<span class="ck">✓</span></button>
+          <button><span class="dot" style="background:#2e9e5b"></span>绿<span class="ck">✓</span></button>
+          <button><span class="dot" style="background:#e0a106"></span>黄<span class="ck">✓</span></button>
+          <button><span class="dot" style="background:#3574f0"></span>蓝<span class="ck">✓</span></button>
+          <button><span class="dot" style="background:#7d64d8"></span>紫<span class="ck">✓</span></button>
+        </span>
+        <span class="echo">当前选中：<b>黑</b></span></span></div>
+    </div>
+  </div>
+</section>
+
+<script>
+  /* 单选交互 + 选中值回显；方案 B 另行处理 thumb 滑动 */
+  document.querySelectorAll(".seg-a, .seg-c").forEach((seg) => {
+    const echo = seg.parentElement.querySelector(".echo b");
+    seg.querySelectorAll("button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        seg.querySelectorAll("button").forEach((b) => b.classList.remove("on"));
+        btn.classList.add("on");
+        if (echo) echo.textContent = btn.textContent.replace("✓", "").trim();
+      });
+    });
+  });
+
+  /* 方案 B：thumb 平移到选中项（含首帧定位与窗口缩放重算） */
+  document.querySelectorAll(".seg-b").forEach((seg) => {
+    const thumb = seg.querySelector(".thumb");
+    const echo = seg.parentElement.querySelector(".echo b");
+    const btns = [...seg.querySelectorAll("button")];
+    function place(animate = true) {
+      const on = seg.querySelector("button.on");
+      if (!on) return;
+      if (!animate) thumb.style.transition = "none";
+      /* offsetLeft/offsetTop 已含轨道 2px padding（相对 .seg-b），直接对齐按钮 */
+      thumb.style.top = on.offsetTop + "px";
+      thumb.style.height = on.offsetHeight + "px";
+      thumb.style.width = on.offsetWidth + "px";
+      thumb.style.transform = `translateX(${on.offsetLeft}px)`;
+      if (!animate) requestAnimationFrame(() => (thumb.style.transition = ""));
+    }
+    btns.forEach((btn) =>
+      btn.addEventListener("click", () => {
+        btns.forEach((b) => b.classList.remove("on"));
+        btn.classList.add("on");
+        place();
+        if (echo) echo.textContent = btn.textContent.trim();
+      })
+    );
+    place(false);
+    window.addEventListener("resize", () => place(false));
+    if (document.fonts) document.fonts.ready.then(() => place(false));
+  });
+</script>
+</body>
+</html>
