@@ -1,0 +1,281 @@
+// 截图标注纯函数与绘制（§3.6）：选区归一/调整、箭头头部、窗口命中、
+// 图形绘制。坐标全部为物理像素；颜色为画布内容色（随图保存的像素，
+// 不随主题，非 UI 语义色——同 fileIcons 语义色逻辑，不适用 --np-* 禁令）。
+
+export type ShotTool =
+  | "select"
+  | "rect"
+  | "ellipse"
+  | "arrow"
+  | "pen"
+  | "marker"
+  | "text"
+  | "mosaic"
+  | "blur";
+
+export interface Shape {
+  type: Exclude<ShotTool, "select">;
+  /** 包围盒（相对选区左上角的物理像素；pen/marker 用 pts） */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  pts?: { x: number; y: number }[];
+  color: string;
+  /** 线宽 / 文字字号（CSS 像素，绘制时 ×scale） */
+  width: number;
+  text?: string;
+}
+
+/** 画布内容色板（QQ 标注惯用色系） */
+export const SHOT_PALETTE = [
+  "#e5484d",
+  "#f76b15",
+  "#ffc53d",
+  "#46a758",
+  "#00a2c7",
+  "#3b82f6",
+  "#ffffff",
+  "#1c1c1c",
+];
+
+/** 拖拽矩形归一（负向拖拽翻正）并钳制到屏内；小于 minSize 视为点击（返回 null） */
+export function normalizeSel(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  mw: number,
+  mh: number,
+  minSize = 6,
+): { x: number; y: number; w: number; h: number } | null {
+  const x = Math.max(0, Math.min(x1, x2));
+  const y = Math.max(0, Math.min(y1, y2));
+  const w = Math.min(mw, Math.max(x1, x2)) - x;
+  const h = Math.min(mh, Math.max(y1, y2)) - y;
+  if (w < minSize || h < minSize) return null;
+  return { x, y, w, h };
+}
+
+export interface Sel {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export type HandleId = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
+
+/** 8 个调整手柄中心（物理像素） */
+export function selHandles(s: Sel): { id: HandleId; x: number; y: number }[] {
+  const cx = s.x + s.w / 2;
+  const cy = s.y + s.h / 2;
+  return [
+    { id: "nw", x: s.x, y: s.y },
+    { id: "n", x: cx, y: s.y },
+    { id: "ne", x: s.x + s.w, y: s.y },
+    { id: "e", x: s.x + s.w, y: cy },
+    { id: "se", x: s.x + s.w, y: s.y + s.h },
+    { id: "s", x: cx, y: s.y + s.h },
+    { id: "sw", x: s.x, y: s.y + s.h },
+    { id: "w", x: s.x, y: cy },
+  ];
+}
+
+/** 手柄命中测试（tol = 物理像素容差） */
+export function handleAt(s: Sel, px: number, py: number, tol = 10): HandleId | null {
+  for (const h of selHandles(s)) {
+    if (Math.abs(px - h.x) <= tol && Math.abs(py - h.y) <= tol) return h.id;
+  }
+  return null;
+}
+
+/** 拖手柄调整选区（钳制屏内，保持 ≥ 最小尺寸） */
+export function resizeSel(
+  s: Sel,
+  handle: HandleId,
+  px: number,
+  py: number,
+  mw: number,
+  mh: number,
+): Sel {
+  let x1 = s.x;
+  let y1 = s.y;
+  let x2 = s.x + s.w;
+  let y2 = s.y + s.h;
+  if (handle.includes("w")) x1 = Math.min(px, x2 - 8);
+  if (handle.includes("e")) x2 = Math.max(px, x1 + 8);
+  if (handle.includes("n")) y1 = Math.min(py, y2 - 8);
+  if (handle.includes("s")) y2 = Math.max(py, y1 + 8);
+  return {
+    x: Math.max(0, x1),
+    y: Math.max(0, y1),
+    w: Math.min(mw, x2) - Math.max(0, x1),
+    h: Math.min(mh, y2) - Math.max(0, y1),
+  };
+}
+
+/** 箭头头部两翼端点（线段末端的 ±25° 张角） */
+export function arrowHead(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  headLen: number,
+): { ax: number; ay: number; bx: number; by: number } | null {
+  const len = Math.hypot(x2 - x1, y2 - y1);
+  if (len < 1) return null;
+  const ang = Math.atan2(y2 - y1, x2 - x1);
+  const wing = (off: number) => ({
+    x: x2 - headLen * Math.cos(ang + off),
+    y: y2 - headLen * Math.sin(ang + off),
+  });
+  const a = wing(Math.PI / 7);
+  const b = wing(-Math.PI / 7);
+  return { ax: a.x, ay: a.y, bx: b.x, by: b.y };
+}
+
+/** 智能窗口命中：面积最小者优先（内层窗口盖在外层之上） */
+export function hitWindow(
+  windows: { x: number; y: number; w: number; h: number }[],
+  px: number,
+  py: number,
+): { x: number; y: number; w: number; h: number } | null {
+  let best: { x: number; y: number; w: number; h: number } | null = null;
+  for (const r of windows) {
+    if (px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h) {
+      if (!best || r.w * r.h < best.w * best.h) best = r;
+    }
+  }
+  return best;
+}
+
+// ── 绘制（物理像素坐标系；线宽/字号 ×scale 还原 CSS 观感）─────────────────
+
+/** 文字换行绘制（\n 显式换行），返回实际占用高度 */
+export function drawText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  fontSize: number,
+  color: string,
+): number {
+  const lines = text.split("\n");
+  ctx.font = `${fontSize}px "Segoe UI", "Microsoft YaHei", sans-serif`;
+  ctx.fillStyle = color;
+  ctx.textBaseline = "top";
+  const lh = fontSize * 1.35;
+  lines.forEach((ln, i) => ctx.fillText(ln, x, y + i * lh));
+  return lines.length * lh;
+}
+
+/** 单个图形绘制到 ctx（坐标已含选区偏移） */
+export function drawShape(
+  ctx: CanvasRenderingContext2D,
+  s: Shape,
+  ox: number,
+  oy: number,
+  scale: number,
+): void {
+  ctx.save();
+  ctx.strokeStyle = s.color;
+  ctx.fillStyle = s.color;
+  ctx.lineWidth = s.width * scale;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  switch (s.type) {
+    case "rect":
+      ctx.strokeRect(s.x + ox, s.y + oy, s.w, s.h);
+      break;
+    case "ellipse": {
+      ctx.beginPath();
+      ctx.ellipse(
+        s.x + ox + s.w / 2,
+        s.y + oy + s.h / 2,
+        Math.abs(s.w / 2),
+        Math.abs(s.h / 2),
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.stroke();
+      break;
+    }
+    case "arrow": {
+      const x1 = s.x + ox;
+      const y1 = s.y + oy;
+      const x2 = s.x + ox + s.w;
+      const y2 = s.y + oy + s.h;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      const head = arrowHead(x1, y1, x2, y2, Math.max(10 * scale, s.width * scale * 3));
+      if (head) {
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(head.ax, head.ay);
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(head.bx, head.by);
+        ctx.stroke();
+      }
+      break;
+    }
+    case "pen":
+    case "marker": {
+      if (!s.pts?.length) break;
+      if (s.type === "marker") {
+        ctx.globalAlpha = 0.4;
+        ctx.lineWidth = s.width * scale * 3.5;
+      }
+      ctx.beginPath();
+      ctx.moveTo(s.pts[0].x + ox, s.pts[0].y + oy);
+      for (const p of s.pts.slice(1)) ctx.lineTo(p.x + ox, p.y + oy);
+      ctx.stroke();
+      break;
+    }
+    case "text":
+      drawText(ctx, s.text ?? "", s.x + ox, s.y + oy, s.width * scale, s.color);
+      break;
+    case "mosaic": {
+      // 取合成画布当前内容打码：下采样再上采样（像素化）
+      const tile = Math.max(4, s.width * 3) * scale;
+      const sw = Math.max(1, Math.round(s.w / tile));
+      const sh = Math.max(1, Math.round(s.h / tile));
+      const off = document.createElement("canvas");
+      off.width = sw;
+      off.height = sh;
+      const octx = off.getContext("2d");
+      if (!octx) break;
+      octx.drawImage(ctx.canvas, s.x + ox, s.y + oy, s.w, s.h, 0, 0, sw, sh);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(off, 0, 0, sw, sh, s.x + ox, s.y + oy, s.w, s.h);
+      ctx.imageSmoothingEnabled = true;
+      break;
+    }
+    case "blur": {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(s.x + ox, s.y + oy, s.w, s.h);
+      ctx.clip();
+      ctx.filter = `blur(${Math.max(3, s.width * scale * 1.5)}px)`;
+      // 外扩绘制避免边缘泛出透明晕
+      const m = s.width * scale * 3;
+      ctx.drawImage(
+        ctx.canvas,
+        s.x + ox,
+        s.y + oy,
+        s.w,
+        s.h,
+        s.x + ox - m / 2,
+        s.y + oy - m / 2,
+        s.w + m,
+        s.h + m,
+      );
+      ctx.restore();
+      break;
+    }
+  }
+  ctx.restore();
+}

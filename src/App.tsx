@@ -61,6 +61,12 @@ export default function App() {
         await useSettings.getState().load();
         const st: Settings = useSettings.getState();
 
+        // 截图全局热键（§3.6）：按用户设置注册，失败静默（设置页改动时会
+        // 重新注册并经灵动岛回执提示冲突）
+        void api
+          .shotRegisterHotkey(st.shotEnabled, st.shotHotkey)
+          .catch(() => undefined);
+
         const args = await api.getLaunchArgs().catch<string[]>(() => []);
         const benchIdx = args.indexOf("--bench");
         let restored: LayoutNode | null = null;

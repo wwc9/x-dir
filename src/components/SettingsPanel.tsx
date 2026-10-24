@@ -13,6 +13,7 @@ import {
   Switch,
 } from "@blueprintjs/core";
 import {
+  Camera,
   Download,
   Files,
   FolderOpen,
@@ -54,11 +55,15 @@ const SORT_LABELS: Record<SortKey, string> = {
   type: "类型",
 };
 
+/** 截图热键预设（tauri-plugin-global-shortcut 可解析的组合；覆盖常用位避免手输） */
+const SHOT_HOTKEYS = ["Ctrl+Alt+A", "Ctrl+Alt+S", "Ctrl+Shift+A", "Alt+A", "F7"];
+
 const TABS = [
   { id: "appearance", label: "外观", icon: Palette },
   { id: "browse", label: "浏览", icon: FolderOpen },
   { id: "ops", label: "文件操作", icon: Files },
   { id: "search", label: "全盘搜索", icon: Search },
+  { id: "shot", label: "截图", icon: Camera },
   { id: "rules", label: "着色规则", icon: Tag },
   { id: "keys", label: "快捷键", icon: Keyboard },
   { id: "config", label: "配置", icon: Download },
@@ -94,6 +99,14 @@ export function SettingsPanel() {
   const setRule = (i: number, patch: Partial<ColorRule>) => {
     const rules = s.colorRules.map((r, j) => (j === i ? { ...r, ...patch } : r));
     s.update({ colorRules: rules });
+  };
+
+  /** 截图热键/开关变更：落盘并即时重注册（冲突经灵动岛回执提示） */
+  const applyShotHotkey = (enabled: boolean, hotkey: string) => {
+    s.update({ shotEnabled: enabled, shotHotkey: hotkey });
+    api.shotRegisterHotkey(enabled, hotkey).catch((e) =>
+      useUi.getState().toast(`截图热键未生效：${String(e)}`, "error"),
+    );
   };
 
   return (
@@ -251,6 +264,33 @@ export function SettingsPanel() {
             </SetRow>
             <div className="np-set-hint">
               {t("索引模式（NTFS 秒搜）开关已移至「全盘搜索」面板底部状态条，点击指示签即可管理。")}
+            </div>
+          </>
+        )}
+        {tab === "shot" && (
+          <>
+            <SetRow label={t("截图快捷键")} desc="系统级全局热键，X-Dir 运行时任意界面可按（含游戏等全屏应用除外）">
+              <Switch
+                checked={s.shotEnabled}
+                onChange={(e) => applyShotHotkey(e.currentTarget.checked, s.shotHotkey)}
+              />
+            </SetRow>
+            <SetRow label="热键键位" desc="被其他程序占用时换一个；更改即时生效">
+              <NpSelect
+                value={s.shotHotkey}
+                options={SHOT_HOTKEYS.map((h) => ({ value: h, label: h }))}
+                onChange={(h) => applyShotHotkey(s.shotEnabled, h)}
+              />
+            </SetRow>
+            <SetRow label={t("立即试一次")} desc="直接开始一次截图（等同按下全局热键）">
+              <Button minimal size="small" onClick={() => void api.shotBegin().catch(() => undefined)}>
+                {t("截图…")}
+              </Button>
+            </SetRow>
+            <div className="np-set-hint">
+              {t(
+                "截图支持框选 / 窗口识别 / 矩形·椭圆·箭头·画笔·马克笔·文字标注 / 马赛克与模糊 / 贴图（钉在屏幕上）/ 复制与保存；关闭 X-Dir 后热键失效。滚动长截图将在后续版本提供。",
+              )}
             </div>
           </>
         )}

@@ -64,6 +64,8 @@ function toPlain(s: SettingsStore): Settings {
     rememberSelection: s.rememberSelection,
     staging: s.staging,
     nameIndex: s.nameIndex,
+    shotEnabled: s.shotEnabled,
+    shotHotkey: s.shotHotkey,
   };
 }
 

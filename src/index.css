@@ -4584,3 +4584,194 @@ mark.np-gsearch-mark {
   background: var(--np-hover);
   color: var(--np-fg);
 }
+
+/* ═══ 截图覆盖层与贴图窗（§3.6，2026-10-24）═══
+   独立全屏窗（shot / pin-*），脱离主界面布局体系；取值仍全走 --np-* token。
+   标注内容色（SHOT_PALETTE）随图保存属画布像素，非 UI 色，见 shot/annot.ts */
+.np-shot {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #000;
+  cursor: crosshair;
+  user-select: none;
+  font-size: var(--np-font-ui);
+}
+.np-shot canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+/* 顶部操作提示 pill（无选区时） */
+.np-shot-hint {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 5px 14px;
+  border-radius: var(--np-radius-pill);
+  background: rgba(0, 0, 0, 0.68);
+  color: #fff;
+  font-size: var(--np-font-sm);
+  pointer-events: none;
+}
+/* 浮动工具栏：surface 卡片（§4.7 浮层语言） */
+.np-shot-toolbar {
+  position: absolute;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: calc(100% - 16px);
+  flex-wrap: wrap;
+  padding: 4px 6px;
+  border-radius: var(--np-radius-lg);
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  box-shadow: var(--np-shadow);
+}
+.np-shot-size {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  font-variant-numeric: tabular-nums;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+.np-shot-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--np-hairline);
+  margin: 0 3px;
+  flex: none;
+}
+.np-shot-tool {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: var(--np-radius);
+  background: transparent;
+  color: var(--np-fg);
+  cursor: pointer;
+}
+.np-shot-tool:hover:not(:disabled) {
+  background: var(--np-hover);
+}
+.np-shot-tool.on {
+  background: var(--np-sel);
+  color: var(--np-accent);
+}
+.np-shot-tool:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.np-shot-tool.np-shot-primary {
+  color: var(--np-accent);
+}
+.np-shot-tool.np-shot-danger:hover {
+  background: var(--np-danger);
+  color: var(--np-danger-fg);
+}
+/* 粗细/字号档位点 */
+.np-shot-wdot {
+  border-radius: var(--np-radius-pill);
+  background: currentcolor;
+  display: block;
+}
+/* 标注色板圆点（内联 background = 画布内容色，非 UI 语义色） */
+.np-shot-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--np-radius-pill);
+  border: 2px solid var(--np-surface);
+  outline: 1px solid var(--np-border);
+  cursor: pointer;
+  flex: none;
+}
+.np-shot-dot.on {
+  outline: 2px solid var(--np-accent);
+}
+/* 文字标注就地编辑框 */
+.np-shot-text {
+  position: absolute;
+  z-index: 9;
+  background: transparent;
+  border: 1px dashed var(--np-accent);
+  outline: none;
+  resize: none;
+  min-height: 1.4em;
+  line-height: 1.35;
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+  padding: 0;
+  min-width: 60px;
+  overflow: hidden;
+  white-space: pre;
+}
+/* 完成/失败回执浮条（保存走原生对话框后的轻提示） */
+.np-shot-saved {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 11;
+  padding: 6px 16px;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  box-shadow: var(--np-shadow);
+  font-size: var(--np-font-sm);
+  color: var(--np-fg);
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 贴图窗：无装饰置顶窗，图片铺满，光标提示可拖动 */
+.np-shot-pin {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  user-select: none;
+  cursor: move;
+  background: transparent;
+}
+.np-shot-pin img {
+  display: block;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+/* 贴图右键小菜单（独立窗无 useUi.openMenu，自绘 surface 卡片） */
+.np-shot-pinmenu {
+  position: fixed;
+  z-index: 20;
+  min-width: 140px;
+  padding: 4px;
+  border-radius: var(--np-radius-lg);
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  box-shadow: var(--np-shadow);
+  display: flex;
+  flex-direction: column;
+}
+.np-shot-pinmenu > button {
+  height: var(--np-ctl-h);
+  text-align: left;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--np-radius);
+  background: transparent;
+  color: var(--np-fg);
+  font-size: var(--np-font-ui);
+  cursor: pointer;
+}
+.np-shot-pinmenu > button:hover {
+  background: var(--np-hover);
+}
+.np-shot-pinmenu-hint {
+  padding: 4px 10px 2px;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}

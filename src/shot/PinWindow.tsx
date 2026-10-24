@@ -1,0 +1,177 @@
+// 贴图窗（§3.6，label pin-*）：截图选区钉在屏幕上的置顶小窗（Snipaste 惯例）。
+// 左键拖动移动、滚轮缩放（左上角锚定）、Alt+滚轮调不透明度、双击 / Esc 关闭、
+// 右键自绘小菜单（复制图像 / 保存为… / 关闭）。窗口物理尺寸与图像显示尺寸
+// 由前端经 window API 同步（capabilities 已放行 set-position/set-size）。
+import { useCallback, useEffect, useRef, useState } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { PhysicalPosition, PhysicalSize, getCurrentWindow } from "@tauri-apps/api/window";
+
+import { api } from "../lib/ipc";
+
+export interface PinBoot {
+  window: "pin";
+  file: string;
+  /** 贴图原始物理像素尺寸 */
+  w: number;
+  h: number;
+  scale: number;
+}
+
+const ZOOM_MIN = 0.1;
+const ZOOM_MAX = 6;
+const OPACITY_MIN = 0.25;
+
+export function PinWindow({ boot }: { boot: PinBoot }) {
+  const win = getCurrentWindow();
+  const [zoom, setZoom] = useState(1);
+  const [opacity, setOpacity] = useState(1);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const posRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const dragRef = useRef<{ lx: number; ly: number } | null>(null);
+  const zoomRef = useRef(1);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    void win
+      .outerPosition()
+      .then((p) => (posRef.current = { x: p.x, y: p.y }))
+      .catch(() => undefined);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") void win.close().catch(() => undefined);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** 缩放并同步窗口尺寸（物理 = 原始 × zoom） */
+  const applyZoom = useCallback(
+    (z: number) => {
+      const zz = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+      zoomRef.current = zz;
+      setZoom(zz);
+      void win
+        .setSize(
+          new PhysicalSize(Math.round(boot.w * zz), Math.round(boot.h * zz)),
+        )
+        .catch(() => undefined);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [boot.w, boot.h],
+  );
+
+  const onWheel = useCallback(
+    (e: React.WheelEvent) => {
+      e.preventDefault();
+      if (e.altKey) {
+        setOpacity((o) =>
+          Math.min(1, Math.max(OPACITY_MIN, o + (e.deltaY < 0 ? 0.05 : -0.05))),
+        );
+        return;
+      }
+      applyZoom(zoomRef.current * (e.deltaY < 0 ? 1.15 : 1 / 1.15));
+    },
+    [applyZoom],
+  );
+
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (menu) {
+        setMenu(null);
+        return;
+      }
+      if (e.button !== 0) return;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      dragRef.current = { lx: e.clientX, ly: e.clientY };
+    },
+    [menu],
+  );
+
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      // 累计位移（CSS→物理）驱动窗口移动，posRef 自持权威位置避免逐帧查询
+      const dx = (e.clientX - d.lx) * boot.scale;
+      const dy = (e.clientY - d.ly) * boot.scale;
+      d.lx = e.clientX;
+      d.ly = e.clientY;
+      posRef.current = { x: posRef.current.x + dx, y: posRef.current.y + dy };
+      void win
+        .setPosition(new PhysicalPosition(posRef.current.x, posRef.current.y))
+        .catch(() => undefined);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [boot.scale],
+  );
+
+  const dataUrl = useCallback(async (): Promise<string | null> => {
+    const img = imgRef.current;
+    if (!img || !img.complete) return null;
+    const c = document.createElement("canvas");
+    c.width = boot.w;
+    c.height = boot.h;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, boot.w, boot.h);
+    return c.toDataURL("image/png");
+  }, [boot.w, boot.h]);
+
+  const onMenuAction = useCallback(
+    async (action: "copy" | "save" | "close") => {
+      setMenu(null);
+      if (action === "close") {
+        void win.close().catch(() => undefined);
+        return;
+      }
+      const url = await dataUrl();
+      if (!url) return;
+      try {
+        if (action === "copy") await api.shotCopy(url);
+        else await api.shotSaveData(url);
+      } catch {
+        // 原生对话框/剪贴板失败静默（贴图窗无提示体系）
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dataUrl],
+  );
+
+  return (
+    <div
+      className="np-shot-pin"
+      onWheel={onWheel}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={() => (dragRef.current = null)}
+      onDoubleClick={() => void win.close().catch(() => undefined)}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setMenu({
+          x: Math.min(e.clientX, window.innerWidth - 150),
+          y: Math.min(e.clientY, window.innerHeight - 130),
+        });
+      }}
+    >
+      <img
+        ref={imgRef}
+        src={convertFileSrc(boot.file)}
+        draggable={false}
+        alt="贴图"
+        style={{
+          width: boot.w * zoom,
+          height: boot.h * zoom,
+          opacity,
+        }}
+      />
+      {menu && (
+        <div className="np-shot-pinmenu" style={{ left: menu.x, top: menu.y }}>
+          <button onClick={() => void onMenuAction("copy")}>复制图像</button>
+          <button onClick={() => void onMenuAction("save")}>保存为…</button>
+          <button onClick={() => void onMenuAction("close")}>关闭贴图</button>
+          <div className="np-shot-pinmenu-hint">滚轮缩放 · Alt+滚轮不透明度</div>
+        </div>
+      )}
+    </div>
+  );
+}

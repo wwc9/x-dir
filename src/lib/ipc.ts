@@ -321,6 +321,10 @@ export interface Settings {
   stagingMode: "move" | "copy";
   /** 全盘搜索索引模式（NTFS MFT/USN，需提权守护进程；默认关闭） */
   nameIndex: { enabled: boolean };
+  /** 截图（§3.6）：系统级热键开关（X-Dir 运行时任意界面生效）与键位 */
+  shotEnabled: boolean;
+  /** 截图热键键位（tauri-plugin-global-shortcut 字符串，如 "Ctrl+Alt+A"） */
+  shotHotkey: string;
 }
 
 /** 自定义右键命令：占位符 %f=全部选中路径（逐个引号包裹） %n=首项文件名 %d=所在目录；
@@ -401,6 +405,8 @@ export const DEFAULT_SETTINGS: Settings = {
   staging: [],
   stagingMode: "move",
   nameIndex: { enabled: false },
+  shotEnabled: true,
+  shotHotkey: "Ctrl+Alt+A",
 };
 
 export const PAGE_SIZE = 500;
@@ -716,6 +722,21 @@ export const api = {
   /** 保存文本文件（UTF-8 BOM；导出文件清单用） */
   saveTextFile: (path: string, content: string) =>
     cmd<void>("save_text_file", { path, content }),
+  /** 截图（§3.6）：开始一次会话（定格光标所在显示器 + 打开覆盖窗） */
+  shotBegin: () => cmd<void>("shot_begin"),
+  /** 关闭截图覆盖窗（完成 / 取消收尾） */
+  shotClose: () => cmd<void>("shot_close"),
+  /** 复制图像 PNG（dataURL）到系统剪贴板 */
+  shotCopy: (dataUrl: string) => cmd<void>("shot_copy", { dataUrl }),
+  /** 贴图：PNG dataURL 钉成置顶窗（x/y/w/h = 虚拟桌面物理坐标） */
+  shotPin: (dataUrl: string, x: number, y: number, w: number, h: number) =>
+    cmd<void>("shot_pin", { dataUrl, x, y, w, h }),
+  /** 保存 PNG dataURL 为文件（原生保存对话框；用户取消 = null） */
+  shotSaveData: (dataUrl: string) =>
+    cmd<string | null>("shot_save_data", { dataUrl }),
+  /** 注册/更新截图全局热键（启动与设置变更时调用；Err = 键位冲突等） */
+  shotRegisterHotkey: (enabled: boolean, hotkey: string) =>
+    cmd<void>("shot_register_hotkey", { enabled, hotkey }),
 };
 
 // M0 内存对比用假数据命令保留

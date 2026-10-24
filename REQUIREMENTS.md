@@ -19,6 +19,12 @@
 - 单窗口内窗格成本仅 2~8MB/格，10 窗格总量控制在 200~350MB
 - 窗格化同时是产品卖点（Q-Dir 哲学的延伸）
 
+**修订（2026-10-24，随截图功能）：** 主界面保持单窗口不变；截图功能新增两类
+**功能专用临时窗口**——全屏截图遮罩窗（label `shot`，会话结束即销毁）与贴图窗
+（label `pin-*`，用户关闭即销毁，常驻数量由用户控制）。它们是系统级 UI（覆盖
+屏幕 / 置顶悬浮），在主窗口内无法实现，且非文件浏览主链路，不计入多窗口内存
+口径（按需创建、用完即毁）。
+
 ## 3. 功能需求
 
 ### 3.1 V1（MVP）
@@ -100,6 +106,39 @@
 - **NTFS 限定**：exFAT/FAT（U 盘常见）、ReFS 无 USN 日志 → 该卷不支持索引，恒走遍历
 - 内存口径：索引默认关闭，350MB 硬验收基线不变；开启后主程序走 mmap（文件映射页可回收，
   私有内存几乎不涨），守护进程独立进程持有内存表（约 75B/条目 + FRN 哈希表）
+
+### 3.6 截图与贴图（2026-10-24 定案并实现一期；滚动长截图为二期）
+
+对标 QQ 截图 / PixPin 的常用子集，替代独立截图工具（用户 2026-10-24 需求）。
+
+**选型调研结论（2026-10-24）**：无宽松协议的开源截图应用可整体嵌入——
+Flameshot / ShareX / Ksnip 均 GPL-3.0（AGPL 系硬红线，§8 打回）；Snipaste /
+PixPin 闭源；electron-screenshots（MIT）深度绑定 Electron API 无法用于 Tauri，
+仅作交互设计蓝本；tauri-plugin-screenshots（MIT）能力为 xcap 子集（仅整屏/
+整窗截图，无选区/标注，项目年轻）不引入；tui-image-editor / filerobot-image-editor
+（MIT）为照片编辑器交互，非截图标注范式。**定案：截屏引擎用 xcap
+（Apache-2.0，Rust，活跃维护），交互层（覆盖窗选区/标注/马赛克/贴图）自研。**
+
+- **会话流程**：全局热键（tauri-plugin-global-shortcut，MIT/Apache-2.0，默认
+  `Ctrl+Alt+A`，设置 → 截图可换/可关）→ xcap 定格光标所在显示器为临时 PNG
+  （`%TEMP%/xdir_shot/`，窗销毁即清、启动清残留）→ Rust 建全屏无边框置顶
+  覆盖窗（label `shot`，initialization_script 注入 `window.__BOOT__` 携带截图
+  路径/显示器参数/可截窗口矩形）→ 前端 `shot/ShotOverlay` 渲染
+- **选区**：拖拽框选 + 8 手柄调整 + 整体移动 + 智能窗口识别（Rust EnumWindows
+  过滤可见/未最小化/非 cloaked/非工具窗/根窗口，前端命中高亮、点击整窗选中，
+  内层小窗优先）；全链路物理像素（×scale 与 CSS 像素换算，多显示器/DPI 对齐）
+- **标注**：矩形/椭圆/箭头/画笔/马克笔/文字（就地 textarea，IME 组合键豁免）+
+  8 色板 + 3 档粗细/字号；撤销/重做（Ctrl+Z/Y）；马赛克/模糊 = 对合成画布
+  （composite：底图+标注按序压平）区域像素化/ctx.filter blur，后画糊先画
+- **完成动作**：复制（tauri-plugin-clipboard-manager 写位图）/ 保存（原生保存
+  对话框，默认名 `截图_yyyymmdd_hhmmss.png`）/ 贴图（label `pin-*` 置顶无边框
+  小窗：拖动移动、滚轮缩放、Alt+滚轮不透明度、双击/Esc 关、右键复制/保存）；
+  Esc/右键逐层取消（文字→标注→拖拽→工具→选区→关闭）；Enter/双击=复制
+- **设置**：`shotEnabled`（默认开）+ `shotHotkey`（预设 5 键位）；设置页「截图」
+  分页含「立即试一次」入口（shot_begin 命令，即热键同款会话）
+- **二期（未实现）滚动长截图**：SendInput 滚轮注入 + 逐帧定格 + 竖向模板匹配
+  拼接（ShareX 思路自研），涉及目标窗口前台化与边界检测，单独排期
+- 不含：OCR、GIF/录屏、取色器、量尺（PixPin 有，未在用户点名范围，按需后补）
 
 ### 3.4 V1 明确不做（防范围蔓延）
 
@@ -351,7 +390,9 @@ WebView2/              # WebView2 用户数据目录
   "colorTags": { "D:\\Code": "blue" },
   "colorRules": [ { "pattern": "*.zip", "color": "orange" } ],
   "recentSearches": [ "预算表", "凭证" ],
-  "nameIndex": { "enabled": false }
+  "nameIndex": { "enabled": false },
+  "shotEnabled": true,
+  "shotHotkey": "Ctrl+Alt+A"
 }
 ```
 
@@ -438,6 +479,7 @@ V2 项（2026-10-11，缩略图开关已随图标视图删除 2026-10-13）：�
 | Delete | 删除到回收站（`confirmDelete` 时弹确认） |
 | Ctrl+Z | 撤销上一步操作：回收站删除还原 / 重命名改回 / 应用内移动移回 / 新建移入回收站（2026-10-13 补，lib/undo 栈式 LIFO，上限 50） |
 | Ctrl+Y / Ctrl+Shift+Z | 重做：按原方向再执行刚撤销的操作并压回撤销栈（可往复；新操作入撤销栈即清空重做分支，2026-10-15 补） |
+| Ctrl+Alt+A | 截图（2026-10-24 新增，**系统级**热键 = Rust global-shortcut 路由，不经 onGlobalKeyDown；设置 → 截图可换键位/关闭；键位见上） |
 | Shift+Delete | 永久删除（绕过回收站，强制 danger 确认；2026-10-13 补） |
 | Alt+Enter | 属性（2026-10-13 补） |
 | Shift+F10 / Menu 键 | 键盘呼出选中项右键菜单（2026-10-13 补） |

@@ -2,13 +2,15 @@
 // 共用（清单与测试用例经 scope=id 对齐，防止单边漂移）。
 // keys = 组合键展示串列表（段以 + 分隔，"A / B" 表示同档位多键）；
 // scope = global（经 onGlobalKeyDown 全局路由，测试强制逐条覆盖）
-//       | component（输入框/浮层控件内部处理，清单展示用）。
+//       | component（输入框/浮层控件内部处理，清单展示用）
+//       | system（系统级热键/独立窗口内按键，由 Rust 插件或截图/贴图窗自行
+//         处理，不经 onGlobalKeyDown；仅清单展示）。
 
 export interface ShortcutItem {
   id: string;
   keys: string[];
   label: string;
-  scope: "global" | "component";
+  scope: "global" | "component" | "system";
 }
 
 export interface ShortcutGroup {
@@ -140,6 +142,28 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { id: "dialog-esc", keys: ["Esc"], label: "对话框：关闭（= 取消）", scope: "component" },
       { id: "zoom-wheel", keys: ["Ctrl+滚轮"], label: "界面缩放（与浏览器习惯一致）", scope: "component" },
       { id: "img-zoom", keys: ["滚轮"], label: "图片预览：缩放图片", scope: "component" },
+    ],
+  },
+  {
+    title: "截图与贴图",
+    items: [
+      {
+        id: "shot-open",
+        keys: ["Ctrl+Alt+A"],
+        label: "截图（系统级热键，X-Dir 运行时任意界面生效；键位可在设置 → 截图更改）",
+        scope: "system",
+      },
+      {
+        id: "shot-esc",
+        keys: ["Esc / 右键"],
+        label: "截图：逐层取消（文字 → 标注 → 工具 → 选区 → 关闭）",
+        scope: "system",
+      },
+      { id: "shot-copy", keys: ["Enter / 双击"], label: "截图：复制到剪贴板", scope: "system" },
+      { id: "shot-undo", keys: ["Ctrl+Z / Ctrl+Y"], label: "截图：撤销 / 重做标注", scope: "system" },
+      { id: "pin-wheel", keys: ["滚轮 / Alt+滚轮"], label: "贴图：缩放 / 调整不透明度", scope: "system" },
+      { id: "pin-move", keys: ["左键拖动"], label: "贴图：移动位置", scope: "system" },
+      { id: "pin-close", keys: ["双击 / Esc"], label: "贴图：关闭", scope: "system" },
     ],
   },
 ];

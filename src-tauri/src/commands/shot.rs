@@ -70,13 +70,13 @@ pub struct ShotCapture {
 /// 枚举可截窗口（可见、未最小化、非 cloaked、非工具窗、根窗口、面积达标），
 /// 返回虚拟桌面绝对物理坐标
 fn enum_windows_abs() -> Vec<(i32, i32, i32, i32)> {
-    use windows::core::BOOL;
     use windows::Win32::Foundation::{HWND, LPARAM, RECT};
-    use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
+    use windows::Win32::Graphics::Dwm::{DWMWA_CLOAKED, DwmGetWindowAttribute};
     use windows::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetAncestor, GetWindowLongPtrW, GetWindowRect, IsIconic, IsWindowVisible,
-        GA_ROOT, GWL_EXSTYLE, WS_EX_TOOLWINDOW,
+        EnumWindows, GA_ROOT, GWL_EXSTYLE, GetAncestor, GetWindowLongPtrW, GetWindowRect, IsIconic,
+        IsWindowVisible, WS_EX_TOOLWINDOW,
     };
+    use windows::core::BOOL;
     struct Ctx {
         out: Vec<(i32, i32, i32, i32)>,
     }
@@ -123,10 +123,7 @@ fn enum_windows_abs() -> Vec<(i32, i32, i32, i32)> {
     }
     let mut ctx = Ctx { out: Vec::new() };
     unsafe {
-        let _ = EnumWindows(
-            Some(proc_impl),
-            LPARAM(&mut ctx as *mut Ctx as isize),
-        );
+        let _ = EnumWindows(Some(proc_impl), LPARAM(&mut ctx as *mut Ctx as isize));
     }
     ctx.out
 }
@@ -215,6 +212,7 @@ fn show_shot_window(app: &AppHandle, cap: &ShotCapture) -> Result<(), String> {
         "mw": cap.mw,
         "mh": cap.mh,
         "scale": cap.scale,
+        "windows": cap.windows,
     });
     let win = WebviewWindowBuilder::new(app, "shot", WebviewUrl::App("index.html".into()))
         .title("X-Dir 截图")
@@ -226,7 +224,7 @@ fn show_shot_window(app: &AppHandle, cap: &ShotCapture) -> Result<(), String> {
         .always_on_top(true)
         .shadow(false)
         .visible(false)
-        .initialization_script(&format!("window.__BOOT__ = {boot};"))
+        .initialization_script(format!("window.__BOOT__ = {boot};"))
         .build()
         .map_err(|e| format!("创建截图窗口失败：{e}"))?;
     win.set_position(PhysicalPosition::new(cap.mx, cap.my))
@@ -316,7 +314,7 @@ pub fn shot_pin(
         .shadow(false)
         .focused(false)
         .visible(false)
-        .initialization_script(&format!("window.__BOOT__ = {boot};"))
+        .initialization_script(format!("window.__BOOT__ = {boot};"))
         .build()
         .map_err(|e| format!("创建贴图窗口失败：{e}"))?;
     win.set_position(PhysicalPosition::new(x, y))
@@ -337,10 +335,7 @@ pub fn shot_pin(
 /// 保存为文件：原生保存对话框（阻塞版跑在 blocking 线程）→ 写盘，返回路径
 /// （用户取消 = null）
 #[tauri::command]
-pub async fn shot_save_data(
-    app: AppHandle,
-    data_url: String,
-) -> Result<Option<String>, String> {
+pub async fn shot_save_data(app: AppHandle, data_url: String) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
     let bytes = decode_data_url(&data_url)?;
     tauri::async_runtime::spawn_blocking(move || {
@@ -354,9 +349,7 @@ pub async fn shot_save_data(
         let Some(p) = picked else {
             return Ok(None);
         };
-        let path = p
-            .into_path()
-            .map_err(|e| format!("路径解析失败：{e}"))?;
+        let path = p.into_path().map_err(|e| format!("路径解析失败：{e}"))?;
         std::fs::write(&path, &bytes).map_err(|e| format!("保存失败：{e}"))?;
         Ok(Some(path.to_string_lossy().into_owned()))
     })
@@ -386,11 +379,7 @@ fn local_stamp() -> String {
 
 /// 注册/更新截图全局热键（前端启动与设置变更时调用；返回 Err = 键被占用）
 #[tauri::command]
-pub fn shot_register_hotkey(
-    app: AppHandle,
-    enabled: bool,
-    hotkey: String,
-) -> Result<(), String> {
+pub fn shot_register_hotkey(app: AppHandle, enabled: bool, hotkey: String) -> Result<(), String> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
     let gs = app.global_shortcut();
     let _ = gs.unregister_all();
