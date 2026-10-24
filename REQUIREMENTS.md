@@ -136,9 +136,35 @@ PixPin 闭源；electron-screenshots（MIT）深度绑定 Electron API 无法用
   Esc/右键逐层取消（文字→标注→拖拽→工具→选区→关闭）；Enter/双击=复制
 - **设置**：`shotEnabled`（默认开）+ `shotHotkey`（预设 5 键位）；设置页「截图」
   分页含「立即试一次」入口（shot_begin 命令，即热键同款会话）
-- **二期（未实现）滚动长截图**：SendInput 滚轮注入 + 逐帧定格 + 竖向模板匹配
-  拼接（ShareX 思路自研），涉及目标窗口前台化与边界检测，单独排期
-- 不含：OCR、GIF/录屏、取色器、量尺（PixPin 有，未在用户点名范围，按需后补）
+- **二期排期（2026-10-24 对标 Snow Shot 定案）**：Snow Shot（github.com/mg-chao/
+  snow-shot，4.8k star，Tauri + React 同栈，Tauri 生态最成熟的完整截图应用）
+  功能面 = 一期核心子集 + 滚动截图/延时/活动窗口/OCR/翻译/AI/录屏；其许可为
+  GPL-3.0 +「非商业」Apache + 商业授权三层混合且无逐文件 SPDX 标注，代码不可
+  移植（§8 红线），仅作功能与交互对标（看行为不读实现）。按价值/成本分三批：
+  - **A 批（小项打包，一期架构内参数化，无新依赖，实现时同步 §6.9 schema
+    `shotDelaySecs` / `shotHotkeyWindow`）**：
+    ① 延时截图——`shot_begin` 加 `delaySecs`（设置页「截图」分页加「延时秒数」
+    0/3/5/10 默认 0，Rust spawn 内 sleep 后定格，供截下拉菜单/悬停提示）
+    ② 活动窗口模式——第二全局热键 `shotHotkeyWindow`（默认 `Ctrl+Alt+W`，预设
+    可换、清空即停用，随 `shotEnabled` 总开关）：触发即定格前台窗口（
+    GetForegroundWindow 匹配已枚举窗口），选区自动取该矩形免拖选，Esc 仍回
+    自由框选
+    ③ 贴图穿透——贴图窗 Alt+单击切换鼠标穿透（set_ignore_cursor_events），
+    穿透态四边虚线提示
+  - **B 批（主项，独立迭代）滚动长截图**：SendInput 滚轮注入 + 逐帧定格 + 竖向
+    模板匹配拼接（ShareX 思路自研，不读 GPL 实现）。流程：框选滚动区 → 覆盖窗
+    隐藏、弹滚动控制浮条窗（label `shot-scroll`）→ Rust 循环〔滚轮注入 → 稳定
+    延时 → capture_region → 上一帧窄竖条（取左右 1/4 处，规避居中 sticky
+    header）在当前帧灰度 SAD 搜索求纵向位移 → 追加新内容〕→ 位移连续为 0
+    （到底）/ 用户停止 / 高度上限 20000px 收尾 → 长图回标准 shot 流程（标注/
+    复制/保存/贴图）。首版不含固定栏自动检测与视差修复，设置页说明标注限制
+  - **C 批（中项，可与 B 并行）OCR 文字识别**：Windows.Media.Ocr（Win10+ 系统
+    组件，零新依赖、无分发协议问题，windows crate 开 Media_Ocr feature）；
+    shot 工具栏加「识别文字」→ 选区合成图喂 OcrEngine → 文本写剪贴板 + toast。
+    中文识别质量以实测验收；不引入 Tesseract（GPL 红线）与 PaddleOCR（体积
+    不可接受）
+  - 不做：翻译 / AI 对话（偏离文件管理器定位且依赖在线服务）；GIF/录屏（xcap
+    VideoRecorder 仅出帧，编码选型复杂，远期另议）；取色器、量尺（未在需求内）
 
 ### 3.4 V1 明确不做（防范围蔓延）
 
