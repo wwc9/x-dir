@@ -245,6 +245,11 @@ pub fn run() {
             commands::shot::shot_pin,
             commands::shot::shot_save_data,
             commands::shot::shot_register_hotkey,
+            commands::shot_scroll::shot_scroll_begin,
+            commands::shot_scroll::shot_scroll_control,
+            commands::shot_scroll::shot_result_copy,
+            commands::shot_scroll::shot_result_save,
+            commands::shot_scroll::shot_pin_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

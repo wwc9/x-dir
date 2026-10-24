@@ -15,20 +15,22 @@ export interface PinBoot {
   w: number;
   h: number;
   scale: number;
+  /** 初始缩放（长图贴图由 Rust 侧按 80% 屏幅算好；常规贴图缺省 1） */
+  zoom?: number;
 }
 
-const ZOOM_MIN = 0.1;
+const ZOOM_MIN = 0.02; // 长图贴图初始 fit 可低于 0.1（20000px 高适配 ~800 屏高）
 const ZOOM_MAX = 6;
 const OPACITY_MIN = 0.25;
 
 export function PinWindow({ boot }: { boot: PinBoot }) {
   const win = getCurrentWindow();
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(boot.zoom ?? 1);
   const [opacity, setOpacity] = useState(1);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const posRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const dragRef = useRef<{ lx: number; ly: number } | null>(null);
-  const zoomRef = useRef(1);
+  const zoomRef = useRef(boot.zoom ?? 1);
   const imgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {

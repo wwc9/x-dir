@@ -737,6 +737,20 @@ export const api = {
   /** 注册/更新截图全局热键（启动与设置变更时调用；Err = 键位冲突等） */
   shotRegisterHotkey: (enabled: boolean, hotkey: string) =>
     cmd<void>("shot_register_hotkey", { enabled, hotkey }),
+  /** 滚动长截图（§3.6 二期）：以选区（显示器相对物理坐标）开滚动会话 */
+  shotScrollBegin: (rx: number, ry: number, rw: number, rh: number, mx: number, my: number) =>
+    cmd<void>("shot_scroll_begin", { rx, ry, rw, rh, mx, my }),
+  /** 滚动浮条操作：finish = 用已拼内容出结果；cancel = 丢弃 */
+  shotScrollControl: (action: "finish" | "cancel") =>
+    cmd<void>("shot_scroll_control", { action }),
+  /** 滚动结果窗：长图（临时 PNG 路径）写入剪贴板 */
+  shotResultCopy: (file: string) => cmd<void>("shot_result_copy", { file }),
+  /** 滚动结果窗：长图另存（原生对话框；用户取消 = null） */
+  shotResultSave: (file: string) =>
+    cmd<string | null>("shot_result_save", { file }),
+  /** 长图贴图：以临时 PNG 路径钉成置顶窗（cx/cy = 窗中心全局物理坐标） */
+  shotPinFile: (file: string, cx: number, cy: number) =>
+    cmd<void>("shot_pin_file", { file, cx, cy }),
 };
 
 // M0 内存对比用假数据命令保留

@@ -15,6 +15,7 @@ pub mod pdf_cmds;
 pub mod preview;
 pub mod search;
 pub mod shot;
+pub mod shot_scroll;
 pub mod terminal;
 pub mod text_cmds;
 pub mod update;

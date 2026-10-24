@@ -14,6 +14,7 @@ import {
   Circle,
   Copy,
   Droplets,
+  GalleryVerticalEnd,
   Grid2x2,
   Highlighter,
   MousePointer2,
@@ -326,6 +327,20 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     },
     [boot.mx, boot.my, busy, closeWindow, exportDataUrl],
   );
+
+  // ── 滚动长截图（§3.6 二期 B 批）：以当前选区开滚动会话，覆盖窗由 Rust 侧
+  // 隐藏并接管后续流程（浮条窗 → 拼接 → 结果窗）────────────────────────────
+  const startScroll = useCallback(() => {
+    const s = selRef.current;
+    if (!s || busy) return;
+    setBusy(true);
+    void api
+      .shotScrollBegin(Math.round(s.x), Math.round(s.y), Math.round(s.w), Math.round(s.h), boot.mx, boot.my)
+      .catch((e) => {
+        setSavedTip(`滚动截图启动失败：${String(e)}`);
+        setBusy(false);
+      });
+  }, [busy, boot.mx, boot.my]);
 
   // ── 撤销 / 重做 ──────────────────────────────────────────────────────────
   const undo = useCallback(() => {
@@ -750,6 +765,13 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             onClick={() => void finish("save")}
           >
             <AppIcon icon={Save} />
+          </button>
+          <button
+            className="np-shot-tool np-shot-primary"
+            title="滚动截图：自动滚动选区拼接长图"
+            onClick={startScroll}
+          >
+            <AppIcon icon={GalleryVerticalEnd} />
           </button>
           <button
             className="np-shot-tool np-shot-danger"

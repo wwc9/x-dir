@@ -151,13 +151,19 @@ PixPin 闭源；electron-screenshots（MIT）深度绑定 Electron API 无法用
     自由框选
     ③ 贴图穿透——贴图窗 Alt+单击切换鼠标穿透（set_ignore_cursor_events），
     穿透态四边虚线提示
-  - **B 批（主项，独立迭代）滚动长截图**：SendInput 滚轮注入 + 逐帧定格 + 竖向
-    模板匹配拼接（ShareX 思路自研，不读 GPL 实现）。流程：框选滚动区 → 覆盖窗
-    隐藏、弹滚动控制浮条窗（label `shot-scroll`）→ Rust 循环〔滚轮注入 → 稳定
-    延时 → capture_region → 上一帧窄竖条（取左右 1/4 处，规避居中 sticky
-    header）在当前帧灰度 SAD 搜索求纵向位移 → 追加新内容〕→ 位移连续为 0
-    （到底）/ 用户停止 / 高度上限 20000px 收尾 → 长图回标准 shot 流程（标注/
-    复制/保存/贴图）。首版不含固定栏自动检测与视差修复，设置页说明标注限制
+  - **B 批（主项，2026-10-24 实现）滚动长截图**：SendInput 滚轮注入 + 逐帧定格 +
+    竖向模板匹配拼接（ShareX 思路自研，不读 GPL 实现）。定案流程：框选滚动区 →
+    点工具栏「滚动截图」→ 覆盖窗隐藏、光标悬停选区中心（Win10+ 悬停滚动把滚轮
+    落到目标窗）、弹控制浮条窗（label `shot-scroll`）→ Rust 循环〔滚轮一格注入 →
+    320ms 稳定 → capture_region 实时捕获 → prev 下部 1/3 高的双窄竖条（左右 1/4
+    处，规避开居中 sticky header）灰度 SAD 搜索求上移量 dy → dy≥2 追加 cur 底部
+    新内容〕→ dy 连续 3 帧为 0（到底）/ 浮条「完成」/ 高度上限 20000px / 动态
+    内容连续 2 帧匹配失败（诚实截断，结果窗顶部提示）收尾 → 长图存临时盘、开
+    独立结果窗（label `shot-result`：等比显示区内滚动 + 复制/保存/贴图/关闭，
+    不回覆盖窗标注流程——长图标注低频，与 PixPin 一致）；贴图 = 复制专属副本走
+    pin 窗、初始按 80% 屏幅适配（PinBoot.zoom，ZOOM_MIN 放宽 0.02）。匹配/拼接
+    纯逻辑带 cargo test（位移求解/到底/动态拒绝/缓冲追加）。已知限制：依赖
+    Win10+ 悬停滚动默认开启；不含固定栏自动检测与视差修复
   - **C 批（中项，可与 B 并行）OCR 文字识别**：Windows.Media.Ocr（Win10+ 系统
     组件，零新依赖、无分发协议问题，windows crate 开 Media_Ocr feature）；
     shot 工具栏加「识别文字」→ 选区合成图喂 OcrEngine → 文本写剪贴板 + toast。

@@ -4775,3 +4775,126 @@ mark.np-gsearch-mark {
   font-size: var(--np-font-sm);
   color: var(--np-muted);
 }
+
+/* 滚动截图浮条窗（§3.6 二期 B 批，label shot-scroll）与结果窗（label
+   shot-result）：独立小窗脱离主界面体系，取值仍全走 --np-* token */
+.np-shot-sbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 100vh;
+  padding: 0 10px;
+  box-sizing: border-box;
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  border-radius: var(--np-radius-lg);
+  font-size: var(--np-font-sm);
+  user-select: none;
+}
+.np-shot-sbar-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-accent);
+  animation: np-shot-pulse 1.1s ease-in-out infinite;
+  flex: none;
+}
+@keyframes np-shot-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+.np-shot-sbar-label {
+  color: var(--np-fg);
+  white-space: nowrap;
+}
+.np-shot-sbar-h {
+  color: var(--np-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* 浮条 / 结果窗通用按钮 */
+.np-shot-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--np-radius);
+  background: var(--np-hover);
+  color: var(--np-fg);
+  cursor: pointer;
+  font-size: var(--np-font-sm);
+  white-space: nowrap;
+}
+.np-shot-btn:hover:not(:disabled) {
+  background: var(--np-sel);
+}
+.np-shot-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.np-shot-btn.primary {
+  background: var(--np-accent);
+  color: var(--np-accent-fg);
+}
+.np-shot-btn.primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+.np-shot-btn.danger:hover:not(:disabled) {
+  background: var(--np-danger);
+  color: var(--np-danger-fg);
+}
+
+.np-shot-result {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--np-bg);
+}
+.np-shot-result-trunc {
+  flex: none;
+  padding: 6px 12px;
+  font-size: var(--np-font-sm);
+  color: var(--np-danger);
+  border-bottom: 1px solid var(--np-hairline);
+  background: var(--np-surface);
+}
+.np-shot-result-view {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  box-sizing: border-box;
+}
+.np-shot-result-view img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.np-shot-result-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--np-hairline);
+  background: var(--np-surface);
+}
+.np-shot-result-dim {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.np-shot-result-tip {
+  flex: 1;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}

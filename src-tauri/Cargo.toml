@@ -30,7 +30,7 @@ log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 windows-core = "0.62"
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_Security", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_Com", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Ole", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_UI_Shell_Common", "Win32_System_SystemServices", "Win32_System_Com_StructuredStorage", "Win32_System_IO", "Win32_System_SystemInformation"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_Security", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_Com", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Ole", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_UI_Shell_Common", "Win32_System_SystemServices", "Win32_System_Com_StructuredStorage", "Win32_System_IO", "Win32_System_SystemInformation"] }
 # 全盘索引的 mmap 只读查询（MIT）
 memmap2 = "0.9"
 trash = "5.2.9"

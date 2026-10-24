@@ -12,7 +12,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
 
 /// 会话/贴图临时文件目录（%TEMP%/xdir_shot）
-fn shot_dir() -> std::path::PathBuf {
+pub(crate) fn shot_dir() -> std::path::PathBuf {
     std::env::temp_dir().join("xdir_shot")
 }
 
@@ -21,7 +21,7 @@ pub fn cleanup_stale() {
     let _ = std::fs::remove_dir_all(shot_dir());
 }
 
-fn millis() -> u128 {
+pub(crate) fn millis() -> u128 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
@@ -129,15 +129,15 @@ fn enum_windows_abs() -> Vec<(i32, i32, i32, i32)> {
 }
 
 /// 光标点所在显示器物理参数（找不到 = None，由调用方回落）
-struct MonRect {
-    x: i32,
-    y: i32,
-    w: u32,
-    h: u32,
-    scale: f32,
+pub(crate) struct MonRect {
+    pub x: i32,
+    pub y: i32,
+    pub w: u32,
+    pub h: u32,
+    pub scale: f32,
 }
 
-fn monitor_at(x: i32, y: i32) -> Option<MonRect> {
+pub(crate) fn monitor_at(x: i32, y: i32) -> Option<MonRect> {
     for m in xcap::Monitor::all().ok()? {
         let (mx, my) = (m.x().ok()?, m.y().ok()?);
         let (mw, mh) = (m.width().ok()?, m.height().ok()?);
@@ -358,7 +358,7 @@ pub async fn shot_save_data(app: AppHandle, data_url: String) -> Result<Option<S
 }
 
 /// 本地时间戳 yyyymmdd_hhmmss（GetLocalTime，免 chrono；同 fs 模块口径）
-fn local_stamp() -> String {
+pub(crate) fn local_stamp() -> String {
     #[cfg(windows)]
     {
         use windows::Win32::Foundation::SYSTEMTIME;
