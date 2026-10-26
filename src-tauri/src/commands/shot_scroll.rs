@@ -148,7 +148,7 @@ impl CanvasBuf {
 // ── 会话入口 ────────────────────────────────────────────────────────────────
 
 /// 开始滚动会话：rx/ry/rw/rh = 选区显示器相对物理坐标；mx/my = 显示器原点。
-/// 第一帧从会话定格图（session.png）裁剪，此后 capture_region 捕获实时屏幕。
+/// 第一帧从会话定格图（session.bmp）裁剪，此后 capture_region 捕获实时屏幕。
 #[tauri::command]
 pub fn shot_scroll_begin(
     app: AppHandle,
@@ -170,13 +170,13 @@ pub fn shot_scroll_begin(
         return Err("选区超出显示器范围".into());
     }
     // 第一帧 = 定格图裁剪（此刻覆盖窗显示的就是原始画面）
-    let session = shot_dir().join("session.png");
+    let session = shot_dir().join("session.bmp");
     let base: RgbaImage = image::open(&session)
         .map_err(|e| format!("读取会话截图失败：{e}"))?
         .crop_imm(rx as u32, ry as u32, rw as u32, rh as u32)
         .to_rgba8();
 
-    // 覆盖窗退场（其销毁钩子会清 session.png，base 已在内存不受影响）
+    // 覆盖窗退场（其销毁钩子会清 session.bmp，base 已在内存不受影响）
     if let Some(w) = app.get_webview_window("shot") {
         let _ = w.close();
     }

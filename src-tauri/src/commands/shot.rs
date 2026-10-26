@@ -177,6 +177,7 @@ fn begin_session(app: &AppHandle) -> Result<(), String> {
         .map_err(|e| format!("无法获取光标位置：{e}"))?;
     let (cx, cy) = (cur.x.round() as i32, cur.y.round() as i32);
     let mon = monitor_at(cx, cy).ok_or("未找到光标所在显示器")?;
+    let t0 = std::time::Instant::now();
 
     let img = xcap::Monitor::all()
         .map_err(|e| format!("显示器枚举失败：{e}"))?
@@ -185,11 +186,15 @@ fn begin_session(app: &AppHandle) -> Result<(), String> {
         .ok_or("未找到目标显示器")?
         .capture_image()
         .map_err(|e| format!("屏幕捕获失败：{e}"))?;
+    log::debug!("截图计时：捕获 {}ms", t0.elapsed().as_millis());
 
     let dir = shot_dir();
     std::fs::create_dir_all(&dir).map_err(|e| format!("创建临时目录失败：{e}"))?;
-    let file = dir.join("session.png");
+    // BMP 而非 PNG：4K PNG 编码 ~2s（感知延迟大头），BMP 编码≈memcpy 级，
+    // 浏览器解码同为原生快路径；文件仅作会话内传递，销毁即清
+    let file = dir.join("session.bmp");
     img.save(&file).map_err(|e| format!("截图写盘失败：{e}"))?;
+    log::debug!("截图计时：BMP 写盘 {}ms", t0.elapsed().as_millis());
 
     let windows = enum_windows_abs()
         .into_iter()
@@ -210,10 +215,14 @@ fn begin_session(app: &AppHandle) -> Result<(), String> {
         scale: mon.scale as f64,
         windows,
     };
-    show_shot_window(app, &cap)
+    show_shot_window(app, &cap, t0)
 }
 
-fn show_shot_window(app: &AppHandle, cap: &ShotCapture) -> Result<(), String> {
+fn show_shot_window(
+    app: &AppHandle,
+    cap: &ShotCapture,
+    t0: std::time::Instant,
+) -> Result<(), String> {
     let boot = serde_json::json!({
         "window": "shot",
         "file": cap.file,
@@ -241,12 +250,13 @@ fn show_shot_window(app: &AppHandle, cap: &ShotCapture) -> Result<(), String> {
         .initialization_script(format!("window.__BOOT__ = {boot};"))
         .build()
         .map_err(|e| format!("创建截图窗口失败：{e}"))?;
+    log::debug!("截图计时：建窗 {}ms", t0.elapsed().as_millis());
     win.set_position(PhysicalPosition::new(cap.mx, cap.my))
         .map_err(|e| e.to_string())?;
     win.set_size(PhysicalSize::new(cap.mw, cap.mh))
         .map_err(|e| e.to_string())?;
     // 覆盖窗销毁（完成/取消）即清理会话定格文件
-    let session_file = shot_dir().join("session.png");
+    let session_file = shot_dir().join("session.bmp");
     win.on_window_event(move |e| {
         if matches!(e, tauri::WindowEvent::Destroyed) {
             let _ = std::fs::remove_file(&session_file);
@@ -254,6 +264,10 @@ fn show_shot_window(app: &AppHandle, cap: &ShotCapture) -> Result<(), String> {
     });
     win.show().map_err(|e| e.to_string())?;
     win.set_focus().map_err(|e| e.to_string())?;
+    log::debug!(
+        "截图计时：show 总计 {}ms（此后前端加载+解码才算可见）",
+        t0.elapsed().as_millis()
+    );
     Ok(())
 }
 
