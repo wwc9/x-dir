@@ -158,6 +158,7 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
       <img
         ref={imgRef}
         src={convertFileSrc(boot.file)}
+        crossOrigin="anonymous"
         draggable={false}
         alt="贴图"
         style={{

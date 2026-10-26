@@ -78,6 +78,7 @@ export function ShotResult({ boot }: { boot: ResultBoot }) {
         <img
           ref={imgRef}
           src={convertFileSrc(boot.file)}
+          crossOrigin="anonymous"
           alt="滚动长图"
           draggable={false}
           style={{ width: boot.w }}

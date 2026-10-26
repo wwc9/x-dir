@@ -16,6 +16,13 @@ pub(crate) fn shot_dir() -> std::path::PathBuf {
     std::env::temp_dir().join("xdir_shot")
 }
 
+/// 运行时建窗必须与 tauri.conf.json 主窗口的 additionalBrowserArgs 完全一致：
+/// WebView2 每进程每 user-data-folder 只允许一个 Environment，第二个环境
+/// 参数不同即失败（0x8007139F「组或资源的状态不正确」）——截图/贴图/滚动
+/// 各窗曾因此全部无法创建。改 conf 时必须同步此处。
+pub(crate) const WEBVIEW_BROWSER_ARGS: &str =
+    "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion";
+
 /// 启动清理：删掉上次会话/贴图残留的临时 PNG
 pub fn cleanup_stale() {
     let _ = std::fs::remove_dir_all(shot_dir());
@@ -158,9 +165,12 @@ pub(crate) fn monitor_at(x: i32, y: i32) -> Option<MonRect> {
 
 /// 定格光标所在显示器并打开全屏覆盖窗（热键回调与 shot_begin 命令共用）
 fn begin_session(app: &AppHandle) -> Result<(), String> {
-    // 连按热键：旧覆盖窗先行关闭（销毁事件会清临时文件，随后重建）
+    // 连按热键：close() 的销毁经事件循环异步完成，同拍重建必撞
+    // "already exists"——本拍只收掉旧窗直接返回，再按一次即全新会话
+    // （销毁事件会清临时文件）
     if let Some(w) = app.get_webview_window("shot") {
         let _ = w.close();
+        return Ok(());
     }
     let cur = app
         .cursor_position()
@@ -215,6 +225,7 @@ fn show_shot_window(app: &AppHandle, cap: &ShotCapture) -> Result<(), String> {
         "windows": cap.windows,
     });
     let win = WebviewWindowBuilder::new(app, "shot", WebviewUrl::App("index.html".into()))
+        .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
         .title("X-Dir 截图")
         .decorations(false)
         .resizable(false)
@@ -223,6 +234,9 @@ fn show_shot_window(app: &AppHandle, cap: &ShotCapture) -> Result<(), String> {
         .skip_taskbar(true)
         .always_on_top(true)
         .shadow(false)
+        // 不可见窗口默认 focused(true) 在部分 WebView2 上聚焦异常（wry#1798）；
+        // show() 后再 set_focus()，保险起见显式关闭
+        .focused(false)
         .visible(false)
         .initialization_script(format!("window.__BOOT__ = {boot};"))
         .build()
@@ -304,6 +318,7 @@ pub fn shot_pin(
         "scale": scale,
     });
     let win = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html".into()))
+        .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
         .title("X-Dir 贴图")
         .decorations(false)
         .resizable(false)
@@ -397,5 +412,9 @@ pub fn shot_register_hotkey(app: AppHandle, enabled: bool, hotkey: String) -> Re
             log::error!("截图启动失败：{e}");
         }
     })
-    .map_err(|e| format!("快捷键「{hotkey}」注册失败（可能被其他程序占用）：{e}"))
+    .map_err(|e| {
+        // App.tsx 启动路径对注册失败静默 catch，这里必须留痕可查
+        log::warn!("截图热键注册失败：{e}");
+        format!("快捷键「{hotkey}」注册失败（可能被其他程序占用）：{e}")
+    })
 }

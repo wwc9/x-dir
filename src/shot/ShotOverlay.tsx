@@ -249,6 +249,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
 
   useEffect(() => {
     const img = new Image();
+    // asset 协议与页面跨源：必须以 CORS 模式加载（asset 协议已回
+    // Access-Control-Allow-Origin），否则 canvas 被污染，toDataURL 抛
+    // SecurityError，复制/贴图/保存全部静默失效
+    img.crossOrigin = "anonymous";
     img.src = convertFileSrc(boot.file);
     img
       .decode()

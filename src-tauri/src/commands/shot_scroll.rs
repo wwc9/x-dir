@@ -299,6 +299,7 @@ fn show_scrollbar_window(app: &AppHandle, mon: &MonRect) -> Result<(), String> {
     let s = f64::from(mon.scale);
     let boot = serde_json::json!({ "window": "scrollbar" });
     let win = WebviewWindowBuilder::new(app, "shot-scroll", WebviewUrl::App("index.html".into()))
+        .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
         .title("X-Dir 滚动截图")
         .decorations(false)
         .resizable(false)
@@ -307,6 +308,9 @@ fn show_scrollbar_window(app: &AppHandle, mon: &MonRect) -> Result<(), String> {
         .skip_taskbar(true)
         .always_on_top(true)
         .shadow(false)
+        // 不可见窗口默认 focused(true) 在部分 WebView2 上聚焦异常（wry#1798）；
+        // show() 后再 set_focus()，保险起见显式关闭
+        .focused(false)
         .visible(false)
         .initialization_script(format!("window.__BOOT__ = {boot};"))
         .build()
@@ -347,6 +351,7 @@ fn show_result_window(
         "truncated": truncated,
     });
     let win = WebviewWindowBuilder::new(app, "shot-result", WebviewUrl::App("index.html".into()))
+        .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
         .title("X-Dir 滚动长图")
         .decorations(true)
         .resizable(true)
@@ -354,6 +359,8 @@ fn show_result_window(
         .maximizable(true)
         .skip_taskbar(false)
         .always_on_top(true)
+        // 不可见建窗显式 focused(false)（wry#1798）
+        .focused(false)
         .visible(false)
         .initialization_script(format!("window.__BOOT__ = {boot};"))
         .build()
@@ -454,6 +461,7 @@ pub fn shot_pin_file(app: AppHandle, file: String, cx: i32, cy: i32) -> Result<(
         "zoom": fit,
     });
     let win = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html".into()))
+        .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
         .title("X-Dir 贴图")
         .decorations(false)
         .resizable(false)
