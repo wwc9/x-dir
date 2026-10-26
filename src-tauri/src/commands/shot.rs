@@ -1,14 +1,16 @@
 // 截图与贴图（2026-10-24，§3.6）：热键 → xcap 定格光标所在显示器 → 全屏覆盖
 // 窗（label "shot"）内选区/标注 → 复制（位图剪贴板）/ 保存（原生对话框）/
-// 贴图（label "pin-*" 置顶窗）。会话数据流转全部走临时 PNG 文件 + asset
-// protocol（scope **）加载，不经 IPC 传大图；会话窗销毁即清理自己的临时
-// 文件，启动时清理上次会话残留。
+// 贴图（label "pin-*" 置顶窗）。会话数据流转走临时 BMP 文件 + asset
+// protocol（scope **）加载，不经 IPC 传大图；捕获+编码在后台线程
+// （SESSION_STARTING 门闸拦连按），主线程只建窗；覆盖窗销毁即清理自己的
+// 临时文件，失焦自动收场（保存对话框期间豁免），启动时清理上次会话残留。
 //
 // 坐标系约定：全链路物理像素（虚拟桌面坐标，左上显示器可为负）；前端把
 // CSS 像素 × scale 还原为物理坐标后再回传，与定格截图逐像素对齐。
 
 use base64::Engine as _;
 use serde::Serialize;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
 
 /// 会话/贴图临时文件目录（%TEMP%/xdir_shot）
@@ -59,7 +61,7 @@ pub struct ShotWindow {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShotCapture {
-    /// 定格截图 PNG 路径（前端经 asset protocol 加载）
+    /// 定格截图 BMP 路径（前端经 asset protocol 加载）
     pub file: String,
     /// 显示器原点（虚拟桌面物理坐标）与物理尺寸
     pub mx: i32,
@@ -163,15 +165,57 @@ pub(crate) fn monitor_at(x: i32, y: i32) -> Option<MonRect> {
 
 // ── 截图会话 ────────────────────────────────────────────────────────────────
 
-/// 定格光标所在显示器并打开全屏覆盖窗（热键回调与 shot_begin 命令共用）
-fn begin_session(app: &AppHandle) -> Result<(), String> {
-    // 连按热键：close() 的销毁经事件循环异步完成，同拍重建必撞
-    // "already exists"——本拍只收掉旧窗直接返回，再按一次即全新会话
-    // （销毁事件会清临时文件）
+/// 捕获+建窗进行中标记：拦截连按（begin_session 只在主线程跑，load/store 无竞争）
+static SESSION_STARTING: AtomicBool = AtomicBool::new(false);
+/// 原生保存对话框打开中：对话框会抢走系统焦点，此时豁免覆盖窗的失焦自毁
+static SAVE_DIALOG_OPEN: AtomicBool = AtomicBool::new(false);
+
+/// 热键/菜单入口：开始一次截图会话。
+/// 捕获+编码在后台线程，主线程只做建窗——在 WndProc 里内联跑 500ms 的
+/// 捕获会冻结整个应用，且 build() 泵消息期间排队的 WM_HOTKEY 会重入
+/// begin_session、对建到一半的窗口 close()（卡死与 double-fire 的根源）。
+/// begin_session 必须在主线程调用（热键 WndProc / shot_begin 派发均满足）。
+fn begin_session(app: &AppHandle) {
+    // 捕获/建窗进行中：连按忽略
+    if SESSION_STARTING.load(Ordering::SeqCst) {
+        return;
+    }
+    // 覆盖窗已开 = 本拍收掉旧会话（销毁钩子清临时文件），再按即全新会话
     if let Some(w) = app.get_webview_window("shot") {
         let _ = w.close();
-        return Ok(());
+        return;
     }
+    SESSION_STARTING.store(true, Ordering::SeqCst);
+    let app = app.clone();
+    let spawned = std::thread::Builder::new()
+        .name("shot-capture".into())
+        .spawn(move || match capture_session(&app) {
+            Ok(cap) => {
+                let app2 = app.clone();
+                let dispatch = app.run_on_main_thread(move || {
+                    if let Err(e) = show_shot_window(&app2, &cap) {
+                        log::error!("截图启动失败：{e}");
+                    }
+                    SESSION_STARTING.store(false, Ordering::SeqCst);
+                });
+                if let Err(e) = dispatch {
+                    log::error!("截图任务派发失败：{e}");
+                    SESSION_STARTING.store(false, Ordering::SeqCst);
+                }
+            }
+            Err(e) => {
+                log::error!("截图启动失败：{e}");
+                SESSION_STARTING.store(false, Ordering::SeqCst);
+            }
+        });
+    if let Err(e) = spawned {
+        SESSION_STARTING.store(false, Ordering::SeqCst);
+        log::error!("截图启动失败：捕获线程启动失败：{e}");
+    }
+}
+
+/// 后台线程：定格光标所在显示器 + 写会话图 + 枚举可截窗口
+fn capture_session(app: &AppHandle) -> Result<ShotCapture, String> {
     let cur = app
         .cursor_position()
         .map_err(|e| format!("无法获取光标位置：{e}"))?;
@@ -206,7 +250,7 @@ fn begin_session(app: &AppHandle) -> Result<(), String> {
         })
         .collect();
 
-    let cap = ShotCapture {
+    Ok(ShotCapture {
         file: file.to_string_lossy().into_owned(),
         mx: mon.x,
         my: mon.y,
@@ -214,15 +258,11 @@ fn begin_session(app: &AppHandle) -> Result<(), String> {
         mh: mon.h,
         scale: mon.scale as f64,
         windows,
-    };
-    show_shot_window(app, &cap, t0)
+    })
 }
 
-fn show_shot_window(
-    app: &AppHandle,
-    cap: &ShotCapture,
-    t0: std::time::Instant,
-) -> Result<(), String> {
+fn show_shot_window(app: &AppHandle, cap: &ShotCapture) -> Result<(), String> {
+    let t_show = std::time::Instant::now();
     let boot = serde_json::json!({
         "window": "shot",
         "file": cap.file,
@@ -250,31 +290,46 @@ fn show_shot_window(
         .initialization_script(format!("window.__BOOT__ = {boot};"))
         .build()
         .map_err(|e| format!("创建截图窗口失败：{e}"))?;
-    log::debug!("截图计时：建窗 {}ms", t0.elapsed().as_millis());
+    log::debug!("截图计时：建窗 {}ms", t_show.elapsed().as_millis());
     win.set_position(PhysicalPosition::new(cap.mx, cap.my))
         .map_err(|e| e.to_string())?;
     win.set_size(PhysicalSize::new(cap.mw, cap.mh))
         .map_err(|e| e.to_string())?;
-    // 覆盖窗销毁（完成/取消）即清理会话定格文件
+    // 覆盖窗销毁（完成/取消）即清理会话定格文件；失焦自动收会话（QQ 惯例）：
+    // 全屏置顶黑罩失焦后 Esc/Enter 全部失效，留在屏上形同卡死。宽限期躲过
+    // show/set_focus 的初始焦点抖动；保存对话框抢焦点时豁免
     let session_file = shot_dir().join("session.bmp");
-    win.on_window_event(move |e| {
-        if matches!(e, tauri::WindowEvent::Destroyed) {
+    let shown_at = std::time::Instant::now();
+    let w2 = win.clone();
+    win.on_window_event(move |e| match e {
+        tauri::WindowEvent::Destroyed => {
             let _ = std::fs::remove_file(&session_file);
         }
+        // 保存对话框抢焦点时豁免
+        tauri::WindowEvent::Focused(false)
+            if !SAVE_DIALOG_OPEN.load(Ordering::SeqCst)
+                && shown_at.elapsed() > std::time::Duration::from_millis(500) =>
+        {
+            let _ = w2.close();
+        }
+        _ => {}
     });
     win.show().map_err(|e| e.to_string())?;
     win.set_focus().map_err(|e| e.to_string())?;
     log::debug!(
         "截图计时：show 总计 {}ms（此后前端加载+解码才算可见）",
-        t0.elapsed().as_millis()
+        t_show.elapsed().as_millis()
     );
     Ok(())
 }
 
-/// 热键/菜单入口：开始一次截图会话
+/// 热键/菜单入口：开始一次截图会话（异步派发，立即返回）
 #[tauri::command]
-pub fn shot_begin(app: AppHandle) -> Result<(), String> {
-    begin_session(&app)
+pub async fn shot_begin(app: AppHandle) -> Result<(), String> {
+    // begin_session 依赖主线程串行（SESSION_STARTING 的 load/store 无锁假设）
+    let app2 = app.clone();
+    app.run_on_main_thread(move || begin_session(&app2))
+        .map_err(|e| format!("截图任务派发失败：{e}"))
 }
 
 /// 关闭覆盖窗（完成/取消后的收尾）
@@ -367,6 +422,7 @@ pub fn shot_pin(
 pub async fn shot_save_data(app: AppHandle, data_url: String) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
     let bytes = decode_data_url(&data_url)?;
+    SAVE_DIALOG_OPEN.store(true, Ordering::SeqCst);
     tauri::async_runtime::spawn_blocking(move || {
         let name = format!("截图_{}.png", local_stamp());
         let picked = app
@@ -375,15 +431,22 @@ pub async fn shot_save_data(app: AppHandle, data_url: String) -> Result<Option<S
             .add_filter("PNG 图片", &["png"])
             .set_file_name(&name)
             .blocking_save_file();
-        let Some(p) = picked else {
-            return Ok(None);
-        };
-        let path = p.into_path().map_err(|e| format!("路径解析失败：{e}"))?;
-        std::fs::write(&path, &bytes).map_err(|e| format!("保存失败：{e}"))?;
-        Ok(Some(path.to_string_lossy().into_owned()))
+        // 对话框已收场，解除覆盖窗失焦豁免
+        SAVE_DIALOG_OPEN.store(false, Ordering::SeqCst);
+        match picked {
+            None => Ok(None),
+            Some(p) => {
+                let path = p.into_path().map_err(|e| format!("路径解析失败：{e}"))?;
+                std::fs::write(&path, &bytes).map_err(|e| format!("保存失败：{e}"))?;
+                Ok(Some(path.to_string_lossy().into_owned()))
+            }
+        }
     })
     .await
-    .map_err(|e| format!("保存线程失败：{e}"))?
+    .map_err(|e| {
+        SAVE_DIALOG_OPEN.store(false, Ordering::SeqCst);
+        format!("保存线程失败：{e}")
+    })?
 }
 
 /// 本地时间戳 yyyymmdd_hhmmss（GetLocalTime，免 chrono；同 fs 模块口径）
@@ -420,10 +483,8 @@ pub fn shot_register_hotkey(app: AppHandle, enabled: bool, hotkey: String) -> Re
         .parse()
         .map_err(|_| format!("无法识别快捷键「{hotkey}」"))?;
     gs.on_shortcut(sc, |app, _sc, event| {
-        if event.state == ShortcutState::Pressed
-            && let Err(e) = begin_session(app)
-        {
-            log::error!("截图启动失败：{e}");
+        if event.state == ShortcutState::Pressed {
+            begin_session(app);
         }
     })
     .map_err(|e| {
