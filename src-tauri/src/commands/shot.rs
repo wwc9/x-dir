@@ -439,9 +439,14 @@ pub fn shot_pin(
 }
 
 /// 保存为文件：原生保存对话框（阻塞版跑在 blocking 线程）→ 写盘，返回路径
-/// （用户取消 = null）
+/// （用户取消 = null）。对话框以调用窗为 parent——覆盖窗全屏置顶，无主的
+/// 对话框会被压在其后，看起来「没弹出来」
 #[tauri::command]
-pub async fn shot_save_data(app: AppHandle, data_url: String) -> Result<Option<String>, String> {
+pub async fn shot_save_data(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    data_url: String,
+) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
     let bytes = decode_data_url(&data_url)?;
     SAVE_DIALOG_OPEN.store(true, Ordering::SeqCst);
@@ -452,6 +457,7 @@ pub async fn shot_save_data(app: AppHandle, data_url: String) -> Result<Option<S
             .file()
             .add_filter("PNG 图片", &["png"])
             .set_file_name(&name)
+            .set_parent(&window)
             .blocking_save_file();
         // 对话框已收场，解除覆盖窗失焦豁免
         SAVE_DIALOG_OPEN.store(false, Ordering::SeqCst);

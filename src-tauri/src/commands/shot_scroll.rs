@@ -412,9 +412,14 @@ pub async fn shot_result_copy(app: AppHandle, file: String) -> Result<(), String
     .map_err(|e| format!("复制线程失败：{e}"))?
 }
 
-/// 结果窗：原生保存对话框（默认名 `滚动截图_时间戳.png`），用户取消 = null
+/// 结果窗：原生保存对话框（默认名 `滚动截图_时间戳.png`），用户取消 = null。
+/// 对话框以结果窗为 parent，否则会被置顶窗压住看不见
 #[tauri::command]
-pub async fn shot_result_save(app: AppHandle, file: String) -> Result<Option<String>, String> {
+pub async fn shot_result_save(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    file: String,
+) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
     tauri::async_runtime::spawn_blocking(move || {
         let bytes = std::fs::read(&file).map_err(|e| format!("读取长图失败：{e}"))?;
@@ -423,6 +428,7 @@ pub async fn shot_result_save(app: AppHandle, file: String) -> Result<Option<Str
             .file()
             .add_filter("PNG 图片", &["png"])
             .set_file_name(format!("滚动截图_{}.png", local_stamp()))
+            .set_parent(&window)
             .blocking_save_file();
         let Some(p) = picked else {
             return Ok(None);
