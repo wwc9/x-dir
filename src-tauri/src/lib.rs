@@ -242,6 +242,7 @@ pub fn run() {
             commands::shot::shot_begin,
             commands::shot::shot_close,
             commands::shot::shot_copy,
+            commands::shot::shot_ready,
             commands::shot::shot_pin,
             commands::shot::shot_save_data,
             commands::shot::shot_register_hotkey,

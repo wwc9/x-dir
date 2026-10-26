@@ -161,6 +161,8 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
         crossOrigin="anonymous"
         draggable={false}
         alt="贴图"
+        // 首帧就绪回执：Rust 此时才 show（提前 show 闪黑屏）
+        onLoad={() => void api.shotReady().catch(() => undefined)}
         style={{
           width: boot.w * zoom,
           height: boot.h * zoom,

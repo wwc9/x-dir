@@ -169,6 +169,8 @@ pub(crate) fn monitor_at(x: i32, y: i32) -> Option<MonRect> {
 static SESSION_STARTING: AtomicBool = AtomicBool::new(false);
 /// 原生保存对话框打开中：对话框会抢走系统焦点，此时豁免覆盖窗的失焦自毁
 static SAVE_DIALOG_OPEN: AtomicBool = AtomicBool::new(false);
+/// 覆盖窗内容首帧已上屏（前端 shot_ready 回执）：失焦自毁仅在此之后生效
+static SHOT_VISIBLE: AtomicBool = AtomicBool::new(false);
 
 /// 热键/菜单入口：开始一次截图会话。
 /// 捕获+编码在后台线程，主线程只做建窗——在 WndProc 里内联跑 500ms 的
@@ -296,10 +298,9 @@ fn show_shot_window(app: &AppHandle, cap: &ShotCapture) -> Result<(), String> {
     win.set_size(PhysicalSize::new(cap.mw, cap.mh))
         .map_err(|e| e.to_string())?;
     // 覆盖窗销毁（完成/取消）即清理会话定格文件；失焦自动收会话（QQ 惯例）：
-    // 全屏置顶黑罩失焦后 Esc/Enter 全部失效，留在屏上形同卡死。宽限期躲过
-    // show/set_focus 的初始焦点抖动；保存对话框抢焦点时豁免
+    // 全屏置顶黑罩失焦后 Esc/Enter 全部失效，留在屏上形同卡死。仅在内容
+    // 首帧上屏（SHOT_VISIBLE）后生效；保存对话框抢焦点时豁免
     let session_file = shot_dir().join("session.bmp");
-    let shown_at = std::time::Instant::now();
     let w2 = win.clone();
     win.on_window_event(move |e| match e {
         tauri::WindowEvent::Destroyed => {
@@ -307,19 +308,40 @@ fn show_shot_window(app: &AppHandle, cap: &ShotCapture) -> Result<(), String> {
         }
         // 保存对话框抢焦点时豁免
         tauri::WindowEvent::Focused(false)
-            if !SAVE_DIALOG_OPEN.load(Ordering::SeqCst)
-                && shown_at.elapsed() > std::time::Duration::from_millis(500) =>
+            if SHOT_VISIBLE.load(Ordering::SeqCst) && !SAVE_DIALOG_OPEN.load(Ordering::SeqCst) =>
         {
             let _ = w2.close();
         }
         _ => {}
     });
-    win.show().map_err(|e| e.to_string())?;
-    win.set_focus().map_err(|e| e.to_string())?;
-    log::debug!(
-        "截图计时：show 总计 {}ms（此后前端加载+解码才算可见）",
-        t_show.elapsed().as_millis()
-    );
+    // 不在此处 show：此刻 webview 还是空内容，提前 show 会闪黑屏。
+    // 前端首帧绘制完成后经 shot_ready 回执再显示；4s 兜底防前端加载
+    // 失败时窗口永远不可见（hotkey 的 toggle 语义也能收拾这种残局）
+    SHOT_VISIBLE.store(false, Ordering::SeqCst);
+    let app3 = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(4));
+        if let Some(w) = app3.get_webview_window("shot") {
+            let _ = w.show();
+            let _ = w.set_focus();
+            SHOT_VISIBLE.store(true, Ordering::SeqCst);
+        }
+    });
+    Ok(())
+}
+
+/// 覆盖窗/贴图窗/结果窗内容首帧就绪后由前端调用：此刻才真正 show——
+/// 提前 show 出来的是未渲染的空 WebView2（Windows 上呈黑底，即「黑屏」）
+#[tauri::command]
+pub fn shot_ready(window: tauri::WebviewWindow) -> Result<(), String> {
+    let label = window.label();
+    if label == "shot" || label == "shot-result" || label.starts_with("pin-") {
+        window.show().map_err(|e| e.to_string())?;
+        if label == "shot" {
+            SHOT_VISIBLE.store(true, Ordering::SeqCst);
+            window.set_focus().map_err(|e| e.to_string())?;
+        }
+    }
     Ok(())
 }
 

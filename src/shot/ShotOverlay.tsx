@@ -272,8 +272,19 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           getComputedStyle(document.documentElement).getPropertyValue("--np-accent").trim() ||
           "#3574f0";
         setReady(true);
+        // 首帧上屏后再让 Rust show 窗口：提前 show 出来的是未渲染的空
+        // WebView2（黑底）。双 rAF 确保画布已被合成器呈现
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            void api.shotReady().catch(() => undefined);
+          }),
+        );
       })
-      .catch(() => setSavedTip("截图加载失败"));
+      .catch(() => {
+        setSavedTip("截图加载失败");
+        // 加载失败也要把窗口放出来展示错误提示，别留在不可见状态
+        void api.shotReady().catch(() => undefined);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
