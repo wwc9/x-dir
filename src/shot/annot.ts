@@ -135,19 +135,20 @@ export function arrowHead(
   return { ax: a.x, ay: a.y, bx: b.x, by: b.y };
 }
 
-/** 智能窗口命中：面积最小者优先（内层窗口盖在外层之上） */
+/** 可截目标命中：候选按 z 序（前→后）排列且已经过 Rust 侧可见层过滤
+ *  （被盖住的后层窗口不在列表中），取第一个包含点的矩形；末尾为整显示器
+ *  桌面兜底，自然最后命中 */
 export function hitWindow(
   windows: { x: number; y: number; w: number; h: number }[],
   px: number,
   py: number,
 ): { x: number; y: number; w: number; h: number } | null {
-  let best: { x: number; y: number; w: number; h: number } | null = null;
   for (const r of windows) {
     if (px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h) {
-      if (!best || r.w * r.h < best.w * best.h) best = r;
+      return r;
     }
   }
-  return best;
+  return null;
 }
 
 // ── 放大镜/取色器（PixPin 惯例：无选区跟随态与拖拽态显示，确认选区即隐）───

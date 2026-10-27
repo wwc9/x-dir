@@ -89,14 +89,20 @@ describe("arrowHead", () => {
 });
 
 describe("hitWindow", () => {
+  // 候选按 z 序（前→后）：全屏桌面兜底在最末；前层小窗排最前
   const wins = [
-    { x: 0, y: 0, w: 1920, h: 1080 },
     { x: 100, y: 100, w: 400, h: 300 },
+    { x: 0, y: 0, w: 1920, h: 1080 },
   ];
 
-  it("命中内层小窗（面积最小者优先）", () => {
-    expect(hitWindow(wins, 150, 150)).toEqual(wins[1]);
-    expect(hitWindow(wins, 50, 50)).toEqual(wins[0]);
+  it("按 z 序命中（前层优先，而非面积最小）", () => {
+    // 两候选矩形都包含该点：前层小窗在前，应命中前层
+    expect(hitWindow(wins, 150, 150)).toEqual(wins[0]);
+  });
+
+  it("前层未覆盖处命中后层（桌面兜底）", () => {
+    expect(hitWindow(wins, 1900, 1070)).toEqual(wins[1]);
+    expect(hitWindow(wins, 50, 50)).toEqual(wins[1]);
   });
 
   it("未命中返回 null", () => {

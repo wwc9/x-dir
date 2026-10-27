@@ -98,11 +98,13 @@ pub struct ShotCapture {
     pub windows: Vec<ShotWindow>,
 }
 
-// ── Win32 窗口枚举（智能窗口识别）───────────────────────────────────────────
+// ── Win32 窗口枚举（可截目标判定）───────────────────────────────────────────
 
-/// 枚举可截窗口（可见、未最小化、非 cloaked、非工具窗、根窗口、面积达标），
-/// 返回虚拟桌面绝对物理坐标
-fn enum_windows_abs() -> Vec<(i32, i32, i32, i32)> {
+/// 枚举候选窗口（z 序 = 前→后，EnumWindows 天然顺序）：可见、未最小化、非
+/// cloaked、非工具窗、根窗口、碎片窗过滤，且只收与目标显示器相交的（其他
+/// 显示器上的窗口对本次会话无意义）。是否真正露出屏幕（遮挡剔除）由
+/// `visible_shot_targets` 的纯函数判定。
+fn enum_windows_abs(mon: (i32, i32, i32, i32)) -> Vec<(i32, i32, i32, i32)> {
     use windows::Win32::Foundation::{HWND, LPARAM, RECT};
     use windows::Win32::Graphics::Dwm::{DWMWA_CLOAKED, DwmGetWindowAttribute};
     use windows::Win32::UI::WindowsAndMessaging::{
@@ -111,6 +113,7 @@ fn enum_windows_abs() -> Vec<(i32, i32, i32, i32)> {
     };
     use windows::core::BOOL;
     struct Ctx {
+        mon: (i32, i32, i32, i32),
         out: Vec<(i32, i32, i32, i32)>,
     }
     unsafe extern "system" fn proc_impl(hwnd: HWND, lparam: LPARAM) -> BOOL {
@@ -139,9 +142,14 @@ fn enum_windows_abs() -> Vec<(i32, i32, i32, i32)> {
             if GetAncestor(hwnd, GA_ROOT) != hwnd {
                 return BOOL(1);
             }
-            // 不排除本进程：枚举发生在覆盖窗创建之前，主窗/已贴图窗均应可截
             let mut r = RECT::default();
             if GetWindowRect(hwnd, &mut r).is_err() {
+                return BOOL(1);
+            }
+            // 只收与目标显示器相交的（其他显示器的窗口对本次会话无意义）；
+            // 覆盖窗自身带 WS_EX_TOOLWINDOW 不会入列，主窗/贴图窗不排除
+            let (mx, my, mw, mh) = ctx.mon;
+            if r.right <= mx || r.left >= mx + mw || r.bottom <= my || r.top >= my + mh {
                 return BOOL(1);
             }
             let w = r.right - r.left;
@@ -154,11 +162,98 @@ fn enum_windows_abs() -> Vec<(i32, i32, i32, i32)> {
         }
         BOOL(1)
     }
-    let mut ctx = Ctx { out: Vec::new() };
+    let mut ctx = Ctx {
+        mon,
+        out: Vec::new(),
+    };
     unsafe {
         let _ = EnumWindows(Some(proc_impl), LPARAM(&mut ctx as *mut Ctx as isize));
     }
     ctx.out
+}
+
+/// 可截目标判定（PixPin 口径）：只认「最前面可见层」——按 z 序从最前往后
+/// 逐个做可见区域减法（矩形集合），只有真正露出屏幕的部分达标（存在 ≥8×8
+/// 的可见块）的窗口才入列，被完全盖住的后层窗口不再出现；候选末尾追加整
+/// 个显示器矩形（桌面兜底 = 最大区域）。任务栏本身是可见的顶层窗口，随减
+/// 法自然入列。z_windows 必须按 z 序（前→后）排列（EnumWindows 天然顺序），
+/// 坐标为虚拟桌面绝对物理像素；返回按 z 序排列、显示器相对坐标，末行为桌
+/// 面兜底（前端 hitWindow 顺序命中时桌面自然最后）。
+fn visible_shot_targets(
+    z_windows: &[(i32, i32, i32, i32)],
+    mon: (i32, i32, i32, i32),
+) -> Vec<ShotWindow> {
+    let (mx, my, mw, mh) = mon;
+    // 未被任何更前层窗口盖住的桌面可见区域（互不重叠的矩形集合），初始 =
+    // 整个显示器
+    let mut region: Vec<(i32, i32, i32, i32)> = vec![(mx, my, mw, mh)];
+    let mut out = Vec::new();
+    for &(wx, wy, ww, wh) in z_windows {
+        // 裁剪到本显示器（跨屏窗口的域外部分不参与遮挡运算）
+        let l = wx.max(mx);
+        let t = wy.max(my);
+        let r = (wx + ww).min(mx + mw);
+        let b = (wy + wh).min(my + mh);
+        if r - l < 8 || b - t < 8 {
+            continue;
+        }
+        // 可见块 = 窗口矩形 ∩ 剩余区域；存在 ≥8×8 的块即入列
+        let mut visible_enough = false;
+        for &(rx, ry, rw, rh) in &region {
+            let vl = l.max(rx);
+            let vt = t.max(ry);
+            let vr = r.min(rx + rw);
+            let vb = b.min(ry + rh);
+            if vr - vl >= 8 && vb - vt >= 8 {
+                visible_enough = true;
+                break;
+            }
+        }
+        if visible_enough {
+            out.push(ShotWindow {
+                x: wx - mx,
+                y: wy - my,
+                w: ww,
+                h: wh,
+            });
+        }
+        // 该窗口盖住的区域从剩余集合里扣除（受影响块拆成上下左右四条）
+        let mut next = Vec::with_capacity(region.len() + 4);
+        for &(rx, ry, rw, rh) in &region {
+            let rr = rx + rw;
+            let rb = ry + rh;
+            if r <= rx || l >= rr || b <= ry || t >= rb {
+                next.push((rx, ry, rw, rh));
+                continue;
+            }
+            let mid_t = t.max(ry);
+            let mid_b = b.min(rb);
+            if ry < t {
+                next.push((rx, ry, rw, t - ry));
+            }
+            if rb > b {
+                next.push((rx, b, rw, rb - b));
+            }
+            if rx < l && mid_b > mid_t {
+                next.push((rx, mid_t, l - rx, mid_b - mid_t));
+            }
+            if rr > r && mid_b > mid_t {
+                next.push((r, mid_t, rr - r, mid_b - mid_t));
+            }
+        }
+        region = next.into_iter().filter(|p| p.2 > 0 && p.3 > 0).collect();
+        if region.is_empty() {
+            break;
+        }
+    }
+    // 桌面兜底：整个显示器（最大区域；hitWindow 顺序命中时自然最后）
+    out.push(ShotWindow {
+        x: 0,
+        y: 0,
+        w: mw,
+        h: mh,
+    });
+    out
 }
 
 /// 光标点所在显示器物理参数（找不到 = None，由调用方回落）
@@ -378,15 +473,8 @@ fn capture_session(app: &AppHandle, reentry: bool) -> Result<ShotCapture, String
         std::thread::sleep(Duration::from_millis(8));
     }
 
-    let windows = enum_windows_abs()
-        .into_iter()
-        .map(|(x, y, w, h)| ShotWindow {
-            x: x - mon.x,
-            y: y - mon.y,
-            w,
-            h,
-        })
-        .collect();
+    let mon_key = (mon.x, mon.y, mon.w as i32, mon.h as i32);
+    let windows = visible_shot_targets(&enum_windows_abs(mon_key), mon_key);
 
     Ok(ShotCapture {
         mx: mon.x,
@@ -730,4 +818,89 @@ pub fn shot_register_hotkey(app: AppHandle, enabled: bool, hotkey: String) -> Re
         log::warn!("截图热键注册失败：{e}");
         format!("快捷键「{hotkey}」注册失败（可能被其他程序占用）：{e}")
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::visible_shot_targets;
+
+    const MON: (i32, i32, i32, i32) = (0, 0, 1920, 1080);
+
+    fn rects(v: &[super::ShotWindow]) -> Vec<(i32, i32, i32, i32)> {
+        v.iter()
+            .map(|w| (w.x, w.y, w.w as i32, w.h as i32))
+            .collect()
+    }
+
+    #[test]
+    fn 完全被盖住的后层窗口不出现() {
+        // 前：全屏窗；后：完全被前窗盖住的窗口
+        let z = [(0, 0, 1920, 940), (200, 200, 800, 600)];
+        let v = visible_shot_targets(&z, MON);
+        assert_eq!(
+            rects(&v),
+            vec![(0, 0, 1920, 940), (0, 0, 1920, 1080)],
+            "只剩前层窗口 + 桌面兜底"
+        );
+    }
+
+    #[test]
+    fn 部分露出的后层窗口保留且按z序在前() {
+        // 前：左半屏；后：右侧大窗（右半露出）
+        let z = [(0, 0, 1000, 1080), (500, 0, 1420, 1080)];
+        let v = visible_shot_targets(&z, MON);
+        assert_eq!(
+            rects(&v),
+            vec![(0, 0, 1000, 1080), (500, 0, 1420, 1080), (0, 0, 1920, 1080)]
+        );
+    }
+
+    #[test]
+    fn 露出宽度不足8像素的后层窗口不出现() {
+        // 后窗只剩 4px 露出（碎边），视为噪声
+        let z = [(0, 0, 1920, 1076), (0, 0, 1920, 1080)];
+        let v = visible_shot_targets(&z, MON);
+        assert_eq!(rects(&v), vec![(0, 0, 1920, 1076), (0, 0, 1920, 1080)]);
+    }
+
+    #[test]
+    fn 任务栏形态的底层窄条保留() {
+        // 前：占上部；后：底部 60px 任务栏完整露出
+        let z = [(0, 0, 1920, 1020), (0, 1020, 1920, 60)];
+        let v = visible_shot_targets(&z, MON);
+        assert_eq!(
+            rects(&v),
+            vec![(0, 0, 1920, 1020), (0, 1020, 1920, 60), (0, 0, 1920, 1080)]
+        );
+    }
+
+    #[test]
+    fn 无候选时仅桌面兜底() {
+        let v = visible_shot_targets(&[], MON);
+        assert_eq!(rects(&v), vec![(0, 0, 1920, 1080)]);
+    }
+
+    #[test]
+    fn 其他显示器的窗口被忽略() {
+        // 候选全部在右侧第二屏（MON 之外）
+        let z = [(1920, 0, 1920, 1080), (2000, 100, 800, 600)];
+        let v = visible_shot_targets(&z, MON);
+        assert_eq!(rects(&v), vec![(0, 0, 1920, 1080)]);
+    }
+
+    #[test]
+    fn 跨屏窗口按本屏内部分参与遮挡() {
+        // 窗口 A 跨屏（本屏内 0..960），窗口 B 在其右侧露出，C 被重叠区盖住
+        let z = [
+            (0, 0, 960, 1080),    // A：本屏左半
+            (900, 0, 1000, 1080), // B：901..1920 露出
+            (950, 100, 400, 400), // C：完全落在 A∪B 已覆盖区
+        ];
+        let v = visible_shot_targets(&z, MON);
+        let r = rects(&v);
+        assert_eq!(r[0], (0, 0, 960, 1080));
+        assert_eq!(r[1], (900, 0, 1000, 1080));
+        assert!(!r.contains(&(950, 100, 400, 400)), "被覆盖的 C 不应入列");
+        assert_eq!(*r.last().unwrap(), (0, 0, 1920, 1080));
+    }
 }
