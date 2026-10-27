@@ -416,7 +416,14 @@ pub(crate) fn end_session(app: &AppHandle) {
     }
     if let Some(w) = app.get_webview_window("shot") {
         let _ = w.hide();
-        let _ = app.emit_to("shot", "shot-session-end", ());
+        // hide 是投给事件循环的异步消息，而 emit 直达 webview——若立即通知
+        // 前端卸载会话 UI，会在蒙层真正离屏前重绘出一帧透明/空白（用户看到的
+        // 「退出闪动」）。延迟一拍等 hide 呈现后再卸载，卸载重绘便不可见
+        let app2 = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(80));
+            let _ = app2.emit_to("shot", "shot-session-end", ());
+        });
     }
 }
 

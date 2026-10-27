@@ -113,7 +113,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const compRef = useRef<HTMLCanvasElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const accentRef = useRef("#3574f0");
-  const hoverWinRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const moveRef = useRef<{ dx: number; dy: number } | null>(null);
   const resizeRef = useRef<HandleId | null>(null);
@@ -121,8 +120,12 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const composingRef = useRef(false);
   const toolbarRef = useRef<HTMLDivElement>(null);
 
-  // 进会话默认预选光标下窗口（PixPin/QQ 惯例）：蒙层一上屏选区就位、工具栏
-  // 直出；拖拽空白处重框、点其他窗口改选（既有指针逻辑天然支持）
+  // 预选跟随模式（PixPin/QQ 惯例，2026-10-27）：进会话默认选中光标下窗口，
+  // 鼠标移动时选中框自动跟随切换其他窗口（此时无工具栏，光标恒十字）；用户
+  // 按下鼠标即开始自定义框选（跟随结束），单击/拖拽松开确认选区、工具栏直出；
+  // Esc 逐层取消到清选区时回到跟随模式
+  const [following, setFollowing] = useState(true);
+  const followingRef = useRef(true);
   const [sel, setSel] = useState<Sel | null>(() =>
     hitWindow(boot.windows, boot.cx, boot.cy),
   );
@@ -210,15 +213,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         ctx.strokeRect(hd[0] - hsz / 2, hd[1] - hsz / 2, hsz, hsz);
       }
     }
-    // 窗口识别高亮（仅在无选区、未拖拽时）
-    const hw = hoverWinRef.current;
-    if (!s && !dragRef.current && hw) {
-      ctx.fillStyle = hexToRgba(accent, 0.1);
-      ctx.fillRect(hw.x, hw.y, hw.w, hw.h);
-      ctx.strokeStyle = accent;
-      ctx.lineWidth = 2 * scale;
-      ctx.strokeRect(hw.x, hw.y, hw.w, hw.h);
-    }
     // 拖拽中的选区框 + 尺寸 pill
     const d = dragRef.current;
     if (d) {
@@ -286,6 +280,14 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         requestAnimationFrame(() =>
           requestAnimationFrame(() => {
             void api.shotReady().catch(() => undefined);
+            // 常驻窗隐藏期间 WebView2 挂起合成器，show 后首帧可能仍是空白
+            // 占位（E2E 实证：遮罩/定格图不入帧，直到下一次指针事件触发
+            // 重绘）。show 完成后窗口可见、rAF 恢复，再强制重绘一拍确保
+            // 定格图 + 蒙层真正上屏
+            requestAnimationFrame(() => {
+              redrawBase();
+              redrawLive();
+            });
           }),
         );
       })
@@ -436,6 +438,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       return;
     }
     if (selRef.current) {
+      // 清选区回到跟随模式：继续移动鼠标自动切换目标窗口（QQ 语义）
+      setFollowing(true);
+      followingRef.current = true;
       setSel(null);
       selRef.current = null;
       redrawLive();
@@ -459,6 +464,21 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         return;
       }
       e.currentTarget.setPointerCapture(e.pointerId);
+      // 跟随模式下按下 = 自定义框选起点（无论点在预选框内外，PixPin 语义：
+      // 按下即脱离跟随，拖拽松开或单击确认新选区）
+      if (followingRef.current) {
+        followingRef.current = false;
+        setFollowing(false);
+        dragRef.current = { x1: px, y1: py, x2: px, y2: py };
+        setSel(null);
+        selRef.current = null;
+        setShapes([]);
+        shapesRef.current = [];
+        setRedoStack([]);
+        redrawBase();
+        redrawLive();
+        return;
+      }
       const s = selRef.current;
       // 手柄调整 > 选区内移动（select 工具）> 选区内标注 > 重新框选
       if (s) {
@@ -480,7 +500,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       }
       // 重新框选：清旧选区与标注（QQ 语义 = 全新会话）
       dragRef.current = { x1: px, y1: py, x2: px, y2: py };
-      hoverWinRef.current = null;
       setSel(null);
       selRef.current = null;
       setShapes([]);
@@ -497,10 +516,12 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     (e: React.PointerEvent) => {
       if (busy) return;
       const { px, py } = toPhys(e);
-      // 光标形态
+      // 光标形态（跟随模式恒十字准星；确认后才区分手柄/移动）
       const el = e.currentTarget as HTMLElement;
       const s0 = selRef.current;
-      if (tool === "select" && s0) {
+      if (followingRef.current) {
+        el.style.cursor = "crosshair";
+      } else if (tool === "select" && s0) {
         const hd = handleAt(s0, px, py);
         const inside = px >= s0.x && px < s0.x + s0.w && py >= s0.y && py < s0.y + s0.h;
         el.style.cursor =
@@ -554,9 +575,17 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         redrawLive();
         return;
       }
-      // 窗口识别高亮（无选区时）
-      if (!s) {
-        hoverWinRef.current = hitWindow(boot.windows, px, py);
+      // 预选跟随：选中框实时切到鼠标下窗口（面积最小者优先）；无窗口则空选区
+      if (followingRef.current) {
+        const hw = hitWindow(boot.windows, px, py);
+        const cur = selRef.current;
+        const same =
+          (!hw && !cur) ||
+          (hw && cur && hw.x === cur.x && hw.y === cur.y && hw.w === cur.w && hw.h === cur.h);
+        if (!same) {
+          setSel(hw);
+          selRef.current = hw;
+        }
         redrawLive();
       }
     },
@@ -715,7 +744,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           onPointerDown={(e) => e.stopPropagation()}
         />
       )}
-      {sel && !busy && (
+      {sel && !busy && !following && (
         <div
           ref={toolbarRef}
           className="np-shot-toolbar"
@@ -807,7 +836,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         </div>
       )}
       {savedTip && <div className="np-shot-saved">{savedTip}</div>}
-      {!sel && !busy && <div className="np-shot-hint">拖拽框选区域 · 点击选中窗口 · Esc 退出</div>}
+      {following && !sel && !busy && (
+        <div className="np-shot-hint">移动选择窗口 · 按住拖拽自定义区域 · Esc 退出</div>
+      )}
+      {!following && !sel && !busy && <div className="np-shot-hint">拖拽框选区域 · 点击选中窗口 · Esc 退出</div>}
     </div>
   );
 }
