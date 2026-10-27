@@ -76,11 +76,6 @@ const TOOLS: { id: ShotTool; label: string; icon: typeof Square }[] = [
   { id: "blur", label: "模糊", icon: Droplets },
 ];
 
-function hexToRgba(hex: string, a: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
-}
-
 /** 开始一个标注草稿（pointerdown；坐标相对选区，物理像素） */
 function startShape(
   tool: ShotTool,
@@ -124,13 +119,11 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   /** 放大镜锚点（最近一次光标物理坐标；跟随/拖拽态显示，确认选区即隐；
    *  以定格时光标位初始化——首帧即有放大镜，不等鼠标先动一下） */
   const magRef = useRef<{ x: number; y: number } | null>({ x: boot.cx, y: boot.cy });
-  /** 光标最近位置（不随模式清空，回跟随态时放大镜立即就位） */
-  const lastPosRef = useRef<{ x: number; y: number } | null>({ x: boot.cx, y: boot.cy });
 
   // 预选跟随模式（PixPin/QQ 惯例，2026-10-27）：进会话默认选中光标下窗口，
   // 鼠标移动时选中框自动跟随切换其他窗口（此时无工具栏，光标恒十字）；用户
   // 按下鼠标即开始自定义框选（跟随结束），单击/拖拽松开确认选区、工具栏直出；
-  // Esc 逐层取消到清选区时回到跟随模式
+  // Esc / 右键立即退出截图（用户定案，不再逐层取消）
   const [following, setFollowing] = useState(true);
   const followingRef = useRef(true);
   const [sel, setSel] = useState<Sel | null>(() =>
@@ -190,47 +183,52 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     const accent = accentRef.current;
     ctx.clearRect(0, 0, boot.mw, boot.mh);
     const s = selRef.current;
+    const dNow = dragRef.current;
     ctx.fillStyle = "rgba(0,0,0,0.32)";
-    if (!s) {
+    // 遮罩挖孔：确认选区优先；左键拖拽中 = 实时拖拽矩形——区域内无遮罩、
+    // 区域外遮罩（PixPin/QQ 惯例，2026-10-27 用户定案）
+    const hole = s ?? (dNow ? normalizeSel(dNow.x1, dNow.y1, dNow.x2, dNow.y2, boot.mw, boot.mh, 1) : null);
+    if (!hole) {
       ctx.fillRect(0, 0, boot.mw, boot.mh);
     } else {
-      ctx.fillRect(0, 0, boot.mw, s.y);
-      ctx.fillRect(0, s.y + s.h, boot.mw, boot.mh - s.y - s.h);
-      ctx.fillRect(0, s.y, s.x, s.h);
-      ctx.fillRect(s.x + s.w, s.y, boot.mw - s.x - s.w, s.h);
-      // 选区边框 + 四角/边中手柄
-      const bw = Math.max(1, Math.round(scale));
-      ctx.strokeStyle = accent;
-      ctx.lineWidth = bw;
-      ctx.strokeRect(s.x, s.y, s.w, s.h);
-      const hsz = 4 * scale;
-      ctx.fillStyle = "#fff";
-      ctx.lineWidth = Math.max(1, scale);
-      for (const hd of [
-        [s.x, s.y],
-        [s.x + s.w / 2, s.y],
-        [s.x + s.w, s.y],
-        [s.x + s.w, s.y + s.h / 2],
-        [s.x + s.w, s.y + s.h],
-        [s.x + s.w / 2, s.y + s.h],
-        [s.x, s.y + s.h],
-        [s.x, s.y + s.h / 2],
-      ]) {
-        ctx.fillRect(hd[0] - hsz / 2, hd[1] - hsz / 2, hsz, hsz);
-        ctx.strokeRect(hd[0] - hsz / 2, hd[1] - hsz / 2, hsz, hsz);
+      ctx.fillRect(0, 0, boot.mw, hole.y);
+      ctx.fillRect(0, hole.y + hole.h, boot.mw, boot.mh - hole.y - hole.h);
+      ctx.fillRect(0, hole.y, hole.x, hole.h);
+      ctx.fillRect(hole.x + hole.w, hole.y, boot.mw - hole.x - hole.w, hole.h);
+      if (s) {
+        // 选区边框 + 四角/边中手柄（仅确认选区；拖拽中只有边框）
+        const bw = Math.max(1, Math.round(scale));
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = bw;
+        ctx.strokeRect(s.x, s.y, s.w, s.h);
+        const hsz = 4 * scale;
+        ctx.fillStyle = "#fff";
+        ctx.lineWidth = Math.max(1, scale);
+        for (const hd of [
+          [s.x, s.y],
+          [s.x + s.w / 2, s.y],
+          [s.x + s.w, s.y],
+          [s.x + s.w, s.y + s.h / 2],
+          [s.x + s.w, s.y + s.h],
+          [s.x + s.w / 2, s.y + s.h],
+          [s.x, s.y + s.h],
+          [s.x, s.y + s.h / 2],
+        ]) {
+          ctx.fillRect(hd[0] - hsz / 2, hd[1] - hsz / 2, hsz, hsz);
+          ctx.strokeRect(hd[0] - hsz / 2, hd[1] - hsz / 2, hsz, hsz);
+        }
       }
     }
     // 放大镜/取色器（PixPin 惯例）：跟随态与拖拽态显示，确认选区后隐藏；
     // 取样合成画布，已画标注同样可见（所见即所得）
     const mag = magRef.current;
     const magVisible = !!mag && (followingRef.current || !!dragRef.current);
-    // 拖拽中的选区框；尺寸并入放大镜信息条（PixPin 同款），无放大镜才单画 pill
+    // 拖拽中的选区边框（区域内部已在遮罩挖孔中透出定格图，不再叠 8% 着色）；
+    // 尺寸并入放大镜信息条（PixPin 同款），无放大镜才单画 pill
     const d = dragRef.current;
     if (d) {
       const r = normalizeSel(d.x1, d.y1, d.x2, d.y2, boot.mw, boot.mh, 1);
       if (r) {
-        ctx.fillStyle = hexToRgba(accent, 0.08);
-        ctx.fillRect(r.x, r.y, r.w, r.h);
         ctx.strokeStyle = accent;
         ctx.lineWidth = Math.max(1, Math.round(scale));
         ctx.strokeRect(r.x, r.y, r.w, r.h);
@@ -438,48 +436,20 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     [],
   );
 
-  /** 逐层取消（Esc / 右键）：文字 → 绘制 → 拖拽 → 工具 → 选区 → 关闭 */
-  const cancelOneStep = useCallback(() => {
+  /** 立即退出（Esc / 右键，2026-10-27 用户定案）：任意状态直接收场，
+   *  不再逐层取消（旧语义：文字 → 绘制 → 拖拽 → 工具 → 选区 → 关闭）。
+   *  busy（复制/保存进行中）期间不响应，避免打断另存对话框流程 */
+  const exitShot = useCallback(() => {
     if (busy) return;
-    if (editingRef.current) {
-      editingRef.current = null;
-      setEditing(null);
-      return;
-    }
-    if (drawRef.current) {
-      drawRef.current = null;
-      redrawLive();
-      return;
-    }
-    if (dragRef.current) {
-      dragRef.current = null;
-      redrawLive();
-      return;
-    }
-    if (tool !== "select") {
-      setTool("select");
-      return;
-    }
-    if (selRef.current) {
-      // 清选区回到跟随模式：继续移动鼠标自动切换目标窗口（QQ 语义）；
-      // 放大镜随即在原光标位恢复（PixPin 惯例）
-      setFollowing(true);
-      followingRef.current = true;
-      setSel(null);
-      selRef.current = null;
-      magRef.current = lastPosRef.current;
-      redrawLive();
-      return;
-    }
     closeWindow();
-  }, [busy, closeWindow, redrawLive, tool]);
+  }, [busy, closeWindow]);
 
   // ── 指针交互 ─────────────────────────────────────────────────────────────
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (busy) return;
       if (e.button === 2) {
-        cancelOneStep();
+        exitShot();
         return;
       }
       if (e.button !== 0) return;
@@ -534,14 +504,13 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       redrawLive();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [busy, tool, color, strokeIdx, redrawBase, redrawLive, commitText, cancelOneStep],
+    [busy, tool, color, strokeIdx, redrawBase, redrawLive, commitText, exitShot],
   );
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
     if (busy) return;
     const { px, py } = toPhys(e);
-    lastPosRef.current = { x: px, y: py };
     // 放大镜锚点（跟随/拖拽态显示，确认选区即隐）
     magRef.current =
       followingRef.current || dragRef.current ? { x: px, y: py } : null;
@@ -680,7 +649,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        cancelOneStep();
+        exitShot();
         return;
       }
       if (composingRef.current) return;
@@ -709,7 +678,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [cancelOneStep, commitText, undo, redo, finish]);
+  }, [exitShot, commitText, undo, redo, finish]);
 
   // ── 工具栏定位（选区下方 12px，放不下换上方；水平居中钳制屏内）──────────
   const [tbPos, setTbPos] = useState<{ left: number; top: number } | null>(null);

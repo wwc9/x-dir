@@ -30,7 +30,9 @@ function ShotHost() {
     const offs: (() => void)[] = [];
     (async () => {
       offs.push(
-        await listen<ShotBoot>("shot-session", (e) => setSession(e.payload)),
+        await listen<ShotBoot>("shot-session", (e) => {
+          setSession(e.payload);
+        }),
         await listen("shot-session-end", () => setSession(null)),
       );
       if (dead) {
