@@ -148,7 +148,7 @@ impl CanvasBuf {
 // ── 会话入口 ────────────────────────────────────────────────────────────────
 
 /// 开始滚动会话：rx/ry/rw/rh = 选区显示器相对物理坐标；mx/my = 显示器原点。
-/// 第一帧从会话定格图（session.bmp）裁剪，此后 capture_region 捕获实时屏幕。
+/// 第一帧从会话定格图（session_{seq}.bmp）裁剪，此后 capture_region 捕获实时屏幕。
 #[tauri::command]
 pub fn shot_scroll_begin(
     app: AppHandle,
@@ -169,17 +169,17 @@ pub fn shot_scroll_begin(
     if rx < 0 || ry < 0 || rx + rw > mon.w as i32 || ry + rh > mon.h as i32 {
         return Err("选区超出显示器范围".into());
     }
-    // 第一帧 = 定格图裁剪（此刻覆盖窗显示的就是原始画面）
-    let session = shot_dir().join("session.bmp");
+    // 第一帧 = 定格图裁剪（此刻覆盖窗显示的就是原始画面；路径由 shot.rs
+    // 会话写入时登记，唯一名 session_{seq}.bmp）
+    let session = super::shot::current_session_file().ok_or("无进行中的截图会话")?;
     let base: RgbaImage = image::open(&session)
         .map_err(|e| format!("读取会话截图失败：{e}"))?
         .crop_imm(rx as u32, ry as u32, rw as u32, rh as u32)
         .to_rgba8();
 
-    // 覆盖窗退场（其销毁钩子会清 session.bmp，base 已在内存不受影响）
-    if let Some(w) = app.get_webview_window("shot") {
-        let _ = w.close();
-    }
+    // 覆盖窗退场（常驻窗隐藏回 idle，end_session 即删会话定格文件；base 已
+    // 在内存不受影响）
+    super::shot::end_session(&app);
     // 光标悬停选区中心：滚轮事件落点 = 目标窗口（Win10+ 悬停滚动）
     unsafe {
         use windows::Win32::UI::WindowsAndMessaging::SetCursorPos;
@@ -298,7 +298,7 @@ fn show_scrollbar_window(app: &AppHandle, mon: &MonRect) -> Result<(), String> {
     const BH: f64 = 42.0;
     let s = f64::from(mon.scale);
     let boot = serde_json::json!({ "window": "scrollbar" });
-    let win = WebviewWindowBuilder::new(app, "shot-scroll", WebviewUrl::App("index.html".into()))
+    let win = WebviewWindowBuilder::new(app, "shot-scroll", WebviewUrl::App("shot.html".into()))
         .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
         .title("X-Dir 滚动截图")
         .decorations(false)
@@ -350,7 +350,7 @@ fn show_result_window(
         "h": h,
         "truncated": truncated,
     });
-    let win = WebviewWindowBuilder::new(app, "shot-result", WebviewUrl::App("index.html".into()))
+    let win = WebviewWindowBuilder::new(app, "shot-result", WebviewUrl::App("shot.html".into()))
         .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
         .title("X-Dir 滚动长图")
         .decorations(true)

@@ -30,4 +30,13 @@ export default defineConfig(() => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+  build: {
+    rollupOptions: {
+      // 多页入口：主窗口 index.html + 截图族窗口轻量入口 shot.html（§3.6）
+      input: {
+        main: "index.html",
+        shot: "shot.html",
+      },
+    },
+  },
 }));

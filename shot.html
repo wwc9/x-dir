@@ -1,0 +1,23 @@
+<!doctype html>
+<!-- 截图族窗口轻量入口（§3.6 性能，2026-10-27）：截图覆盖窗（常驻）、贴图、
+     滚动浮条、结果窗都加载本页（src/shot/boot.tsx），不加载完整文件管理器
+     bundle（App + Blueprint + stores），冷启动解析成本大降；样式与主界面
+     共用 index.css。主窗口仍走 index.html -->
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>X-Dir 截图</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/shot/boot.tsx"></script>
+  </body>
+</html>

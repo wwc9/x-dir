@@ -87,9 +87,22 @@ pub fn run() {
             std::panic::set_hook(Box::new(|info| {
                 log::error!("panic: {info}");
             }));
-            // 上次会话/贴图残留的临时 PNG 清理（截图会话文件随窗销毁即删，
+            // 上次会话/贴图残留的临时 PNG 清理（截图会话文件随收场即删，
             // 崩溃/强杀残留由此兜底）
             commands::shot::cleanup_stale();
+            // 截图覆盖窗预热（§3.6 性能，2026-10-27）：常驻隐藏窗在启动
+            // 2.5s 后后台建好、页面 idle 待命，热键按下只剩捕获+贴图，首按
+            // 即达百毫秒级（PixPin 口径）。预热失败不致命，热键路径会现场补建
+            let shot_prewarm = _app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(2500));
+                let h = shot_prewarm.clone();
+                let _ = shot_prewarm.run_on_main_thread(move || {
+                    if let Err(e) = commands::shot::ensure_shot_window(&h) {
+                        log::warn!("截图覆盖窗预热失败：{e}");
+                    }
+                });
+            });
             // 索引模式预热：后台把已建索引 mmap prefault 进文件缓存，消除首次查询冷映射
             crate::index::warm_views_async();
             // 无边框窗口带阴影时，tao 在 Win11 顶部留 1px 非客户区（WM_NCCALCSIZE
@@ -243,6 +256,7 @@ pub fn run() {
             commands::shot::shot_close,
             commands::shot::shot_copy,
             commands::shot::shot_ready,
+            commands::shot::shot_page_ready,
             commands::shot::shot_pin,
             commands::shot::shot_save_data,
             commands::shot::shot_register_hotkey,

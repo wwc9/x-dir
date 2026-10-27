@@ -1,7 +1,7 @@
-// 截图覆盖层（§3.6，热键经 Rust 建窗加载）：定格截图铺底 + 智能窗口识别 +
-// 选区（拖拽/手柄调整/整体移动）+ 标注（矩形/椭圆/箭头/画笔/马克笔/文字）+
-// 马赛克/模糊 + 复制/保存/贴图。全链路物理像素坐标（×boot.scale 与 CSS 像素
-// 换算），与定格截图逐像素对齐。
+// 截图覆盖层（§3.6，常驻覆盖窗经 shot-session 事件驱动挂载）：定格截图铺底 +
+// 智能窗口识别（进会话默认预选光标下窗口）+ 选区（拖拽/手柄调整/整体移动）+
+// 标注（矩形/椭圆/箭头/画笔/马克笔/文字）+ 马赛克/模糊 + 复制/保存/贴图。
+// 全链路物理像素坐标（×boot.scale 与 CSS 像素换算），与定格截图逐像素对齐。
 //
 // 双 canvas 分层：composite（离屏，底图 + 已确认标注按序压平——马赛克/模糊
 // 取其像素，语义 = 后画的会把先画的糊掉，与 QQ 一致）→ base（静态显示）；
@@ -51,6 +51,11 @@ export interface ShotBoot {
   mw: number;
   mh: number;
   scale: number;
+  /** 会话序号（常驻覆盖窗重挂 key） */
+  seq: number;
+  /** 会话定格时光标位置（显示器相对物理像素；默认预选光标下窗口） */
+  cx: number;
+  cy: number;
   windows: { x: number; y: number; w: number; h: number }[];
 }
 
@@ -116,7 +121,11 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const composingRef = useRef(false);
   const toolbarRef = useRef<HTMLDivElement>(null);
 
-  const [sel, setSel] = useState<Sel | null>(null);
+  // 进会话默认预选光标下窗口（PixPin/QQ 惯例）：蒙层一上屏选区就位、工具栏
+  // 直出；拖拽空白处重框、点其他窗口改选（既有指针逻辑天然支持）
+  const [sel, setSel] = useState<Sel | null>(() =>
+    hitWindow(boot.windows, boot.cx, boot.cy),
+  );
   const [tool, setTool] = useState<ShotTool>("select");
   const [color, setColor] = useState(SHOT_PALETTE[0]);
   const [strokeIdx, setStrokeIdx] = useState(1);

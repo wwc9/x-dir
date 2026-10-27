@@ -1,17 +1,30 @@
-// 截图与贴图（2026-10-24，§3.6）：热键 → xcap 定格光标所在显示器 → 全屏覆盖
-// 窗（label "shot"）内选区/标注 → 复制（位图剪贴板）/ 保存（原生对话框）/
-// 贴图（label "pin-*" 置顶窗）。会话数据流转走临时 BMP 文件 + asset
-// protocol（scope **）加载，不经 IPC 传大图；捕获+编码在后台线程
-// （SESSION_STARTING 门闸拦连按），主线程只建窗；覆盖窗销毁即清理自己的
-// 临时文件，失焦自动收场（保存对话框期间豁免），启动时清理上次会话残留。
+// 截图与贴图（§3.6，2026-10-27 性能重构）：常驻覆盖窗 + 快路径会话。
+// 覆盖窗（label "shot"）在应用启动后 2.5s 预热建好并常驻隐藏（页面 idle 待命，
+// 监听 shot-session 事件），热键按下只做「DXGI 捕获 → BMP 落盘 → 事件下发 →
+// 前端贴图回执 shot_ready → show」，砍掉旧方案每次建窗 + webview 冷启动的
+// ~600ms；捕获换 DXGI Desktop Duplication（shot_dxgi，失败回落 xcap），
+// 感知延迟从 ~1.2s 降到 ~300ms 内（log::info「截图感知延迟」实测）。
+// 贴图（label "pin-*"）置顶窗 / 滚动浮条 / 结果窗仍按需建窗，但统一加载
+// 轻量入口 shot.html（不再加载完整文件管理器 bundle）。
+//
+// 会话数据流转走临时 BMP 文件 + asset protocol（scope **）加载，不经 IPC 传
+// 大图；捕获+编码在后台线程（SESSION_STARTING 门闸拦连按），主线程只做定位
+// 与事件下发。会话收场 = 隐藏常驻窗（不销毁），热键重按 = 就地重拍（先撤蒙层
+// 再捕获，PixPin 惯例）；失焦自动收场（保存对话框期间豁免）；启动时清理上次
+// 会话残留。
 //
 // 坐标系约定：全链路物理像素（虚拟桌面坐标，左上显示器可为负）；前端把
 // CSS 像素 × scale 还原为物理坐标后再回传，与定格截图逐像素对齐。
 
 use base64::Engine as _;
 use serde::Serialize;
-use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
+use std::path::PathBuf;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::Duration;
+use tauri::{
+    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder,
+};
 
 /// 会话/贴图临时文件目录（%TEMP%/xdir_shot）
 pub(crate) fn shot_dir() -> std::path::PathBuf {
@@ -70,6 +83,11 @@ pub struct ShotCapture {
     pub mh: u32,
     /// DPI 缩放（前端 CSS 像素 ↔ 物理像素换算）
     pub scale: f64,
+    /// 会话序号（millis；前端常驻覆盖窗以此为 key 重挂 ShotOverlay）
+    pub seq: u64,
+    /// 定格时光标位置（显示器相对物理像素；前端默认预选光标下窗口）
+    pub cx: i32,
+    pub cy: i32,
     /// 可截窗口矩形（智能窗口识别，本显示器相对物理坐标）
     pub windows: Vec<ShotWindow>,
 }
@@ -165,38 +183,86 @@ pub(crate) fn monitor_at(x: i32, y: i32) -> Option<MonRect> {
 
 // ── 截图会话 ────────────────────────────────────────────────────────────────
 
-/// 捕获+建窗进行中标记：拦截连按（begin_session 只在主线程跑，load/store 无竞争）
+/// 捕获+下发进行中标记：拦截连按（begin_session 只在主线程跑，load/store 无竞争）
 static SESSION_STARTING: AtomicBool = AtomicBool::new(false);
-/// 原生保存对话框打开中：对话框会抢走系统焦点，此时豁免覆盖窗的失焦自毁
-static SAVE_DIALOG_OPEN: AtomicBool = AtomicBool::new(false);
+/// 会话进行中（覆盖窗显示着选区）：热键重按 = 就地重拍；收场即复位
+static SESSION_ACTIVE: AtomicBool = AtomicBool::new(false);
 /// 覆盖窗内容首帧已上屏（前端 shot_ready 回执）：失焦自毁仅在此之后生效
 static SHOT_VISIBLE: AtomicBool = AtomicBool::new(false);
+/// 原生保存对话框打开中：对话框会抢走系统焦点，此时豁免覆盖窗的失焦自毁
+static SAVE_DIALOG_OPEN: AtomicBool = AtomicBool::new(false);
+/// 常驻覆盖窗页面就绪（前端 shot_page_ready 回执，事件监听已注册）：
+/// 会话事件在此之前下发会丢，capture 线程等此标记再下发
+static SHOT_PAGE_READY: AtomicBool = AtomicBool::new(false);
+/// 本次会话起始时刻（millis）：shot_ready 时算感知延迟（log::info 实测口径）
+static SESSION_T0: AtomicU64 = AtomicU64::new(0);
+/// 当前会话定格图路径（唯一名 session_{seq}.bmp）：收场删除、滚动截图读取
+static SESSION_FILE: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+/// 滚动截图取第一帧用：当前会话定格图路径（无会话 = None）
+pub(crate) fn current_session_file() -> Option<PathBuf> {
+    SESSION_FILE
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone()
+}
 
 /// 热键/菜单入口：开始一次截图会话。
-/// 捕获+编码在后台线程，主线程只做建窗——在 WndProc 里内联跑 500ms 的
-/// 捕获会冻结整个应用，且 build() 泵消息期间排队的 WM_HOTKEY 会重入
-/// begin_session、对建到一半的窗口 close()（卡死与 double-fire 的根源）。
+/// 捕获在后台线程（在 WndProc 里内联跑捕获会冻结整个应用，且 build() 泵消息
+/// 期间排队的 WM_HOTKEY 会重入），主线程只做窗口定位与事件下发。
 /// begin_session 必须在主线程调用（热键 WndProc / shot_begin 派发均满足）。
 fn begin_session(app: &AppHandle) {
-    // 捕获/建窗进行中：连按忽略
+    // 捕获/下发进行中：连按忽略
     if SESSION_STARTING.load(Ordering::SeqCst) {
+        log::debug!("截图热键触发：上一拍仍在进行，忽略");
         return;
     }
-    // 覆盖窗已开 = 本拍收掉旧会话（销毁钩子清临时文件），再按即全新会话
-    if let Some(w) = app.get_webview_window("shot") {
-        let _ = w.close();
-        return;
+    log::debug!("截图热键触发");
+    // 常驻覆盖窗缺失（预热未跑完/异常销毁）：现场补建（冷路径），门闸复位
+    if app.get_webview_window("shot").is_none() {
+        SESSION_ACTIVE.store(false, Ordering::SeqCst);
+        SHOT_VISIBLE.store(false, Ordering::SeqCst);
+        if let Err(e) = ensure_shot_window(app) {
+            log::error!("截图启动失败：{e}");
+            return;
+        }
+    }
+    // 会话进行中 = 就地重拍（PixPin 惯例）：先撤蒙层再捕获，否则定格的是
+    // 蒙层自己；撤下后给合成器约 140ms 把窗口真正摘离屏幕
+    let reentry = SESSION_ACTIVE.load(Ordering::SeqCst);
+    if reentry {
+        end_session(app);
     }
     SESSION_STARTING.store(true, Ordering::SeqCst);
+    SESSION_T0.store(millis() as u64, Ordering::SeqCst);
     let app = app.clone();
     let spawned = std::thread::Builder::new()
         .name("shot-capture".into())
-        .spawn(move || match capture_session(&app) {
+        .spawn(move || match capture_session(&app, reentry) {
             Ok(cap) => {
                 let app2 = app.clone();
                 let dispatch = app.run_on_main_thread(move || {
-                    if let Err(e) = show_shot_window(&app2, &cap) {
-                        log::error!("截图启动失败：{e}");
+                    if let Some(w) = app2.get_webview_window("shot") {
+                        let _ = w.set_position(PhysicalPosition::new(cap.mx, cap.my));
+                        let _ = w.set_size(PhysicalSize::new(cap.mw, cap.mh));
+                        SESSION_ACTIVE.store(true, Ordering::SeqCst);
+                        if let Err(e) = app2.emit_to("shot", "shot-session", &cap) {
+                            log::error!("截图会话下发失败：{e}");
+                        }
+                        // 5s 看门狗：前端迟迟不回执（页面挂死/事件丢失）就收场
+                        // 重置门闸，热键可再按；不强制 show 空白窗（白屏闪屏）
+                        let app3 = app2.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(Duration::from_secs(5));
+                            if SESSION_ACTIVE.load(Ordering::SeqCst)
+                                && !SHOT_VISIBLE.load(Ordering::SeqCst)
+                            {
+                                log::warn!("截图覆盖窗 5s 未就绪，收场重置");
+                                end_session(&app3);
+                            }
+                        });
+                    } else {
+                        log::error!("截图会话下发失败：覆盖窗已不存在");
                     }
                     SESSION_STARTING.store(false, Ordering::SeqCst);
                 });
@@ -217,7 +283,10 @@ fn begin_session(app: &AppHandle) {
 }
 
 /// 后台线程：定格光标所在显示器 + 写会话图 + 枚举可截窗口
-fn capture_session(app: &AppHandle) -> Result<ShotCapture, String> {
+fn capture_session(app: &AppHandle, reentry: bool) -> Result<ShotCapture, String> {
+    if reentry {
+        std::thread::sleep(Duration::from_millis(140));
+    }
     let cur = app
         .cursor_position()
         .map_err(|e| format!("无法获取光标位置：{e}"))?;
@@ -225,22 +294,34 @@ fn capture_session(app: &AppHandle) -> Result<ShotCapture, String> {
     let mon = monitor_at(cx, cy).ok_or("未找到光标所在显示器")?;
     let t0 = std::time::Instant::now();
 
-    let img = xcap::Monitor::all()
-        .map_err(|e| format!("显示器枚举失败：{e}"))?
-        .into_iter()
-        .find(|m| m.x().ok() == Some(mon.x) && m.y().ok() == Some(mon.y))
-        .ok_or("未找到目标显示器")?
-        .capture_image()
-        .map_err(|e| format!("屏幕捕获失败：{e}"))?;
+    // DXGI Desktop Duplication 优先（4K ~60-100ms），任何不满足回落 xcap/GDI
+    let img = crate::commands::shot_dxgi::capture(&mon)
+        .or_else(|| xcap_capture(&mon))
+        .ok_or("屏幕捕获失败（DXGI 与 GDI 均不可用）")?;
     log::debug!("截图计时：捕获 {}ms", t0.elapsed().as_millis());
 
     let dir = shot_dir();
     std::fs::create_dir_all(&dir).map_err(|e| format!("创建临时目录失败：{e}"))?;
     // BMP 而非 PNG：4K PNG 编码 ~2s（感知延迟大头），BMP 编码≈memcpy 级，
-    // 浏览器解码同为原生快路径；文件仅作会话内传递，销毁即清
-    let file = dir.join("session.bmp");
+    // 浏览器解码同为原生快路径；文件仅作会话内传递，收场即清。
+    // 唯一文件名（带 seq）：常驻窗反复加载同一路径会被 WebView2 资源缓存
+    // 坑掉（第二次会话 img.decode() 失败 → 透明画布），seq 变路径即变
+    let seq = millis();
+    let file = dir.join(format!("session_{seq}.bmp"));
     img.save(&file).map_err(|e| format!("截图写盘失败：{e}"))?;
+    *SESSION_FILE.lock().unwrap_or_else(|p| p.into_inner()) = Some(file.clone());
     log::debug!("截图计时：BMP 写盘 {}ms", t0.elapsed().as_millis());
+
+    // 等常驻页就绪（事件监听注册完成）再下发，会话事件不丢；超 3s 照发
+    // （看门狗兜底）——只发生在启动后头几秒预热未完成的极端时序
+    let t_wait = std::time::Instant::now();
+    while !SHOT_PAGE_READY.load(Ordering::SeqCst) {
+        if t_wait.elapsed() >= Duration::from_secs(3) {
+            log::warn!("截图覆盖窗页面 3s 未就绪，照发会话（可能丢失）");
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(8));
+    }
 
     let windows = enum_windows_abs()
         .into_iter()
@@ -259,23 +340,31 @@ fn capture_session(app: &AppHandle) -> Result<ShotCapture, String> {
         mw: mon.w,
         mh: mon.h,
         scale: mon.scale as f64,
+        seq: seq as u64,
+        cx: (cx - mon.x).clamp(0, mon.w as i32 - 1),
+        cy: (cy - mon.y).clamp(0, mon.h as i32 - 1),
         windows,
     })
 }
 
-fn show_shot_window(app: &AppHandle, cap: &ShotCapture) -> Result<(), String> {
-    let t_show = std::time::Instant::now();
-    let boot = serde_json::json!({
-        "window": "shot",
-        "file": cap.file,
-        "mx": cap.mx,
-        "my": cap.my,
-        "mw": cap.mw,
-        "mh": cap.mh,
-        "scale": cap.scale,
-        "windows": cap.windows,
-    });
-    let win = WebviewWindowBuilder::new(app, "shot", WebviewUrl::App("index.html".into()))
+/// xcap（GDI）回落捕获：DXGI 不可用（HDR/旋转/独占全屏/安全桌面等）时兜底
+fn xcap_capture(mon: &MonRect) -> Option<image::RgbaImage> {
+    xcap::Monitor::all()
+        .ok()?
+        .into_iter()
+        .find(|m| m.x().ok() == Some(mon.x) && m.y().ok() == Some(mon.y))?
+        .capture_image()
+        .ok()
+}
+
+/// 确保常驻覆盖窗存在（启动预热与热键冷路径共用）。idle 态仅挂 ShotHost
+/// 空壳监听会话事件；建窗一次，之后所有会话复用，不再销毁。
+pub(crate) fn ensure_shot_window(app: &AppHandle) -> Result<(), String> {
+    if app.get_webview_window("shot").is_some() {
+        return Ok(());
+    }
+    let boot = serde_json::json!({ "window": "shot-idle" });
+    let win = WebviewWindowBuilder::new(app, "shot", WebviewUrl::App("shot.html".into()))
         .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
         .title("X-Dir 截图")
         .decorations(false)
@@ -291,43 +380,44 @@ fn show_shot_window(app: &AppHandle, cap: &ShotCapture) -> Result<(), String> {
         .visible(false)
         .initialization_script(format!("window.__BOOT__ = {boot};"))
         .build()
-        .map_err(|e| format!("创建截图窗口失败：{e}"))?;
-    log::debug!("截图计时：建窗 {}ms", t_show.elapsed().as_millis());
-    win.set_position(PhysicalPosition::new(cap.mx, cap.my))
-        .map_err(|e| e.to_string())?;
-    win.set_size(PhysicalSize::new(cap.mw, cap.mh))
-        .map_err(|e| e.to_string())?;
-    // 覆盖窗销毁（完成/取消）即清理会话定格文件；失焦自动收会话（QQ 惯例）：
-    // 全屏置顶黑罩失焦后 Esc/Enter 全部失效，留在屏上形同卡死。仅在内容
-    // 首帧上屏（SHOT_VISIBLE）后生效；保存对话框抢焦点时豁免
-    let session_file = shot_dir().join("session.bmp");
-    let w2 = win.clone();
+        .map_err(|e| format!("创建截图覆盖窗失败：{e}"))?;
+    // 失焦自动收会话（QQ 惯例）：全屏置顶蒙层失焦后 Esc/Enter 全部失效，
+    // 留在屏上形同卡死。仅在内容首帧上屏（SHOT_VISIBLE）后生效；保存对话框
+    // 抢焦点时豁免。常驻窗不销毁，销毁只发生在应用退出/异常（门闸复位即可，
+    // 会话文件由下次启动 cleanup_stale 兜底）
+    let app2 = app.clone();
     win.on_window_event(move |e| match e {
-        tauri::WindowEvent::Destroyed => {
-            let _ = std::fs::remove_file(&session_file);
-        }
-        // 保存对话框抢焦点时豁免
         tauri::WindowEvent::Focused(false)
             if SHOT_VISIBLE.load(Ordering::SeqCst) && !SAVE_DIALOG_OPEN.load(Ordering::SeqCst) =>
         {
-            let _ = w2.close();
+            end_session(&app2);
+        }
+        tauri::WindowEvent::Destroyed => {
+            SESSION_ACTIVE.store(false, Ordering::SeqCst);
+            SHOT_VISIBLE.store(false, Ordering::SeqCst);
+            SHOT_PAGE_READY.store(false, Ordering::SeqCst);
         }
         _ => {}
     });
-    // 不在此处 show：此刻 webview 还是空内容，提前 show 会闪黑屏。
-    // 前端首帧绘制完成后经 shot_ready 回执再显示；4s 兜底防前端加载
-    // 失败时窗口永远不可见（hotkey 的 toggle 语义也能收拾这种残局）
-    SHOT_VISIBLE.store(false, Ordering::SeqCst);
-    let app3 = app.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_secs(4));
-        if let Some(w) = app3.get_webview_window("shot") {
-            let _ = w.show();
-            let _ = w.set_focus();
-            SHOT_VISIBLE.store(true, Ordering::SeqCst);
-        }
-    });
     Ok(())
+}
+
+/// 收场：隐藏常驻覆盖窗回到 idle（不销毁），清会话状态与定格文件，
+/// 并通知前端卸载会话 UI（释放画布内存）
+pub(crate) fn end_session(app: &AppHandle) {
+    SESSION_ACTIVE.store(false, Ordering::SeqCst);
+    SHOT_VISIBLE.store(false, Ordering::SeqCst);
+    let session_file = SESSION_FILE
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .take();
+    if let Some(f) = session_file {
+        let _ = std::fs::remove_file(f);
+    }
+    if let Some(w) = app.get_webview_window("shot") {
+        let _ = w.hide();
+        let _ = app.emit_to("shot", "shot-session-end", ());
+    }
 }
 
 /// 覆盖窗/贴图窗/结果窗内容首帧就绪后由前端调用：此刻才真正 show——
@@ -339,8 +429,21 @@ pub fn shot_ready(window: tauri::WebviewWindow) -> Result<(), String> {
         window.show().map_err(|e| e.to_string())?;
         if label == "shot" {
             SHOT_VISIBLE.store(true, Ordering::SeqCst);
+            let t0 = SESSION_T0.load(Ordering::SeqCst);
+            if t0 > 0 {
+                log::info!("截图感知延迟 {}ms", millis().saturating_sub(u128::from(t0)));
+            }
             window.set_focus().map_err(|e| e.to_string())?;
         }
+    }
+    Ok(())
+}
+
+/// 常驻覆盖窗页面就绪回执（事件监听已注册）：Rust 侧放行会话事件下发
+#[tauri::command]
+pub fn shot_page_ready(window: tauri::WebviewWindow) -> Result<(), String> {
+    if window.label() == "shot" {
+        SHOT_PAGE_READY.store(true, Ordering::SeqCst);
     }
     Ok(())
 }
@@ -354,12 +457,10 @@ pub async fn shot_begin(app: AppHandle) -> Result<(), String> {
         .map_err(|e| format!("截图任务派发失败：{e}"))
 }
 
-/// 关闭覆盖窗（完成/取消后的收尾）
+/// 关闭覆盖窗会话（完成/取消后的收尾）：隐藏常驻窗回到 idle
 #[tauri::command]
 pub fn shot_close(app: AppHandle) -> Result<(), String> {
-    if let Some(w) = app.get_webview_window("shot") {
-        let _ = w.close();
-    }
+    end_session(&app);
     Ok(())
 }
 
@@ -401,6 +502,11 @@ pub fn shot_pin(
     let scale = monitor_at(x + w / 2, y + h / 2)
         .map(|m| m.scale as f64)
         .unwrap_or(1.0);
+    // 建窗前先收蒙层（2026-10-27 E2E 实证）：build() 会泵主线程消息，全屏
+    // 置顶蒙层在场时其重绘/焦点事件重入会让 build 卡死不返回（窗口已建、
+    // set_position/show 永不执行，贴图永不可见）。先收场再建窗，视觉也
+    // 自然——贴图落屏时蒙层恰好退场
+    end_session(&app);
     let boot = serde_json::json!({
         "window": "pin",
         "file": file.to_string_lossy(),
@@ -408,7 +514,7 @@ pub fn shot_pin(
         "h": h,
         "scale": scale,
     });
-    let win = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html".into()))
+    let win = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("shot.html".into()))
         .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
         .title("X-Dir 贴图")
         .decorations(false)
@@ -423,10 +529,16 @@ pub fn shot_pin(
         .initialization_script(format!("window.__BOOT__ = {boot};"))
         .build()
         .map_err(|e| format!("创建贴图窗口失败：{e}"))?;
-    win.set_position(PhysicalPosition::new(x, y))
-        .map_err(|e| e.to_string())?;
+    log::debug!("贴图窗 build 返回：label={label}");
+    win.set_position(PhysicalPosition::new(x, y)).map_err(|e| {
+        log::warn!("贴图 set_position 失败：{e}");
+        e.to_string()
+    })?;
     win.set_size(PhysicalSize::new(w as u32, h as u32))
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            log::warn!("贴图 set_size 失败：{e}");
+            e.to_string()
+        })?;
     let pin_file = file.clone();
     win.on_window_event(move |e| {
         if matches!(e, tauri::WindowEvent::Destroyed) {
@@ -435,6 +547,7 @@ pub fn shot_pin(
     });
     // 贴图不抢焦点（Snipaste 惯例）：贴完继续手头工作
     win.show().map_err(|e| e.to_string())?;
+    log::debug!("贴图窗已建并 show：label={label} rect=({x},{y},{w},{h})");
     Ok(())
 }
 
@@ -515,6 +628,7 @@ pub fn shot_register_hotkey(app: AppHandle, enabled: bool, hotkey: String) -> Re
             begin_session(app);
         }
     })
+    .map(|()| log::info!("截图热键已注册：{hotkey}"))
     .map_err(|e| {
         // App.tsx 启动路径对注册失败静默 catch，这里必须留痕可查
         log::warn!("截图热键注册失败：{e}");

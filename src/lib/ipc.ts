@@ -728,6 +728,8 @@ export const api = {
   shotClose: () => cmd<void>("shot_close"),
   /** 截图窗族内容首帧就绪：Rust 此时才 show（提前 show 会闪黑屏） */
   shotReady: () => cmd<void>("shot_ready"),
+  /** 常驻截图覆盖窗页面就绪（事件监听已注册）：Rust 放行会话事件下发 */
+  shotPageReady: () => cmd<void>("shot_page_ready"),
   /** 复制图像 PNG（dataURL）到系统剪贴板 */
   shotCopy: (dataUrl: string) => cmd<void>("shot_copy", { dataUrl }),
   /** 贴图：PNG dataURL 钉成置顶窗（x/y/w/h = 虚拟桌面物理坐标） */
