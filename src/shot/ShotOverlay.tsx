@@ -387,15 +387,50 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           }
           return;
         }
-        const dataUrl = exportDataUrl(s);
-        if (!dataUrl) return;
+        // 保存/贴图感知优先路径：RGBA 直传暂存（免 PNG 编码/base64/解码），
+        // 任一环节失败回落 dataURL 路径
+        const cc = cropCanvas(s);
+        const img = cc
+          ? cc
+              .getContext("2d", { willReadFrequently: true })!
+              .getImageData(0, 0, cc.width, cc.height)
+          : null;
+        const c = cc;
         if (action === "pin") {
-          await api.shotPin(dataUrl, boot.mx + s.x, boot.my + s.y, s.w, s.h);
+          if (img && c) {
+            try {
+              await api.shotPinRaw(
+                img.data,
+                c.width,
+                c.height,
+                boot.mx + s.x,
+                boot.my + s.y,
+              );
+              closeWindow();
+              return;
+            } catch {
+              // 落到下方 dataURL 路径
+            }
+          }
+          await api.shotPin(exportDataUrl(s)!, boot.mx + s.x, boot.my + s.y, s.w, s.h);
           closeWindow();
         } else {
-          const saved = await api.shotSaveData(dataUrl);
+          let saved: string | null = null;
+          let staged = false; // 暂存成功 = 取消对话框时不能回落（否则弹两次对话框）
+          if (img && c) {
+            try {
+              await api.shotStageRaw(img.data, c.width, c.height);
+              saved = await api.shotSaveRaw();
+              staged = true;
+            } catch {
+              staged = false; // 落到下方 dataURL 路径
+            }
+          }
+          if (!staged) {
+            saved = await api.shotSaveData(exportDataUrl(s)!);
+          }
           if (saved) {
-            setSavedTip(`已保存 ${saved.split(/[\\/]/).pop()}`);
+            setSavedTip(`已保存 ${saved.split(/[\/]/).pop()}`);
             setTimeout(() => closeWindow(), 1400);
           } else {
             setBusy(false); // 取消保存对话框，回到截图

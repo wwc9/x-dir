@@ -657,19 +657,42 @@ pub fn shot_copy(app: AppHandle, data_url: String) -> Result<(), String> {
         .map_err(|e| format!("写入剪贴板失败：{e}"))
 }
 
-/// 帧头解析：前 16 字节 = width/height 的 u32 LE（复制/后续原始直传共用）。
+/// 帧头解析：前 16 字节 = [width u32 LE][height u32 LE][x i32 LE][y i32 LE]
+/// + RGBA 载荷（copy/stage/pin 原始直传共用；x/y 仅贴图落位使用，其余填 0）。
+///
 /// 独立成纯函数供 test。
-fn parse_frame_header(bytes: &[u8]) -> Option<(u32, u32, &[u8])> {
+fn parse_frame_header(bytes: &[u8]) -> Option<(u32, u32, i32, i32, &[u8])> {
     if bytes.len() < 16 {
         return None;
     }
     let w = u32::from_le_bytes(bytes[0..4].try_into().ok()?);
     let h = u32::from_le_bytes(bytes[4..8].try_into().ok()?);
+    let x = i32::from_le_bytes(bytes[8..12].try_into().ok()?);
+    let y = i32::from_le_bytes(bytes[12..16].try_into().ok()?);
     if w == 0 || h == 0 {
         return None;
     }
-    Some((w, h, &bytes[16..]))
+    Some((w, h, x, y, &bytes[16..]))
 }
+
+/// PNG 快速编码（CompressionType::Fast = fdeflate 后端，4K 约百 ms 级，
+/// 对话框打开期间在后台线程并行执行）
+fn encode_png_fast(mw: u32, mh: u32, rgba: Vec<u8>) -> Result<Vec<u8>, String> {
+    use image::codecs::png::{CompressionType, FilterType, PngEncoder};
+    let mut buf = std::io::Cursor::new(Vec::new());
+    image::RgbaImage::from_raw(mw, mh, rgba)
+        .ok_or("帧尺寸与数据不符")?
+        .write_with_encoder(PngEncoder::new_with_quality(
+            &mut buf,
+            CompressionType::Fast,
+            FilterType::Adaptive,
+        ))
+        .map_err(|e| format!("PNG 编码失败：{e}"))?;
+    Ok(buf.into_inner())
+}
+
+/// 暂存的选区帧（保存/贴图的 RGBA 原始字节，前端合成结果）
+static STAGED_FRAME: Mutex<Option<SessionFrame>> = Mutex::new(None);
 
 /// 复制选区到剪贴板（感知优先路径）：前端把选区合成结果以 RGBA 原始字节
 /// 经 ipc 二进制（fetch POST octet-stream）直传——免「canvas PNG 编码 /
@@ -683,7 +706,7 @@ pub fn shot_copy_raw(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result
         tauri::ipc::InvokeBody::Raw(b) => b,
         _ => return Err("需要二进制请求体".into()),
     };
-    let Some((w, h, rgba)) = parse_frame_header(bytes) else {
+    let Some((w, h, _, _, rgba)) = parse_frame_header(bytes) else {
         return Err("帧头不合法".into());
     };
     if rgba.len() != w as usize * h as usize * 4 {
@@ -708,6 +731,81 @@ pub fn shot_copy_raw(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result
     Ok(())
 }
 
+/// 暂存选区帧（保存/贴图第一步）：RGBA 原始字节进内存，随后 shot_save_raw
+/// 开对话框 / shot_pin_raw 建贴图窗——把「PNG 编码 + base64 传输」从点击到
+/// 对话框的关键路径上整体移除
+#[tauri::command]
+pub fn shot_stage_raw(request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    let bytes = match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => b,
+        _ => return Err("需要二进制请求体".into()),
+    };
+    let Some((w, h, _, _, rgba)) = parse_frame_header(bytes) else {
+        return Err("帧头不合法".into());
+    };
+    if rgba.len() != w as usize * h as usize * 4 {
+        return Err(format!(
+            "RGBA 尺寸不符：{} 字节 ≠ {}×{}×4",
+            rgba.len(),
+            w,
+            h
+        ));
+    }
+    *STAGED_FRAME.lock().unwrap_or_else(|p| p.into_inner()) = Some(SessionFrame {
+        mw: w,
+        mh: h,
+        rgba: rgba.to_vec(),
+    });
+    Ok(())
+}
+
+/// 保存暂存帧：对话框立即打开（帧已在内存），PNG 编码（Fast 档）在对话框
+/// 打开期间于后台线程并行执行，选完路径即刻写盘
+#[tauri::command]
+pub async fn shot_save_raw(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let frame = STAGED_FRAME
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .take()
+        .ok_or("无暂存帧")?;
+    SAVE_DIALOG_OPEN.store(true, Ordering::SeqCst);
+    tauri::async_runtime::spawn_blocking(move || {
+        // 编码线程与对话框并行：用户选路径的同时 PNG 已在编码
+        let (tx, rx) = std::sync::mpsc::channel::<Result<Vec<u8>, String>>();
+        let enc = std::thread::spawn(move || {
+            let _ = tx.send(encode_png_fast(frame.mw, frame.mh, frame.rgba));
+        });
+        let name = format!("截图_{}.png", local_stamp());
+        let picked = app
+            .dialog()
+            .file()
+            .add_filter("PNG 图片", &["png"])
+            .set_file_name(&name)
+            .set_parent(&window)
+            .blocking_save_file();
+        SAVE_DIALOG_OPEN.store(false, Ordering::SeqCst);
+        let _ = enc.join();
+        let encoded = rx.recv().map_err(|e| format!("编码线程失败：{e}"))??;
+        match picked {
+            None => Ok(None),
+            Some(p) => {
+                let path = p.into_path().map_err(|e| format!("路径解析失败：{e}"))?;
+                std::fs::write(&path, encoded).map_err(|e| format!("保存失败：{e}"))?;
+                Ok(Some(path.to_string_lossy().into_owned()))
+            }
+        }
+    })
+    .await
+    .map_err(|e| {
+        SAVE_DIALOG_OPEN.store(false, Ordering::SeqCst);
+        format!("保存线程失败：{e}")
+    })?
+}
+
 #[tauri::command]
 pub fn shot_pin(
     app: AppHandle,
@@ -726,8 +824,20 @@ pub fn shot_pin(
     let ts = millis();
     let file = dir.join(format!("pin_{ts}.png"));
     std::fs::write(&file, &bytes).map_err(|e| format!("贴图写盘失败：{e}"))?;
+    spawn_pin_window(&app, &file, x, y, w, h)
+}
 
-    let label = format!("pin-{ts}");
+/// 建贴图窗并落位（shot_pin dataURL 回落与 shot_pin_raw 直传共用）。
+/// 返回前已 end_session 收蒙层（build() 泵消息与全屏蒙层互卡的既有防护）
+fn spawn_pin_window(
+    app: &AppHandle,
+    file: &std::path::Path,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+) -> Result<(), String> {
+    let label = format!("pin-{}", millis());
     let scale = monitor_at(x + w / 2, y + h / 2)
         .map(|m| m.scale as f64)
         .unwrap_or(1.0);
@@ -735,7 +845,7 @@ pub fn shot_pin(
     // 置顶蒙层在场时其重绘/焦点事件重入会让 build 卡死不返回（窗口已建、
     // set_position/show 永不执行，贴图永不可见）。先收场再建窗，视觉也
     // 自然——贴图落屏时蒙层恰好退场
-    end_session(&app);
+    end_session(app);
     let boot = serde_json::json!({
         "window": "pin",
         "file": file.to_string_lossy(),
@@ -743,7 +853,7 @@ pub fn shot_pin(
         "h": h,
         "scale": scale,
     });
-    let win = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("shot.html".into()))
+    let win = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("shot.html".into()))
         .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
         .title("X-Dir 贴图")
         .decorations(false)
@@ -775,7 +885,7 @@ pub fn shot_pin(
             log::warn!("贴图 set_size 失败：{e}");
             e.to_string()
         })?;
-    let pin_file = file.clone();
+    let pin_file = file.to_path_buf();
     win.on_window_event(move |e| {
         if matches!(e, tauri::WindowEvent::Destroyed) {
             let _ = std::fs::remove_file(&pin_file);
@@ -824,6 +934,40 @@ pub async fn shot_save_data(
         SAVE_DIALOG_OPEN.store(false, Ordering::SeqCst);
         format!("保存线程失败：{e}")
     })?
+}
+
+/// 贴图（感知优先路径）：RGBA 原始字节直传，落盘为 BMP（编码 memcpy 级，
+/// 浏览器原生显示）——免 PNG 编码/解码；前端失败回落 shot_pin dataURL 路径
+#[tauri::command]
+pub fn shot_pin_raw(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    let bytes = match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => b,
+        _ => return Err("需要二进制请求体".into()),
+    };
+    let Some((w, h, x, y, rgba)) = parse_frame_header(bytes) else {
+        return Err("帧头不合法".into());
+    };
+    let (w, h) = (w as i32, h as i32);
+    if w < 8 || h < 8 || w > 20000 || h > 20000 {
+        return Err("贴图尺寸非法".into());
+    }
+    if rgba.len() != w as usize * h as usize * 4 {
+        return Err(format!(
+            "RGBA 尺寸不符：{} 字节 ≠ {}×{}×4",
+            rgba.len(),
+            w,
+            h
+        ));
+    }
+    let img =
+        image::RgbaImage::from_raw(w as u32, h as u32, rgba.to_vec()).ok_or("帧尺寸与数据不符")?;
+    let dir = shot_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| format!("创建临时目录失败：{e}"))?;
+    let ts = millis();
+    let file = dir.join(format!("pin_{ts}.bmp"));
+    img.save_with_format(&file, image::ImageFormat::Bmp)
+        .map_err(|e| format!("贴图写盘失败：{e}"))?;
+    spawn_pin_window(&app, &file, x, y, w, h)
 }
 
 /// 本地时间戳 yyyymmdd_hhmmss（GetLocalTime，免 chrono；同 fs 模块口径）
@@ -967,9 +1111,26 @@ mod copy_header_tests {
         b[0..4].copy_from_slice(&1920u32.to_le_bytes());
         b[4..8].copy_from_slice(&1080u32.to_le_bytes());
         b.extend_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8]);
-        let (w, h, rgba) = parse_frame_header(&b).expect("应解析成功");
-        assert_eq!((w, h), (1920, 1080));
+        let (w, h, x, y, rgba) = parse_frame_header(&b).expect("应解析成功");
+        assert_eq!((w, h, x, y), (1920, 1080, 0, 0));
         assert_eq!(rgba.len(), 8);
+    }
+
+    #[test]
+    fn png快速编码可回读() {
+        // 2×2 已知像素 → Fast 编码 → 内存解码回读校验
+        let rgba = vec![255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 9, 9, 9, 255];
+        let encoded = super::encode_png_fast(2, 2, rgba.clone()).expect("编码成功");
+        let decoded = image::load_from_memory(&encoded)
+            .expect("可解码")
+            .to_rgba8();
+        assert_eq!(decoded.dimensions(), (2, 2));
+        assert_eq!(decoded.into_raw(), rgba);
+    }
+
+    #[test]
+    fn png编码拒绝尺寸不符的数据() {
+        assert!(super::encode_png_fast(2, 2, vec![0; 7]).is_err());
     }
 
     #[test]
@@ -979,8 +1140,8 @@ mod copy_header_tests {
         assert!(parse_frame_header(&b).is_none(), "零尺寸拒绝");
         b[0..4].copy_from_slice(&10u32.to_le_bytes());
         b[4..8].copy_from_slice(&5u32.to_le_bytes());
-        let (w, h, rgba) = parse_frame_header(&b).expect("非零尺寸应通过");
-        assert_eq!((w, h), (10, 5));
+        let (w, h, x, y, rgba) = parse_frame_header(&b).expect("非零尺寸应通过");
+        assert_eq!((w, h, x, y), (10, 5, 0, 0));
         assert!(rgba.is_empty());
     }
 }

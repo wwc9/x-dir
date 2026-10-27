@@ -411,8 +411,32 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export const PAGE_SIZE = 500;
 
-function cmd<T>(name: string, args?: Record<string, unknown>): Promise<T> {
-  return invoke<T>(name, args);
+function cmd<T>(
+  name: string,
+  args?: Record<string, unknown> | Uint8Array,
+): Promise<T> {
+  // Uint8Array 请求体 = tauri 原始通道（InvokeBody::Raw），运行时直传字节
+  return invoke<T>(name, args as Record<string, unknown>);
+}
+
+/** 原始直传帧体：[w u32 LE][h u32 LE][x i32 LE][y i32 LE][RGBA...]。invoke
+ *  请求体整体传 Uint8Array 时 tauri 自动走 application/octet-stream 原始
+ *  通道（InvokeBody::Raw），免 base64/JSON 序列化 */
+function frameBody(
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+): Uint8Array {
+  const body = new Uint8Array(16 + rgba.byteLength);
+  const dv = new DataView(body.buffer);
+  dv.setUint32(0, width, true);
+  dv.setUint32(4, height, true);
+  dv.setInt32(8, x, true);
+  dv.setInt32(12, y, true);
+  body.set(rgba, 16);
+  return body;
 }
 
 export const api = {
@@ -743,20 +767,30 @@ export const api = {
     rgba: Uint8ClampedArray,
     width: number,
     height: number,
-  ): Promise<void> => {
-    const body = new Uint8Array(16 + rgba.byteLength);
-    const dv = new DataView(body.buffer);
-    dv.setUint32(0, width, true);
-    dv.setUint32(4, height, true);
-    body.set(rgba, 16);
-    return cmd<void>("shot_copy_raw", body as unknown as Record<string, unknown>);
-  },
+  ): Promise<void> => cmd<void>("shot_copy_raw", frameBody(rgba, width, height, 0, 0)),
   /** 贴图：PNG dataURL 钉成置顶窗（x/y/w/h = 虚拟桌面物理坐标） */
   shotPin: (dataUrl: string, x: number, y: number, w: number, h: number) =>
     cmd<void>("shot_pin", { dataUrl, x, y, w, h }),
-  /** 保存 PNG dataURL 为文件（原生保存对话框；用户取消 = null） */
+  /** 保存 PNG dataURL 为文件（原生保存对话框；用户取消 = null；回落路径） */
   shotSaveData: (dataUrl: string) =>
     cmd<string | null>("shot_save_data", { dataUrl }),
+  /** 暂存选区帧（RGBA 原始字节直传）：后续 shotSaveRaw 开对话框 */
+  shotStageRaw: (
+    rgba: Uint8ClampedArray,
+    width: number,
+    height: number,
+  ): Promise<void> => cmd<void>("shot_stage_raw", frameBody(rgba, width, height, 0, 0)),
+  /** 保存暂存帧：对话框即时打开，PNG 原生 Fast 编码在对话框期间并行完成，
+   *  选完路径即刻写盘（用户取消 = null） */
+  shotSaveRaw: (): Promise<string | null> => cmd<string | null>("shot_save_raw"),
+  /** 贴图暂存帧直传落位（BMP 临时文件 memcpy 级编码；回落路径 shotPin） */
+  shotPinRaw: (
+    rgba: Uint8ClampedArray,
+    width: number,
+    height: number,
+    x: number,
+    y: number,
+  ): Promise<void> => cmd<void>("shot_pin_raw", frameBody(rgba, width, height, x, y)),
   /** 注册/更新截图全局热键（启动与设置变更时调用；Err = 键位冲突等） */
   shotRegisterHotkey: (enabled: boolean, hotkey: string) =>
     cmd<void>("shot_register_hotkey", { enabled, hotkey }),
