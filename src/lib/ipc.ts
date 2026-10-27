@@ -733,8 +733,24 @@ export const api = {
   /** 会话定格帧二进制直传（RGBA 原始字节，显示器整幅）：前端 putImageData
    *  直绘，无 BMP 落盘/asset 读回/解码三跳；空 ArrayBuffer = 无进行中的会话 */
   shotFrame: () => cmd<ArrayBuffer>("shot_frame"),
-  /** 复制图像 PNG（dataURL）到系统剪贴板 */
+  /** 复制图像 PNG（dataURL）到系统剪贴板（回落路径：含 PNG 编码/解码） */
   shotCopy: (dataUrl: string) => cmd<void>("shot_copy", { dataUrl }),
+  /** 复制选区到剪贴板（感知优先路径）：RGBA 原始字节整体作为 invoke 请求体
+   *  （Uint8Array → tauri 自动走 application/octet-stream 原始通道
+   *  InvokeBody::Raw），免 PNG 编码/base64/JSON/PNG 解码四道工序；
+   *  请求体 = [w u32 LE][h u32 LE][RGBA...]；报错时调用方回落 shotCopy */
+  shotCopyRaw: (
+    rgba: Uint8ClampedArray,
+    width: number,
+    height: number,
+  ): Promise<void> => {
+    const body = new Uint8Array(16 + rgba.byteLength);
+    const dv = new DataView(body.buffer);
+    dv.setUint32(0, width, true);
+    dv.setUint32(4, height, true);
+    body.set(rgba, 16);
+    return cmd<void>("shot_copy_raw", body as unknown as Record<string, unknown>);
+  },
   /** 贴图：PNG dataURL 钉成置顶窗（x/y/w/h = 虚拟桌面物理坐标） */
   shotPin: (dataUrl: string, x: number, y: number, w: number, h: number) =>
     cmd<void>("shot_pin", { dataUrl, x, y, w, h }),

@@ -646,6 +646,7 @@ pub fn shot_close(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn shot_copy(app: AppHandle, data_url: String) -> Result<(), String> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
+    log::debug!("剪贴板走 dataURL 回落路径（{} 字节）", data_url.len());
     let bytes = decode_data_url(&data_url)?;
     let img = image::load_from_memory(&bytes)
         .map_err(|e| format!("PNG 解码失败：{e}"))?
@@ -654,6 +655,57 @@ pub fn shot_copy(app: AppHandle, data_url: String) -> Result<(), String> {
     app.clipboard()
         .write_image(&tauri::image::Image::new_owned(img.into_raw(), w, h))
         .map_err(|e| format!("写入剪贴板失败：{e}"))
+}
+
+/// 帧头解析：前 16 字节 = width/height 的 u32 LE（复制/后续原始直传共用）。
+/// 独立成纯函数供 test。
+fn parse_frame_header(bytes: &[u8]) -> Option<(u32, u32, &[u8])> {
+    if bytes.len() < 16 {
+        return None;
+    }
+    let w = u32::from_le_bytes(bytes[0..4].try_into().ok()?);
+    let h = u32::from_le_bytes(bytes[4..8].try_into().ok()?);
+    if w == 0 || h == 0 {
+        return None;
+    }
+    Some((w, h, &bytes[16..]))
+}
+
+/// 复制选区到剪贴板（感知优先路径）：前端把选区合成结果以 RGBA 原始字节
+/// 经 ipc 二进制（fetch POST octet-stream）直传——免「canvas PNG 编码 /
+/// base64 膨胀传输 / JSON 解析 / PNG 解码」四道工序（4K 整屏省 ~0.5-2s）。
+/// 请求体 = [w u32 LE][h u32 LE][RGBA...]；前端失败时回落 shot_copy dataURL
+/// 路径，两条路并存。
+#[tauri::command]
+pub fn shot_copy_raw(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+    let bytes = match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => b,
+        _ => return Err("需要二进制请求体".into()),
+    };
+    let Some((w, h, rgba)) = parse_frame_header(bytes) else {
+        return Err("帧头不合法".into());
+    };
+    if rgba.len() != w as usize * h as usize * 4 {
+        return Err(format!(
+            "RGBA 尺寸不符：{} 字节 ≠ {}×{}×4",
+            rgba.len(),
+            w,
+            h
+        ));
+    }
+    let t0 = std::time::Instant::now();
+    app.clipboard()
+        .write_image(&tauri::image::Image::new(rgba, w, h))
+        .map_err(|e| format!("写入剪贴板失败：{e}"))?;
+    log::debug!(
+        "剪贴板直传：{}×{} {}KB，写剪贴板 {}ms",
+        w,
+        h,
+        rgba.len() / 1024,
+        t0.elapsed().as_millis()
+    );
+    Ok(())
 }
 
 #[tauri::command]
@@ -902,5 +954,33 @@ mod tests {
         assert_eq!(r[1], (900, 0, 1000, 1080));
         assert!(!r.contains(&(950, 100, 400, 400)), "被覆盖的 C 不应入列");
         assert_eq!(*r.last().unwrap(), (0, 0, 1920, 1080));
+    }
+}
+
+#[cfg(test)]
+mod copy_header_tests {
+    use super::parse_frame_header;
+
+    #[test]
+    fn 帧头解析宽高与载荷() {
+        let mut b = vec![0u8; 16];
+        b[0..4].copy_from_slice(&1920u32.to_le_bytes());
+        b[4..8].copy_from_slice(&1080u32.to_le_bytes());
+        b.extend_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8]);
+        let (w, h, rgba) = parse_frame_header(&b).expect("应解析成功");
+        assert_eq!((w, h), (1920, 1080));
+        assert_eq!(rgba.len(), 8);
+    }
+
+    #[test]
+    fn 帧头过短或零尺寸拒绝() {
+        assert!(parse_frame_header(&[0u8; 8]).is_none());
+        let mut b = vec![0u8; 16];
+        assert!(parse_frame_header(&b).is_none(), "零尺寸拒绝");
+        b[0..4].copy_from_slice(&10u32.to_le_bytes());
+        b[4..8].copy_from_slice(&5u32.to_le_bytes());
+        let (w, h, rgba) = parse_frame_header(&b).expect("非零尺寸应通过");
+        assert_eq!((w, h), (10, 5));
+        assert!(rgba.is_empty());
     }
 }

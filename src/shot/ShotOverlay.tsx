@@ -344,18 +344,52 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     return c.toDataURL("image/png");
   }, []);
 
+  /** 选区合成结果裁剪成独立画布（copy 的像素源，尺寸 = 选区物理像素） */
+  const cropCanvas = useCallback(
+    (s: Sel): HTMLCanvasElement | null => {
+      const comp = compRef.current;
+      if (!comp) return null;
+      const c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(s.w));
+      c.height = Math.max(1, Math.round(s.h));
+      c.getContext("2d")!.drawImage(comp, s.x, s.y, s.w, s.h, 0, 0, c.width, c.height);
+      return c;
+    },
+    [],
+  );
+
   const finish = useCallback(
     async (action: "copy" | "pin" | "save") => {
       const s = selRef.current;
       if (!s || busy) return;
-      const dataUrl = exportDataUrl(s);
-      if (!dataUrl) return;
       setBusy(true);
       try {
         if (action === "copy") {
-          await api.shotCopy(dataUrl);
+          // 感知优先：先收场（停靠 = 立即从屏幕消失，页面仍存活可继续跑
+          // JS），复制在后台完成——点击即完成，不再等传输与编码；剪贴板
+          // 在 ~百毫秒内就绪（与 PixPin 一致，极快连贴有小概率竞态）
           closeWindow();
-        } else if (action === "pin") {
+          const c = cropCanvas(s);
+          if (c) {
+            const img = c
+              .getContext("2d", { willReadFrequently: true })!
+              .getImageData(0, 0, c.width, c.height);
+            try {
+              await api.shotCopyRaw(img.data, c.width, c.height);
+              return;
+            } catch {
+              // 直传失败落到 dataURL 路径（慢但可靠）
+            }
+          }
+          const dataUrl = exportDataUrl(s);
+          if (dataUrl) {
+            await api.shotCopy(dataUrl);
+          }
+          return;
+        }
+        const dataUrl = exportDataUrl(s);
+        if (!dataUrl) return;
+        if (action === "pin") {
           await api.shotPin(dataUrl, boot.mx + s.x, boot.my + s.y, s.w, s.h);
           closeWindow();
         } else {
@@ -372,7 +406,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         setBusy(false);
       }
     },
-    [boot.mx, boot.my, busy, closeWindow, exportDataUrl],
+    [boot.mx, boot.my, busy, closeWindow, cropCanvas, exportDataUrl],
   );
 
   // ── 滚动长截图（§3.6 二期 B 批）：以当前选区开滚动会话，覆盖窗由 Rust 侧
