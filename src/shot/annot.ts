@@ -150,6 +150,117 @@ export function hitWindow(
   return best;
 }
 
+// ── 放大镜/取色器（PixPin 惯例：无选区跟随态与拖拽态显示，确认选区即隐）───
+
+/** 取样网格边长（源物理像素）与放大倍率：15px × 10 = 150px 取景框 */
+export const MAGNIFIER_SRC = 15;
+export const MAGNIFIER_ZOOM = 10;
+/** 取景框与光标的最小间距（物理像素） */
+export const MAGNIFIER_GAP = 18;
+
+/** 放大镜取景框边长 / 信息条高度（物理像素） */
+export function magnifierBox(): { box: number; barH: number } {
+  const box = MAGNIFIER_SRC * MAGNIFIER_ZOOM;
+  return { box, barH: Math.round(box * 0.18) };
+}
+
+/** 放大镜布局：默认落在光标右下，越屏翻转；极小屏钳到原点兜底 */
+export function magnifierLayout(
+  px: number,
+  py: number,
+  mw: number,
+  mh: number,
+): { boxX: number; boxY: number; barY: number } {
+  const { box, barH } = magnifierBox();
+  const total = box + barH;
+  let boxX = px + MAGNIFIER_GAP;
+  let boxY = py + MAGNIFIER_GAP;
+  if (boxX + box > mw) boxX = px - MAGNIFIER_GAP - box;
+  if (boxY + total > mh) boxY = py - MAGNIFIER_GAP - total;
+  return {
+    boxX: Math.max(0, boxX),
+    boxY: Math.max(0, boxY),
+    barY: Math.max(0, boxY) + box,
+  };
+}
+
+/** 放大镜绘制：取景框（最近邻放大定格图）+ 红色发丝十字 + 信息条
+ *  （坐标 / HEX 取色 / 色块，拖拽态并入 W×H 尺寸，不再单画尺寸 pill——
+ *  PixPin 同款）。src = 合成画布（含已画标注，所见即所得）。
+ *  scale 用于线宽增密：高 DPI 下 1 物理像素的发丝线会被缩放摊淡（E2E 实证
+ *  4K@150% 仅 ~65% 覆盖率），随 scale 加粗才够醒目 */
+export function drawMagnifier(
+  ctx: CanvasRenderingContext2D,
+  src: HTMLCanvasElement | null,
+  px: number,
+  py: number,
+  mw: number,
+  mh: number,
+  scale = 1,
+  sizeLabel?: string,
+): void {
+  const { box, barH } = magnifierBox();
+  const { boxX, boxY, barY } = magnifierLayout(px, py, mw, mh);
+  // 像素网格对齐：取样中心取整，避免源矩形亚像素采样发虚
+  const ix = Math.max(0, Math.min(mw - 1, Math.round(px)));
+  const iy = Math.max(0, Math.min(mh - 1, Math.round(py)));
+  const half = (MAGNIFIER_SRC - 1) / 2;
+  const lw = Math.max(1, Math.round(scale));
+  ctx.save();
+  ctx.fillStyle = "#000";
+  ctx.fillRect(boxX, boxY, box, box);
+  if (src) {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(src, ix - half, iy - half, MAGNIFIER_SRC, MAGNIFIER_SRC, boxX, boxY, box, box);
+    ctx.imageSmoothingEnabled = true;
+  }
+  // 红色发丝十字（PixPin 同款）
+  ctx.strokeStyle = "#ff453a";
+  ctx.lineWidth = lw;
+  const cx = boxX + box / 2;
+  const cy = boxY + box / 2;
+  const half2 = lw / 2;
+  ctx.beginPath();
+  ctx.moveTo(Math.round(cx - half2) + 0.5, boxY);
+  ctx.lineTo(Math.round(cx - half2) + 0.5, boxY + box);
+  ctx.moveTo(boxX, Math.round(cy - half2) + 0.5);
+  ctx.lineTo(boxX + box, Math.round(cy - half2) + 0.5);
+  ctx.stroke();
+  // 内白外黑双层描边，任何底色都可辨
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "#fff";
+  ctx.strokeRect(boxX + 0.5, boxY + 0.5, box - 1, box - 1);
+  ctx.strokeStyle = "#000";
+  ctx.strokeRect(boxX - 0.5, boxY - 0.5, box + 1, box + 1);
+  // 信息条：取色（合成画布 1×1 读回）+ 坐标 + HEX（+ 拖拽尺寸）
+  let hex = "#000000";
+  const sctx = src?.getContext("2d");
+  if (sctx) {
+    const d = sctx.getImageData(ix, iy, 1, 1).data;
+    hex = `#${[d[0], d[1], d[2]]
+      .map((v) => v.toString(16).padStart(2, "0"))
+      .join("")}`.toUpperCase();
+  }
+  const fs = Math.round(barH * 0.62);
+  const sw = Math.round(barH * 0.62);
+  const text = `${ix}, ${iy}  ${hex}${sizeLabel ? `  ${sizeLabel}` : ""}`;
+  // 信息条随内容加宽（拖拽尺寸长文本），但不越出屏幕
+  ctx.font = `${fs}px "Segoe UI", "Microsoft YaHei", sans-serif`;
+  const barW = Math.min(mw - boxX, Math.max(box, Math.round(sw + 16 + ctx.measureText(text).width + 12)));
+  ctx.fillStyle = "rgba(0,0,0,0.8)";
+  ctx.fillRect(boxX, barY, barW, barH);
+  ctx.fillStyle = hex;
+  ctx.fillRect(boxX + 8, barY + (barH - sw) / 2, sw, sw);
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(boxX + 8.5, barY + (barH - sw) / 2 + 0.5, sw - 1, sw - 1);
+  ctx.fillStyle = "#fff";
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillText(text, boxX + sw + 16, barY + barH / 2, barW - sw - 24);
+  ctx.restore();
+}
+
 // ── 绘制（物理像素坐标系；线宽/字号 ×scale 还原 CSS 观感）─────────────────
 
 /** 文字换行绘制（\n 显式换行），返回实际占用高度 */

@@ -1,10 +1,16 @@
-// 截图标注纯函数测试（§3.6）：选区归一/调整、手柄命中、箭头头部、窗口命中。
+// 截图标注纯函数测试（§3.6）：选区归一/调整、手柄命中、箭头头部、窗口命中、
+// 放大镜布局。
 import { describe, expect, it } from "vitest";
 
 import {
+  MAGNIFIER_GAP,
+  MAGNIFIER_SRC,
+  MAGNIFIER_ZOOM,
   arrowHead,
   handleAt,
   hitWindow,
+  magnifierBox,
+  magnifierLayout,
   normalizeSel,
   resizeSel,
   selHandles,
@@ -95,5 +101,45 @@ describe("hitWindow", () => {
 
   it("未命中返回 null", () => {
     expect(hitWindow([], 10, 10)).toBeNull();
+  });
+});
+
+describe("magnifierLayout", () => {
+  const { box, barH } = magnifierBox();
+
+  it("取景框尺寸 = 取样网格 × 放大倍率，信息条成比例", () => {
+    expect(box).toBe(MAGNIFIER_SRC * MAGNIFIER_ZOOM);
+    expect(barH).toBeGreaterThan(0);
+    expect(barH).toBeLessThan(box);
+  });
+
+  it("屏内默认落在光标右下（留出间距）", () => {
+    const l = magnifierLayout(100, 100, 1920, 1080);
+    expect(l.boxX).toBe(100 + MAGNIFIER_GAP);
+    expect(l.boxY).toBe(100 + MAGNIFIER_GAP);
+    expect(l.barY).toBe(l.boxY + box);
+  });
+
+  it("靠近右缘向左翻转，靠近下缘向上翻转", () => {
+    const right = magnifierLayout(1910, 500, 1920, 1080);
+    expect(right.boxX).toBe(1910 - MAGNIFIER_GAP - box);
+    const bottom = magnifierLayout(500, 1070, 1920, 1080);
+    expect(bottom.boxY).toBe(1070 - MAGNIFIER_GAP - box - barH);
+    expect(bottom.barY + barH).toBeLessThanOrEqual(1080);
+  });
+
+  it("右下角同时翻转且整体不出屏", () => {
+    const l = magnifierLayout(1919, 1079, 1920, 1080);
+    expect(l.boxX + box).toBeLessThanOrEqual(1920);
+    expect(l.barY + barH).toBeLessThanOrEqual(1080);
+    expect(l.boxX).toBeGreaterThanOrEqual(0);
+    expect(l.boxY).toBeGreaterThanOrEqual(0);
+  });
+
+  it("极小屏不产生负坐标", () => {
+    const l = magnifierLayout(5, 5, 100, 80);
+    expect(l.boxX).toBeGreaterThanOrEqual(0);
+    expect(l.boxY).toBeGreaterThanOrEqual(0);
+    expect(l.barY).toBeGreaterThanOrEqual(box);
   });
 });

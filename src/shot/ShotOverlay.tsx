@@ -35,6 +35,7 @@ import {
   type HandleId,
   type Sel,
   type Shape,
+  drawMagnifier,
   drawShape,
   handleAt,
   hitWindow,
@@ -119,6 +120,11 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const drawRef = useRef<Shape | null>(null);
   const composingRef = useRef(false);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  /** 放大镜锚点（最近一次光标物理坐标；跟随/拖拽态显示，确认选区即隐；
+   *  以定格时光标位初始化——首帧即有放大镜，不等鼠标先动一下） */
+  const magRef = useRef<{ x: number; y: number } | null>({ x: boot.cx, y: boot.cy });
+  /** 光标最近位置（不随模式清空，回跟随态时放大镜立即就位） */
+  const lastPosRef = useRef<{ x: number; y: number } | null>({ x: boot.cx, y: boot.cy });
 
   // 预选跟随模式（PixPin/QQ 惯例，2026-10-27）：进会话默认选中光标下窗口，
   // 鼠标移动时选中框自动跟随切换其他窗口（此时无工具栏，光标恒十字）；用户
@@ -213,7 +219,11 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         ctx.strokeRect(hd[0] - hsz / 2, hd[1] - hsz / 2, hsz, hsz);
       }
     }
-    // 拖拽中的选区框 + 尺寸 pill
+    // 放大镜/取色器（PixPin 惯例）：跟随态与拖拽态显示，确认选区后隐藏；
+    // 取样合成画布，已画标注同样可见（所见即所得）
+    const mag = magRef.current;
+    const magVisible = !!mag && (followingRef.current || !!dragRef.current);
+    // 拖拽中的选区框；尺寸并入放大镜信息条（PixPin 同款），无放大镜才单画 pill
     const d = dragRef.current;
     if (d) {
       const r = normalizeSel(d.x1, d.y1, d.x2, d.y2, boot.mw, boot.mh, 1);
@@ -224,19 +234,21 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         ctx.lineWidth = Math.max(1, Math.round(scale));
         ctx.strokeRect(r.x, r.y, r.w, r.h);
       }
-      const label = `${Math.round(Math.abs(d.x2 - d.x1))} × ${Math.round(Math.abs(d.y2 - d.y1))}`;
-      const fs = 12 * scale;
-      ctx.font = `${fs}px "Segoe UI", sans-serif`;
-      const tw = ctx.measureText(label).width;
-      let lx = d.x2 + 10 * scale;
-      let ly = d.y2 + 14 * scale;
-      if (lx + tw + 12 * scale > boot.mw) lx = Math.max(4 * scale, d.x2 - tw - 22 * scale);
-      if (ly > boot.mh - 10 * scale) ly = d.y2 - 14 * scale;
-      ctx.fillStyle = "rgba(0,0,0,0.75)";
-      ctx.fillRect(lx, ly - fs, tw + 12 * scale, fs * 1.7);
-      ctx.fillStyle = "#fff";
-      ctx.textBaseline = "alphabetic";
-      ctx.fillText(label, lx + 6 * scale, ly + fs * 0.35);
+      if (!magVisible) {
+        const label = `${Math.round(Math.abs(d.x2 - d.x1))} × ${Math.round(Math.abs(d.y2 - d.y1))}`;
+        const fs = 12 * scale;
+        ctx.font = `${fs}px "Segoe UI", sans-serif`;
+        const tw = ctx.measureText(label).width;
+        let lx = d.x2 + 10 * scale;
+        let ly = d.y2 + 14 * scale;
+        if (lx + tw + 12 * scale > boot.mw) lx = Math.max(4 * scale, d.x2 - tw - 22 * scale);
+        if (ly > boot.mh - 10 * scale) ly = d.y2 - 14 * scale;
+        ctx.fillStyle = "rgba(0,0,0,0.75)";
+        ctx.fillRect(lx, ly - fs, tw + 12 * scale, fs * 1.7);
+        ctx.fillStyle = "#fff";
+        ctx.textBaseline = "alphabetic";
+        ctx.fillText(label, lx + 6 * scale, ly + fs * 0.35);
+      }
     }
     // 进行中的标注预览（坐标相对选区，clip 内）
     const dr = drawRef.current;
@@ -247,6 +259,12 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       ctx.clip();
       drawShape(ctx, dr, s.x, s.y, scale);
       ctx.restore();
+    }
+    if (mag && magVisible) {
+      const sizeLabel = d
+        ? `${Math.round(Math.abs(d.x2 - d.x1))} × ${Math.round(Math.abs(d.y2 - d.y1))}`
+        : undefined;
+      drawMagnifier(ctx, compRef.current, mag.x, mag.y, boot.mw, boot.mh, scale, sizeLabel);
     }
   }, [boot.mw, boot.mh, scale]);
 
@@ -438,11 +456,13 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       return;
     }
     if (selRef.current) {
-      // 清选区回到跟随模式：继续移动鼠标自动切换目标窗口（QQ 语义）
+      // 清选区回到跟随模式：继续移动鼠标自动切换目标窗口（QQ 语义）；
+      // 放大镜随即在原光标位恢复（PixPin 惯例）
       setFollowing(true);
       followingRef.current = true;
       setSel(null);
       selRef.current = null;
+      magRef.current = lastPosRef.current;
       redrawLive();
       return;
     }
@@ -514,8 +534,12 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (busy) return;
-      const { px, py } = toPhys(e);
+    if (busy) return;
+    const { px, py } = toPhys(e);
+    lastPosRef.current = { x: px, y: py };
+    // 放大镜锚点（跟随/拖拽态显示，确认选区即隐）
+    magRef.current =
+      followingRef.current || dragRef.current ? { x: px, y: py } : null;
       // 光标形态（跟随模式恒十字准星；确认后才区分手柄/移动）
       const el = e.currentTarget as HTMLElement;
       const s0 = selRef.current;
@@ -597,6 +621,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     if (dragRef.current) {
       const d = dragRef.current;
       dragRef.current = null;
+      magRef.current = null; // 选区已确认，放大镜退场（PixPin 语义）
       const r = normalizeSel(d.x1, d.y1, d.x2, d.y2, boot.mw, boot.mh);
       if (r) {
         setSel(r);

@@ -9,9 +9,16 @@
 //
 // 会话数据流转走临时 BMP 文件 + asset protocol（scope **）加载，不经 IPC 传
 // 大图；捕获+编码在后台线程（SESSION_STARTING 门闸拦连按），主线程只做定位
-// 与事件下发。会话收场 = 隐藏常驻窗（不销毁），热键重按 = 就地重拍（先撤蒙层
-// 再捕获，PixPin 惯例）；失焦自动收场（保存对话框期间豁免）；启动时清理上次
-// 会话残留。
+// 与事件下发。会话收场 = 停靠常驻窗到屏幕外（不销毁、不隐藏），热键重按 =
+// 就地重拍（先撤蒙层再捕获，PixPin 惯例）；失焦自动收场（保存对话框期间豁
+// 免）；启动时清理上次会话残留。
+//
+// 防闪核心（PixPin/snow-shot 口径「内容先于窗口可见」）：常驻覆盖窗**从不
+// SW_HIDE**——隐藏窗口期间 WebView2 的 DirectComposition 提交不进 DWM 场景，
+// show 瞬间只能呈现旧白面（闪一帧白，2026-10-27 复检确认）。收场改为停靠在
+// 虚拟桌面外（Win32 可见、rAF 全速、合成器不离场），会话内容（定格图+蒙层）
+// 在屏幕外呈现完毕后 set_position 一次原子上屏，DWM 直接拿到最终 surface，
+// 零空白帧。
 //
 // 坐标系约定：全链路物理像素（虚拟桌面坐标，左上显示器可为负）；前端把
 // CSS 像素 × scale 还原为物理坐标后再回传，与定格截图逐像素对齐。
@@ -198,6 +205,38 @@ static SHOT_PAGE_READY: AtomicBool = AtomicBool::new(false);
 static SESSION_T0: AtomicU64 = AtomicU64::new(0);
 /// 当前会话定格图路径（唯一名 session_{seq}.bmp）：收场删除、滚动截图读取
 static SESSION_FILE: Mutex<Option<PathBuf>> = Mutex::new(None);
+/// 待上屏的显示器原点（dispatch 时登记，shot_ready 时消费）：覆盖窗停靠在
+/// 屏幕外，会话内容就绪后才移动到该原点原子上屏
+static SESSION_POS: Mutex<Option<(i32, i32)>> = Mutex::new(None);
+
+/// 常驻覆盖窗的停靠坐标（虚拟桌面外，任何显示器都够不到）。Windows 把窗口
+/// 坐标钳制在 ±32768 内（E2E 实证 -40000 被钳到 -32768），取 -32700：不触
+/// 钳制、远离最小化惯例的 -32000，即使 8K 窗宽右缘也仍在屏外
+fn park_position() -> PhysicalPosition<i32> {
+    PhysicalPosition::new(-32700, -32700)
+}
+
+/// 覆盖窗停靠回屏幕外（收场）。绝不用 hide()：SW_HIDE 会让 WebView2 合成器
+/// 离场，再 show 时 DWM 只能呈现旧白面（闪白）；停靠期间窗口对合成器持续
+/// 在场，会话内容提前呈现，上屏只是一次原子移动
+fn park_shot_window(w: &tauri::WebviewWindow) {
+    let _ = w.set_position(park_position());
+}
+
+/// snow-shot 同款：禁用 DWM 对该窗的显示/隐藏过渡动画，上屏/停靠零渐隐
+#[cfg(windows)]
+fn disable_dwm_transitions(hwnd: windows::Win32::Foundation::HWND) {
+    use windows::Win32::Graphics::Dwm::{DWMWA_TRANSITIONS_FORCEDISABLED, DwmSetWindowAttribute};
+    let disable: i32 = 1;
+    unsafe {
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_TRANSITIONS_FORCEDISABLED,
+            &disable as *const i32 as *const std::ffi::c_void,
+            std::mem::size_of::<i32>() as u32,
+        );
+    }
+}
 
 /// 滚动截图取第一帧用：当前会话定格图路径（无会话 = None）
 pub(crate) fn current_session_file() -> Option<PathBuf> {
@@ -243,8 +282,12 @@ fn begin_session(app: &AppHandle) {
                 let app2 = app.clone();
                 let dispatch = app.run_on_main_thread(move || {
                     if let Some(w) = app2.get_webview_window("shot") {
-                        let _ = w.set_position(PhysicalPosition::new(cap.mx, cap.my));
+                        // 只改尺寸不动位置：窗口此刻应仍停靠在屏幕外，位置由
+                        // shot_ready 在内容就绪后一次性移动（提前移上屏会把
+                        // 上一次会话的残影/空壳暴露给用户）
                         let _ = w.set_size(PhysicalSize::new(cap.mw, cap.mh));
+                        *SESSION_POS.lock().unwrap_or_else(|p| p.into_inner()) =
+                            Some((cap.mx, cap.my));
                         SESSION_ACTIVE.store(true, Ordering::SeqCst);
                         if let Err(e) = app2.emit_to("shot", "shot-session", &cap) {
                             log::error!("截图会话下发失败：{e}");
@@ -358,7 +401,8 @@ fn xcap_capture(mon: &MonRect) -> Option<image::RgbaImage> {
 }
 
 /// 确保常驻覆盖窗存在（启动预热与热键冷路径共用）。idle 态仅挂 ShotHost
-/// 空壳监听会话事件；建窗一次，之后所有会话复用，不再销毁。
+/// 空壳监听会话事件；建窗一次，之后所有会话复用，不再销毁。建好即停靠屏幕
+/// 外并保持「可见」：合成器持续在场，会话上屏只是一次原子移动（防闪白）
 pub(crate) fn ensure_shot_window(app: &AppHandle) -> Result<(), String> {
     if app.get_webview_window("shot").is_some() {
         return Ok(());
@@ -374,6 +418,10 @@ pub(crate) fn ensure_shot_window(app: &AppHandle) -> Result<(), String> {
         .skip_taskbar(true)
         .always_on_top(true)
         .shadow(false)
+        // 透明窗兜底：即便极端时序下有陈旧帧先上屏，也是透出真实桌面而非
+        // 白屏（shot.html 的 html/body 已是 transparent）；会话 UI 本身有
+        // 定格图铺底，透明不影响观感
+        .transparent(true)
         // 不可见窗口默认 focused(true) 在部分 WebView2 上聚焦异常（wry#1798）；
         // show() 后再 set_focus()，保险起见显式关闭
         .focused(false)
@@ -381,6 +429,14 @@ pub(crate) fn ensure_shot_window(app: &AppHandle) -> Result<(), String> {
         .initialization_script(format!("window.__BOOT__ = {boot};"))
         .build()
         .map_err(|e| format!("创建截图覆盖窗失败：{e}"))?;
+    #[cfg(windows)]
+    if let Ok(hwnd) = win.hwnd() {
+        disable_dwm_transitions(hwnd);
+    }
+    // 先停靠屏幕外再放行可见：页面在屏外加载呈现（rAF 全速、合成器不离场），
+    // 热键首按即有「已渲染完毕」的窗体可原子上屏
+    let _ = win.set_position(park_position());
+    let _ = win.show();
     // 失焦自动收会话（QQ 惯例）：全屏置顶蒙层失焦后 Esc/Enter 全部失效，
     // 留在屏上形同卡死。仅在内容首帧上屏（SHOT_VISIBLE）后生效；保存对话框
     // 抢焦点时豁免。常驻窗不销毁，销毁只发生在应用退出/异常（门闸复位即可，
@@ -402,11 +458,12 @@ pub(crate) fn ensure_shot_window(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// 收场：隐藏常驻覆盖窗回到 idle（不销毁），清会话状态与定格文件，
-/// 并通知前端卸载会话 UI（释放画布内存）
+/// 收场：停靠常驻覆盖窗到屏幕外回到 idle（不销毁、不 SW_HIDE），清会话状态
+/// 与定格文件，并通知前端卸载会话 UI（释放画布内存）
 pub(crate) fn end_session(app: &AppHandle) {
     SESSION_ACTIVE.store(false, Ordering::SeqCst);
     SHOT_VISIBLE.store(false, Ordering::SeqCst);
+    *SESSION_POS.lock().unwrap_or_else(|p| p.into_inner()) = None;
     let session_file = SESSION_FILE
         .lock()
         .unwrap_or_else(|p| p.into_inner())
@@ -415,10 +472,10 @@ pub(crate) fn end_session(app: &AppHandle) {
         let _ = std::fs::remove_file(f);
     }
     if let Some(w) = app.get_webview_window("shot") {
-        let _ = w.hide();
-        // hide 是投给事件循环的异步消息，而 emit 直达 webview——若立即通知
-        // 前端卸载会话 UI，会在蒙层真正离屏前重绘出一帧透明/空白（用户看到的
-        // 「退出闪动」）。延迟一拍等 hide 呈现后再卸载，卸载重绘便不可见
+        park_shot_window(&w);
+        // 停靠是投给事件循环的异步消息，而 emit 直达 webview——若立即通知
+        // 前端卸载会话 UI，可能在窗口真正离屏前触发一帧多余重绘。延迟一拍
+        // 等停靠呈现后再卸载（此后重绘全部发生在屏幕外，不可见）
         let app2 = app.clone();
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(80));
@@ -427,12 +484,19 @@ pub(crate) fn end_session(app: &AppHandle) {
     }
 }
 
-/// 覆盖窗/贴图窗/结果窗内容首帧就绪后由前端调用：此刻才真正 show——
-/// 提前 show 出来的是未渲染的空 WebView2（Windows 上呈黑底，即「黑屏」）
+/// 覆盖窗/贴图窗/结果窗内容首帧就绪后由前端调用：此刻才真正可见——
+/// 覆盖窗从屏幕外停靠位一次移动到目标显示器原点，DWM 直接呈现已就绪的
+/// 最终 surface（零白帧）；show 仅作异常兜底（窗口若处于真隐藏态）
 #[tauri::command]
 pub fn shot_ready(window: tauri::WebviewWindow) -> Result<(), String> {
     let label = window.label();
     if label == "shot" || label == "shot-result" || label.starts_with("pin-") {
+        if label == "shot" {
+            let pos = SESSION_POS.lock().unwrap_or_else(|p| p.into_inner()).take();
+            if let Some((x, y)) = pos {
+                let _ = window.set_position(PhysicalPosition::new(x, y));
+            }
+        }
         window.show().map_err(|e| e.to_string())?;
         if label == "shot" {
             SHOT_VISIBLE.store(true, Ordering::SeqCst);
@@ -531,11 +595,18 @@ pub fn shot_pin(
         .skip_taskbar(true)
         .always_on_top(true)
         .shadow(false)
+        // 透明兜底：img onLoad 回执后 show，仍可能有陈旧帧先上屏——透出桌面
+        // 好过白闪（与覆盖窗同族处理）
+        .transparent(true)
         .focused(false)
         .visible(false)
         .initialization_script(format!("window.__BOOT__ = {boot};"))
         .build()
         .map_err(|e| format!("创建贴图窗口失败：{e}"))?;
+    #[cfg(windows)]
+    if let Ok(hwnd) = win.hwnd() {
+        disable_dwm_transitions(hwnd);
+    }
     log::debug!("贴图窗 build 返回：label={label}");
     win.set_position(PhysicalPosition::new(x, y)).map_err(|e| {
         log::warn!("贴图 set_position 失败：{e}");
