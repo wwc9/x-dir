@@ -102,6 +102,9 @@ pub fn run() {
                         log::warn!("截图覆盖窗预热失败：{e}");
                     }
                 });
+                // DXGI 复制会话保活预热（感知延迟二期）：哑捕获一帧把设备/
+                // 驱动/首帧合成全部热好，消掉首按 380ms 初始化罚金
+                commands::shot_dxgi::prewarm();
             });
             // 索引模式预热：后台把已建索引 mmap prefault 进文件缓存，消除首次查询冷映射
             crate::index::warm_views_async();
@@ -255,6 +258,7 @@ pub fn run() {
             commands::shot::shot_begin,
             commands::shot::shot_close,
             commands::shot::shot_copy,
+            commands::shot::shot_frame,
             commands::shot::shot_ready,
             commands::shot::shot_page_ready,
             commands::shot::shot_pin,

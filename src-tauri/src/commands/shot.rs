@@ -7,11 +7,13 @@
 // 贴图（label "pin-*"）置顶窗 / 滚动浮条 / 结果窗仍按需建窗，但统一加载
 // 轻量入口 shot.html（不再加载完整文件管理器 bundle）。
 //
-// 会话数据流转走临时 BMP 文件 + asset protocol（scope **）加载，不经 IPC 传
-// 大图；捕获+编码在后台线程（SESSION_STARTING 门闸拦连按），主线程只做定位
-// 与事件下发。会话收场 = 停靠常驻窗到屏幕外（不销毁、不隐藏），热键重按 =
-// 就地重拍（先撤蒙层再捕获，PixPin 惯例）；失焦自动收场（保存对话框期间豁
-// 免）；启动时清理上次会话残留。
+// 会话定格帧走内存直传：捕获后留在 SESSION_FRAME，前端经 shot_frame 命令
+// 以 IPC 二进制（tauri::ipc::Response）拿 RGBA 原始字节 putImageData 直绘，
+// 不经 BMP 落盘/asset 协议/浏览器解码（2026-10-27 感知延迟二期）。捕获+
+// 编码在后台线程（SESSION_STARTING 门闸拦连按），主线程只做定位与事件下发。
+// 会话收场 = 停靠常驻窗到屏幕外（不销毁、不隐藏），热键重按 = 就地重拍
+// （先撤蒙层再捕获，PixPin 惯例）；失焦自动收场（保存对话框期间豁免）；
+// 启动时清理上次会话残留。
 //
 // 防闪核心（PixPin/snow-shot 口径「内容先于窗口可见」）：常驻覆盖窗**从不
 // SW_HIDE**——隐藏窗口期间 WebView2 的 DirectComposition 提交不进 DWM 场景，
@@ -25,7 +27,6 @@
 
 use base64::Engine as _;
 use serde::Serialize;
-use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
@@ -81,8 +82,6 @@ pub struct ShotWindow {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShotCapture {
-    /// 定格截图 BMP 路径（前端经 asset protocol 加载）
-    pub file: String,
     /// 显示器原点（虚拟桌面物理坐标）与物理尺寸
     pub mx: i32,
     pub my: i32,
@@ -203,11 +202,33 @@ static SAVE_DIALOG_OPEN: AtomicBool = AtomicBool::new(false);
 static SHOT_PAGE_READY: AtomicBool = AtomicBool::new(false);
 /// 本次会话起始时刻（millis）：shot_ready 时算感知延迟（log::info 实测口径）
 static SESSION_T0: AtomicU64 = AtomicU64::new(0);
-/// 当前会话定格图路径（唯一名 session_{seq}.bmp）：收场删除、滚动截图读取
-static SESSION_FILE: Mutex<Option<PathBuf>> = Mutex::new(None);
+/// 当前会话定格帧（RGBA 原始字节，显示器整幅）：shot_frame 经 IPC 二进制
+/// 直传前端（putImageData 直绘，无落盘/读回/解码三跳）；收场释放；滚动
+/// 截图从内存裁首帧（不再读临时文件）
+static SESSION_FRAME: Mutex<Option<SessionFrame>> = Mutex::new(None);
 /// 待上屏的显示器原点（dispatch 时登记，shot_ready 时消费）：覆盖窗停靠在
 /// 屏幕外，会话内容就绪后才移动到该原点原子上屏
 static SESSION_POS: Mutex<Option<(i32, i32)>> = Mutex::new(None);
+
+/// 会话定格帧（显示器整幅 RGBA）
+pub(crate) struct SessionFrame {
+    pub mw: u32,
+    pub mh: u32,
+    pub rgba: Vec<u8>,
+}
+
+/// 滚动截图取第一帧用：从内存定格帧裁出滚动区域（坐标相对显示器；
+/// 无会话 = None）
+pub(crate) fn session_frame_crop(x: i32, y: i32, w: u32, h: u32) -> Option<image::RgbaImage> {
+    let g = SESSION_FRAME.lock().unwrap_or_else(|p| p.into_inner());
+    let f = g.as_ref()?;
+    let xi = x.clamp(0, f.mw as i32 - 1) as u32;
+    let yi = y.clamp(0, f.mh as i32 - 1) as u32;
+    let wi = w.min(f.mw - xi);
+    let hi = h.min(f.mh - yi);
+    let full = image::RgbaImage::from_raw(f.mw, f.mh, f.rgba.clone())?;
+    Some(image::imageops::crop_imm(&full, xi, yi, wi, hi).to_image())
+}
 
 /// 常驻覆盖窗的停靠坐标（虚拟桌面外，任何显示器都够不到）。Windows 把窗口
 /// 坐标钳制在 ±32768 内（E2E 实证 -40000 被钳到 -32768），取 -32700：不触
@@ -236,14 +257,6 @@ fn disable_dwm_transitions(hwnd: windows::Win32::Foundation::HWND) {
             std::mem::size_of::<i32>() as u32,
         );
     }
-}
-
-/// 滚动截图取第一帧用：当前会话定格图路径（无会话 = None）
-pub(crate) fn current_session_file() -> Option<PathBuf> {
-    SESSION_FILE
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .clone()
 }
 
 /// 热键/菜单入口：开始一次截图会话。
@@ -337,23 +350,22 @@ fn capture_session(app: &AppHandle, reentry: bool) -> Result<ShotCapture, String
     let mon = monitor_at(cx, cy).ok_or("未找到光标所在显示器")?;
     let t0 = std::time::Instant::now();
 
-    // DXGI Desktop Duplication 优先（4K ~60-100ms），任何不满足回落 xcap/GDI
+    // DXGI Desktop Duplication 优先（4K ~60-100ms，会话保活零初始化），任何
+    // 不满足回落 xcap/GDI
     let img = crate::commands::shot_dxgi::capture(&mon)
         .or_else(|| xcap_capture(&mon))
         .ok_or("屏幕捕获失败（DXGI 与 GDI 均不可用）")?;
     log::debug!("截图计时：捕获 {}ms", t0.elapsed().as_millis());
 
-    let dir = shot_dir();
-    std::fs::create_dir_all(&dir).map_err(|e| format!("创建临时目录失败：{e}"))?;
-    // BMP 而非 PNG：4K PNG 编码 ~2s（感知延迟大头），BMP 编码≈memcpy 级，
-    // 浏览器解码同为原生快路径；文件仅作会话内传递，收场即清。
-    // 唯一文件名（带 seq）：常驻窗反复加载同一路径会被 WebView2 资源缓存
-    // 坑掉（第二次会话 img.decode() 失败 → 透明画布），seq 变路径即变
+    // 定格帧留在内存：shot_frame 经 IPC 二进制直传前端 putImageData 直绘，
+    // 滚动截图从内存裁剪——不再有 BMP 落盘/asset 读回/解码三跳（各 ~100ms 级）
     let seq = millis();
-    let file = dir.join(format!("session_{seq}.bmp"));
-    img.save(&file).map_err(|e| format!("截图写盘失败：{e}"))?;
-    *SESSION_FILE.lock().unwrap_or_else(|p| p.into_inner()) = Some(file.clone());
-    log::debug!("截图计时：BMP 写盘 {}ms", t0.elapsed().as_millis());
+    let (fw, fh) = (img.width(), img.height());
+    *SESSION_FRAME.lock().unwrap_or_else(|p| p.into_inner()) = Some(SessionFrame {
+        mw: fw,
+        mh: fh,
+        rgba: img.into_raw(),
+    });
 
     // 等常驻页就绪（事件监听注册完成）再下发，会话事件不丢；超 3s 照发
     // （看门狗兜底）——只发生在启动后头几秒预热未完成的极端时序
@@ -377,7 +389,6 @@ fn capture_session(app: &AppHandle, reentry: bool) -> Result<ShotCapture, String
         .collect();
 
     Ok(ShotCapture {
-        file: file.to_string_lossy().into_owned(),
         mx: mon.x,
         my: mon.y,
         mw: mon.w,
@@ -459,18 +470,12 @@ pub(crate) fn ensure_shot_window(app: &AppHandle) -> Result<(), String> {
 }
 
 /// 收场：停靠常驻覆盖窗到屏幕外回到 idle（不销毁、不 SW_HIDE），清会话状态
-/// 与定格文件，并通知前端卸载会话 UI（释放画布内存）
+/// 与定格帧（33MB 内存即还），并通知前端卸载会话 UI（释放画布内存）
 pub(crate) fn end_session(app: &AppHandle) {
     SESSION_ACTIVE.store(false, Ordering::SeqCst);
     SHOT_VISIBLE.store(false, Ordering::SeqCst);
     *SESSION_POS.lock().unwrap_or_else(|p| p.into_inner()) = None;
-    let session_file = SESSION_FILE
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .take();
-    if let Some(f) = session_file {
-        let _ = std::fs::remove_file(f);
-    }
+    *SESSION_FRAME.lock().unwrap_or_else(|p| p.into_inner()) = None;
     if let Some(w) = app.get_webview_window("shot") {
         park_shot_window(&w);
         // 停靠是投给事件循环的异步消息，而 emit 直达 webview——若立即通知
@@ -517,6 +522,19 @@ pub fn shot_page_ready(window: tauri::WebviewWindow) -> Result<(), String> {
         SHOT_PAGE_READY.store(true, Ordering::SeqCst);
     }
     Ok(())
+}
+
+/// 会话定格帧二进制直传（snow-shot 同款 ipc::Response 路线）：前端收到
+/// shot-session 后 invoke 本命令拿 RGBA 原始字节，putImageData 直绘——
+/// 替代「BMP 落盘 → asset 协议读回 → 浏览器解码」三跳（各 ~100ms 级）。
+/// 空响应 = 无进行中的会话（前端展示加载失败兜底）
+#[tauri::command]
+pub fn shot_frame() -> tauri::ipc::Response {
+    let g = SESSION_FRAME.lock().unwrap_or_else(|p| p.into_inner());
+    match g.as_ref() {
+        Some(f) => tauri::ipc::Response::new(f.rgba.clone()),
+        None => tauri::ipc::Response::new(Vec::new()),
+    }
 }
 
 /// 热键/菜单入口：开始一次截图会话（异步派发，立即返回）

@@ -730,6 +730,9 @@ export const api = {
   shotReady: () => cmd<void>("shot_ready"),
   /** 常驻截图覆盖窗页面就绪（事件监听已注册）：Rust 放行会话事件下发 */
   shotPageReady: () => cmd<void>("shot_page_ready"),
+  /** 会话定格帧二进制直传（RGBA 原始字节，显示器整幅）：前端 putImageData
+   *  直绘，无 BMP 落盘/asset 读回/解码三跳；空 ArrayBuffer = 无进行中的会话 */
+  shotFrame: () => cmd<ArrayBuffer>("shot_frame"),
   /** 复制图像 PNG（dataURL）到系统剪贴板 */
   shotCopy: (dataUrl: string) => cmd<void>("shot_copy", { dataUrl }),
   /** 贴图：PNG dataURL 钉成置顶窗（x/y/w/h = 虚拟桌面物理坐标） */

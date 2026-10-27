@@ -169,15 +169,12 @@ pub fn shot_scroll_begin(
     if rx < 0 || ry < 0 || rx + rw > mon.w as i32 || ry + rh > mon.h as i32 {
         return Err("选区超出显示器范围".into());
     }
-    // 第一帧 = 定格图裁剪（此刻覆盖窗显示的就是原始画面；路径由 shot.rs
-    // 会话写入时登记，唯一名 session_{seq}.bmp）
-    let session = super::shot::current_session_file().ok_or("无进行中的截图会话")?;
-    let base: RgbaImage = image::open(&session)
-        .map_err(|e| format!("读取会话截图失败：{e}"))?
-        .crop_imm(rx as u32, ry as u32, rw as u32, rh as u32)
-        .to_rgba8();
+    // 第一帧 = 定格图裁剪（此刻覆盖窗显示的就是原始画面；定格帧由 shot.rs
+    // 会话捕获后留在内存，这里直接裁，无文件 IO）
+    let base: RgbaImage = super::shot::session_frame_crop(rx, ry, rw as u32, rh as u32)
+        .ok_or("无进行中的截图会话")?;
 
-    // 覆盖窗退场（常驻窗隐藏回 idle，end_session 即删会话定格文件；base 已
+    // 覆盖窗退场（常驻窗停靠回屏幕外，end_session 即释放内存定格帧；base 已
     // 在内存不受影响）
     super::shot::end_session(&app);
     // 光标悬停选区中心：滚轮事件落点 = 目标窗口（Win10+ 悬停滚动）

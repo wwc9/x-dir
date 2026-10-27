@@ -2,13 +2,14 @@
 // 智能窗口识别（进会话默认预选光标下窗口）+ 选区（拖拽/手柄调整/整体移动）+
 // 标注（矩形/椭圆/箭头/画笔/马克笔/文字）+ 马赛克/模糊 + 复制/保存/贴图。
 // 全链路物理像素坐标（×boot.scale 与 CSS 像素换算），与定格截图逐像素对齐。
+// 定格帧经 shot_frame IPC 二进制直传 RGBA 原始字节，putImageData 直绘上屏
+// （2026-10-27 感知延迟二期：无 BMP 落盘/asset 读回/浏览器解码三跳）。
 //
 // 双 canvas 分层：composite（离屏，底图 + 已确认标注按序压平——马赛克/模糊
 // 取其像素，语义 = 后画的会把先画的糊掉，与 QQ 一致）→ base（静态显示）；
 // live 承载遮罩/选区框/窗口高亮/绘制预览的高频重绘，mousemove 不触底图。
 // 本窗脱离主界面体系（无 np-tip/island），按钮提示用原生 title 承载。
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   ArrowUpRight,
   Circle,
@@ -46,7 +47,6 @@ import {
 
 export interface ShotBoot {
   window: "shot";
-  file: string;
   mx: number;
   my: number;
   mw: number;
@@ -54,7 +54,7 @@ export interface ShotBoot {
   scale: number;
   /** 会话序号（常驻覆盖窗重挂 key） */
   seq: number;
-  /** 会话定格时光标位置（显示器相对物理像素；默认预选光标下窗口） */
+  /** 定格时光标位置（显示器相对物理像素；默认预选光标下窗口） */
   cx: number;
   cy: number;
   windows: { x: number; y: number; w: number; h: number }[];
@@ -112,7 +112,8 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const baseRef = useRef<HTMLCanvasElement>(null);
   const liveRef = useRef<HTMLCanvasElement>(null);
   const compRef = useRef<HTMLCanvasElement | null>(null);
-  const imgRef = useRef<HTMLImageElement | null>(null);
+  /** 定格帧画布（RGBA 直绘，语义等同旧 img 元素，供 comp 底图拷贝） */
+  const imgRef = useRef<CanvasImageSource | null>(null);
   const accentRef = useRef("#3574f0");
   const dragRef = useRef<DragState | null>(null);
   const moveRef = useRef<{ dx: number; dy: number } | null>(null);
@@ -269,51 +270,55 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   }, [boot.mw, boot.mh, scale]);
 
   useEffect(() => {
-    const img = new Image();
-    // asset 协议与页面跨源：必须以 CORS 模式加载（asset 协议已回
-    // Access-Control-Allow-Origin），否则 canvas 被污染，toDataURL 抛
-    // SecurityError，复制/贴图/保存全部静默失效
-    img.crossOrigin = "anonymous";
-    img.src = convertFileSrc(boot.file);
-    img
-      .decode()
-      .then(() => {
-        imgRef.current = img;
-        for (const c of [baseRef.current, liveRef.current]) {
-          if (c) {
-            c.width = boot.mw;
-            c.height = boot.mh;
-          }
-        }
-        const comp = document.createElement("canvas");
-        comp.width = boot.mw;
-        comp.height = boot.mh;
-        compRef.current = comp;
-        accentRef.current =
-          getComputedStyle(document.documentElement).getPropertyValue("--np-accent").trim() ||
-          "#3574f0";
-        setReady(true);
-        // 首帧上屏后再让 Rust show 窗口：提前 show 出来的是未渲染的空
-        // WebView2（黑底）。双 rAF 确保画布已被合成器呈现
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => {
-            void api.shotReady().catch(() => undefined);
-            // 常驻窗隐藏期间 WebView2 挂起合成器，show 后首帧可能仍是空白
-            // 占位（E2E 实证：遮罩/定格图不入帧，直到下一次指针事件触发
-            // 重绘）。show 完成后窗口可见、rAF 恢复，再强制重绘一拍确保
-            // 定格图 + 蒙层真正上屏
-            requestAnimationFrame(() => {
-              redrawBase();
-              redrawLive();
-            });
-          }),
-        );
-      })
-      .catch(() => {
+    let dead = false;
+    void (async () => {
+      // 定格帧二进制直传（RGBA 原始字节）→ 离屏画布 putImageData 一次成底，
+      // 无 BMP 落盘/asset 协议读回/浏览器解码三跳（各 ~100ms 级）
+      const buf = await api.shotFrame();
+      if (dead) return;
+      if (buf.byteLength !== boot.mw * boot.mh * 4) {
         setSavedTip("截图加载失败");
         // 加载失败也要把窗口放出来展示错误提示，别留在不可见状态
         void api.shotReady().catch(() => undefined);
-      });
+        return;
+      }
+      const frame = document.createElement("canvas");
+      frame.width = boot.mw;
+      frame.height = boot.mh;
+      frame
+        .getContext("2d")!
+        .putImageData(new ImageData(new Uint8ClampedArray(buf), boot.mw, boot.mh), 0, 0);
+      imgRef.current = frame;
+      for (const c of [baseRef.current, liveRef.current]) {
+        if (c) {
+          c.width = boot.mw;
+          c.height = boot.mh;
+        }
+      }
+      const comp = document.createElement("canvas");
+      comp.width = boot.mw;
+      comp.height = boot.mh;
+      compRef.current = comp;
+      accentRef.current =
+        getComputedStyle(document.documentElement).getPropertyValue("--np-accent").trim() ||
+        "#3574f0";
+      setReady(true);
+      // 首帧上屏后再让 Rust 移窗上屏；双 rAF 确保画布已被合成器呈现
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          void api.shotReady().catch(() => undefined);
+          // 常驻窗停靠屏幕外期间 WebView2 合成器持续在场（不 SW_HIDE），此
+          // 处强制重绘一拍只是兜底（驱动异常等极端时序下保证定格图上屏）
+          requestAnimationFrame(() => {
+            redrawBase();
+            redrawLive();
+          });
+        }),
+      );
+    })();
+    return () => {
+      dead = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
