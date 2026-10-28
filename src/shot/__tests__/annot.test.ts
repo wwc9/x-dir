@@ -7,7 +7,10 @@ import {
   MAGNIFIER_SRC,
   MAGNIFIER_ZOOM,
   arrowHead,
+  formatMagColor,
+  formatMagCoords,
   handleAt,
+  hexToRgba,
   hitWindow,
   magnifierBox,
   magnifierLayout,
@@ -147,5 +150,47 @@ describe("magnifierLayout", () => {
     expect(l.boxX).toBeGreaterThanOrEqual(0);
     expect(l.boxY).toBeGreaterThanOrEqual(0);
     expect(l.barY).toBeGreaterThanOrEqual(box);
+  });
+});
+
+describe("formatMagColor", () => {
+  const rgba = [168, 187, 206, 255] as const;
+
+  it("hex 大写输出", () => {
+    expect(formatMagColor(rgba, "hex")).toBe("#A8BBCE");
+  });
+
+  it("rgb 逗号串输出", () => {
+    expect(formatMagColor(rgba, "rgb")).toBe("rgb(168, 187, 206)");
+  });
+
+  it("低位字节补零", () => {
+    expect(formatMagColor([0, 5, 16, 255] as const, "hex")).toBe("#000510");
+  });
+});
+
+describe("formatMagCoords", () => {
+  it("全局 = 显示器物理坐标", () => {
+    expect(formatMagCoords(589, 2149, "global")).toBe("(589, 2149)");
+  });
+
+  it("相对 = 相对原点差值（带前缀标注）", () => {
+    expect(formatMagCoords(589, 2149, "relative", { x: 500, y: 2100 })).toBe("相对 (89, 49)");
+  });
+
+  it("无 origin 的相对模式退回全局", () => {
+    expect(formatMagCoords(589, 2149, "relative")).toBe("(589, 2149)");
+  });
+});
+
+describe("hexToRgba", () => {
+  it("六位 hex 转 rgba 串", () => {
+    expect(hexToRgba("#3574f0", 0.25)).toBe("rgba(53,116,240,0.25)");
+    expect(hexToRgba("#FFFFFF", 1)).toBe("rgba(255,255,255,1)");
+  });
+
+  it("非法输入退回白色", () => {
+    expect(hexToRgba("rgb(1,2,3)", 0.5)).toBe("rgba(255,255,255,0.5)");
+    expect(hexToRgba("#12345", 0.5)).toBe("rgba(255,255,255,0.5)");
   });
 });

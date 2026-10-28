@@ -153,16 +153,58 @@ export function hitWindow(
 
 // ── 放大镜/取色器（PixPin 惯例：无选区跟随态与拖拽态显示，确认选区即隐）───
 
-/** 取样网格边长（源物理像素）与放大倍率：15px × 10 = 150px 取景框 */
-export const MAGNIFIER_SRC = 15;
-export const MAGNIFIER_ZOOM = 10;
+/** 取样网格边长（源物理像素）与放大倍率：13px × 16 = 208px 取景框，
+ *  块 16px——内容比旧 10×15 更大更易读（PixPin 参考口径） */
+export const MAGNIFIER_SRC = 13;
+export const MAGNIFIER_ZOOM = 16;
 /** 取景框与光标的最小间距（物理像素） */
 export const MAGNIFIER_GAP = 18;
 
-/** 放大镜取景框边长 / 信息条高度（物理像素） */
-export function magnifierBox(): { box: number; barH: number } {
+export type MagColorFormat = "hex" | "rgb";
+export type MagCoordMode = "global" | "relative";
+
+/** #rrggbb → rgba() 串（网格线/中心像素淡染用）；非法输入退回白色 */
+export function hexToRgba(hex: string, alpha: number): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return `rgba(255,255,255,${alpha})`;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+}
+
+/** 取色值格式化：hex 大写 / rgb() 逗号串（Shift 切换） */
+export function formatMagColor(
+  rgba: readonly [number, number, number, number],
+  format: MagColorFormat,
+): string {
+  const [r, g, b] = rgba;
+  if (format === "rgb") return `rgb(${r}, ${g}, ${b})`;
+  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`.toUpperCase();
+}
+
+/** 放大镜坐标格式化：全局 = 显示器物理坐标；相对 = 相对 origin（选区/拖拽
+ *  矩形左上，P 切换；无 origin 时退回全局） */
+export function formatMagCoords(
+  ix: number,
+  iy: number,
+  mode: MagCoordMode,
+  origin?: { x: number; y: number },
+): string {
+  if (mode === "relative" && origin) return `相对 (${ix - origin.x}, ${iy - origin.y})`;
+  return `(${ix}, ${iy})`;
+}
+
+/** 信息面板文字度量（barH 与绘制共用同一套，防止两处漂移） */
+function magPanelMetrics(scale: number): { fs: number; lineH: number; pad: number; lines: number } {
+  const fs = Math.max(12, Math.round(11 * scale));
+  const lineH = Math.round(fs * 1.5);
+  return { fs, lineH, pad: Math.round(fs * 0.5), lines: 5 };
+}
+
+/** 放大镜取景框边长 / 信息面板高度（物理像素） */
+export function magnifierBox(scale = 1): { box: number; barH: number } {
   const box = MAGNIFIER_SRC * MAGNIFIER_ZOOM;
-  return { box, barH: Math.round(box * 0.18) };
+  const { lineH, pad, lines } = magPanelMetrics(scale);
+  return { box, barH: pad * 2 + lineH * lines };
 }
 
 /** 放大镜布局：默认落在光标右下，越屏翻转；极小屏钳到原点兜底 */
@@ -171,8 +213,9 @@ export function magnifierLayout(
   py: number,
   mw: number,
   mh: number,
+  scale = 1,
 ): { boxX: number; boxY: number; barY: number } {
-  const { box, barH } = magnifierBox();
+  const { box, barH } = magnifierBox(scale);
   const total = box + barH;
   let boxX = px + MAGNIFIER_GAP;
   let boxY = py + MAGNIFIER_GAP;
@@ -185,11 +228,23 @@ export function magnifierLayout(
   };
 }
 
-/** 放大镜绘制：取景框（最近邻放大定格图）+ 红色发丝十字 + 信息条
- *  （坐标 / HEX 取色 / 色块，拖拽态并入 W×H 尺寸，不再单画尺寸 pill——
- *  PixPin 同款）。src = 合成画布（含已画标注，所见即所得）。
- *  scale 用于线宽增密：高 DPI 下 1 物理像素的发丝线会被缩放摊淡（E2E 实证
- *  4K@150% 仅 ~65% 覆盖率），随 scale 加粗才够醒目 */
+export interface MagnifierOpts {
+  /** 主题 accent（十字线 / 像素网格 / 中心像素淡染同色） */
+  color: string;
+  colorFormat: MagColorFormat;
+  coordMode: MagCoordMode;
+  /** 相对坐标原点（选区/拖拽矩形左上） */
+  origin?: { x: number; y: number };
+  /** 拖拽态尺寸标签（并入坐标行） */
+  sizeLabel?: string;
+}
+
+/** 放大镜绘制：取景框（最近邻放大定格图 + 主题蓝像素网格 + 中心像素高亮
+ *  + 主题蓝发丝十字）+ 多行信息面板（坐标 / 色块+色值 / 快捷键提示——
+ *  Shift 切换颜色格式、C 复制颜色值、P 全局/相对坐标，参考 PixPin）。
+ *  src = 合成画布（含已画标注，所见即所得）。scale 用于线宽/字号增密：
+ *  高 DPI 下 1 物理像素的发丝线会被缩放摊淡（E2E 实证 4K@150% 仅 ~65%
+ *  覆盖率），随 scale 加粗才够醒目。返回光标处取色值（C 复制用） */
 export function drawMagnifier(
   ctx: CanvasRenderingContext2D,
   src: HTMLCanvasElement | null,
@@ -197,15 +252,16 @@ export function drawMagnifier(
   py: number,
   mw: number,
   mh: number,
-  scale = 1,
-  sizeLabel?: string,
-): void {
-  const { box, barH } = magnifierBox();
-  const { boxX, boxY, barY } = magnifierLayout(px, py, mw, mh);
+  scale: number,
+  opts: MagnifierOpts,
+): { rgba: [number, number, number, number] } {
+  const { box, barH } = magnifierBox(scale);
+  const { boxX, boxY, barY } = magnifierLayout(px, py, mw, mh, scale);
   // 像素网格对齐：取样中心取整，避免源矩形亚像素采样发虚
   const ix = Math.max(0, Math.min(mw - 1, Math.round(px)));
   const iy = Math.max(0, Math.min(mh - 1, Math.round(py)));
   const half = (MAGNIFIER_SRC - 1) / 2;
+  const zb = MAGNIFIER_ZOOM;
   const lw = Math.max(1, Math.round(scale));
   ctx.save();
   ctx.fillStyle = "#000";
@@ -215,8 +271,28 @@ export function drawMagnifier(
     ctx.drawImage(src, ix - half, iy - half, MAGNIFIER_SRC, MAGNIFIER_SRC, boxX, boxY, box, box);
     ctx.imageSmoothingEnabled = true;
   }
-  // 红色发丝十字（PixPin 同款）
-  ctx.strokeStyle = "#ff453a";
+  // 像素网格（主题蓝淡线）
+  ctx.strokeStyle = hexToRgba(opts.color, 0.25);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 1; i < MAGNIFIER_SRC; i++) {
+    const g = boxX + i * zb + 0.5;
+    const gy = boxY + i * zb + 0.5;
+    ctx.moveTo(g, boxY);
+    ctx.lineTo(g, boxY + box);
+    ctx.moveTo(boxX, gy);
+    ctx.lineTo(boxX + box, gy);
+  }
+  ctx.stroke();
+  // 中心像素高亮：主题蓝淡染 + accent 描边（取色即所指）
+  const px0 = boxX + half * zb;
+  const py0 = boxY + half * zb;
+  ctx.fillStyle = hexToRgba(opts.color, 0.35);
+  ctx.fillRect(px0, py0, zb, zb);
+  ctx.strokeStyle = opts.color;
+  ctx.strokeRect(px0 + lw / 2, py0 + lw / 2, zb - lw, zb - lw);
+  // 主题蓝发丝十字（过中心，与全局十字线同色同口径）
+  ctx.strokeStyle = opts.color;
   ctx.lineWidth = lw;
   const cx = boxX + box / 2;
   const cy = boxY + box / 2;
@@ -233,33 +309,55 @@ export function drawMagnifier(
   ctx.strokeRect(boxX + 0.5, boxY + 0.5, box - 1, box - 1);
   ctx.strokeStyle = "#000";
   ctx.strokeRect(boxX - 0.5, boxY - 0.5, box + 1, box + 1);
-  // 信息条：取色（合成画布 1×1 读回）+ 坐标 + HEX（+ 拖拽尺寸）
-  let hex = "#000000";
+  // 取色（合成画布 1×1 读回）
+  let rgba: [number, number, number, number] = [0, 0, 0, 255];
   const sctx = src?.getContext("2d");
   if (sctx) {
     const d = sctx.getImageData(ix, iy, 1, 1).data;
-    hex = `#${[d[0], d[1], d[2]]
-      .map((v) => v.toString(16).padStart(2, "0"))
-      .join("")}`.toUpperCase();
+    rgba = [d[0], d[1], d[2], d[3]];
   }
-  const fs = Math.round(barH * 0.62);
-  const sw = Math.round(barH * 0.62);
-  const text = `${ix}, ${iy}  ${hex}${sizeLabel ? `  ${sizeLabel}` : ""}`;
-  // 信息条随内容加宽（拖拽尺寸长文本），但不越出屏幕
+  // 信息面板：坐标(+拖拽尺寸) / 色块+色值 / 三行快捷键提示（参考 PixPin）
+  const { fs, lineH, pad } = magPanelMetrics(scale);
+  const colorText = formatMagColor(rgba, opts.colorFormat);
+  const lines = [
+    formatMagCoords(ix, iy, opts.coordMode, opts.origin) +
+      (opts.sizeLabel ? `  ${opts.sizeLabel}` : ""),
+    colorText,
+    "Shift: 切换颜色格式",
+    "C: 复制颜色值",
+    "P: 全局/相对坐标",
+  ];
   ctx.font = `${fs}px "Segoe UI", "Microsoft YaHei", sans-serif`;
-  const barW = Math.min(mw - boxX, Math.max(box, Math.round(sw + 16 + ctx.measureText(text).width + 12)));
+  const textW = Math.max(
+    ...lines.filter((_, i) => i !== 1).map((t) => ctx.measureText(t).width),
+    0,
+  );
+  const sw = Math.round(fs * 0.9);
+  const barW = Math.min(
+    mw - boxX,
+    Math.max(box, Math.round(pad + sw + 10 + textW + pad)),
+  );
   ctx.fillStyle = "rgba(0,0,0,0.8)";
   ctx.fillRect(boxX, barY, barW, barH);
-  ctx.fillStyle = hex;
-  ctx.fillRect(boxX + 8, barY + (barH - sw) / 2, sw, sw);
-  ctx.strokeStyle = "#fff";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(boxX + 8.5, barY + (barH - sw) / 2 + 0.5, sw - 1, sw - 1);
-  ctx.fillStyle = "#fff";
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
-  ctx.fillText(text, boxX + sw + 16, barY + barH / 2, barW - sw - 24);
+  for (let i = 0; i < lines.length; i++) {
+    const ly = barY + pad + lineH * (i + 0.5);
+    if (i === 1) {
+      ctx.fillStyle = colorText;
+      ctx.fillRect(boxX + pad, ly - sw / 2, sw, sw);
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(boxX + pad + 0.5, ly - sw / 2 + 0.5, sw - 1, sw - 1);
+      ctx.fillStyle = "#fff";
+      ctx.fillText(lines[i], boxX + pad + sw + 10, ly);
+    } else {
+      ctx.fillStyle = "#fff";
+      ctx.fillText(lines[i], boxX + pad, ly);
+    }
+  }
   ctx.restore();
+  return { rgba };
 }
 
 /** 全局十字线（启动截图后的定位 / 水平对比）：过光标的

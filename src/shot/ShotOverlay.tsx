@@ -34,11 +34,13 @@ import { AppIcon } from "../components/AppIcon";
 import {
   SHOT_PALETTE,
   type HandleId,
+  type MagColorFormat,
   type Sel,
   type Shape,
   drawCrosshair,
   drawMagnifier,
   drawShape,
+  formatMagColor,
   handleAt,
   hitWindow,
   normalizeSel,
@@ -120,6 +122,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   /** 放大镜锚点（最近一次光标物理坐标；跟随/拖拽态显示，确认选区即隐；
    *  以定格时光标位初始化——首帧即有放大镜，不等鼠标先动一下） */
   const magRef = useRef<{ x: number; y: number } | null>({ x: boot.cx, y: boot.cy });
+  /** 放大镜取色状态：色值格式（Shift 切换）/ 坐标模式（P 切换）/ 最近取样值（C 复制） */
+  const colorFmtRef = useRef<MagColorFormat>("hex");
+  const coordRelRef = useRef(false);
+  const magColorRef = useRef<readonly [number, number, number, number] | null>(null);
 
   // 预选跟随模式（PixPin/QQ 惯例，2026-10-27）：进会话默认选中光标下窗口，
   // 鼠标移动时选中框自动跟随切换其他窗口（此时无工具栏，光标恒十字）；用户
@@ -271,7 +277,14 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       const sizeLabel = d
         ? `${Math.round(Math.abs(d.x2 - d.x1))} × ${Math.round(Math.abs(d.y2 - d.y1))}`
         : undefined;
-      drawMagnifier(ctx, compRef.current, mag.x, mag.y, boot.mw, boot.mh, scale, sizeLabel);
+      magColorRef.current =
+        drawMagnifier(ctx, compRef.current, mag.x, mag.y, boot.mw, boot.mh, scale, {
+          sizeLabel,
+          color: accentRef.current,
+          colorFormat: colorFmtRef.current,
+          coordMode: coordRelRef.current ? "relative" : "global",
+          origin: hole ? { x: hole.x, y: hole.y } : undefined,
+        })?.rgba ?? null;
     }
   }, [boot.mw, boot.mh, scale]);
 
@@ -770,6 +783,36 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         }
         return;
       }
+      // 放大镜快捷键（跟随/拖拽态）：Shift 切换色值格式 / C 复制色值 /
+      // P 全局/相对坐标（PixPin 参考口径；带修饰键的组合不劫持）
+      const magColor = magColorRef.current;
+      const magOn = (followingRef.current || dragRef.current) && magColor !== null;
+      if (magOn && magColor && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (e.key === "Shift") {
+          e.preventDefault();
+          colorFmtRef.current = colorFmtRef.current === "hex" ? "rgb" : "hex";
+          redrawLive();
+          return;
+        }
+        if (e.key === "p" || e.key === "P") {
+          e.preventDefault();
+          coordRelRef.current = !coordRelRef.current;
+          redrawLive();
+          return;
+        }
+        if (e.key === "c" || e.key === "C") {
+          e.preventDefault();
+          const text = formatMagColor(magColor, colorFmtRef.current);
+          void navigator.clipboard
+            ?.writeText(text)
+            .then(() => {
+              setSavedTip(`已复制 ${text}`);
+              setTimeout(() => setSavedTip(null), 1200);
+            })
+            .catch(() => undefined);
+          return;
+        }
+      }
       const ctrl = e.ctrlKey || e.metaKey;
       if (ctrl && e.key.toLowerCase() === "z" && !e.shiftKey) {
         e.preventDefault();
@@ -788,7 +831,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [exitShot, commitText, undo, redo, finish]);
+  }, [exitShot, commitText, undo, redo, finish, redrawLive]);
 
   // ── 工具栏定位（选区下方 12px，放不下换上方；水平居中钳制屏内）──────────
   const [tbPos, setTbPos] = useState<{ left: number; top: number } | null>(null);
