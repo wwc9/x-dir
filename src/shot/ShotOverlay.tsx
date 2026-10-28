@@ -77,16 +77,16 @@ const SHADOW_W = [0, 10, 18, 30];
 const BORDER_W = [0, 3, 6, 10];
 const SHADOW_LV_LABEL = ["关", "弱", "中", "强"];
 
-const TOOLS: { id: ShotTool; label: string; text: string; icon: typeof Square }[] = [
-  { id: "select", label: "选择 / 移动选区", text: "选择", icon: MousePointer2 },
-  { id: "rect", label: "矩形", text: "矩形", icon: Square },
-  { id: "ellipse", label: "椭圆", text: "椭圆", icon: Circle },
-  { id: "arrow", label: "箭头", text: "箭头", icon: ArrowUpRight },
-  { id: "pen", label: "画笔", text: "画笔", icon: Pencil },
-  { id: "marker", label: "马克笔", text: "马克", icon: Highlighter },
-  { id: "text", label: "文字", text: "文字", icon: Type },
-  { id: "mosaic", label: "马赛克", text: "马赛克", icon: Grip },
-  { id: "blur", label: "模糊", text: "模糊", icon: Waves },
+const TOOLS: { id: ShotTool; label: string; icon: typeof Square }[] = [
+  { id: "select", label: "选择 / 移动选区", icon: MousePointer2 },
+  { id: "rect", label: "矩形", icon: Square },
+  { id: "ellipse", label: "椭圆", icon: Circle },
+  { id: "arrow", label: "箭头", icon: ArrowUpRight },
+  { id: "pen", label: "画笔", icon: Pencil },
+  { id: "marker", label: "马克笔", icon: Highlighter },
+  { id: "text", label: "文字", icon: Type },
+  { id: "mosaic", label: "马赛克", icon: Grip },
+  { id: "blur", label: "模糊", icon: Waves },
 ];
 
 /** 开始一个标注草稿（pointerdown；坐标相对选区，物理像素） */
@@ -1140,10 +1140,8 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                 onClick={() => setTool(t.id)}
               >
                 <AppIcon icon={t.icon} size={DENSITY.iconLg} />
-                <span className="np-shot-tool-t">{t.text}</span>
-              </button>
+                </button>
             ))}
-            <span className="np-shot-sep" />
             <button
               className="np-shot-tool"
               title="撤销（Ctrl+Z）"
@@ -1151,7 +1149,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               onClick={undo}
             >
               <AppIcon icon={Undo2} size={DENSITY.iconLg} />
-              <span className="np-shot-tool-t">撤销</span>
             </button>
             <button
               className="np-shot-tool"
@@ -1160,7 +1157,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               onClick={redo}
             >
               <AppIcon icon={Redo2} size={DENSITY.iconLg} />
-              <span className="np-shot-tool-t">重做</span>
             </button>
           </div>
           <div className="np-shot-tb-row">
@@ -1170,7 +1166,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               onClick={openPanel("color")}
             >
               <AppIcon icon={Palette} size={DENSITY.iconLg} />
-              <span className="np-shot-tool-t">颜色</span>
             </button>
             <button
               className={`np-shot-tool ${panel?.kind === "width" ? "on" : ""}`}
@@ -1178,7 +1173,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               onClick={openPanel("width")}
             >
               <AppIcon icon={PenLine} size={DENSITY.iconLg} />
-              <span className="np-shot-tool-t">线宽</span>
             </button>
             <button
               className={`np-shot-tool ${shadowLv ? "on" : ""}`}
@@ -1186,7 +1180,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               onClick={openPanel("shadow")}
             >
               <AppIcon icon={Layers} size={DENSITY.iconLg} />
-              <span className="np-shot-tool-t">阴影</span>
             </button>
             <button
               className={`np-shot-tool ${borderLv ? "on" : ""}`}
@@ -1194,16 +1187,13 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               onClick={openPanel("border")}
             >
               <AppIcon icon={Frame} size={DENSITY.iconLg} />
-              <span className="np-shot-tool-t">边框</span>
             </button>
-            <span className="np-shot-sep" />
             <button
               className="np-shot-tool np-shot-primary"
               title="贴图：钉在屏幕上"
               onClick={() => void finish("pin")}
             >
               <AppIcon icon={Pin} size={DENSITY.iconLg} />
-              <span className="np-shot-tool-t">贴图</span>
             </button>
             <button
               className="np-shot-tool np-shot-primary"
@@ -1211,7 +1201,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               onClick={() => void finish("copy")}
             >
               <AppIcon icon={Copy} size={DENSITY.iconLg} />
-              <span className="np-shot-tool-t">复制</span>
             </button>
             <button
               className="np-shot-tool np-shot-primary"
@@ -1219,7 +1208,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               onClick={() => void finish("save")}
             >
               <AppIcon icon={Save} size={DENSITY.iconLg} />
-              <span className="np-shot-tool-t">保存</span>
             </button>
             <button
               className="np-shot-tool np-shot-primary"
@@ -1227,16 +1215,13 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               onClick={startScroll}
             >
               <AppIcon icon={GalleryVerticalEnd} size={DENSITY.iconLg} />
-              <span className="np-shot-tool-t">滚动</span>
             </button>
-            <span className="np-shot-sep" />
             <button
               className="np-shot-tool np-shot-danger"
               title="取消截图（Esc）"
               onClick={closeWindow}
             >
               <AppIcon icon={X} size={DENSITY.iconLg} />
-              <span className="np-shot-tool-t">关闭</span>
             </button>
           </div>
           </div>
@@ -1287,19 +1272,11 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                         setPanel(null);
                       }}
                     >
-                      <span className="np-shot-tool-t">{lbl}</span>
                     </button>
                   ))}
               </div>
             </div>
           )}
-          <button
-            className="np-shot-tool np-shot-danger"
-            title="取消截图（Esc）"
-            onClick={closeWindow}
-          >
-            <AppIcon icon={X} size={DENSITY.iconLg} />
-          </button>
         </div>
       )}
       {savedTip && <div className="np-shot-saved">{savedTip}</div>}

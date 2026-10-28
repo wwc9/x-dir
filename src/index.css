@@ -4631,7 +4631,7 @@ mark.np-gsearch-mark {
   z-index: 10;
   display: flex;
   align-items: stretch;
-  gap: 1px;
+  gap: 0;
   max-width: calc(100% - 16px);
   flex-wrap: wrap;
   padding: 5px 6px;
@@ -4669,7 +4669,7 @@ mark.np-gsearch-mark {
   display: grid;
   place-items: center;
   align-self: stretch;
-  background: var(--np-surface-2);
+  padding: 0 2px;
   border-radius: var(--np-radius-lg) 0 0 var(--np-radius-lg);
   color: var(--np-muted);
   cursor: grab;
@@ -4702,25 +4702,17 @@ mark.np-gsearch-mark {
   flex: none;
 }
 .np-shot-tool {
-  /* 统一固定宽度：两行按钮形成对齐网格（图标列/文字列跨行水平对齐） */
-  width: 42px;
+  /* 统一固定宽度：两行按钮形成对齐网格（图标列跨行水平对齐） */
+  width: 36px;
   flex: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  padding: 3px 0 2px;
+  display: grid;
+  place-items: center;
+  padding: 4px 0;
   border: none;
   border-radius: var(--np-radius);
   background: transparent;
   color: var(--np-fg);
   cursor: pointer;
-}
-.np-shot-tool-t {
-  font-size: 10px;
-  line-height: 1;
-  white-space: nowrap;
 }
 .np-shot-tool:hover:not(:disabled) {
   background: var(--np-hover);
