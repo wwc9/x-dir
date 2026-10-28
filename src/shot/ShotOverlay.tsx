@@ -102,9 +102,12 @@ function startShape(
 
 export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const scale = boot.scale;
+  // 物理像素取整：非整数 DPI 下 clientX × scale 会带浮点误差（信息条出现
+  // 606.00001525878906 这类值），截图本就该落在整数像素网格上——交互坐标
+  // 统一在源头取整（选区/标注/贴图落位随之更锐利）
   const toPhys = (e: { clientX: number; clientY: number }) => ({
-    px: e.clientX * scale,
-    py: e.clientY * scale,
+    px: Math.round(e.clientX * scale),
+    py: Math.round(e.clientY * scale),
   });
 
   const baseRef = useRef<HTMLCanvasElement>(null);
