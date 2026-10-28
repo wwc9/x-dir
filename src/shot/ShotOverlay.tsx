@@ -14,10 +14,11 @@ import {
   ArrowUpRight,
   Circle,
   Copy,
-  Droplets,
   GalleryVerticalEnd,
-  Grid2x2,
+  Frame,
+  Grip,
   Highlighter,
+  Layers,
   MousePointer2,
   Pencil,
   Pin,
@@ -26,6 +27,7 @@ import {
   Square,
   Type,
   Undo2,
+  Waves,
   X,
 } from "lucide-react";
 
@@ -66,6 +68,10 @@ export interface ShotBoot {
 /** 三档线宽 / 字号（CSS 像素观感值） */
 const STROKES = [2, 4, 7];
 const FONTS = [16, 22, 30];
+/** 阴影模糊半径 / 边框线宽档位（CSS 像素观感值，随 scale 增密） */
+const SHADOW_W = [0, 10, 18, 30];
+const BORDER_W = [0, 3, 6, 10];
+const SHADOW_LV_LABEL = ["关", "弱", "中", "强"];
 
 const TOOLS: { id: ShotTool; label: string; icon: typeof Square }[] = [
   { id: "select", label: "选择 / 移动选区", icon: MousePointer2 },
@@ -75,8 +81,8 @@ const TOOLS: { id: ShotTool; label: string; icon: typeof Square }[] = [
   { id: "pen", label: "画笔", icon: Pencil },
   { id: "marker", label: "马克笔", icon: Highlighter },
   { id: "text", label: "文字", icon: Type },
-  { id: "mosaic", label: "马赛克", icon: Grid2x2 },
-  { id: "blur", label: "模糊", icon: Droplets },
+  { id: "mosaic", label: "马赛克", icon: Grip },
+  { id: "blur", label: "模糊", icon: Waves },
 ];
 
 /** 开始一个标注草稿（pointerdown；坐标相对选区，物理像素） */
@@ -129,6 +135,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const colorFmtRef = useRef<MagColorFormat>("hex");
   const coordRelRef = useRef(false);
   const magColorRef = useRef<readonly [number, number, number, number] | null>(null);
+  /** 导出装饰：阴影 / 边框档位（0=关 1=弱 2=中 3=强，点击循环切换） */
+  const [shadowLv, setShadowLv] = useState(0);
+  const [borderLv, setBorderLv] = useState(0);
 
   // 预选跟随模式（PixPin/QQ 惯例，2026-10-27）：进会话默认选中光标下窗口，
   // 鼠标移动时选中框自动跟随切换其他窗口（此时无工具栏，光标恒十字）；用户
@@ -293,6 +302,25 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         );
       }
     }
+    // 阴影/边框预览（已确认选区）：选区外围实时呈现导出效果
+    const sbw = Math.round(SHADOW_W[shadowLv] * scale);
+    const bbw = Math.round(BORDER_W[borderLv] * scale);
+    if (s && !followingRef.current && !dNow && (sbw || bbw)) {
+      ctx.save();
+      if (sbw) {
+        ctx.filter = `blur(${Math.round(sbw / 3)}px)`;
+        ctx.strokeStyle = "rgba(0,0,0,0.45)";
+        ctx.lineWidth = sbw;
+        ctx.strokeRect(s.x - sbw / 2, s.y - sbw / 2, s.w + sbw, s.h + sbw);
+        ctx.filter = "none";
+      }
+      if (bbw) {
+        ctx.strokeStyle = accentRef.current;
+        ctx.lineWidth = bbw;
+        ctx.strokeRect(s.x - bbw / 2, s.y - bbw / 2, s.w + bbw, s.h + bbw);
+      }
+      ctx.restore();
+    }
     // 全局十字线（启动后定位/水平对比）：跟随态过光标整幅发丝线随光标移动
     // （预选跟随态 sel 恒非空，不能以 !s 为条件），按下拖拽/确认选区后即隐
     // ——此时选区边框 + 尺寸信息接管。颜色 = 主题 accent（与选区边框同色）
@@ -421,18 +449,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     void api.shotClose().catch(() => undefined);
   }, []);
 
-  const exportDataUrl = useCallback((s: Sel): string | null => {
-    const comp = compRef.current;
-    if (!comp) return null;
-    const c = document.createElement("canvas");
-    c.width = s.w;
-    c.height = s.h;
-    const ctx = c.getContext("2d");
-    if (!ctx) return null;
-    ctx.drawImage(comp, s.x, s.y, s.w, s.h, 0, 0, s.w, s.h);
-    return c.toDataURL("image/png");
-  }, []);
-
+  /** 导出画布 = 裁剪 + 可选装饰（阴影/边框，外扩余量，输出尺寸大于选区）。
+   *  装饰开启时导出不再与定格帧逐像素一致（四周多出阴影/边框），调用方
+   *  需绕过零 IPC 快路走画布管线 */
   /** 选区合成结果裁剪成独立画布（copy 的像素源，尺寸 = 选区物理像素） */
   const cropCanvas = useCallback(
     (s: Sel): HTMLCanvasElement | null => {
@@ -447,6 +466,44 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     [],
   );
 
+  const exportCanvas = useCallback(
+    (s: Sel): HTMLCanvasElement | null => {
+      const base = cropCanvas(s);
+      if (!base) return null;
+      const sbw = Math.round(SHADOW_W[shadowLv] * scale);
+      const bbw = Math.round(BORDER_W[borderLv] * scale);
+      if (!sbw && !bbw) return base;
+      const m = Math.ceil(sbw * 1.4 + bbw);
+      const out = document.createElement("canvas");
+      out.width = s.w + m * 2;
+      out.height = s.h + m * 2;
+      const octx = out.getContext("2d");
+      if (!octx) return base;
+      if (sbw) {
+        octx.save();
+        octx.shadowColor = "rgba(0,0,0,0.45)";
+        octx.shadowBlur = sbw;
+        octx.shadowOffsetY = Math.round(sbw * 0.25);
+        octx.fillStyle = "#fff";
+        octx.fillRect(m, m, s.w, s.h);
+        octx.restore();
+      }
+      octx.drawImage(base, m, m);
+      if (bbw) {
+        octx.strokeStyle = color;
+        octx.lineWidth = bbw;
+        octx.strokeRect(m - bbw / 2, m - bbw / 2, s.w + bbw, s.h + bbw);
+      }
+      return out;
+    },
+    [cropCanvas, shadowLv, borderLv, color, scale],
+  );
+
+  const exportDataUrl = useCallback(
+    (s: Sel): string | null => exportCanvas(s)?.toDataURL("image/png") ?? null,
+    [exportCanvas],
+  );
+
   const finish = useCallback(
     async (action: "copy" | "pin" | "save") => {
       const s = selRef.current;
@@ -455,7 +512,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       // 零 IPC 快路公共参数：选区整数矩形（150% 缩放下坐标可能带半像素，
       // 取整对齐像素网格）+ 无标注判定（含未提交的文字输入）——合成结果
       // 像素与 Rust 侧会话定格帧一致，三个动作都能只传矩形由 Rust 进程内裁剪
-      const noMarks = !shapesRef.current.length && !editingRef.current;
+      // 阴影/边框开启时导出带外扩装饰（尺寸大于选区），必须走画布管线
+      const deco = shadowLv > 0 || borderLv > 0;
+      const noMarks = !shapesRef.current.length && !editingRef.current && !deco;
       const rx = Math.round(s.x);
       const ry = Math.round(s.y);
       const rw = Math.max(1, Math.round(s.w));
@@ -476,7 +535,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             }
           }
           closeWindow();
-          const c = cropCanvas(s);
+          const c = exportCanvas(s);
           if (c) {
             const img = c
               .getContext("2d", { willReadFrequently: true })!
@@ -506,7 +565,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               // 落到下方直传/dataURL 路径
             }
           }
-          const c = cropCanvas(s);
+          const c = exportCanvas(s);
           if (c) {
             const img = c
               .getContext("2d", { willReadFrequently: true })!
@@ -534,7 +593,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             }
           }
           if (!staged) {
-            const c = cropCanvas(s);
+            const c = exportCanvas(s);
             if (c) {
               const img = c
                 .getContext("2d", { willReadFrequently: true })!
@@ -907,13 +966,15 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const tbDragRef = useRef<{ dx: number; dy: number } | null>(null);
   /** 拖动过的工具栏粘住手动位置，直到选区重建（新截图/重新框选）才回自动位 */
   const tbDraggedRef = useRef(false);
-  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [colorOpen, setColorOpen] = useState(false);
+  const [widthOpen, setWidthOpen] = useState(false);
   useLayoutEffect(() => {
     const tb = toolbarRef.current;
     const s = sel;
     if (!tb || !s || tbDraggedRef.current) {
       if (!s) {
-        setPaletteOpen(false);
+        setColorOpen(false);
+        setWidthOpen(false);
         tbDraggedRef.current = false;
       }
       setTbPos(null);
@@ -955,13 +1016,16 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
 
   // 颜色/线宽弹层：工具栏外点击即收
   useEffect(() => {
-    if (!paletteOpen) return;
+    if (!colorOpen && !widthOpen) return;
     const close = (ev: PointerEvent) => {
-      if (!toolbarRef.current?.contains(ev.target as Node)) setPaletteOpen(false);
+      if (!toolbarRef.current?.contains(ev.target as Node)) {
+        setColorOpen(false);
+        setWidthOpen(false);
+      }
     };
     document.addEventListener("pointerdown", close, true);
     return () => document.removeEventListener("pointerdown", close, true);
-  }, [paletteOpen]);
+  }, [colorOpen, widthOpen]);
 
   const strokeBtns =
     tool === "text"
@@ -1023,10 +1087,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           onPointerMove={onTbPointerMove}
           onPointerUp={onTbPointerUp}
         >
-          <span className="np-shot-size">
-            {Math.round(sel.w)} × {Math.round(sel.h)}
-          </span>
-          <span className="np-shot-sep" />
           {TOOLS.map((t) => (
             <button
               key={t.id}
@@ -1039,13 +1099,29 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           ))}
           <span className="np-shot-sep" />
           <button
-            className={`np-shot-tool ${paletteOpen ? "on" : ""}`}
-            title="标注颜色与线宽"
-            onClick={() => setPaletteOpen((v) => !v)}
+            className={`np-shot-tool ${colorOpen ? "on" : ""}`}
+            title="标注颜色"
+            onClick={() => {
+              setColorOpen((v) => !v);
+              setWidthOpen(false);
+            }}
           >
             <span className="np-shot-pickdot" style={{ background: color }} />
           </button>
-          {paletteOpen && (
+          <button
+            className={`np-shot-tool ${widthOpen ? "on" : ""}`}
+            title="线条宽度"
+            onClick={() => {
+              setWidthOpen((v) => !v);
+              setColorOpen(false);
+            }}
+          >
+            <span
+              className="np-shot-wdot"
+              style={{ width: strokeBtns[strokeIdx].px + 4, height: strokeBtns[strokeIdx].px + 4 }}
+            />
+          </button>
+          {colorOpen && (
             <div
               className="np-shot-palette"
               style={
@@ -1065,6 +1141,17 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                   />
                 ))}
               </div>
+            </div>
+          )}
+          {widthOpen && (
+            <div
+              className="np-shot-palette"
+              style={
+                tbPos && tbPos.top * 2 > boot.mh / scale
+                  ? { bottom: "calc(100% + 6px)" }
+                  : { top: "calc(100% + 6px)" }
+              }
+            >
               <div className="np-shot-pal-row">
                 {strokeBtns.map((w) => (
                   <button
@@ -1079,6 +1166,21 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               </div>
             </div>
           )}
+          <span className="np-shot-sep" />
+          <button
+            className={`np-shot-tool ${shadowLv ? "on" : ""}`}
+            title={`阴影（点击切换：${SHADOW_LV_LABEL[shadowLv]}，重复点击调宽度）`}
+            onClick={() => setShadowLv((v) => (v + 1) % 4)}
+          >
+            <AppIcon icon={Layers} />
+          </button>
+          <button
+            className={`np-shot-tool ${borderLv ? "on" : ""}`}
+            title={`边框（点击切换：${SHADOW_LV_LABEL[borderLv]}，重复点击调宽度）`}
+            onClick={() => setBorderLv((v) => (v + 1) % 4)}
+          >
+            <AppIcon icon={Frame} />
+          </button>
           <span className="np-shot-sep" />
           <button className="np-shot-tool" title="撤销（Ctrl+Z）" disabled={!shapes.length} onClick={undo}>
             <AppIcon icon={Undo2} />
