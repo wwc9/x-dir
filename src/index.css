@@ -4665,11 +4665,12 @@ mark.np-gsearch-mark {
   gap: 8px;
 }
 .np-shot-grip {
+  /* 全高拉长的拖拽把手条（圆角只留左缘，与工具栏外形衔接） */
   display: grid;
   place-items: center;
   align-self: stretch;
-  padding: 0 2px;
-  border-radius: var(--np-radius);
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius-lg) 0 0 var(--np-radius-lg);
   color: var(--np-muted);
   cursor: grab;
 }
@@ -4701,13 +4702,15 @@ mark.np-gsearch-mark {
   flex: none;
 }
 .np-shot-tool {
-  width: auto;
-  min-width: 40px;
+  /* 统一固定宽度：两行按钮形成对齐网格（图标列/文字列跨行水平对齐） */
+  width: 42px;
+  flex: none;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 2px;
-  padding: 3px 4px 2px;
+  padding: 3px 0 2px;
   border: none;
   border-radius: var(--np-radius);
   background: transparent;
