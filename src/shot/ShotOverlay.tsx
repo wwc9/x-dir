@@ -220,12 +220,12 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         }
       }
     }
-    // 全局十字线（启动后定位/水平对比，PixPin 同款）：跟随态过光标整幅
-    // 发丝线随光标移动（预选跟随态 sel 恒非空，不能以 !s 为条件），按下
-    // 拖拽/确认选区后即隐——此时选区边框 + 尺寸信息接管
+    // 全局十字线（启动后定位/水平对比）：跟随态过光标整幅发丝线随光标移动
+    // （预选跟随态 sel 恒非空，不能以 !s 为条件），按下拖拽/确认选区后即隐
+    // ——此时选区边框 + 尺寸信息接管。颜色 = 主题 accent（与选区边框同色）
     const mag0 = magRef.current;
     if (followingRef.current && !dNow && mag0) {
-      drawCrosshair(ctx, mag0.x, mag0.y, boot.mw, boot.mh, scale);
+      drawCrosshair(ctx, mag0.x, mag0.y, boot.mw, boot.mh, scale, accentRef.current);
     }
     // 放大镜/取色器（PixPin 惯例）：跟随态与拖拽态显示，确认选区后隐藏；
     // 取样合成画布，已画标注同样可见（所见即所得）
