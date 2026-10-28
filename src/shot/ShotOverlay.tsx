@@ -387,43 +387,66 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           }
           return;
         }
-        // 保存/贴图感知优先路径：RGBA 直传暂存（免 PNG 编码/base64/解码），
-        // 任一环节失败回落 dataURL 路径
-        const cc = cropCanvas(s);
-        const img = cc
-          ? cc
-              .getContext("2d", { willReadFrequently: true })!
-              .getImageData(0, 0, cc.width, cc.height)
-          : null;
-        const c = cc;
+        // 保存/贴图零 IPC 快路优先：无标注（含未提交的文字输入）时合成结果
+        // 像素与 Rust 侧会话定格帧一致，只传选区整数矩形（150% 缩放下坐标
+        // 可能带半像素，取整对齐像素网格）、由 Rust 进程内裁剪——免前端
+        // getImageData（JS 同步读全选区像素）与整幅选区 RGBA 跨进程拷贝；
+        // 任一环节失败回落下方合成直传 / dataURL 路径
+        const noMarks = !shapesRef.current.length && !editingRef.current;
+        const rx = Math.round(s.x);
+        const ry = Math.round(s.y);
+        const rw = Math.max(1, Math.round(s.w));
+        const rh = Math.max(1, Math.round(s.h));
         if (action === "pin") {
-          if (img && c) {
+          if (noMarks) {
             try {
-              await api.shotPinRaw(
-                img.data,
-                c.width,
-                c.height,
-                boot.mx + s.x,
-                boot.my + s.y,
-              );
+              await api.shotPinCrop(rx, ry, rw, rh, boot.mx + rx, boot.my + ry);
+              closeWindow();
+              return;
+            } catch {
+              // 落到下方直传/dataURL 路径
+            }
+          }
+          const c = cropCanvas(s);
+          if (c) {
+            const img = c
+              .getContext("2d", { willReadFrequently: true })!
+              .getImageData(0, 0, c.width, c.height);
+            try {
+              await api.shotPinRaw(img.data, c.width, c.height, boot.mx + rx, boot.my + ry);
               closeWindow();
               return;
             } catch {
               // 落到下方 dataURL 路径
             }
           }
-          await api.shotPin(exportDataUrl(s)!, boot.mx + s.x, boot.my + s.y, s.w, s.h);
+          await api.shotPin(exportDataUrl(s)!, boot.mx + rx, boot.my + ry, rw, rh);
           closeWindow();
         } else {
           let saved: string | null = null;
           let staged = false; // 暂存成功 = 取消对话框时不能回落（否则弹两次对话框）
-          if (img && c) {
+          if (noMarks) {
             try {
-              await api.shotStageRaw(img.data, c.width, c.height);
+              await api.shotStageCrop(rx, ry, rw, rh);
               saved = await api.shotSaveRaw();
               staged = true;
             } catch {
-              staged = false; // 落到下方 dataURL 路径
+              staged = false; // 落到下方合成直传路径
+            }
+          }
+          if (!staged) {
+            const c = cropCanvas(s);
+            if (c) {
+              const img = c
+                .getContext("2d", { willReadFrequently: true })!
+                .getImageData(0, 0, c.width, c.height);
+              try {
+                await api.shotStageRaw(img.data, c.width, c.height);
+                saved = await api.shotSaveRaw();
+                staged = true;
+              } catch {
+                staged = false; // 落到下方 dataURL 路径
+              }
             }
           }
           if (!staged) {

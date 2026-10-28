@@ -780,6 +780,11 @@ export const api = {
     width: number,
     height: number,
   ): Promise<void> => cmd<void>("shot_stage_raw", frameBody(rgba, width, height, 0, 0)),
+  /** 快存暂存（零 IPC）：无标注时只传选区整数矩形（显示器相对物理坐标），
+   *  Rust 进程内从会话定格帧裁剪暂存——免 getImageData 与 RGBA 跨进程拷贝；
+   *  Err（无会话/矩形不合法）时前端回落 shotStageRaw */
+  shotStageCrop: (x: number, y: number, w: number, h: number): Promise<void> =>
+    cmd<void>("shot_stage_crop", { x, y, w, h }),
   /** 保存暂存帧：对话框即时打开，PNG 原生 Fast 编码在对话框期间并行完成，
    *  选完路径即刻写盘（用户取消 = null） */
   shotSaveRaw: (): Promise<string | null> => cmd<string | null>("shot_save_raw"),
@@ -791,6 +796,10 @@ export const api = {
     x: number,
     y: number,
   ): Promise<void> => cmd<void>("shot_pin_raw", frameBody(rgba, width, height, x, y)),
+  /** 贴图快存落位（零 IPC）：选区整数矩形（显示器相对）+ 屏幕落位物理坐标，
+   *  Rust 进程内裁剪定格帧后直接建贴图窗；Err 时前端回落 shotPinRaw */
+  shotPinCrop: (x: number, y: number, w: number, h: number, sx: number, sy: number) =>
+    cmd<void>("shot_pin_crop", { x, y, w, h, sx, sy }),
   /** 注册/更新截图全局热键（启动与设置变更时调用；Err = 键位冲突等） */
   shotRegisterHotkey: (enabled: boolean, hotkey: string) =>
     cmd<void>("shot_register_hotkey", { enabled, hotkey }),

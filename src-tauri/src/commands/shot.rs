@@ -317,12 +317,40 @@ pub(crate) struct SessionFrame {
 pub(crate) fn session_frame_crop(x: i32, y: i32, w: u32, h: u32) -> Option<image::RgbaImage> {
     let g = SESSION_FRAME.lock().unwrap_or_else(|p| p.into_inner());
     let f = g.as_ref()?;
-    let xi = x.clamp(0, f.mw as i32 - 1) as u32;
-    let yi = y.clamp(0, f.mh as i32 - 1) as u32;
-    let wi = w.min(f.mw - xi);
-    let hi = h.min(f.mh - yi);
-    let full = image::RgbaImage::from_raw(f.mw, f.mh, f.rgba.clone())?;
-    Some(image::imageops::crop_imm(&full, xi, yi, wi, hi).to_image())
+    crop_rgba_rows(f.mw, f.mh, &f.rgba, x, y, w as i32, h as i32)
+        .map(|c| image::RgbaImage::from_raw(c.mw, c.mh, c.rgba).expect("裁剪尺寸与数据一致"))
+}
+
+/// 从整幅 RGBA 帧按行拷贝裁剪出子帧（免整帧 clone，矩形钳到帧内，裁出
+/// 至少 1×1；w/h ≤ 0 或载荷长度不符 = None）。快存/贴图零 IPC 路与滚动
+/// 截图首帧共用。独立纯函数供 test。
+pub(crate) fn crop_rgba_rows(
+    mw: u32,
+    mh: u32,
+    rgba: &[u8],
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+) -> Option<SessionFrame> {
+    if mw == 0 || mh == 0 || w <= 0 || h <= 0 || rgba.len() != mw as usize * mh as usize * 4 {
+        return None;
+    }
+    let x0 = x.clamp(0, mw as i32 - 1) as usize;
+    let y0 = y.clamp(0, mh as i32 - 1) as usize;
+    let cw = (w as u32).min(mw - x0 as u32) as usize;
+    let ch = (h as u32).min(mh - y0 as u32) as usize;
+    let stride = mw as usize * 4;
+    let mut out = Vec::with_capacity(cw * ch * 4);
+    for row in y0..y0 + ch {
+        let start = row * stride + x0 * 4;
+        out.extend_from_slice(&rgba[start..start + cw * 4]);
+    }
+    Some(SessionFrame {
+        mw: cw as u32,
+        mh: ch as u32,
+        rgba: out,
+    })
 }
 
 /// 常驻覆盖窗的停靠坐标（虚拟桌面外，任何显示器都够不到）。Windows 把窗口
@@ -759,6 +787,26 @@ pub fn shot_stage_raw(request: tauri::ipc::Request<'_>) -> Result<(), String> {
     Ok(())
 }
 
+/// 零 IPC 快存暂存：无标注时合成结果像素与会话定格帧一致，前端只传选区
+/// 整数矩形，Rust 进程内从 SESSION_FRAME 按行裁剪进 STAGED_FRAME——免前端
+/// getImageData（JS 同步读全选区像素）与整幅选区 RGBA 跨进程拷贝；有标注
+/// 或本命令失败时前端仍走 shot_stage_raw 合成直传
+#[tauri::command]
+pub fn shot_stage_crop(x: i32, y: i32, w: i32, h: i32) -> Result<(), String> {
+    let cropped = {
+        let g = SESSION_FRAME.lock().unwrap_or_else(|p| p.into_inner());
+        let f = g.as_ref().ok_or("无会话定格帧")?;
+        crop_rgba_rows(f.mw, f.mh, &f.rgba, x, y, w, h).ok_or("裁剪矩形不合法")?
+    };
+    log::debug!(
+        "快存暂存：定格帧裁剪 {}×{}（零 IPC 路）",
+        cropped.mw,
+        cropped.mh
+    );
+    *STAGED_FRAME.lock().unwrap_or_else(|p| p.into_inner()) = Some(cropped);
+    Ok(())
+}
+
 /// 保存暂存帧：对话框立即打开（帧已在内存），PNG 编码（Fast 档）在对话框
 /// 打开期间于后台线程并行执行，选完路径即刻写盘
 #[tauri::command]
@@ -959,15 +1007,60 @@ pub fn shot_pin_raw(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<
             h
         ));
     }
+    pin_from_frame(
+        &app,
+        SessionFrame {
+            mw: w as u32,
+            mh: h as u32,
+            rgba: rgba.to_vec(),
+        },
+        x,
+        y,
+    )
+}
+
+/// 贴图零 IPC 快路：无标注时前端只传选区整数矩形与屏幕落位，Rust 进程内
+/// 从会话定格帧裁剪——免前端 getImageData 与整幅选区 RGBA 跨进程拷贝；
+/// 失败时前端回落 shot_pin_raw / shot_pin dataURL 路径
+#[tauri::command]
+pub fn shot_pin_crop(
+    app: AppHandle,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    sx: i32,
+    sy: i32,
+) -> Result<(), String> {
+    if w < 8 || h < 8 || w > 20000 || h > 20000 {
+        return Err("贴图尺寸非法".into());
+    }
+    let cropped = {
+        let g = SESSION_FRAME.lock().unwrap_or_else(|p| p.into_inner());
+        let f = g.as_ref().ok_or("无会话定格帧")?;
+        crop_rgba_rows(f.mw, f.mh, &f.rgba, x, y, w, h).ok_or("贴图裁剪矩形不合法")?
+    };
+    log::debug!(
+        "贴图快存：定格帧裁剪 {}×{}（零 IPC 路）",
+        cropped.mw,
+        cropped.mh
+    );
+    pin_from_frame(&app, cropped, sx, sy)
+}
+
+/// RGBA 帧落盘为贴图临时 BMP 并建贴图窗（shot_pin_raw 直传与 shot_pin_crop
+/// 快存共用；BMP 编码 memcpy 级，浏览器原生显示）
+fn pin_from_frame(app: &AppHandle, frame: SessionFrame, x: i32, y: i32) -> Result<(), String> {
+    let (w, h) = (frame.mw as i32, frame.mh as i32);
     let img =
-        image::RgbaImage::from_raw(w as u32, h as u32, rgba.to_vec()).ok_or("帧尺寸与数据不符")?;
+        image::RgbaImage::from_raw(frame.mw, frame.mh, frame.rgba).ok_or("帧尺寸与数据不符")?;
     let dir = shot_dir();
     std::fs::create_dir_all(&dir).map_err(|e| format!("创建临时目录失败：{e}"))?;
     let ts = millis();
     let file = dir.join(format!("pin_{ts}.bmp"));
     img.save_with_format(&file, image::ImageFormat::Bmp)
         .map_err(|e| format!("贴图写盘失败：{e}"))?;
-    spawn_pin_window(&app, &file, x, y, w, h)
+    spawn_pin_window(app, &file, x, y, w, h)
 }
 
 /// 本地时间戳 yyyymmdd_hhmmss（GetLocalTime，免 chrono；同 fs 模块口径）
@@ -1143,5 +1236,67 @@ mod copy_header_tests {
         let (w, h, x, y, rgba) = parse_frame_header(&b).expect("非零尺寸应通过");
         assert_eq!((w, h, x, y), (10, 5, 0, 0));
         assert!(rgba.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod crop_rows_tests {
+    use super::crop_rgba_rows;
+
+    /// 4×3 帧像素 = [y*40 + x*10 + c]（c = 通道序），便于逐字节断言
+    fn frame() -> Vec<u8> {
+        let mut v = Vec::with_capacity(4 * 3 * 4);
+        for y in 0..3u8 {
+            for x in 0..4u8 {
+                v.extend_from_slice(&[x, y, x + y, 255]);
+            }
+        }
+        v
+    }
+
+    #[test]
+    fn 整幅裁剪等于原帧() {
+        let c = crop_rgba_rows(4, 3, &frame(), 0, 0, 4, 3).expect("应成功");
+        assert_eq!((c.mw, c.mh), (4, 3));
+        assert_eq!(c.rgba, frame());
+    }
+
+    #[test]
+    fn 偏移裁剪逐行拷贝正确() {
+        // 裁 (1,1) 起 2×1：应取到帧内像素 (1,1) 与 (2,1)
+        let c = crop_rgba_rows(4, 3, &frame(), 1, 1, 2, 1).expect("应成功");
+        assert_eq!((c.mw, c.mh), (2, 1));
+        assert_eq!(c.rgba, vec![1, 1, 2, 255, 2, 1, 3, 255]);
+    }
+
+    #[test]
+    fn 越界矩形钳制到帧内() {
+        // 负起点钳到 0；宽高超出右/下边界截断
+        let c = crop_rgba_rows(4, 3, &frame(), -5, -7, 100, 100).expect("应成功");
+        assert_eq!((c.mw, c.mh), (4, 3));
+        assert_eq!(c.rgba, frame());
+        let c = crop_rgba_rows(4, 3, &frame(), 2, 1, 100, 100).expect("应成功");
+        assert_eq!((c.mw, c.mh), (2, 2));
+        assert_eq!(
+            c.rgba,
+            vec![2, 1, 3, 255, 3, 1, 4, 255, 2, 2, 4, 255, 3, 2, 5, 255]
+        );
+    }
+
+    #[test]
+    fn 非法入参拒绝() {
+        assert!(
+            crop_rgba_rows(4, 3, &frame(), 0, 0, 0, 3).is_none(),
+            "宽 0 拒绝"
+        );
+        assert!(
+            crop_rgba_rows(4, 3, &frame(), 0, 0, 4, -1).is_none(),
+            "负高拒绝"
+        );
+        assert!(crop_rgba_rows(0, 0, &[], 0, 0, 1, 1).is_none(), "空帧拒绝");
+        assert!(
+            crop_rgba_rows(4, 3, &[0u8; 47], 0, 0, 1, 1).is_none(),
+            "载荷长度不符拒绝"
+        );
     }
 }
