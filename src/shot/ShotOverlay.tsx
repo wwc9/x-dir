@@ -73,16 +73,16 @@ const SHADOW_W = [0, 10, 18, 30];
 const BORDER_W = [0, 3, 6, 10];
 const SHADOW_LV_LABEL = ["关", "弱", "中", "强"];
 
-const TOOLS: { id: ShotTool; label: string; icon: typeof Square }[] = [
-  { id: "select", label: "选择 / 移动选区", icon: MousePointer2 },
-  { id: "rect", label: "矩形", icon: Square },
-  { id: "ellipse", label: "椭圆", icon: Circle },
-  { id: "arrow", label: "箭头", icon: ArrowUpRight },
-  { id: "pen", label: "画笔", icon: Pencil },
-  { id: "marker", label: "马克笔", icon: Highlighter },
-  { id: "text", label: "文字", icon: Type },
-  { id: "mosaic", label: "马赛克", icon: Grip },
-  { id: "blur", label: "模糊", icon: Waves },
+const TOOLS: { id: ShotTool; label: string; text: string; icon: typeof Square }[] = [
+  { id: "select", label: "选择 / 移动选区", text: "选择", icon: MousePointer2 },
+  { id: "rect", label: "矩形", text: "矩形", icon: Square },
+  { id: "ellipse", label: "椭圆", text: "椭圆", icon: Circle },
+  { id: "arrow", label: "箭头", text: "箭头", icon: ArrowUpRight },
+  { id: "pen", label: "画笔", text: "画笔", icon: Pencil },
+  { id: "marker", label: "马克笔", text: "马克", icon: Highlighter },
+  { id: "text", label: "文字", text: "文字", icon: Type },
+  { id: "mosaic", label: "马赛克", text: "马赛克", icon: Grip },
+  { id: "blur", label: "模糊", text: "模糊", icon: Waves },
 ];
 
 /** 开始一个标注草稿（pointerdown；坐标相对选区，物理像素） */
@@ -966,15 +966,39 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const tbDragRef = useRef<{ dx: number; dy: number } | null>(null);
   /** 拖动过的工具栏粘住手动位置，直到选区重建（新截图/重新框选）才回自动位 */
   const tbDraggedRef = useRef(false);
-  const [colorOpen, setColorOpen] = useState(false);
-  const [widthOpen, setWidthOpen] = useState(false);
+  /** 弹层设置面板：颜色/线宽/阴影/边框，锚定触发按钮正上方（越界翻转/钳屏） */
+  const [panel, setPanel] = useState<{
+    kind: "color" | "width" | "shadow" | "border";
+    cx: number;
+    btnTop: number;
+    btnBottom: number;
+    left: number;
+    top: number;
+  } | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const openPanel =
+    (kind: "color" | "width" | "shadow" | "border") =>
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      const r = e.currentTarget.getBoundingClientRect();
+      setPanel((prev) =>
+        prev?.kind === kind
+          ? null
+          : {
+              kind,
+              cx: r.x + r.width / 2,
+              btnTop: r.top,
+              btnBottom: r.bottom,
+              left: r.x + r.width / 2,
+              top: r.top - 70,
+            },
+      );
+    };
   useLayoutEffect(() => {
     const tb = toolbarRef.current;
     const s = sel;
     if (!tb || !s || tbDraggedRef.current) {
       if (!s) {
-        setColorOpen(false);
-        setWidthOpen(false);
+        setPanel(null);
         tbDraggedRef.current = false;
       }
       setTbPos(null);
@@ -1014,18 +1038,30 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     toolbarRef.current?.releasePointerCapture(e.pointerId);
   };
 
-  // 颜色/线宽弹层：工具栏外点击即收
+  // 弹层面板：工具栏外点击即收
   useEffect(() => {
-    if (!colorOpen && !widthOpen) return;
+    if (!panel) return;
     const close = (ev: PointerEvent) => {
-      if (!toolbarRef.current?.contains(ev.target as Node)) {
-        setColorOpen(false);
-        setWidthOpen(false);
-      }
+      if (!toolbarRef.current?.contains(ev.target as Node)) setPanel(null);
     };
     document.addEventListener("pointerdown", close, true);
     return () => document.removeEventListener("pointerdown", close, true);
-  }, [colorOpen, widthOpen]);
+  }, [panel]);
+  // 面板挂载后按实际宽高钳制：水平居中于触发钮且不出屏；按钮正上方放不下
+  // （工具栏被拖到贴屏顶）翻到按钮下方
+  useLayoutEffect(() => {
+    if (!panel) return;
+    const el = panelRef.current;
+    if (!el) return;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const left = Math.max(8, Math.min(panel.cx - w / 2, vw - w - 8));
+    let top = panel.btnTop - h - 6;
+    if (top < 8) top = Math.min(panel.btnBottom + 6, vh - h - 8);
+    if (left !== panel.left || top !== panel.top) setPanel({ ...panel, left, top });
+  }, [panel]);
 
   const strokeBtns =
     tool === "text"
@@ -1095,98 +1131,53 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               onClick={() => setTool(t.id)}
             >
               <AppIcon icon={t.icon} />
+              <span className="np-shot-tool-t">{t.text}</span>
             </button>
           ))}
           <span className="np-shot-sep" />
           <button
-            className={`np-shot-tool ${colorOpen ? "on" : ""}`}
+            className={`np-shot-tool ${panel?.kind === "color" ? "on" : ""}`}
             title="标注颜色"
-            onClick={() => {
-              setColorOpen((v) => !v);
-              setWidthOpen(false);
-            }}
+            onClick={openPanel("color")}
           >
             <span className="np-shot-pickdot" style={{ background: color }} />
+            <span className="np-shot-tool-t">颜色</span>
           </button>
           <button
-            className={`np-shot-tool ${widthOpen ? "on" : ""}`}
+            className={`np-shot-tool ${panel?.kind === "width" ? "on" : ""}`}
             title="线条宽度"
-            onClick={() => {
-              setWidthOpen((v) => !v);
-              setColorOpen(false);
-            }}
+            onClick={openPanel("width")}
           >
             <span
               className="np-shot-wdot"
               style={{ width: strokeBtns[strokeIdx].px + 4, height: strokeBtns[strokeIdx].px + 4 }}
             />
+            <span className="np-shot-tool-t">线宽</span>
           </button>
-          {colorOpen && (
-            <div
-              className="np-shot-palette"
-              style={
-                tbPos && tbPos.top * 2 > boot.mh / scale
-                  ? { bottom: "calc(100% + 6px)" }
-                  : { top: "calc(100% + 6px)" }
-              }
-            >
-              <div className="np-shot-pal-row">
-                {SHOT_PALETTE.map((c) => (
-                  <button
-                    key={c}
-                    className={`np-shot-dot ${color === c ? "on" : ""}`}
-                    style={{ background: c }}
-                    title="标注颜色"
-                    onClick={() => setColor(c)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-          {widthOpen && (
-            <div
-              className="np-shot-palette"
-              style={
-                tbPos && tbPos.top * 2 > boot.mh / scale
-                  ? { bottom: "calc(100% + 6px)" }
-                  : { top: "calc(100% + 6px)" }
-              }
-            >
-              <div className="np-shot-pal-row">
-                {strokeBtns.map((w) => (
-                  <button
-                    key={w.v}
-                    className={`np-shot-tool ${strokeIdx === w.v ? "on" : ""}`}
-                    title={w.title}
-                    onClick={() => setStrokeIdx(w.v)}
-                  >
-                    <span className="np-shot-wdot" style={{ width: w.px, height: w.px }} />
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          <span className="np-shot-sep" />
           <button
             className={`np-shot-tool ${shadowLv ? "on" : ""}`}
-            title={`阴影（点击切换：${SHADOW_LV_LABEL[shadowLv]}，重复点击调宽度）`}
-            onClick={() => setShadowLv((v) => (v + 1) % 4)}
+            title="阴影"
+            onClick={openPanel("shadow")}
           >
             <AppIcon icon={Layers} />
+            <span className="np-shot-tool-t">阴影</span>
           </button>
           <button
             className={`np-shot-tool ${borderLv ? "on" : ""}`}
-            title={`边框（点击切换：${SHADOW_LV_LABEL[borderLv]}，重复点击调宽度）`}
-            onClick={() => setBorderLv((v) => (v + 1) % 4)}
+            title="边框"
+            onClick={openPanel("border")}
           >
             <AppIcon icon={Frame} />
+            <span className="np-shot-tool-t">边框</span>
           </button>
           <span className="np-shot-sep" />
           <button className="np-shot-tool" title="撤销（Ctrl+Z）" disabled={!shapes.length} onClick={undo}>
             <AppIcon icon={Undo2} />
+            <span className="np-shot-tool-t">撤销</span>
           </button>
           <button className="np-shot-tool" title="重做（Ctrl+Y）" disabled={!redoStack.length} onClick={redo}>
             <AppIcon icon={Redo2} />
+            <span className="np-shot-tool-t">重做</span>
           </button>
           <span className="np-shot-sep" />
           <button
@@ -1195,6 +1186,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             onClick={() => void finish("pin")}
           >
             <AppIcon icon={Pin} />
+            <span className="np-shot-tool-t">贴图</span>
           </button>
           <button
             className="np-shot-tool np-shot-primary"
@@ -1202,6 +1194,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             onClick={() => void finish("copy")}
           >
             <AppIcon icon={Copy} />
+            <span className="np-shot-tool-t">复制</span>
           </button>
           <button
             className="np-shot-tool np-shot-primary"
@@ -1209,6 +1202,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             onClick={() => void finish("save")}
           >
             <AppIcon icon={Save} />
+            <span className="np-shot-tool-t">保存</span>
           </button>
           <button
             className="np-shot-tool np-shot-primary"
@@ -1216,7 +1210,61 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             onClick={startScroll}
           >
             <AppIcon icon={GalleryVerticalEnd} />
+            <span className="np-shot-tool-t">滚动</span>
           </button>
+          {panel && (
+            <div
+              ref={panelRef}
+              className="np-shot-palette"
+              style={{ position: "fixed", left: panel.left, top: panel.top }}
+            >
+              <div className="np-shot-pal-row">
+                {panel.kind === "color" &&
+                  SHOT_PALETTE.map((c) => (
+                    <button
+                      key={c}
+                      className={`np-shot-dot ${color === c ? "on" : ""}`}
+                      style={{ background: c }}
+                      title="标注颜色"
+                      onClick={() => {
+                        setColor(c);
+                        setPanel(null);
+                      }}
+                    />
+                  ))}
+                {panel.kind === "width" &&
+                  strokeBtns.map((w) => (
+                    <button
+                      key={w.v}
+                      className={`np-shot-tool ${strokeIdx === w.v ? "on" : ""}`}
+                      title={w.title}
+                      onClick={() => {
+                        setStrokeIdx(w.v);
+                        setPanel(null);
+                      }}
+                    >
+                      <span className="np-shot-wdot" style={{ width: w.px, height: w.px }} />
+                    </button>
+                  ))}
+                {(panel.kind === "shadow" || panel.kind === "border") &&
+                  SHADOW_LV_LABEL.map((lbl, v) => (
+                    <button
+                      key={v}
+                      className={`np-shot-tool ${
+                        (panel.kind === "shadow" ? shadowLv : borderLv) === v ? "on" : ""
+                      }`}
+                      title={lbl}
+                      onClick={() => {
+                        (panel.kind === "shadow" ? setShadowLv : setBorderLv)(v);
+                        setPanel(null);
+                      }}
+                    >
+                      <span className="np-shot-tool-t">{lbl}</span>
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
           <button
             className="np-shot-tool np-shot-danger"
             title="取消截图（Esc）"

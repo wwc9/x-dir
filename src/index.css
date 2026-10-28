@@ -4647,8 +4647,7 @@ mark.np-gsearch-mark {
 }
 /* 颜色/线宽弹出选择面板（锚定工具栏，下开/上翻随工具栏在屏上半/下半） */
 .np-shot-palette {
-  position: absolute;
-  left: 0;
+  position: fixed;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -4689,15 +4688,23 @@ mark.np-gsearch-mark {
   flex: none;
 }
 .np-shot-tool {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
+  width: auto;
+  min-width: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 6px 3px;
   border: none;
   border-radius: var(--np-radius);
   background: transparent;
   color: var(--np-fg);
   cursor: pointer;
+}
+.np-shot-tool-t {
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
 }
 .np-shot-tool:hover:not(:disabled) {
   background: var(--np-hover);
