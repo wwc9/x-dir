@@ -252,15 +252,25 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       const fs = Math.max(12, Math.round(12 * scale));
       ctx.font = `${fs}px "Segoe UI", "Microsoft YaHei", sans-serif`;
       const tw = ctx.measureText(text).width;
-      const pw = Math.round(tw + 20 * scale);
-      const ph = Math.round(fs * 1.8);
+      const padX = Math.round(12 * scale);
+      const pw = Math.round(tw + padX * 2);
+      const ph = Math.round(fs * 1.9);
       const p = pillAnchor(rc, pw, ph, allowBottom);
-      ctx.fillStyle = "rgba(0,0,0,0.75)";
-      ctx.fillRect(p.x, p.y, pw, ph);
+      // 半透明黑色圆角胶囊（PixPin 参考口径）
+      ctx.fillStyle = "rgba(0,0,0,0.65)";
+      const r = ph / 2;
+      ctx.beginPath();
+      ctx.moveTo(p.x + r, p.y);
+      ctx.arcTo(p.x + pw, p.y, p.x + pw, p.y + ph, r);
+      ctx.arcTo(p.x + pw, p.y + ph, p.x, p.y + ph, r);
+      ctx.arcTo(p.x, p.y + ph, p.x, p.y, r);
+      ctx.arcTo(p.x, p.y, p.x + pw, p.y, r);
+      ctx.closePath();
+      ctx.fill();
       ctx.fillStyle = "#fff";
       ctx.textBaseline = "middle";
       ctx.textAlign = "left";
-      ctx.fillText(text, p.x + 10 * scale, p.y + ph / 2);
+      ctx.fillText(text, p.x + padX, p.y + ph / 2);
     };
     if (followingRef.current && s && !dNow && !(s.w === boot.mw && s.h === boot.mh)) {
       drawPill(`窗口 (${s.x}, ${s.y}) · ${s.w} × ${s.h}`, s, true);
