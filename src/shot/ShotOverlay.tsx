@@ -636,17 +636,28 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   );
 
   // ── 滚动长截图（§3.6 二期 B 批）：以当前选区开滚动会话，覆盖窗由 Rust 侧
-  // 隐藏并接管后续流程（浮条窗 → 拼接 → 结果窗）────────────────────────────
+  // 隐藏并接管后续流程（浮条窗 → 拼接 → 结果窗）。两段式：begin 装钩+收场，
+  // launch 建浮条起循环（间隙让主循环把覆盖窗停靠消息处理完，防 build 卡死）
   const startScroll = useCallback(() => {
     const s = selRef.current;
     if (!s || busy) return;
     setBusy(true);
-    void api
-      .shotScrollBegin(Math.round(s.x), Math.round(s.y), Math.round(s.w), Math.round(s.h), boot.mx, boot.my)
-      .catch((e) => {
+    void (async () => {
+      try {
+        await api.shotScrollBegin(
+          Math.round(s.x),
+          Math.round(s.y),
+          Math.round(s.w),
+          Math.round(s.h),
+          boot.mx,
+          boot.my,
+        );
+        await api.shotScrollLaunch();
+      } catch (e) {
         setSavedTip(`滚动截图启动失败：${String(e)}`);
         setBusy(false);
-      });
+      }
+    })();
   }, [busy, boot.mx, boot.my]);
 
   // ── 撤销 / 重做 ──────────────────────────────────────────────────────────

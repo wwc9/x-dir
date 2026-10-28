@@ -156,8 +156,9 @@ PixPin 闭源；electron-screenshots（MIT）深度绑定 Electron API 无法用
     ShareX 思路自研，不读 GPL 实现）。定案流程：框选滚动区 → 点工具栏「滚动
     截图」→ 覆盖窗隐藏、弹控制浮条窗（label `shot-scroll`）→ WH_MOUSE_LL 低级
     鼠标钩子监听用户滚轮（钩子回调只写静态标记即刻返回；只响应光标在选区内的
-    滚轮——滚轮经 Win10+ 悬停滚动落到光标下目标窗）→ Rust 循环线程〔下滚后静默
-    240ms 合并连滚/惯性 → capture_region 实时捕获 → prev 下部 1/3 高的双窄竖条
+    滚轮——滚轮经 Win10+ 悬停滚动落到光标下目标窗）→ Rust 循环线程〔滚动进行中
+    每 ≥150ms 流式增量捕获（帧间行程小必在匹配域内）+ 停歇 ≥240ms 收尾帧
+    → capture_region 实时捕获 → prev 下部 1/3 高的双窄竖条
     （左右 1/4 处，规避开居中 sticky header）灰度 SAD 搜索求有符号位移 dy →
     dy≥2（下滚）追加 cur 底部新内容；dy≤-2（上滚回看）只重定基准不追加〕→
     下滚后 dy 连续 3 帧为 0（到底）/ 浮条「完成」/ 高度上限 20000px / 动态内容
@@ -165,8 +166,10 @@ PixPin 闭源；electron-screenshots（MIT）深度绑定 Electron API 无法用
     结果窗（label `shot-result`：等比显示区内滚动 + 复制/保存/贴图/关闭，不回
     覆盖窗标注流程——长图标注低频，与 PixPin 一致）；贴图 = 复制专属副本走
     pin 窗、初始按 80% 屏幅适配（PinBoot.zoom，ZOOM_MIN 放宽 0.02）。匹配/拼接
-    纯逻辑带 cargo test（正/负位移求解/到底/动态拒绝/缓冲追加）。已知限制：依赖
-    Win10+ 悬停滚动默认开启；不含固定栏自动检测与视差修复
+    纯逻辑带 cargo test（正/负位移求解/到底/动态拒绝/缓冲追加）。启动两段式
+    （begin 校验装钩收场 / launch 延时建浮条）——蒙层未离屏即建窗实测卡死；
+    收尾浮条用 destroy；5 分钟无活动自动收场。已知限制：依赖 Win10+ 悬停滚动
+    默认开启；不含固定栏自动检测与视差修复
   - **C 批（中项，可与 B 并行）OCR 文字识别**：Windows.Media.Ocr（Win10+ 系统
     组件，零新依赖、无分发协议问题，windows crate 开 Media_Ocr feature）；
     shot 工具栏加「识别文字」→ 选区合成图喂 OcrEngine → 文本写剪贴板 + toast。

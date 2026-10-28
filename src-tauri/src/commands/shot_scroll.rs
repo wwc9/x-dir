@@ -28,14 +28,22 @@ use super::shot::{MonRect, local_stamp, millis, monitor_at, shot_dir};
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, GetMessageW, MSG, MSLLHOOKSTRUCT, PostThreadMessageW, SetWindowsHookExW,
-    UnhookWindowsHookEx, WH_MOUSE_LL, WM_MOUSEWHEEL, WM_QUIT,
+    CallNextHookEx, GetMessageW, MSG, MSLLHOOKSTRUCT, PM_NOREMOVE, PeekMessageW,
+    PostThreadMessageW, SetWindowsHookExW, UnhookWindowsHookEx, WH_MOUSE_LL, WM_MOUSEWHEEL,
+    WM_QUIT,
 };
 
 /// 长图高度上限（物理像素，§3.6 定案 20000）
 const MAX_H: u32 = 20000;
-/// 下滚事件后的静默窗：滚轮停歇此时长才捕获（连滚/惯性多格合并为一帧）
+/// 下滚事件后的静默窗：滚轮停歇此时长才收尾帧（连滚/惯性多格合并）
 const QUIET: Duration = Duration::from_millis(240);
+/// 滚动进行中的流式增量帧：最小捕获间隔（每帧行程小，必落在匹配域内——
+/// 首版只做停歇合并，一格连滚 > 选区高时帧间无重叠、匹配必败，实测事故）
+const STREAM_GAP: Duration = Duration::from_millis(150);
+/// 流式帧的单击渲染等待
+const TICK_SETTLE: Duration = Duration::from_millis(60);
+/// 无滚轮活动的自动收场时限（兜底：钩子被系统摘除等异常不再永久挂死）
+const IDLE_TIMEOUT: Duration = Duration::from_secs(300);
 /// 循环线程轮询节奏
 const POLL: Duration = Duration::from_millis(20);
 /// 到底判定：下滚后位移为 0 的连续捕获帧数
@@ -45,17 +53,24 @@ const BAD_STREAK: u32 = 2;
 
 /// 0=滚动中 1=请求完成（用已拼内容出结果）2=请求取消（丢弃）
 static SCROLL_FLAG: AtomicU8 = AtomicU8::new(0);
+/// begin 与 launch 两段间的会话载荷（定格图裁剪 + 几何），launch 取走即清；
+/// begin 重入（载荷未消费）即拒绝，防重复装钩
+type ScrollPayload = (RgbaImage, u32, u32, u32, u32, MonRect);
+static SCROLL_PENDING: Mutex<Option<ScrollPayload>> = Mutex::new(None);
 /// 钩子反应区 = 选区全局物理坐标（x, y, w, h）——光标在内才响应滚轮，
 /// 滚轮落点即目标窗口（Win10+ 悬停滚动），光标挪出选区不误触
 static HOOK_ZONE: Mutex<(i32, i32, i32, i32)> = Mutex::new((0, 0, 0, 0));
 /// 最近一次钩内下滚时刻（None = 会话尚无下滚）
 static WHEEL_DOWN: Mutex<Option<Instant>> = Mutex::new(None);
+/// 最近一次捕获时刻（流式帧间隔节流）
+static LAST_CAPTURE: Mutex<Option<Instant>> = Mutex::new(None);
 /// 待捕获 / 上滚标记（钩回调置位，循环线程消费后清零）
 static WHEEL_PEND: AtomicBool = AtomicBool::new(false);
 static WHEEL_UP: AtomicBool = AtomicBool::new(false);
-/// 钩子线程 id（收尾 PostThreadMessageW WM_QUIT）与安装结果
+/// 钩子线程 id（收尾 PostThreadMessageW WM_QUIT）
 static HOOK_TID: AtomicU32 = AtomicU32::new(0);
-static HOOK_OK: AtomicBool = AtomicBool::new(false);
+/// 钩子收到的选区内滚轮事件计数（诊断：捕获间隔期计数冻结 = 钩子被系统摘除）
+static HOOK_TICKS: AtomicU32 = AtomicU32::new(0);
 
 // ── 用户滚轮监听（WH_MOUSE_LL 低级钩子）─────────────────────────────────────
 
@@ -68,6 +83,7 @@ unsafe extern "system" fn wheel_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
             let info = &*(lparam.0 as *const MSLLHOOKSTRUCT);
             let (zx, zy, zw, zh) = *HOOK_ZONE.lock().unwrap_or_else(|e| e.into_inner());
             if info.pt.x >= zx && info.pt.x < zx + zw && info.pt.y >= zy && info.pt.y < zy + zh {
+                HOOK_TICKS.fetch_add(1, Ordering::Relaxed);
                 let delta = (info.mouseData >> 16) as u16 as i16;
                 if delta < 0 {
                     if let Ok(mut t) = WHEEL_DOWN.lock() {
@@ -83,20 +99,35 @@ unsafe extern "system" fn wheel_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
     }
 }
 
-/// 钩子线程：装钩 + 消息泵（GetMessageW 阻塞等 WM_QUIT），退出时卸钩
-fn spawn_wheel_hook() -> std::thread::JoinHandle<()> {
-    std::thread::spawn(|| unsafe {
+/// 装钩 + 握手：钩子线程装 WH_MOUSE_LL 后经 channel 回执，调用方至多等 1s。
+/// 首版用 TID/HOOK_OK 两静态轮询——TID 先于装钩置位，循环线程几乎必然在
+/// HOOK_OK 置位前误判「装钩失败」秒关浮条（2026-10-28 实测闪退根因），改握手。
+/// 返回 false（装钩失败/超时）时调用方必须仍 quit_hook 兜底（超时挂死情形）。
+fn install_wheel_hook() -> bool {
+    let (tx, rx) = std::sync::mpsc::channel::<bool>();
+    std::thread::spawn(move || unsafe {
         HOOK_TID.store(GetCurrentThreadId(), Ordering::Relaxed);
-        match SetWindowsHookExW(WH_MOUSE_LL, Some(wheel_proc), None, 0) {
-            Ok(hook) => {
-                HOOK_OK.store(true, Ordering::Relaxed);
-                let mut msg = MSG::default();
-                while GetMessageW(&mut msg, None, 0, 0).as_bool() {}
-                let _ = UnhookWindowsHookEx(hook);
-            }
-            Err(_) => HOOK_OK.store(false, Ordering::Relaxed),
+        // 先 PeekMessage 一拍（PM_NOREMOVE 即建线程消息队列）：确保此后 quit
+        // 的 PostThreadMessageW 必达，钩子线程总能收到 WM_QUIT 退出卸钩
+        let mut msg = MSG::default();
+        let _ = PeekMessageW(&mut msg, None, 0, 0, PM_NOREMOVE);
+        let hook = SetWindowsHookExW(WH_MOUSE_LL, Some(wheel_proc), None, 0);
+        let ok = hook.is_ok();
+        let _ = tx.send(ok);
+        if let Ok(hook) = hook {
+            while GetMessageW(&mut msg, None, 0, 0).as_bool() {}
+            let _ = UnhookWindowsHookEx(hook);
         }
-    })
+    });
+    match rx.recv_timeout(Duration::from_secs(1)) {
+        Ok(true) => true,
+        Ok(false) => false,
+        Err(_) => {
+            log::error!("滚动截图：滚轮钩子安装握手超时");
+            quit_hook();
+            false
+        }
+    }
 }
 
 /// 令钩子线程退出消息泵（WM_QUIT 投给钩子线程 id）
@@ -104,7 +135,9 @@ fn quit_hook() {
     let tid = HOOK_TID.load(Ordering::Relaxed);
     if tid != 0 {
         unsafe {
-            let _ = PostThreadMessageW(tid, WM_QUIT, WPARAM(0), LPARAM(0));
+            if let Err(e) = PostThreadMessageW(tid, WM_QUIT, WPARAM(0), LPARAM(0)) {
+                log::error!("滚动截图：滚轮钩子退出通知失败：{e}");
+            }
         }
     }
 }
@@ -156,8 +189,12 @@ fn match_scroll_dy(prev: &RgbaImage, cur: &RgbaImage) -> Option<i32> {
             continue;
         }
         let sad = total as f32 / cnt as f32;
-        if sad < best_sad {
-            best_sad = sad;
+        // 并列（±0.25 灰阶）取 |dy| 更小者：重复行样式的 UI（列表/表格）易在
+        // 大位移处出现同分误配，滚动帧间位移小者概率远高（流式帧行程本就小）
+        if sad < best_sad - 0.25
+            || (sad <= best_sad + 0.25 && d.unsigned_abs() < best_dy.unsigned_abs())
+        {
+            best_sad = best_sad.min(sad);
             best_dy = d;
         }
     }
@@ -219,7 +256,20 @@ pub fn shot_scroll_begin(
     mx: i32,
     my: i32,
 ) -> Result<(), String> {
-    if app.get_webview_window("shot-scroll").is_some() {
+    // 浮条窗在 = 会话进行中（flag=0）；flag≠0 的残留浮条是 cancel/finish 收尾
+    // close 未奏效的僵尸（实测 wry 偶发），销毁后放行
+    if let Some(w) = app.get_webview_window("shot-scroll") {
+        if SCROLL_FLAG.load(Ordering::Relaxed) == 0 {
+            return Err("滚动截图进行中".into());
+        }
+        log::warn!("滚动截图：清理残留浮条窗（僵尸收尾）");
+        let _ = w.destroy();
+    }
+    if SCROLL_PENDING
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .is_some()
+    {
         return Err("滚动截图进行中".into());
     }
     if rw < 96 || rh < 80 {
@@ -233,61 +283,104 @@ pub fn shot_scroll_begin(
     // 会话捕获后留在内存，这里直接裁，无文件 IO）
     let base: RgbaImage = super::shot::session_frame_crop(rx, ry, rw as u32, rh as u32)
         .ok_or("无进行中的截图会话")?;
+    log::info!("滚动截图开始：选区 ({rx},{ry}) {rw}×{rh} @显示器 ({mx},{my})");
 
-    // 覆盖窗退场（常驻窗停靠回屏幕外，end_session 即释放内存定格帧；base 已
-    // 在内存不受影响）
-    super::shot::end_session(&app);
-
-    // 钩子反应区 = 选区全局物理坐标
+    // 钩子反应区 = 选区全局物理坐标；会话静态复位（装钩前，防旧值串场）
     *HOOK_ZONE.lock().unwrap_or_else(|e| e.into_inner()) = (mon.x + rx, mon.y + ry, rw, rh);
     WHEEL_DOWN.lock().unwrap_or_else(|e| e.into_inner()).take();
     WHEEL_PEND.store(false, Ordering::Relaxed);
     WHEEL_UP.store(false, Ordering::Relaxed);
     HOOK_TID.store(0, Ordering::Relaxed);
-    HOOK_OK.store(false, Ordering::Relaxed);
     SCROLL_FLAG.store(0, Ordering::Relaxed);
-    show_scrollbar_window(&app, &mon)?;
 
+    // 装钩先行（channel 握手，至多 1s）：失败直接报错返回——此刻覆盖窗尚未
+    // 收场，用户不丢截图，可直接改用普通复制/保存
+    if !install_wheel_hook() {
+        return Err("滚动截图启动失败：无法监听鼠标滚轮".into());
+    }
+
+    // 覆盖窗退场（常驻窗停靠回屏幕外，end_session 即释放内存定格帧；base 已
+    // 在内存不受影响）。停靠是投给事件循环的异步消息，必须等主循环把窗口真正
+    // 摘离屏幕后才得起建浮条窗——实测蒙层在场时 build() 泵消息永久卡死（贴图
+    // 同款坑，shot.rs 在案），故拆两段命令由前端顺序调用（贴图 finish 流同款
+    // 间隙）
+    super::shot::end_session(&app);
+    *SCROLL_PENDING.lock().unwrap_or_else(|e| e.into_inner()) =
+        Some((base, rw as u32, rh as u32, rx as u32, ry as u32, mon));
+    Ok(())
+}
+
+/// 滚动会话第二段：不直接在主线程建窗（本命令运行于主线程，蒙层停靠消息可
+/// 能还没被泵到——实测蒙层在场时 build() 泵消息永久卡死），而是派 150ms 后台
+/// 定时再 run_on_main_thread 起建浮条并起拼接循环；此间主循环早已把蒙层摘屏
+#[tauri::command]
+pub fn shot_scroll_launch(app: AppHandle) -> Result<(), String> {
+    let Some((base, rw, rh, rx, ry, mon)) = SCROLL_PENDING
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take()
+    else {
+        return Err("无待启动的滚动会话".into());
+    };
+    log::info!("滚动截图：第二段进场，150ms 后起建浮条");
     let app2 = app.clone();
     std::thread::spawn(move || {
-        scroll_loop(app2, mon, rw as u32, rh as u32, rx as u32, ry as u32, base);
+        std::thread::sleep(Duration::from_millis(150));
+        let runner = app2.clone();
+        let dispatch = runner.run_on_main_thread(move || {
+            if let Err(e) = show_scrollbar_window(&app2, &mon) {
+                log::error!("滚动截图：{e}");
+                quit_hook();
+                end_scroll(&app2, mon, None, false);
+                return;
+            }
+            // 清掉装钩握手窗口期落进的滚轮标记（不属于本会话的有效滚动）
+            WHEEL_DOWN.lock().unwrap_or_else(|e| e.into_inner()).take();
+            LAST_CAPTURE
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take();
+            WHEEL_PEND.store(false, Ordering::Relaxed);
+            WHEEL_UP.store(false, Ordering::Relaxed);
+            let app3 = app2.clone();
+            std::thread::spawn(move || {
+                scroll_loop(app3, mon, rw, rh, rx, ry, base);
+            });
+        });
+        if let Err(e) = dispatch {
+            log::error!("滚动截图：浮条建窗任务派发失败：{e}");
+            quit_hook();
+        }
     });
     Ok(())
 }
 
 /// 滚动拼接主循环（独立线程）：等下滚静默 → 捕获 → 有符号匹配 → 追加/重定基准。
-/// 钩子安装由本线程等待就绪（tid 非零）后判定，装钩失败静默收场关浮条。
+/// 钩子已由 shot_scroll_begin 握手装好，本线程只消费标记。
 fn scroll_loop(app: AppHandle, mon: MonRect, rw: u32, rh: u32, rx: u32, ry: u32, base: RgbaImage) {
     let mon_obj = xcap::Monitor::all().ok().and_then(|all| {
         all.into_iter()
             .find(|m| m.x().ok() == Some(mon.x) && m.y().ok() == Some(mon.y))
     });
     let Some(monitor) = mon_obj else {
+        log::error!("滚动截图：找不到目标显示器，收场");
         quit_hook();
         end_scroll(&app, mon, None, false);
         return;
     };
-    let _hook = spawn_wheel_hook();
-    // 等钩子线程完成安装（tid 非零即已尝试）；装钩失败无法感知用户滚轮，收场
-    for _ in 0..100 {
-        if HOOK_TID.load(Ordering::Relaxed) != 0 {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    }
-    if !HOOK_OK.load(Ordering::Relaxed) {
-        quit_hook();
-        end_scroll(&app, mon, None, false);
-        return;
-    }
     let mut canvas = CanvasBuf::new(rw);
     canvas.push(&base, 0);
     let mut last = base;
     let mut zero_streak = 0u32;
     let mut bad_streak = 0u32;
     let mut truncated = false;
+    let mut last_activity = Instant::now();
+    emit_height(&app, canvas.h);
+    // 浮条页加载晚于首发事件会漏听初始高度（实测显示 0px），隔一拍补发
+    std::thread::sleep(Duration::from_millis(600));
     emit_height(&app, canvas.h);
     loop {
+        let now = Instant::now();
         if SCROLL_FLAG.load(Ordering::Relaxed) != 0 || canvas.h >= MAX_H {
             truncated = canvas.h >= MAX_H;
             break;
@@ -296,64 +389,108 @@ fn scroll_loop(app: AppHandle, mon: MonRect, rw: u32, rh: u32, rx: u32, ry: u32,
         if WHEEL_UP.swap(false, Ordering::Relaxed) {
             zero_streak = 0;
         }
-        // 下滚后静默 QUIET 才捕获：一格连滚/惯性合并为一帧，免碎片拼接
-        let due = WHEEL_DOWN
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .map(|t| t.elapsed() >= QUIET)
-            .unwrap_or(false);
-        if WHEEL_PEND.load(Ordering::Relaxed) && due {
-            WHEEL_PEND.store(false, Ordering::Relaxed);
-            match monitor.capture_region(rx, ry, rw, rh) {
-                Ok(frame) => match match_scroll_dy(&last, &frame) {
-                    // 内容上移 ≥2px：底部新内容追加
-                    Some(dy) if dy >= 2 => {
-                        zero_streak = 0;
-                        bad_streak = 0;
-                        canvas.push(&frame, dy as u32);
-                        last = frame;
-                        emit_height(&app, canvas.h);
-                    }
-                    // 内容下移（上滚回看）：只重定基准，不追加不倒退
-                    Some(dy) if dy <= -2 => {
-                        zero_streak = 0;
-                        bad_streak = 0;
-                        last = frame;
-                    }
-                    // 0/±1px：视作未滚动（到底或滚动被拦截）
-                    Some(_) => {
-                        zero_streak += 1;
-                        if zero_streak >= BOTTOM_STREAK {
-                            break;
+        // 捕获调度：滚动进行中（末次滚轮 < QUIET）按 ≥STREAM_GAP 流式出增量帧
+        //（每帧行程小，必落在匹配域内）；滚轮停歇 ≥QUIET 收尾帧（合并惯性）。
+        // 两路都受 STREAM_GAP 节流，防同刻连拍
+        if WHEEL_PEND.load(Ordering::Relaxed) {
+            last_activity = now;
+            let last_tick = *WHEEL_DOWN.lock().unwrap_or_else(|e| e.into_inner());
+            let since_tick = last_tick.map(|t| now.duration_since(t));
+            let since_cap = LAST_CAPTURE
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .map(|t| now.duration_since(t));
+            let settled = since_tick.is_some_and(|d| d >= QUIET);
+            let streaming = !settled
+                && since_tick.is_some_and(|d| d >= TICK_SETTLE)
+                && since_cap.is_none_or(|d| d >= STREAM_GAP);
+            if (settled || streaming) && since_cap.is_none_or(|d| d >= STREAM_GAP) {
+                WHEEL_PEND.store(false, Ordering::Relaxed);
+                *LAST_CAPTURE.lock().unwrap_or_else(|e| e.into_inner()) = Some(now);
+                let ticks = HOOK_TICKS.load(Ordering::Relaxed);
+                match monitor.capture_region(rx, ry, rw, rh) {
+                    Ok(frame) => match match_scroll_dy(&last, &frame) {
+                        // 内容上移 ≥2px：底部新内容追加
+                        Some(dy) if dy >= 2 => {
+                            zero_streak = 0;
+                            bad_streak = 0;
+                            canvas.push(&frame, dy as u32);
+                            last = frame;
+                            log::debug!(
+                                "滚动截图：追加 {dy}px，累计 {}px（钩子 {ticks} ticks）",
+                                canvas.h
+                            );
+                            emit_height(&app, canvas.h);
                         }
-                    }
-                    None => {
+                        // 内容下移（上滚回看）：只重定基准，不追加不倒退
+                        Some(dy) if dy <= -2 => {
+                            zero_streak = 0;
+                            bad_streak = 0;
+                            last = frame;
+                            log::debug!(
+                                "滚动截图：上滚回看 {dy}px，重定基准（钩子 {ticks} ticks）"
+                            );
+                        }
+                        // 0/±1px：视作未滚动（到底或滚动被拦截）
+                        Some(_) => {
+                            zero_streak += 1;
+                            log::debug!(
+                                "滚动截图：未滚动 {zero_streak}/{BOTTOM_STREAK}（钩子 {ticks} ticks）"
+                            );
+                            if zero_streak >= BOTTOM_STREAK {
+                                log::info!("滚动截图：到底（连续 {BOTTOM_STREAK} 帧未滚动）");
+                                break;
+                            }
+                        }
+                        None => {
+                            bad_streak += 1;
+                            log::debug!("滚动截图：匹配失败 {bad_streak}/{BAD_STREAK}");
+                            if bad_streak >= BAD_STREAK {
+                                truncated = true;
+                                break;
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        log::error!("滚动截图：帧捕获失败：{e}");
                         bad_streak += 1;
                         if bad_streak >= BAD_STREAK {
                             truncated = true;
                             break;
                         }
                     }
-                },
-                Err(_) => {
-                    bad_streak += 1;
-                    if bad_streak >= BAD_STREAK {
-                        truncated = true;
-                        break;
-                    }
                 }
             }
+        }
+        // 兜底：长时间无滚轮活动（钩子被系统摘除等异常）自动收场，不留死会话
+        if now.duration_since(last_activity) >= IDLE_TIMEOUT {
+            log::info!(
+                "滚动截图：{} 分钟无滚轮活动，自动收场",
+                IDLE_TIMEOUT.as_secs() / 60
+            );
+            break;
         }
         std::thread::sleep(POLL);
     }
     quit_hook();
     if SCROLL_FLAG.load(Ordering::Relaxed) == 2 {
-        // 取消：丢弃，不出结果
+        // 取消：丢弃，不出结果（浮条窗也须关闭——首版此处提前 return 漏关，
+        // 僵尸浮条挂着导致下次 begin 被「滚动截图进行中」挡死，实测事故）
+        log::info!("滚动截图：用户取消，丢弃已拼内容（{}px）", canvas.h);
+        if let Some(w) = app.get_webview_window("shot-scroll") {
+            let _ = w.destroy();
+        }
         return;
+    }
+    if truncated {
+        log::info!("滚动截图：动态内容/捕获异常截断，累计 {}px", canvas.h);
     }
     match canvas.to_image() {
         Some(img) => end_scroll(&app, mon, Some(img), truncated),
-        None => end_scroll(&app, mon, None, false),
+        None => {
+            log::error!("滚动截图：拼接缓冲转图失败");
+            end_scroll(&app, mon, None, false)
+        }
     }
 }
 
@@ -367,10 +504,14 @@ fn emit_height(app: &AppHandle, height: u32) {
 
 /// 收尾：关浮条窗，长图存临时盘后开结果窗
 fn end_scroll(app: &AppHandle, mon: MonRect, img: Option<RgbaImage>, truncated: bool) {
+    // destroy 而非 close：close 走 CloseRequested 语义，实测偶发不奏效留僵尸
     if let Some(w) = app.get_webview_window("shot-scroll") {
-        let _ = w.close();
+        let _ = w.destroy();
     }
-    let Some(img) = img else { return };
+    let Some(img) = img else {
+        log::error!("滚动截图：无拼接结果可出（启动/收场异常）");
+        return;
+    };
     let dir = shot_dir();
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join(format!("scroll_{}.png", millis()));
@@ -391,23 +532,46 @@ fn show_scrollbar_window(app: &AppHandle, mon: &MonRect) -> Result<(), String> {
     const BH: f64 = 42.0;
     let s = f64::from(mon.scale);
     let boot = serde_json::json!({ "window": "scrollbar" });
-    let win = WebviewWindowBuilder::new(app, "shot-scroll", WebviewUrl::App("shot.html".into()))
-        .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
-        .title("X-Dir 滚动截图")
-        .decorations(false)
-        .resizable(false)
-        .maximizable(false)
-        .minimizable(false)
-        .skip_taskbar(true)
-        .always_on_top(true)
-        .shadow(false)
-        // 不可见窗口默认 focused(true) 在部分 WebView2 上聚焦异常（wry#1798）；
-        // show() 后再 set_focus()，保险起见显式关闭
-        .focused(false)
-        .visible(false)
-        .initialization_script(format!("window.__BOOT__ = {boot};"))
-        .build()
-        .map_err(|e| format!("创建滚动浮条窗失败：{e}"))?;
+    // 本机 WebView2 建窗有 0x8007139F 前科（shot.rs 日志在案）：失败清掉可能
+    // 的僵尸 label 重试一次，仍败才报错
+    let mut win = None;
+    let mut last_err = String::new();
+    for attempt in 0..2 {
+        match WebviewWindowBuilder::new(app, "shot-scroll", WebviewUrl::App("shot.html".into()))
+            .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
+            .title("X-Dir 滚动截图")
+            .decorations(false)
+            .resizable(false)
+            .maximizable(false)
+            .minimizable(false)
+            .skip_taskbar(true)
+            .always_on_top(true)
+            .shadow(false)
+            // 不可见窗口默认 focused(true) 在部分 WebView2 上聚焦异常（wry#1798）；
+            // show() 后再 set_focus()，保险起见显式关闭
+            .focused(false)
+            .visible(false)
+            .initialization_script(format!("window.__BOOT__ = {boot};"))
+            .build()
+        {
+            Ok(w) => {
+                win = Some(w);
+                break;
+            }
+            Err(e) => {
+                last_err = format!("创建滚动浮条窗失败（第 {} 次）：{e}", attempt + 1);
+                log::error!("滚动截图：{last_err}");
+                // 建窗失败可能残留僵尸 label，先销毁再重试
+                if let Some(z) = app.get_webview_window("shot-scroll") {
+                    let _ = z.destroy();
+                }
+                if attempt == 0 {
+                    std::thread::sleep(Duration::from_millis(250));
+                }
+            }
+        }
+    }
+    let win = win.ok_or(last_err)?;
     let (w, h) = ((BW * s).round() as i32, (BH * s).round() as i32);
     win.set_position(PhysicalPosition::new(
         mon.x + (mon.w as i32 - w) / 2,
@@ -417,7 +581,9 @@ fn show_scrollbar_window(app: &AppHandle, mon: &MonRect) -> Result<(), String> {
     win.set_size(PhysicalSize::new(w as u32, h as u32))
         .map_err(|e| e.to_string())?;
     win.show().map_err(|e| e.to_string())?;
-    win.set_focus().map_err(|e| e.to_string())
+    win.set_focus().map_err(|e| e.to_string())?;
+    log::info!("滚动截图：控制浮条已显示");
+    Ok(())
 }
 
 fn show_result_window(

@@ -28,7 +28,7 @@
 use base64::Engine as _;
 use serde::Serialize;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::time::Duration;
 use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder,
@@ -297,6 +297,9 @@ static SAVE_DIALOG_OPEN: AtomicBool = AtomicBool::new(false);
 static SHOT_PAGE_READY: AtomicBool = AtomicBool::new(false);
 /// 本次会话起始时刻（millis）：shot_ready 时算感知延迟（log::info 实测口径）
 static SESSION_T0: AtomicU64 = AtomicU64::new(0);
+/// 5s 看门狗连续未就绪次数：≥2 = 常驻窗页面僵死（WebView2 建窗 0x8007139F
+/// 前科机器实证），销毁常驻窗待下按热键冷重建自愈
+static READY_FAIL_STREAK: AtomicU32 = AtomicU32::new(0);
 /// 当前会话定格帧（RGBA 原始字节，显示器整幅）：shot_frame 经 IPC 二进制
 /// 直传前端（putImageData 直绘，无落盘/读回/解码三跳）；收场释放；滚动
 /// 截图从内存裁首帧（不再读临时文件）
@@ -429,15 +432,26 @@ fn begin_session(app: &AppHandle) {
                             log::error!("截图会话下发失败：{e}");
                         }
                         // 5s 看门狗：前端迟迟不回执（页面挂死/事件丢失）就收场
-                        // 重置门闸，热键可再按；不强制 show 空白窗（白屏闪屏）
+                        // 重置门闸，热键可再按；不强制 show 空白窗（白屏闪屏）。
+                        // 连续两次未就绪 = 页面僵死（非偶发丢事件），销毁常驻窗
+                        // 让下次热键走冷重建路径自愈（滚动会话 WebView 僵死事故
+                        // 2026-10-28：热键从此永久打不开截图，只能重启应用）
                         let app3 = app2.clone();
                         std::thread::spawn(move || {
                             std::thread::sleep(Duration::from_secs(5));
                             if SESSION_ACTIVE.load(Ordering::SeqCst)
                                 && !SHOT_VISIBLE.load(Ordering::SeqCst)
                             {
-                                log::warn!("截图覆盖窗 5s 未就绪，收场重置");
+                                let n = READY_FAIL_STREAK.fetch_add(1, Ordering::SeqCst) + 1;
+                                log::warn!("截图覆盖窗 5s 未就绪，收场重置（连续第 {n} 次）");
                                 end_session(&app3);
+                                if n >= 2 {
+                                    READY_FAIL_STREAK.store(0, Ordering::SeqCst);
+                                    if let Some(w) = app3.get_webview_window("shot") {
+                                        log::info!("截图覆盖窗页面连续未就绪，销毁待冷重建自愈");
+                                        let _ = w.destroy();
+                                    }
+                                }
                             }
                         });
                     } else {
@@ -621,6 +635,7 @@ pub fn shot_ready(window: tauri::WebviewWindow) -> Result<(), String> {
         window.show().map_err(|e| e.to_string())?;
         if label == "shot" {
             SHOT_VISIBLE.store(true, Ordering::SeqCst);
+            READY_FAIL_STREAK.store(0, Ordering::SeqCst);
             let t0 = SESSION_T0.load(Ordering::SeqCst);
             if t0 > 0 {
                 log::info!("截图感知延迟 {}ms", millis().saturating_sub(u128::from(t0)));

@@ -272,6 +272,7 @@ pub fn run() {
             commands::shot::shot_stage_raw,
             commands::shot::shot_register_hotkey,
             commands::shot_scroll::shot_scroll_begin,
+            commands::shot_scroll::shot_scroll_launch,
             commands::shot_scroll::shot_scroll_control,
             commands::shot_scroll::shot_result_copy,
             commands::shot_scroll::shot_result_save,

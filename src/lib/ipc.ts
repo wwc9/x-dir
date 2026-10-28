@@ -808,9 +808,13 @@ export const api = {
   /** 注册/更新截图全局热键（启动与设置变更时调用；Err = 键位冲突等） */
   shotRegisterHotkey: (enabled: boolean, hotkey: string) =>
     cmd<void>("shot_register_hotkey", { enabled, hotkey }),
-  /** 滚动长截图（§3.6 二期）：以选区（显示器相对物理坐标）开滚动会话 */
+  /** 滚动长截图（§3.6 二期）：以选区（显示器相对物理坐标）开滚动会话。
+   *  两段式（贴图 finish 流同款）：begin 校验+装钩+收覆盖窗后返回，主循环把
+   *  停靠消息处理完，前端随即调 launch 建浮条窗起循环——蒙层未离屏即建窗
+   *  实测永久卡死（WebView2 build() 泵消息坑） */
   shotScrollBegin: (rx: number, ry: number, rw: number, rh: number, mx: number, my: number) =>
     cmd<void>("shot_scroll_begin", { rx, ry, rw, rh, mx, my }),
+  shotScrollLaunch: () => cmd<void>("shot_scroll_launch", {}),
   /** 滚动浮条操作：finish = 用已拼内容出结果；cancel = 丢弃 */
   shotScrollControl: (action: "finish" | "cancel") =>
     cmd<void>("shot_scroll_control", { action }),
