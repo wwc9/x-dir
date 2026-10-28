@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>截图标注条布局三方案 · X-Dir</title>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+  /* 真实工具栏同款视觉语言（浅色）：白底圆角 + 1px 描边 + 阴影 */
+  :root {
+    --surface: #ffffff;
+    --surface-2: #f3f4f6;
+    --fg: #1f2329;
+    --muted: #8a8f99;
+    --hairline: #e5e6eb;
+    --border: #dcdde1;
+    --radius: 6px;
+    --radius-lg: 8px;
+    --accent: #3574f0;
+    --shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 32px;
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: #eef0f3;
+    color: var(--fg);
+  }
+  h1 { font-size: 20px; margin: 0 0 6px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 28px; }
+  .proposal { margin-bottom: 36px; }
+  .proposal h2 { font-size: 15px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+  .proposal h2 .tag {
+    font-size: 11px; padding: 1px 8px; border-radius: 999px;
+    background: var(--accent); color: #fff; font-weight: 600;
+  }
+  .proposal h2 .tag.alt { background: #6b7280; }
+  .proposal p { margin: 0 0 10px; font-size: 12.5px; color: var(--muted); }
+  .stage {
+    position: relative;
+    border-radius: var(--radius-lg);
+    background:
+      linear-gradient(45deg, #d8dce2 25%, transparent 25%, transparent 75%, #d8dce2 75%),
+      linear-gradient(45deg, #d8dce2 25%, #e8eaee 25%, #e8eaee 75%, #d8dce2 75%);
+    background-size: 24px 24px;
+    background-position: 0 0, 12px 12px;
+    padding: 46px 20px 20px;
+    overflow: hidden;
+    min-height: 150px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .stage .sel {
+    position: absolute;
+    border: 1.5px solid var(--accent);
+    inset: 18px 30px 64px 40px;
+    pointer-events: none;
+  }
+  .stage .sel::before {
+    content: "";
+    position: absolute; inset: 0;
+    background: rgba(255, 255, 255, 0.55);
+  }
+  .pill {
+    position: absolute;
+    top: 6px; left: 34px;
+    background: rgba(0, 0, 0, 0.65);
+    color: #fff;
+    font-size: 12px;
+    padding: 3px 12px;
+    border-radius: 999px;
+    z-index: 2;
+    font-variant-numeric: tabular-nums;
+  }
+  /* ── 工具栏通用（真实工具栏同款） ─────────────────────────── */
+  .tb {
+    position: relative;
+    display: flex;
+    align-items: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    padding: 5px 6px;
+    z-index: 1;
+  }
+  .tb .grip {
+    display: grid; place-items: center;
+    align-self: stretch;
+    padding: 0 1px;
+    border-radius: var(--radius);
+    color: var(--muted);
+    cursor: grab;
+  }
+  .tb .sep {
+    width: 1px; height: 22px;
+    background: var(--hairline);
+    margin: 0 2px; flex: none;
+  }
+  .tb button {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 2px;
+    min-width: 40px;
+    padding: 3px 4px 2px;
+    border: none; border-radius: var(--radius);
+    background: transparent; color: var(--fg);
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .tb button:hover { background: var(--surface-2); }
+  .tb button.on { background: rgba(53, 116, 240, 0.12); color: var(--accent); }
+  .tb button.primary { color: var(--accent); }
+  .tb button.danger:hover { background: #e5484d; color: #fff; }
+  .tb .t { font-size: 10px; line-height: 1; white-space: nowrap; }
+  .tb svg { width: 20px; height: 20px; }
+  .tb .pickdot {
+    width: 14px; height: 14px; border-radius: 999px;
+    background: #e5484d;
+    border: 2px solid #fff; outline: 1px solid var(--border);
+  }
+  .tb .wdot { width: 11px; height: 11px; border-radius: 999px; background: currentcolor; display: block; }
+  /* 方案 A/B：双行 */
+  .tb.rows { flex-direction: column; align-items: stretch; gap: 1px; }
+  .tb.rows .row { display: flex; align-items: center; }
+  /* 尺寸标注 */
+  .dims { font-size: 11px; color: var(--muted); margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+</style>
+</head>
+<body>
+<h1>截图标注条布局三方案</h1>
+<div class="sub">图标 20px + 文字 10px，视觉语言与现行工具栏一致；每款下方自动标注实测宽 × 高。拖拽把手固定在最左侧。</div>
+
+<template id="tpl-tools">
+  <button class="on" title="选择"><i data-lucide="mouse-pointer-2"></i><span class="t">选择</span></button>
+  <button title="矩形"><i data-lucide="square"></i><span class="t">矩形</span></button>
+  <button title="椭圆"><i data-lucide="circle"></i><span class="t">椭圆</span></button>
+  <button title="箭头"><i data-lucide="arrow-up-right"></i><span class="t">箭头</span></button>
+  <button title="画笔"><i data-lucide="pencil"></i><span class="t">画笔</span></button>
+  <button title="马克笔"><i data-lucide="highlighter"></i><span class="t">马克</span></button>
+  <button title="文字"><i data-lucide="type"></i><span class="t">文字</span></button>
+  <button title="马赛克"><i data-lucide="grip"></i><span class="t">马赛克</span></button>
+  <button title="模糊"><i data-lucide="waves"></i><span class="t">模糊</span></button>
+</template>
+<template id="tpl-style">
+  <button class="on" title="颜色"><span class="pickdot"></span><span class="t">颜色</span></button>
+  <button title="线宽"><span class="wdot" style="width:11px;height:11px"></span><span class="t">线宽</span></button>
+  <button title="阴影"><i data-lucide="layers"></i><span class="t">阴影</span></button>
+  <button title="边框"><i data-lucide="frame"></i><span class="t">边框</span></button>
+</template>
+<template id="tpl-actions">
+  <button title="撤销"><i data-lucide="undo-2"></i><span class="t">撤销</span></button>
+  <button title="重做"><i data-lucide="redo-2"></i><span class="t">重做</span></button>
+  <button class="primary" title="贴图"><i data-lucide="pin"></i><span class="t">贴图</span></button>
+  <button class="primary" title="复制"><i data-lucide="copy"></i><span class="t">复制</span></button>
+  <button class="primary" title="保存"><i data-lucide="save"></i><span class="t">保存</span></button>
+  <button class="primary" title="滚动截图"><i data-lucide="gallery-vertical-end"></i><span class="t">滚动</span></button>
+  <button class="danger" title="关闭"><i data-lucide="x"></i><span class="t">关闭</span></button>
+</template>
+<template id="tpl-tools-bare">
+  <button class="on" title="选择"><i data-lucide="mouse-pointer-2"></i></button>
+  <button title="矩形"><i data-lucide="square"></i></button>
+  <button title="椭圆"><i data-lucide="circle"></i></button>
+  <button title="箭头"><i data-lucide="arrow-up-right"></i></button>
+  <button title="画笔"><i data-lucide="pencil"></i></button>
+  <button title="马克笔"><i data-lucide="highlighter"></i></button>
+  <button title="文字"><i data-lucide="type"></i></button>
+  <button title="马赛克"><i data-lucide="grip"></i></button>
+  <button title="模糊"><i data-lucide="waves"></i></button>
+</template>
+<template id="tpl-style-bare">
+  <button class="on" title="颜色"><span class="pickdot"></span></button>
+  <button title="线宽"><span class="wdot" style="width:11px;height:11px"></span></button>
+  <button title="阴影"><i data-lucide="layers"></i></button>
+  <button title="边框"><i data-lucide="frame"></i></button>
+</template>
+<template id="tpl-actions-bare">
+  <button title="撤销"><i data-lucide="undo-2"></i></button>
+  <button title="重做"><i data-lucide="redo-2"></i></button>
+  <button class="primary" title="贴图"><i data-lucide="pin"></i></button>
+  <button class="primary" title="复制"><i data-lucide="copy"></i></button>
+  <button class="primary" title="保存"><i data-lucide="save"></i></button>
+  <button class="primary" title="滚动截图"><i data-lucide="gallery-vertical-end"></i></button>
+  <button class="danger" title="关闭"><i data-lucide="x"></i></button>
+</template>
+
+<div class="proposal">
+  <h2>方案 A · 双行分区，保留文字 <span class="tag">推荐</span></h2>
+  <p>上行 = 绘制工具 + 撤销/重做；下行 = 样式（颜色/线宽/阴影/边框）+ 输出动作。文字全保留、长度减半，高度略增（约 90px）。按钮 38px 宽。</p>
+  <div class="stage">
+    <div class="sel"></div>
+    <div class="pill">1000,600&nbsp;&nbsp;720 × 300 px</div>
+    <div class="tb rows" id="tbA"></div>
+  </div>
+  <div class="dims" id="dimsA"></div>
+</div>
+
+<div class="proposal">
+  <h2>方案 B · 单行纯图标（悬停显示名称） <span class="tag alt">最短</span></h2>
+  <p>回到单行但去掉文字（名称悬停 tooltip 显示），图标 20px。最矮（约 42px），长度与现状相近。</p>
+  <div class="stage">
+    <div class="sel"></div>
+    <div class="pill">1000,600&nbsp;&nbsp;720 × 300 px</div>
+    <div class="tb" id="tbB"></div>
+  </div>
+  <div class="dims" id="dimsB"></div>
+</div>
+
+<div class="proposal">
+  <h2>方案 C · 双行纯图标（最紧凑）</h2>
+  <p>与方案 A 同分区但全部去文字。宽 ≈ 420px、高 ≈ 70px，最紧凑；无文字依赖 tooltip。</p>
+  <div class="stage">
+    <div class="sel"></div>
+    <div class="pill">1000,600&nbsp;&nbsp;720 × 300 px</div>
+    <div class="tb rows" id="tbC"></div>
+  </div>
+  <div class="dims" id="dimsC"></div>
+</div>
+
+<script>
+  function mount(id, parts) {
+    const tb = document.getElementById(id);
+    for (const part of parts) {
+      const row = document.createElement("div");
+      row.className = tb.classList.contains("rows") ? "row" : "";
+      for (const seg of part) {
+        if (seg === "sep") {
+          const s = document.createElement("span");
+          s.className = "sep";
+          row.appendChild(s);
+        } else {
+          row.appendChild(document.getElementById(seg).content.cloneNode(true));
+        }
+      }
+      tb.appendChild(row);
+    }
+    const grip = document.createElement("span");
+    grip.className = "grip";
+    grip.title = "拖动工具栏";
+    grip.innerHTML = '<i data-lucide="grip-vertical"></i>';
+    tb.prepend(grip);
+  }
+  // A：双行带文字（行1 工具+撤销重做；行2 样式+动作）
+  mount("tbA", [["tpl-tools", "sep", "tpl-actions-bare"], ["tpl-style", "sep", "tpl-actions"]]);
+  // B：单行纯图标
+  mount("tbB", [["tpl-tools-bare", "sep", "tpl-style-bare", "sep", "tpl-actions-bare"]]);
+  // C：双行纯图标（行1 工具；行2 样式+动作）
+  mount("tbC", [["tpl-tools-bare"], ["tpl-style-bare", "sep", "tpl-actions-bare"]]);
+  lucide.createIcons();
+  // 自动标注实测尺寸
+  for (const [id, dim] of [["tbA", "dimsA"], ["tbB", "dimsB"], ["tbC", "dimsC"]]) {
+    const tb = document.getElementById(id);
+    const r = tb.getBoundingClientRect();
+    document.getElementById(dim).textContent =
+      `实测：${Math.round(r.width)} × ${Math.round(r.height)} px（物理 ≈ ${Math.round(r.width * 1.5)} × ${Math.round(r.height * 1.5)}）`;
+  }
+</script>
+</body>
+</html>
