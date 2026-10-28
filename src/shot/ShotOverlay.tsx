@@ -17,6 +17,7 @@ import {
   GalleryVerticalEnd,
   Frame,
   Grip,
+  GripVertical,
   Highlighter,
   Layers,
   MousePointer2,
@@ -32,6 +33,7 @@ import {
 } from "lucide-react";
 
 import { api } from "../lib/ipc";
+import { DENSITY } from "../lib/tokens";
 import { AppIcon } from "../components/AppIcon";
 import {
   SHOT_PALETTE,
@@ -1123,6 +1125,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           onPointerMove={onTbPointerMove}
           onPointerUp={onTbPointerUp}
         >
+          <span className="np-shot-grip" title="拖动工具栏">
+            <AppIcon icon={GripVertical} size={DENSITY.iconLg} />
+          </span>
           {TOOLS.map((t) => (
             <button
               key={t.id}
@@ -1130,7 +1135,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               title={t.label}
               onClick={() => setTool(t.id)}
             >
-              <AppIcon icon={t.icon} />
+              <AppIcon icon={t.icon} size={DENSITY.iconLg} />
               <span className="np-shot-tool-t">{t.text}</span>
             </button>
           ))}
@@ -1159,7 +1164,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             title="阴影"
             onClick={openPanel("shadow")}
           >
-            <AppIcon icon={Layers} />
+            <AppIcon icon={Layers} size={DENSITY.iconLg} />
             <span className="np-shot-tool-t">阴影</span>
           </button>
           <button
@@ -1167,16 +1172,16 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             title="边框"
             onClick={openPanel("border")}
           >
-            <AppIcon icon={Frame} />
+            <AppIcon icon={Frame} size={DENSITY.iconLg} />
             <span className="np-shot-tool-t">边框</span>
           </button>
           <span className="np-shot-sep" />
           <button className="np-shot-tool" title="撤销（Ctrl+Z）" disabled={!shapes.length} onClick={undo}>
-            <AppIcon icon={Undo2} />
+            <AppIcon icon={Undo2} size={DENSITY.iconLg} />
             <span className="np-shot-tool-t">撤销</span>
           </button>
           <button className="np-shot-tool" title="重做（Ctrl+Y）" disabled={!redoStack.length} onClick={redo}>
-            <AppIcon icon={Redo2} />
+            <AppIcon icon={Redo2} size={DENSITY.iconLg} />
             <span className="np-shot-tool-t">重做</span>
           </button>
           <span className="np-shot-sep" />
@@ -1185,7 +1190,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             title="贴图：钉在屏幕上"
             onClick={() => void finish("pin")}
           >
-            <AppIcon icon={Pin} />
+            <AppIcon icon={Pin} size={DENSITY.iconLg} />
             <span className="np-shot-tool-t">贴图</span>
           </button>
           <button
@@ -1193,7 +1198,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             title="复制到剪贴板（Enter / 双击选区）"
             onClick={() => void finish("copy")}
           >
-            <AppIcon icon={Copy} />
+            <AppIcon icon={Copy} size={DENSITY.iconLg} />
             <span className="np-shot-tool-t">复制</span>
           </button>
           <button
@@ -1201,7 +1206,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             title="保存为 PNG 文件"
             onClick={() => void finish("save")}
           >
-            <AppIcon icon={Save} />
+            <AppIcon icon={Save} size={DENSITY.iconLg} />
             <span className="np-shot-tool-t">保存</span>
           </button>
           <button
@@ -1209,7 +1214,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             title="滚动截图：自动滚动选区拼接长图"
             onClick={startScroll}
           >
-            <AppIcon icon={GalleryVerticalEnd} />
+            <AppIcon icon={GalleryVerticalEnd} size={DENSITY.iconLg} />
             <span className="np-shot-tool-t">滚动</span>
           </button>
           {panel && (
@@ -1270,7 +1275,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             title="取消截图（Esc）"
             onClick={closeWindow}
           >
-            <AppIcon icon={X} />
+            <AppIcon icon={X} size={DENSITY.iconLg} />
           </button>
         </div>
       )}

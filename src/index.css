@@ -4631,10 +4631,10 @@ mark.np-gsearch-mark {
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 1px;
   max-width: calc(100% - 16px);
   flex-wrap: wrap;
-  padding: 6px 8px;
+  padding: 5px 6px;
   border-radius: var(--np-radius-lg);
   background: var(--np-surface);
   border: 1px solid var(--np-border);
@@ -4673,6 +4673,18 @@ mark.np-gsearch-mark {
   outline: 1px solid var(--np-border);
   display: block;
 }
+.np-shot-grip {
+  display: grid;
+  place-items: center;
+  align-self: stretch;
+  padding: 0 1px;
+  border-radius: var(--np-radius);
+  color: var(--np-muted);
+  cursor: grab;
+}
+.np-shot-grip:active {
+  cursor: grabbing;
+}
 .np-shot-size {
   font-size: var(--np-font-sm);
   color: var(--np-muted);
@@ -4684,17 +4696,17 @@ mark.np-gsearch-mark {
   width: 1px;
   height: 22px;
   background: var(--np-hairline);
-  margin: 0 3px;
+  margin: 0 2px;
   flex: none;
 }
 .np-shot-tool {
   width: auto;
-  min-width: 44px;
+  min-width: 40px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
-  padding: 4px 6px 3px;
+  gap: 2px;
+  padding: 3px 4px 2px;
   border: none;
   border-radius: var(--np-radius);
   background: transparent;
