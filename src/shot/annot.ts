@@ -195,7 +195,7 @@ export function formatMagCoords(
 
 /** 信息面板文字度量（barH 与绘制共用同一套，防止两处漂移） */
 function magPanelMetrics(scale: number): { fs: number; lineH: number; pad: number; lines: number } {
-  const fs = Math.max(12, Math.round(11 * scale));
+  const fs = Math.max(13, Math.round(13 * scale));
   const lineH = Math.round(fs * 1.5);
   return { fs, lineH, pad: Math.round(fs * 0.5), lines: 5 };
 }

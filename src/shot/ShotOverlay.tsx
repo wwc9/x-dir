@@ -226,9 +226,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         }
       }
     }
-    // 信息条（参考 PixPin，锚定选区左上角）：窗口预选 = 窗口坐标+尺寸；
-    // 拖拽框选 = 选区原点+尺寸。锚定优先级：选区外左上 → 选区外左下（仅
-    // 窗口预选）→ 选区内左上。桌面兜底（整幅显示器矩形）不展示
+    // 信息条（参考 PixPin，锚定选区左上角，有选区即常驻）：预选带「窗口」
+    // 前缀；拖拽/已确认 = 选区原点+尺寸。锚定优先级：选区外左上 → 选区外
+    // 左下（仅预选/已确认）→ 选区内左上
+    const pillRect = dNow ? hole : s;
     const pillAnchor = (
       rc: { x: number; y: number; w: number; h: number },
       pw: number,
@@ -249,10 +250,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       rc: { x: number; y: number; w: number; h: number },
       allowBottom: boolean,
     ) => {
-      const fs = Math.max(12, Math.round(12 * scale));
+      const fs = Math.max(13, Math.round(14 * scale));
       ctx.font = `${fs}px "Segoe UI", "Microsoft YaHei", sans-serif`;
       const tw = ctx.measureText(text).width;
-      const padX = Math.round(12 * scale);
+      const padX = Math.round(13 * scale);
       const pw = Math.round(tw + padX * 2);
       const ph = Math.round(fs * 1.9);
       const p = pillAnchor(rc, pw, ph, allowBottom);
@@ -272,11 +273,22 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       ctx.textAlign = "left";
       ctx.fillText(text, p.x + padX, p.y + ph / 2);
     };
-    if (followingRef.current && s && !dNow && !(s.w === boot.mw && s.h === boot.mh)) {
-      drawPill(`窗口 (${s.x}, ${s.y}) · ${s.w} × ${s.h}`, s, true);
-    }
-    if (dNow && hole) {
-      drawPill(`${hole.x}, ${hole.y}  ${hole.w} × ${hole.h} px`, hole, false);
+    // 有选区即常驻：预选（含桌面兜底全屏）带「窗口」前缀，拖拽/已确认 =
+    // 选区原点+尺寸（截全屏同样可见）
+    if (pillRect) {
+      if (followingRef.current && !dNow) {
+        drawPill(
+          `窗口 (${pillRect.x}, ${pillRect.y}) · ${pillRect.w} × ${pillRect.h}`,
+          pillRect,
+          true,
+        );
+      } else {
+        drawPill(
+          `${pillRect.x}, ${pillRect.y}  ${pillRect.w} × ${pillRect.h} px`,
+          pillRect,
+          !dNow,
+        );
+      }
     }
     // 全局十字线（启动后定位/水平对比）：跟随态过光标整幅发丝线随光标移动
     // （预选跟随态 sel 恒非空，不能以 !s 为条件），按下拖拽/确认选区后即隐
