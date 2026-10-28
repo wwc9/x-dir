@@ -226,6 +226,24 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         }
       }
     }
+    // 预选窗口信息（左下角，自动识别定位用）：窗口左上角坐标 + 尺寸。
+    // 桌面兜底（整幅显示器矩形）不展示
+    if (followingRef.current && s && !dNow && !(s.w === boot.mw && s.h === boot.mh)) {
+      const text = `窗口 (${s.x}, ${s.y}) · ${s.w} × ${s.h}`;
+      const fs = Math.max(12, Math.round(12 * scale));
+      ctx.font = `${fs}px "Segoe UI", "Microsoft YaHei", sans-serif`;
+      const tw = ctx.measureText(text).width;
+      const pw = Math.round(tw + 20 * scale);
+      const ph = Math.round(fs * 1.8);
+      const pxl = Math.round(14 * scale);
+      const pyl = boot.mh - ph - Math.round(14 * scale);
+      ctx.fillStyle = "rgba(0,0,0,0.75)";
+      ctx.fillRect(pxl, pyl, pw, ph);
+      ctx.fillStyle = "#fff";
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "left";
+      ctx.fillText(text, pxl + 10 * scale, pyl + ph / 2);
+    }
     // 全局十字线（启动后定位/水平对比）：跟随态过光标整幅发丝线随光标移动
     // （预选跟随态 sel 恒非空，不能以 !s 为条件），按下拖拽/确认选区后即隐
     // ——此时选区边框 + 尺寸信息接管。颜色 = 主题 accent（与选区边框同色）
@@ -263,14 +281,15 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         ctx.fillText(label, lx + 6 * scale, ly + fs * 0.35);
       }
     }
-    // 进行中的标注预览（坐标相对选区，clip 内）
+    // 进行中的标注预览（坐标相对选区，clip 内）。马赛克/模糊采样 comp 层——
+    // 拖拽中实时出效果（live 层挖孔区透明，采样它预览不可见）
     const dr = drawRef.current;
     if (dr && s && dr.type !== "text") {
       ctx.save();
       ctx.beginPath();
       ctx.rect(s.x, s.y, s.w, s.h);
       ctx.clip();
-      drawShape(ctx, dr, s.x, s.y, scale);
+      drawShape(ctx, dr, s.x, s.y, scale, compRef.current ?? undefined);
       ctx.restore();
     }
     if (mag && magVisible) {
@@ -750,8 +769,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           ? (d.pts?.length ?? 0) > 1
           : Math.abs(d.w) > 3 || Math.abs(d.h) > 3;
       if (meaningful) {
-        if (d.type !== "pen" && d.type !== "marker") {
-          // 包围盒归正（负向拖拽翻正）
+        if (d.type !== "pen" && d.type !== "marker" && d.type !== "arrow") {
+          // 包围盒归正（负向拖拽翻正）。箭头不参与：w/h 是方向向量，
+          // 归正会把负向拖拽的箭头翻成反向（实测踩坑）
           const nx = d.w < 0 ? d.x + d.w : d.x;
           const ny = d.h < 0 ? d.y + d.h : d.y;
           d.x = nx;
@@ -835,10 +855,18 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
 
   // ── 工具栏定位（选区下方 12px，放不下换上方；水平居中钳制屏内）──────────
   const [tbPos, setTbPos] = useState<{ left: number; top: number } | null>(null);
+  const tbDragRef = useRef<{ dx: number; dy: number } | null>(null);
+  /** 拖动过的工具栏粘住手动位置，直到选区重建（新截图/重新框选）才回自动位 */
+  const tbDraggedRef = useRef(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   useLayoutEffect(() => {
     const tb = toolbarRef.current;
     const s = sel;
-    if (!tb || !s) {
+    if (!tb || !s || tbDraggedRef.current) {
+      if (!s) {
+        setPaletteOpen(false);
+        tbDraggedRef.current = false;
+      }
       setTbPos(null);
       return;
     }
@@ -851,6 +879,40 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     const top = below + r.height + 8 <= sh ? below : Math.max(8, s.y / scale - r.height - 12);
     setTbPos({ left, top });
   }, [sel, ready, scale, boot.mw, boot.mh, shapes, tool, color, strokeIdx]);
+
+  // 工具栏拖动：按住非按钮区（容器空白/尺寸标签/分隔线）拖动，钳制屏内
+  const onTbPointerDown = (e: React.PointerEvent) => {
+    if ((e.target as Element).closest("button, .np-shot-palette")) return;
+    const tb = toolbarRef.current;
+    if (!tb || !tbPos) return;
+    e.preventDefault();
+    tbDragRef.current = { dx: e.clientX - tbPos.left, dy: e.clientY - tbPos.top };
+    tb.setPointerCapture(e.pointerId);
+  };
+  const onTbPointerMove = (e: React.PointerEvent) => {
+    const dg = tbDragRef.current;
+    const tb = toolbarRef.current;
+    if (!dg || !tb) return;
+    const left = Math.max(8, Math.min(e.clientX - dg.dx, (boot.mw / scale) - tb.offsetWidth - 8));
+    const top = Math.max(8, Math.min(e.clientY - dg.dy, (boot.mh / scale) - tb.offsetHeight - 8));
+    tbDraggedRef.current = true;
+    setTbPos({ left, top });
+  };
+  const onTbPointerUp = (e: React.PointerEvent) => {
+    if (!tbDragRef.current) return;
+    tbDragRef.current = null;
+    toolbarRef.current?.releasePointerCapture(e.pointerId);
+  };
+
+  // 颜色/线宽弹层：工具栏外点击即收
+  useEffect(() => {
+    if (!paletteOpen) return;
+    const close = (ev: PointerEvent) => {
+      if (!toolbarRef.current?.contains(ev.target as Node)) setPaletteOpen(false);
+    };
+    document.addEventListener("pointerdown", close, true);
+    return () => document.removeEventListener("pointerdown", close, true);
+  }, [paletteOpen]);
 
   const strokeBtns =
     tool === "text"
@@ -905,7 +967,12 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             left: tbPos?.left ?? -9999,
             top: tbPos?.top ?? -9999,
           }}
-          onPointerDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            onTbPointerDown(e);
+          }}
+          onPointerMove={onTbPointerMove}
+          onPointerUp={onTbPointerUp}
         >
           <span className="np-shot-size">
             {Math.round(sel.w)} × {Math.round(sel.h)}
@@ -922,26 +989,47 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             </button>
           ))}
           <span className="np-shot-sep" />
-          {SHOT_PALETTE.map((c) => (
-            <button
-              key={c}
-              className={`np-shot-dot ${color === c ? "on" : ""}`}
-              style={{ background: c }}
-              title="标注颜色"
-              onClick={() => setColor(c)}
-            />
-          ))}
-          <span className="np-shot-sep" />
-          {strokeBtns.map((w) => (
-            <button
-              key={w.v}
-              className={`np-shot-tool ${strokeIdx === w.v ? "on" : ""}`}
-              title={w.title}
-              onClick={() => setStrokeIdx(w.v)}
+          <button
+            className={`np-shot-tool ${paletteOpen ? "on" : ""}`}
+            title="标注颜色与线宽"
+            onClick={() => setPaletteOpen((v) => !v)}
+          >
+            <span className="np-shot-pickdot" style={{ background: color }} />
+          </button>
+          {paletteOpen && (
+            <div
+              className="np-shot-palette"
+              style={
+                tbPos && tbPos.top * 2 > boot.mh / scale
+                  ? { bottom: "calc(100% + 6px)" }
+                  : { top: "calc(100% + 6px)" }
+              }
             >
-              <span className="np-shot-wdot" style={{ width: w.px, height: w.px }} />
-            </button>
-          ))}
+              <div className="np-shot-pal-row">
+                {SHOT_PALETTE.map((c) => (
+                  <button
+                    key={c}
+                    className={`np-shot-dot ${color === c ? "on" : ""}`}
+                    style={{ background: c }}
+                    title="标注颜色"
+                    onClick={() => setColor(c)}
+                  />
+                ))}
+              </div>
+              <div className="np-shot-pal-row">
+                {strokeBtns.map((w) => (
+                  <button
+                    key={w.v}
+                    className={`np-shot-tool ${strokeIdx === w.v ? "on" : ""}`}
+                    title={w.title}
+                    onClick={() => setStrokeIdx(w.v)}
+                  >
+                    <span className="np-shot-wdot" style={{ width: w.px, height: w.px }} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <span className="np-shot-sep" />
           <button className="np-shot-tool" title="撤销（Ctrl+Z）" disabled={!shapes.length} onClick={undo}>
             <AppIcon icon={Undo2} />

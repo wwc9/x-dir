@@ -416,6 +416,9 @@ export function drawShape(
   ox: number,
   oy: number,
   scale: number,
+  /** 马赛克/模糊的采样源：默认自画（已提交路径），预览传合成画布 comp——
+   *  live 层挖孔区域是透明像素，采样它预览不可见（实测踩坑） */
+  source: HTMLCanvasElement = ctx.canvas,
 ): void {
   ctx.save();
   ctx.strokeStyle = s.color;
@@ -478,7 +481,8 @@ export function drawShape(
       drawText(ctx, s.text ?? "", s.x + ox, s.y + oy, s.width * scale, s.color);
       break;
     case "mosaic": {
-      // 取合成画布当前内容打码：下采样再上采样（像素化）
+      // 取合成画布当前内容打码：下采样再上采样（像素化）。source 由调用方
+      // 指定（预览传 comp 层——live 层挖孔区域是透明像素，采样它预览不可见）
       const tile = Math.max(4, s.width * 3) * scale;
       const sw = Math.max(1, Math.round(s.w / tile));
       const sh = Math.max(1, Math.round(s.h / tile));
@@ -487,7 +491,7 @@ export function drawShape(
       off.height = sh;
       const octx = off.getContext("2d");
       if (!octx) break;
-      octx.drawImage(ctx.canvas, s.x + ox, s.y + oy, s.w, s.h, 0, 0, sw, sh);
+      octx.drawImage(source, s.x + ox, s.y + oy, s.w, s.h, 0, 0, sw, sh);
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(off, 0, 0, sw, sh, s.x + ox, s.y + oy, s.w, s.h);
       ctx.imageSmoothingEnabled = true;
@@ -502,7 +506,7 @@ export function drawShape(
       // 外扩绘制避免边缘泛出透明晕
       const m = s.width * scale * 3;
       ctx.drawImage(
-        ctx.canvas,
+        source,
         s.x + ox,
         s.y + oy,
         s.w,

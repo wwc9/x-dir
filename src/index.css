@@ -4639,6 +4639,40 @@ mark.np-gsearch-mark {
   background: var(--np-surface);
   border: 1px solid var(--np-border);
   box-shadow: var(--np-shadow);
+  /* 整条可拖动（非按钮区按住拖动），按钮自身保持 pointer */
+  cursor: move;
+}
+.np-shot-toolbar button {
+  cursor: pointer;
+}
+/* 颜色/线宽弹出选择面板（锚定工具栏，下开/上翻随工具栏在屏上半/下半） */
+.np-shot-palette {
+  position: absolute;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--np-radius-lg);
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  box-shadow: var(--np-shadow);
+  z-index: 5;
+  cursor: default;
+}
+.np-shot-pal-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* 颜色/线宽入口图标：当前色圆点 */
+.np-shot-pickdot {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--np-radius-pill);
+  border: 2px solid var(--np-surface);
+  outline: 1px solid var(--np-border);
+  display: block;
 }
 .np-shot-size {
   font-size: var(--np-font-sm);
