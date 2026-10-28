@@ -262,6 +262,33 @@ export function drawMagnifier(
   ctx.restore();
 }
 
+/** 全局十字线（启动截图后的定位 / 水平对比，PixPin 同款红色）：过光标的
+ *  整幅水平 + 垂直发丝线，随光标移动。跟随态专属——确认选区或开始拖拽后
+ *  由选区边框 + 尺寸信息接管，十字线即隐。线宽随 scale 增密（同放大镜
+ *  发丝线口径，round+0.5 像素网格对齐） */
+export function drawCrosshair(
+  ctx: CanvasRenderingContext2D,
+  px: number,
+  py: number,
+  mw: number,
+  mh: number,
+  scale = 1,
+): void {
+  const x = Math.round(Math.max(0, Math.min(mw - 1, px))) + 0.5;
+  const y = Math.round(Math.max(0, Math.min(mh - 1, py))) + 0.5;
+  const lw = Math.max(1, Math.round(scale));
+  ctx.save();
+  ctx.strokeStyle = "#ff453a";
+  ctx.lineWidth = lw;
+  ctx.beginPath();
+  ctx.moveTo(0, y);
+  ctx.lineTo(mw, y);
+  ctx.moveTo(x, 0);
+  ctx.lineTo(x, mh);
+  ctx.stroke();
+  ctx.restore();
+}
+
 // ── 绘制（物理像素坐标系；线宽/字号 ×scale 还原 CSS 观感）─────────────────
 
 /** 文字换行绘制（\n 显式换行），返回实际占用高度 */
