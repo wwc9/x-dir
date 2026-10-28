@@ -21,7 +21,9 @@ import {
   Highlighter,
   Layers,
   MousePointer2,
+  Palette,
   Pencil,
+  PenLine,
   Pin,
   Redo2,
   Save,
@@ -1128,95 +1130,116 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           <span className="np-shot-grip" title="拖动工具栏">
             <AppIcon icon={GripVertical} size={DENSITY.iconLg} />
           </span>
-          {TOOLS.map((t) => (
+          <div className="np-shot-tb-rows">
+          <div className="np-shot-tb-row">
+            {TOOLS.map((t) => (
+              <button
+                key={t.id}
+                className={`np-shot-tool ${tool === t.id ? "on" : ""}`}
+                title={t.label}
+                onClick={() => setTool(t.id)}
+              >
+                <AppIcon icon={t.icon} size={DENSITY.iconLg} />
+                <span className="np-shot-tool-t">{t.text}</span>
+              </button>
+            ))}
+            <span className="np-shot-sep" />
             <button
-              key={t.id}
-              className={`np-shot-tool ${tool === t.id ? "on" : ""}`}
-              title={t.label}
-              onClick={() => setTool(t.id)}
+              className="np-shot-tool"
+              title="撤销（Ctrl+Z）"
+              disabled={!shapes.length}
+              onClick={undo}
             >
-              <AppIcon icon={t.icon} size={DENSITY.iconLg} />
-              <span className="np-shot-tool-t">{t.text}</span>
+              <AppIcon icon={Undo2} size={DENSITY.iconLg} />
+              <span className="np-shot-tool-t">撤销</span>
             </button>
-          ))}
-          <span className="np-shot-sep" />
-          <button
-            className={`np-shot-tool ${panel?.kind === "color" ? "on" : ""}`}
-            title="标注颜色"
-            onClick={openPanel("color")}
-          >
-            <span className="np-shot-pickdot" style={{ background: color }} />
-            <span className="np-shot-tool-t">颜色</span>
-          </button>
-          <button
-            className={`np-shot-tool ${panel?.kind === "width" ? "on" : ""}`}
-            title="线条宽度"
-            onClick={openPanel("width")}
-          >
-            <span
-              className="np-shot-wdot"
-              style={{ width: strokeBtns[strokeIdx].px + 4, height: strokeBtns[strokeIdx].px + 4 }}
-            />
-            <span className="np-shot-tool-t">线宽</span>
-          </button>
-          <button
-            className={`np-shot-tool ${shadowLv ? "on" : ""}`}
-            title="阴影"
-            onClick={openPanel("shadow")}
-          >
-            <AppIcon icon={Layers} size={DENSITY.iconLg} />
-            <span className="np-shot-tool-t">阴影</span>
-          </button>
-          <button
-            className={`np-shot-tool ${borderLv ? "on" : ""}`}
-            title="边框"
-            onClick={openPanel("border")}
-          >
-            <AppIcon icon={Frame} size={DENSITY.iconLg} />
-            <span className="np-shot-tool-t">边框</span>
-          </button>
-          <span className="np-shot-sep" />
-          <button className="np-shot-tool" title="撤销（Ctrl+Z）" disabled={!shapes.length} onClick={undo}>
-            <AppIcon icon={Undo2} size={DENSITY.iconLg} />
-            <span className="np-shot-tool-t">撤销</span>
-          </button>
-          <button className="np-shot-tool" title="重做（Ctrl+Y）" disabled={!redoStack.length} onClick={redo}>
-            <AppIcon icon={Redo2} size={DENSITY.iconLg} />
-            <span className="np-shot-tool-t">重做</span>
-          </button>
-          <span className="np-shot-sep" />
-          <button
-            className="np-shot-tool np-shot-primary"
-            title="贴图：钉在屏幕上"
-            onClick={() => void finish("pin")}
-          >
-            <AppIcon icon={Pin} size={DENSITY.iconLg} />
-            <span className="np-shot-tool-t">贴图</span>
-          </button>
-          <button
-            className="np-shot-tool np-shot-primary"
-            title="复制到剪贴板（Enter / 双击选区）"
-            onClick={() => void finish("copy")}
-          >
-            <AppIcon icon={Copy} size={DENSITY.iconLg} />
-            <span className="np-shot-tool-t">复制</span>
-          </button>
-          <button
-            className="np-shot-tool np-shot-primary"
-            title="保存为 PNG 文件"
-            onClick={() => void finish("save")}
-          >
-            <AppIcon icon={Save} size={DENSITY.iconLg} />
-            <span className="np-shot-tool-t">保存</span>
-          </button>
-          <button
-            className="np-shot-tool np-shot-primary"
-            title="滚动截图：自动滚动选区拼接长图"
-            onClick={startScroll}
-          >
-            <AppIcon icon={GalleryVerticalEnd} size={DENSITY.iconLg} />
-            <span className="np-shot-tool-t">滚动</span>
-          </button>
+            <button
+              className="np-shot-tool"
+              title="重做（Ctrl+Y）"
+              disabled={!redoStack.length}
+              onClick={redo}
+            >
+              <AppIcon icon={Redo2} size={DENSITY.iconLg} />
+              <span className="np-shot-tool-t">重做</span>
+            </button>
+          </div>
+          <div className="np-shot-tb-row">
+            <button
+              className={`np-shot-tool ${panel?.kind === "color" ? "on" : ""}`}
+              title="标注颜色"
+              onClick={openPanel("color")}
+            >
+              <AppIcon icon={Palette} size={DENSITY.iconLg} />
+              <span className="np-shot-tool-t">颜色</span>
+            </button>
+            <button
+              className={`np-shot-tool ${panel?.kind === "width" ? "on" : ""}`}
+              title="线条宽度"
+              onClick={openPanel("width")}
+            >
+              <AppIcon icon={PenLine} size={DENSITY.iconLg} />
+              <span className="np-shot-tool-t">线宽</span>
+            </button>
+            <button
+              className={`np-shot-tool ${shadowLv ? "on" : ""}`}
+              title="阴影"
+              onClick={openPanel("shadow")}
+            >
+              <AppIcon icon={Layers} size={DENSITY.iconLg} />
+              <span className="np-shot-tool-t">阴影</span>
+            </button>
+            <button
+              className={`np-shot-tool ${borderLv ? "on" : ""}`}
+              title="边框"
+              onClick={openPanel("border")}
+            >
+              <AppIcon icon={Frame} size={DENSITY.iconLg} />
+              <span className="np-shot-tool-t">边框</span>
+            </button>
+            <span className="np-shot-sep" />
+            <button
+              className="np-shot-tool np-shot-primary"
+              title="贴图：钉在屏幕上"
+              onClick={() => void finish("pin")}
+            >
+              <AppIcon icon={Pin} size={DENSITY.iconLg} />
+              <span className="np-shot-tool-t">贴图</span>
+            </button>
+            <button
+              className="np-shot-tool np-shot-primary"
+              title="复制到剪贴板（Enter / 双击选区）"
+              onClick={() => void finish("copy")}
+            >
+              <AppIcon icon={Copy} size={DENSITY.iconLg} />
+              <span className="np-shot-tool-t">复制</span>
+            </button>
+            <button
+              className="np-shot-tool np-shot-primary"
+              title="保存为 PNG 文件"
+              onClick={() => void finish("save")}
+            >
+              <AppIcon icon={Save} size={DENSITY.iconLg} />
+              <span className="np-shot-tool-t">保存</span>
+            </button>
+            <button
+              className="np-shot-tool np-shot-primary"
+              title="滚动截图：自动滚动选区拼接长图"
+              onClick={startScroll}
+            >
+              <AppIcon icon={GalleryVerticalEnd} size={DENSITY.iconLg} />
+              <span className="np-shot-tool-t">滚动</span>
+            </button>
+            <span className="np-shot-sep" />
+            <button
+              className="np-shot-tool np-shot-danger"
+              title="取消截图（Esc）"
+              onClick={closeWindow}
+            >
+              <AppIcon icon={X} size={DENSITY.iconLg} />
+              <span className="np-shot-tool-t">关闭</span>
+            </button>
+          </div>
+          </div>
           {panel && (
             <div
               ref={panelRef}

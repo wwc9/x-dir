@@ -4630,7 +4630,7 @@ mark.np-gsearch-mark {
   position: absolute;
   z-index: 10;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 1px;
   max-width: calc(100% - 16px);
   flex-wrap: wrap;
@@ -4664,23 +4664,24 @@ mark.np-gsearch-mark {
   align-items: center;
   gap: 8px;
 }
-/* 颜色/线宽入口图标：当前色圆点 */
-.np-shot-pickdot {
-  width: 14px;
-  height: 14px;
-  border-radius: var(--np-radius-pill);
-  border: 2px solid var(--np-surface);
-  outline: 1px solid var(--np-border);
-  display: block;
-}
 .np-shot-grip {
   display: grid;
   place-items: center;
   align-self: stretch;
-  padding: 0 1px;
+  padding: 0 2px;
   border-radius: var(--np-radius);
   color: var(--np-muted);
   cursor: grab;
+}
+.np-shot-tb-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.np-shot-tb-row {
+  display: flex;
+  align-items: center;
+  gap: 1px;
 }
 .np-shot-grip:active {
   cursor: grabbing;
