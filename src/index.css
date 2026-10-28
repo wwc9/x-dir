@@ -4669,7 +4669,7 @@ mark.np-gsearch-mark {
   display: grid;
   place-items: center;
   align-self: stretch;
-  padding: 0 2px;
+  padding: 0 1px;
   border-radius: var(--np-radius-lg) 0 0 var(--np-radius-lg);
   color: var(--np-muted);
   cursor: grab;
@@ -4677,12 +4677,12 @@ mark.np-gsearch-mark {
 .np-shot-tb-rows {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
 }
 .np-shot-tb-row {
   display: flex;
   align-items: center;
-  gap: 1px;
+  gap: 0;
 }
 .np-shot-grip:active {
   cursor: grabbing;
