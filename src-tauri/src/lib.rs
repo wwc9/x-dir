@@ -258,6 +258,7 @@ pub fn run() {
             commands::shot::shot_begin,
             commands::shot::shot_close,
             commands::shot::shot_copy,
+            commands::shot::shot_copy_crop,
             commands::shot::shot_copy_raw,
             commands::shot::shot_frame,
             commands::shot::shot_ready,

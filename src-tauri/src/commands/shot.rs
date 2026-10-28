@@ -729,7 +729,6 @@ static STAGED_FRAME: Mutex<Option<SessionFrame>> = Mutex::new(None);
 /// 路径，两条路并存。
 #[tauri::command]
 pub fn shot_copy_raw(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<(), String> {
-    use tauri_plugin_clipboard_manager::ClipboardExt;
     let bytes = match request.body() {
         tauri::ipc::InvokeBody::Raw(b) => b,
         _ => return Err("需要二进制请求体".into()),
@@ -746,14 +745,70 @@ pub fn shot_copy_raw(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result
         ));
     }
     let t0 = std::time::Instant::now();
-    app.clipboard()
-        .write_image(&tauri::image::Image::new(rgba, w, h))
-        .map_err(|e| format!("写入剪贴板失败：{e}"))?;
+    write_clipboard_image(&app, w, h, rgba)?;
     log::debug!(
         "剪贴板直传：{}×{} {}KB，写剪贴板 {}ms",
         w,
         h,
         rgba.len() / 1024,
+        t0.elapsed().as_millis()
+    );
+    Ok(())
+}
+
+/// 写入位图到剪贴板：Windows 走原生 CF_DIB（clip.rs 行式转换，4K 全屏
+/// ~百 ms 级——剪贴板插件的逐像素路径 debug 下 4K 要 2.3s）；其他平台走
+/// tauri 剪贴板插件
+fn write_clipboard_image(_app: &AppHandle, w: u32, h: u32, rgba: &[u8]) -> Result<(), String> {
+    #[cfg(windows)]
+    return crate::clip::set_image(w, h, rgba);
+    #[cfg(not(windows))]
+    {
+        use tauri_plugin_clipboard_manager::ClipboardExt;
+        _app.clipboard()
+            .write_image(&tauri::image::Image::new(rgba, w, h))
+            .map_err(|e| format!("写入剪贴板失败：{e}"))
+    }
+}
+
+/// 复制零 IPC 快路：无标注时合成结果像素与会话定格帧一致，前端只传选区
+/// 整数矩形，Rust 进程内从 SESSION_FRAME 裁剪后直写剪贴板——免前端
+/// getImageData（GPU→CPU 同步回读）与整幅选区 RGBA 跨进程拷贝；写完才返回
+/// 供前端收场（点击→剪贴板就绪 ~50ms，且消除「先收场、贴上时还没写完」的
+/// 竞态）。有标注或失败时前端回落 shot_copy_raw / dataURL 路径
+#[tauri::command]
+pub fn shot_copy_crop(app: AppHandle, x: i32, y: i32, w: i32, h: i32) -> Result<(), String> {
+    let cropped = {
+        let g = SESSION_FRAME.lock().unwrap_or_else(|p| p.into_inner());
+        let Some(f) = g.as_ref() else {
+            log::warn!("复制快存失败：无会话定格帧");
+            return Err("无会话定格帧".into());
+        };
+        match crop_rgba_rows(f.mw, f.mh, &f.rgba, x, y, w, h) {
+            Some(c) => c,
+            None => {
+                log::warn!(
+                    "复制快存失败：裁剪矩形不合法（帧 {}×{}，请求 {},{} {}×{}）",
+                    f.mw,
+                    f.mh,
+                    x,
+                    y,
+                    w,
+                    h
+                );
+                return Err("复制裁剪矩形不合法".into());
+            }
+        }
+    };
+    let t0 = std::time::Instant::now();
+    write_clipboard_image(&app, cropped.mw, cropped.mh, &cropped.rgba).map_err(|e| {
+        log::warn!("复制快存写剪贴板失败：{e}");
+        e
+    })?;
+    log::debug!(
+        "复制快存：定格帧裁剪 {}×{}（零 IPC 路），写剪贴板 {}ms",
+        cropped.mw,
+        cropped.mh,
         t0.elapsed().as_millis()
     );
     Ok(())

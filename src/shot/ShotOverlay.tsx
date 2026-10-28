@@ -363,11 +363,29 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       const s = selRef.current;
       if (!s || busy) return;
       setBusy(true);
+      // 零 IPC 快路公共参数：选区整数矩形（150% 缩放下坐标可能带半像素，
+      // 取整对齐像素网格）+ 无标注判定（含未提交的文字输入）——合成结果
+      // 像素与 Rust 侧会话定格帧一致，三个动作都能只传矩形由 Rust 进程内裁剪
+      const noMarks = !shapesRef.current.length && !editingRef.current;
+      const rx = Math.round(s.x);
+      const ry = Math.round(s.y);
+      const rw = Math.max(1, Math.round(s.w));
+      const rh = Math.max(1, Math.round(s.h));
       try {
         if (action === "copy") {
-          // 感知优先：先收场（停靠 = 立即从屏幕消失，页面仍存活可继续跑
-          // JS），复制在后台完成——点击即完成，不再等传输与编码；剪贴板
-          // 在 ~百毫秒内就绪（与 PixPin 一致，极快连贴有小概率竞态）
+          // 复制零 IPC 快路：Rust 裁剪定格帧直写剪贴板，写完才收场——免
+          // getImageData（GPU→CPU 同步回读）与 RGBA 跨进程拷贝，点击→剪贴板
+          // 就绪 ~50ms，且消除旧「先收场、贴上时还没写完」的竞态；失败回落
+          // 下方合成直传 / dataURL 路径
+          if (noMarks) {
+            try {
+              await api.shotCopyCrop(rx, ry, rw, rh);
+              closeWindow();
+              return;
+            } catch {
+              // 落到下方直传路径
+            }
+          }
           closeWindow();
           const c = cropCanvas(s);
           if (c) {
@@ -387,16 +405,8 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           }
           return;
         }
-        // 保存/贴图零 IPC 快路优先：无标注（含未提交的文字输入）时合成结果
-        // 像素与 Rust 侧会话定格帧一致，只传选区整数矩形（150% 缩放下坐标
-        // 可能带半像素，取整对齐像素网格）、由 Rust 进程内裁剪——免前端
-        // getImageData（JS 同步读全选区像素）与整幅选区 RGBA 跨进程拷贝；
+        // 保存/贴图零 IPC 快路优先：只传选区整数矩形、由 Rust 进程内裁剪；
         // 任一环节失败回落下方合成直传 / dataURL 路径
-        const noMarks = !shapesRef.current.length && !editingRef.current;
-        const rx = Math.round(s.x);
-        const ry = Math.round(s.y);
-        const rw = Math.max(1, Math.round(s.w));
-        const rh = Math.max(1, Math.round(s.h));
         if (action === "pin") {
           if (noMarks) {
             try {

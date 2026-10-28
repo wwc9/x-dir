@@ -768,6 +768,11 @@ export const api = {
     width: number,
     height: number,
   ): Promise<void> => cmd<void>("shot_copy_raw", frameBody(rgba, width, height, 0, 0)),
+  /** 复制快路（零 IPC）：无标注时只传选区整数矩形（显示器相对物理坐标），
+   *  Rust 进程内裁剪定格帧后直写剪贴板——免 getImageData 与 RGBA 跨进程拷贝；
+   *  Err（无会话/矩形不合法）时前端回落 shotCopyRaw */
+  shotCopyCrop: (x: number, y: number, w: number, h: number): Promise<void> =>
+    cmd<void>("shot_copy_crop", { x, y, w, h }),
   /** 贴图：PNG dataURL 钉成置顶窗（x/y/w/h = 虚拟桌面物理坐标） */
   shotPin: (dataUrl: string, x: number, y: number, w: number, h: number) =>
     cmd<void>("shot_pin", { dataUrl, x, y, w, h }),

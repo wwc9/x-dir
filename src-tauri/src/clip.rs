@@ -19,10 +19,73 @@ use windows::core::PCWSTR;
 
 /// DROPFILES 头长度（pFiles=4 + POINT=8 + fNC=4 + fWide=4）
 const DROPFILES_LEN: usize = 20;
+/// 标准剪贴板格式号：CF_DIB = 8（BITMAPINFOHEADER + 像素）
+#[cfg(windows)]
+const CF_DIB: u32 = 8;
 #[cfg(windows)]
 const DROPEFFECT_COPY: u32 = 1;
 #[cfg(windows)]
 const DROPEFFECT_MOVE: u32 = 2;
+
+/// 构建 CF_DIB 负载（40 字节 BITMAPINFOHEADER + 32bpp BGRA，正 biHeight =
+/// 经典 bottom-up 行序——OLE 从 top-down（负高度）DIB 合成 CF_BITMAP 有
+/// 已知的取空毛病，bottom-up 是全兼容写法）：逐像素交换 R/B（位运算单趟，
+/// 4K 全屏 ~百 ms 级；剪贴板插件的逐像素路径 debug 下 4K 要 2.3s）。独立
+/// 纯函数供 test。
+#[cfg(windows)]
+pub fn build_dib(w: u32, h: u32, rgba: &[u8]) -> Vec<u8> {
+    let stride = w as usize * 4; // 32bpp 天然 4 字节对齐
+    let mut out = vec![0u8; 40 + stride * h as usize];
+    out[0..4].copy_from_slice(&40u32.to_le_bytes()); // biSize
+    out[4..8].copy_from_slice(&(w as i32).to_le_bytes()); // biWidth
+    out[8..12].copy_from_slice(&(h as i32).to_le_bytes()); // biHeight > 0 = bottom-up
+    out[12..14].copy_from_slice(&1u16.to_le_bytes()); // biPlanes
+    out[14..16].copy_from_slice(&32u16.to_le_bytes()); // biBitCount
+    // biCompression = BI_RGB(0)，biSizeImage 等其余字段对 BI_RGB 可为 0
+    for (dst_row, src_row) in out[40..]
+        .chunks_exact_mut(stride)
+        .zip(rgba.chunks_exact(stride).rev())
+    {
+        for (s, d) in src_row
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(dst_row.as_chunks_mut::<4>().0)
+        {
+            let v = u32::from_le_bytes(*s);
+            // RGBA 字节序 LE = A<<24|B<<16|G<<8|R → BGRA = A、G 原位，R/B 互换
+            let bgra = (v & 0xFF00_FF00) | ((v & 0x00FF_0000) >> 16) | ((v & 0x0000_00FF) << 16);
+            *d = bgra.to_le_bytes();
+        }
+    }
+    out
+}
+
+/// 写入位图（CF_DIB）。内存构建全部前置到打开剪贴板之前：EmptyClipboard
+/// 一旦成功而后续失败，用户原有剪贴板内容就丢了——失败窗口压缩到
+/// SetClipboardData 一瞬（同 set_files 纪律）。
+#[cfg(windows)]
+pub fn set_image(w: u32, h: u32, rgba: &[u8]) -> Result<(), String> {
+    if w == 0 || h == 0 || rgba.len() != w as usize * h as usize * 4 {
+        return Err("位图尺寸与数据不符".into());
+    }
+    let dib = build_dib(w, h, rgba);
+    if !open_clipboard() {
+        return Err("无法打开系统剪贴板".into());
+    }
+    unsafe {
+        if EmptyClipboard().is_err() {
+            let _ = CloseClipboard();
+            return Err("无法清空系统剪贴板".into());
+        }
+        if !set_block(CF_DIB, &dib) {
+            let _ = CloseClipboard();
+            return Err("写入 CF_DIB 失败".into());
+        }
+        let _ = CloseClipboard();
+    }
+    Ok(())
+}
 
 /// 构建 CF_HDROP 全局内存负载（宽字符路径 + 双 NUL 结尾）
 pub fn build_hdrop(paths: &[String]) -> Vec<u8> {
@@ -242,5 +305,26 @@ mod tests {
         narrow[0..4].copy_from_slice(&(DROPFILES_LEN as u32).to_le_bytes());
         narrow.extend_from_slice(b"C:\\a\0C:\\b\0\0");
         assert_eq!(parse_hdrop(&narrow), vec!["C:\\a", "C:\\b"]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn dib_header_and_pixel_swizzle() {
+        // 2×2 已知像素：第一行红/绿，第二行蓝/白（RGBA）
+        let rgba = vec![
+            255, 0, 0, 255, 0, 255, 0, 255, // row 0
+            0, 0, 255, 255, 255, 255, 255, 255, // row 1
+        ];
+        let dib = build_dib(2, 2, &rgba);
+        assert_eq!(dib.len(), 40 + 16);
+        assert_eq!(u32::from_le_bytes(dib[0..4].try_into().unwrap()), 40);
+        assert_eq!(i32::from_le_bytes(dib[4..8].try_into().unwrap()), 2);
+        assert_eq!(i32::from_le_bytes(dib[8..12].try_into().unwrap()), 2);
+        assert_eq!(u16::from_le_bytes(dib[12..14].try_into().unwrap()), 1);
+        assert_eq!(u16::from_le_bytes(dib[14..16].try_into().unwrap()), 32);
+        assert_eq!(u32::from_le_bytes(dib[16..20].try_into().unwrap()), 0);
+        // 像素 BGRA 且行序 bottom-up：DIB 第一行 = 源图最后一行，R/B 互换
+        assert_eq!(&dib[40..48], &[255, 0, 0, 255, 255, 255, 255, 255]);
+        assert_eq!(&dib[48..56], &[0, 0, 255, 255, 0, 255, 0, 255]);
     }
 }
