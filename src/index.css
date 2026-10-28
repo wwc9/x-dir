@@ -267,6 +267,15 @@ body {
 .bp6-overlay {
   z-index: 100;
 }
+/* Blueprint v6 轻量 popover 模型（2026-10-28 修）：PopoverNext 的 overlay 是
+   static（z-index 对 static 无效，上面这条帮不到它），菜单内容自带 fixed 但
+   只有 Blueprint 默认 z=20——低于 Dialog overlay 的 100，设置面板等 Dialog
+   内的下拉菜单会被面板整屏容器盖死（实测：菜单挂载、位置正确、屏上不可见
+   且点不到）。把弹层内容抬到与 Dialog overlay 同层：portal 后挂的 DOM 顺序
+   保证后开的菜单压过先开的面板；未开面板时同旧 .bp6-overlay=100 语义 */
+.bp6-popover-transition-container.bp6-overlay-content {
+  z-index: 100;
+}
 /* 自绘悬浮提示（2026-10-21 定案 · 方案 B 卡片键帽，120ms）：全局单例
    lib/tooltip.ts 委托 data-tip/data-kbd 渲染，替代原生 title（仅交互控件，
    内容截断场景仍用原生 title）。surface 卡片 + 发丝线 ring + np 阴影与
