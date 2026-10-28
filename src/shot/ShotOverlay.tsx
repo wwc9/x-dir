@@ -8,7 +8,9 @@
 // 双 canvas 分层：composite（离屏，底图 + 已确认标注按序压平——马赛克/模糊
 // 取其像素，语义 = 后画的会把先画的糊掉，与 QQ 一致）→ base（静态显示）；
 // live 承载遮罩/选区框/窗口高亮/绘制预览的高频重绘，mousemove 不触底图。
-// 本窗脱离主界面体系（无 np-tip/island），按钮提示用原生 title 承载。
+// 本窗脱离主界面体系（无 island/DialogHost），按钮提示复用主界面 np-tip
+// 气泡（lib/tooltip 委托 data-tip/data-kbd，样式与 120ms 速度完全一致；
+// 2026-10-28 定案，替代原生 title）。
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
@@ -35,6 +37,7 @@ import {
 } from "lucide-react";
 
 import { api } from "../lib/ipc";
+import { initTooltip } from "../lib/tooltip";
 import { DENSITY } from "../lib/tokens";
 import { AppIcon } from "../components/AppIcon";
 import {
@@ -168,6 +171,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   selRef.current = sel;
   shapesRef.current = shapes;
   editingRef.current = editing;
+
+  // ── np-tip 悬浮提示（与本窗画布交互无冲突：委托 data-tip/data-kbd）───────
+  useEffect(() => initTooltip(), []);
 
   // ── 画布初始化与重绘 ──────────────────────────────────────────────────────
   const redrawComposite = useCallback(() => {
@@ -1127,7 +1133,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           onPointerMove={onTbPointerMove}
           onPointerUp={onTbPointerUp}
         >
-          <span className="np-shot-grip" title="拖动工具栏">
+          <span className="np-shot-grip" data-tip="拖动工具栏">
             <AppIcon icon={GripVertical} size={DENSITY.iconLg} />
           </span>
           <div className="np-shot-tb-rows">
@@ -1136,7 +1142,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               <button
                 key={t.id}
                 className={`np-shot-tool ${tool === t.id ? "on" : ""}`}
-                title={t.label}
+                data-tip={t.label}
                 onClick={() => setTool(t.id)}
               >
                 <AppIcon icon={t.icon} size={DENSITY.iconLg} />
@@ -1144,7 +1150,8 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             ))}
             <button
               className="np-shot-tool"
-              title="撤销（Ctrl+Z）"
+              data-tip="撤销"
+              data-kbd="Ctrl+Z"
               disabled={!shapes.length}
               onClick={undo}
             >
@@ -1152,7 +1159,8 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             </button>
             <button
               className="np-shot-tool"
-              title="重做（Ctrl+Y）"
+              data-tip="重做"
+              data-kbd="Ctrl+Y"
               disabled={!redoStack.length}
               onClick={redo}
             >
@@ -1162,63 +1170,65 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           <div className="np-shot-tb-row">
             <button
               className={`np-shot-tool ${panel?.kind === "color" ? "on" : ""}`}
-              title="标注颜色"
+              data-tip="标注颜色"
               onClick={openPanel("color")}
             >
               <AppIcon icon={Palette} size={DENSITY.iconLg} />
             </button>
             <button
               className={`np-shot-tool ${panel?.kind === "width" ? "on" : ""}`}
-              title="线条宽度"
+              data-tip="线条宽度"
               onClick={openPanel("width")}
             >
               <AppIcon icon={PenLine} size={DENSITY.iconLg} />
             </button>
             <button
               className={`np-shot-tool ${shadowLv ? "on" : ""}`}
-              title="阴影"
+              data-tip="阴影"
               onClick={openPanel("shadow")}
             >
               <AppIcon icon={Layers} size={DENSITY.iconLg} />
             </button>
             <button
               className={`np-shot-tool ${borderLv ? "on" : ""}`}
-              title="边框"
+              data-tip="边框"
               onClick={openPanel("border")}
             >
               <AppIcon icon={Frame} size={DENSITY.iconLg} />
             </button>
             <button
               className="np-shot-tool np-shot-primary"
-              title="贴图：钉在屏幕上"
+              data-tip="贴图：钉在屏幕上"
               onClick={() => void finish("pin")}
             >
               <AppIcon icon={Pin} size={DENSITY.iconLg} />
             </button>
             <button
               className="np-shot-tool np-shot-primary"
-              title="复制到剪贴板（Enter / 双击选区）"
+              data-tip="复制到剪贴板 · 双击选区同效"
+              data-kbd="Enter"
               onClick={() => void finish("copy")}
             >
               <AppIcon icon={Copy} size={DENSITY.iconLg} />
             </button>
             <button
               className="np-shot-tool np-shot-primary"
-              title="保存为 PNG 文件"
+              data-tip="保存为 PNG 文件"
               onClick={() => void finish("save")}
             >
               <AppIcon icon={Save} size={DENSITY.iconLg} />
             </button>
             <button
               className="np-shot-tool np-shot-primary"
-              title="滚动截图：自动滚动选区拼接长图"
+              data-tip="滚动截图：滚轮下滚拼接长图"
               onClick={startScroll}
             >
               <AppIcon icon={GalleryVerticalEnd} size={DENSITY.iconLg} />
             </button>
             <button
               className="np-shot-tool np-shot-danger"
-              title="取消截图（Esc）"
+              data-tip="取消截图"
+              data-kbd="Esc"
               onClick={closeWindow}
             >
               <AppIcon icon={X} size={DENSITY.iconLg} />
@@ -1238,7 +1248,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                       key={c}
                       className={`np-shot-dot ${color === c ? "on" : ""}`}
                       style={{ background: c }}
-                      title="标注颜色"
+                      data-tip="标注颜色"
                       onClick={() => {
                         setColor(c);
                         setPanel(null);
@@ -1250,7 +1260,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                     <button
                       key={w.v}
                       className={`np-shot-tool ${strokeIdx === w.v ? "on" : ""}`}
-                      title={w.title}
+                      data-tip={w.title}
                       onClick={() => {
                         setStrokeIdx(w.v);
                         setPanel(null);
@@ -1266,7 +1276,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                       className={`np-shot-tool ${
                         (panel.kind === "shadow" ? shadowLv : borderLv) === v ? "on" : ""
                       }`}
-                      title={lbl}
+                      data-tip={lbl}
                       onClick={() => {
                         (panel.kind === "shadow" ? setShadowLv : setBorderLv)(v);
                         setPanel(null);

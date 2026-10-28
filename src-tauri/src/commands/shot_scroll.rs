@@ -1,17 +1,23 @@
-// 滚动长截图（§3.6 二期 B 批，2026-10-24）：框选滚动区 → 覆盖窗隐藏、弹控制
-// 浮条窗（label "shot-scroll"）→ Rust 循环〔光标悬停选区中心 + SendInput 滚轮
-// 注入 → 稳定延时 → xcap capture_region 实时捕获 → 上一帧下部窄竖条灰度 SAD
-// 匹配求纵向位移 → 追加新内容〕→ 到底 / 用户完成 / 高度上限收尾 → 长图存临时
-// 盘 → 结果窗（label "shot-result"：复制 / 保存 / 贴图 / 关闭）。拼接算法
-// 自研（ShareX 思路，未读 GPL 实现）；首版不含固定栏自动检测与视差修复，
-// 动态内容（动画/加载条）连续两帧无法匹配即诚实截断并在结果窗提示。
+// 滚动长截图（§3.6 二期 B 批，2026-10-24 首版；2026-10-28 改手动滚轮模式）：
+// 框选滚动区 → 覆盖窗隐藏、弹控制浮条窗（label "shot-scroll"）→ WH_MOUSE_LL
+// 低级鼠标钩子监听用户滚轮〔光标在选区内：下滚记时刻置待捕获；上滚只置标记
+// ——“下滚持续截图、上滚不动”〕→ 循环线程在下滚静默窗（合并连滚/惯性）后
+// capture_region 实时捕获 → 灰度 SAD 模板匹配求有符号纵向位移 → dy≥2（内容
+// 上移）追加底部新内容，dy≤-2（上滚回看）只重定基准不追加 → 到底 / 用户完成 /
+// 高度上限收尾 → 长图存临时盘 → 结果窗（label "shot-result"：复制 / 保存 /
+// 贴图 / 关闭）。拼接算法自研（ShareX 思路，未读 GPL 实现）；首版不含固定栏
+// 自动检测与视差修复，动态内容（动画/加载条）连续两帧无法匹配即诚实截断并在
+// 结果窗提示。注入式自动滚动（SendInput + SetCursorPos）已废弃。
 //
 // 会话状态：单会话静态标志（0=滚动中 1=请求完成 2=请求取消），begin 时重置；
-// 循环跑独立 std::thread，经事件 shot-scroll-progress 推送已捕获高度。
+// 循环跑独立 std::thread，经事件 shot-scroll-progress 推送已捕获高度。钩子
+// 回调必须即刻返回，故钩子线程只置静态标记、全部分匹配逻辑在循环线程执行；
+// 收尾经 PostThreadMessageW(WM_QUIT) 令钩子线程退出消息泵并卸钩。
 
 use std::path::Path;
-use std::sync::atomic::{AtomicU8, Ordering};
-use std::time::Duration;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
+use std::time::{Duration, Instant};
 
 use image::RgbaImage;
 use tauri::{
@@ -19,52 +25,99 @@ use tauri::{
 };
 
 use super::shot::{MonRect, local_stamp, millis, monitor_at, shot_dir};
+use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
+use windows::Win32::System::Threading::GetCurrentThreadId;
+use windows::Win32::UI::WindowsAndMessaging::{
+    CallNextHookEx, GetMessageW, MSG, MSLLHOOKSTRUCT, PostThreadMessageW, SetWindowsHookExW,
+    UnhookWindowsHookEx, WH_MOUSE_LL, WM_MOUSEWHEEL, WM_QUIT,
+};
 
 /// 长图高度上限（物理像素，§3.6 定案 20000）
 const MAX_H: u32 = 20000;
-/// 每帧滚轮注入后的稳定等待：等页面滚动动画与渲染完成
-const SETTLE: Duration = Duration::from_millis(320);
-/// 到底判定：位移连续为 0 的帧数
+/// 下滚事件后的静默窗：滚轮停歇此时长才捕获（连滚/惯性多格合并为一帧）
+const QUIET: Duration = Duration::from_millis(240);
+/// 循环线程轮询节奏
+const POLL: Duration = Duration::from_millis(20);
+/// 到底判定：下滚后位移为 0 的连续捕获帧数
 const BOTTOM_STREAK: u32 = 3;
 /// 动态内容判定：匹配连续失败的帧数（单次失败先跳过再试）
 const BAD_STREAK: u32 = 2;
 
 /// 0=滚动中 1=请求完成（用已拼内容出结果）2=请求取消（丢弃）
 static SCROLL_FLAG: AtomicU8 = AtomicU8::new(0);
+/// 钩子反应区 = 选区全局物理坐标（x, y, w, h）——光标在内才响应滚轮，
+/// 滚轮落点即目标窗口（Win10+ 悬停滚动），光标挪出选区不误触
+static HOOK_ZONE: Mutex<(i32, i32, i32, i32)> = Mutex::new((0, 0, 0, 0));
+/// 最近一次钩内下滚时刻（None = 会话尚无下滚）
+static WHEEL_DOWN: Mutex<Option<Instant>> = Mutex::new(None);
+/// 待捕获 / 上滚标记（钩回调置位，循环线程消费后清零）
+static WHEEL_PEND: AtomicBool = AtomicBool::new(false);
+static WHEEL_UP: AtomicBool = AtomicBool::new(false);
+/// 钩子线程 id（收尾 PostThreadMessageW WM_QUIT）与安装结果
+static HOOK_TID: AtomicU32 = AtomicU32::new(0);
+static HOOK_OK: AtomicBool = AtomicBool::new(false);
 
-// ── 滚轮注入 ────────────────────────────────────────────────────────────────
+// ── 用户滚轮监听（WH_MOUSE_LL 低级钩子）─────────────────────────────────────
 
-/// 向光标下窗口注入一格向下滚动（Win10+ 默认"悬停滚动非活动窗口"；
-/// mouseData 负值 = 朝用户方向滚 = 露出下方新内容）
-fn send_wheel_down() {
-    use windows::Win32::UI::Input::KeyboardAndMouse::{
-        INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_WHEEL, MOUSEINPUT, SendInput,
-    };
-    let inp = INPUT {
-        r#type: INPUT_MOUSE,
-        Anonymous: INPUT_0 {
-            mi: MOUSEINPUT {
-                dx: 0,
-                dy: 0,
-                mouseData: (-120i32) as u32,
-                dwFlags: MOUSEEVENTF_WHEEL,
-                time: 0,
-                dwExtraInfo: 0,
-            },
-        },
-    };
+/// 低级鼠标钩子回调：WM_MOUSEWHEEL 且光标在选区内——下滚记时刻置待捕获，
+/// 上滚置上滚标记（上滚不截取）。只写静态标记即刻返回，耗时分匹配全在
+/// 循环线程（回调阻塞超时会令系统摘钩丢事件）。
+unsafe extern "system" fn wheel_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     unsafe {
-        SendInput(&[inp], std::mem::size_of::<INPUT>() as i32);
+        if code >= 0 && wparam.0 as u32 == WM_MOUSEWHEEL {
+            let info = &*(lparam.0 as *const MSLLHOOKSTRUCT);
+            let (zx, zy, zw, zh) = *HOOK_ZONE.lock().unwrap_or_else(|e| e.into_inner());
+            if info.pt.x >= zx && info.pt.x < zx + zw && info.pt.y >= zy && info.pt.y < zy + zh {
+                let delta = (info.mouseData >> 16) as u16 as i16;
+                if delta < 0 {
+                    if let Ok(mut t) = WHEEL_DOWN.lock() {
+                        *t = Some(Instant::now());
+                    }
+                    WHEEL_PEND.store(true, Ordering::Relaxed);
+                } else if delta > 0 {
+                    WHEEL_UP.store(true, Ordering::Relaxed);
+                }
+            }
+        }
+        CallNextHookEx(None, code, wparam, lparam)
     }
 }
 
-// ── 纵向位移匹配（灰度 SAD 模板匹配，自研）────────────────────────────────
+/// 钩子线程：装钩 + 消息泵（GetMessageW 阻塞等 WM_QUIT），退出时卸钩
+fn spawn_wheel_hook() -> std::thread::JoinHandle<()> {
+    std::thread::spawn(|| unsafe {
+        HOOK_TID.store(GetCurrentThreadId(), Ordering::Relaxed);
+        match SetWindowsHookExW(WH_MOUSE_LL, Some(wheel_proc), None, 0) {
+            Ok(hook) => {
+                HOOK_OK.store(true, Ordering::Relaxed);
+                let mut msg = MSG::default();
+                while GetMessageW(&mut msg, None, 0, 0).as_bool() {}
+                let _ = UnhookWindowsHookEx(hook);
+            }
+            Err(_) => HOOK_OK.store(false, Ordering::Relaxed),
+        }
+    })
+}
 
-/// 求 cur 相对 prev 的上移量 dy：prev[y] 的内容出现在 cur[y-dy]，新内容 =
-/// cur 底部 [h-dy..h)。模板取 prev 下部两条窄竖条（左右 1/4 处，规避开居中
-/// 的 sticky header / 加载条），灰度 + 隔点采样后做 SAD；最小 SAD 超阈值 =
-/// 置信不足（动态内容干扰），返回 None。
-fn match_scroll_dy(prev: &RgbaImage, cur: &RgbaImage) -> Option<u32> {
+/// 令钩子线程退出消息泵（WM_QUIT 投给钩子线程 id）
+fn quit_hook() {
+    let tid = HOOK_TID.load(Ordering::Relaxed);
+    if tid != 0 {
+        unsafe {
+            let _ = PostThreadMessageW(tid, WM_QUIT, WPARAM(0), LPARAM(0));
+        }
+    }
+}
+
+// ── 纵向位移匹配（灰度 SAD 模板匹配，自研；有符号）──────────────────────────
+
+/// 求 cur 相对 prev 的纵向位移 dy（有符号）：dy>0 = 内容上移（用户下滚，
+/// 底部新内容 = cur 底部 [h-dy..h)）；dy<0 = 内容下移 |dy|（用户上滚回看）。
+/// 模板取 prev 下部两条窄竖条（左右 1/4 处，规避开居中的 sticky header /
+/// 加载条），灰度 + 隔点采样后做 SAD；对 d ∈ [-(th-1), h-th] 搜索（负向
+/// 只需模板带高度内可重叠，越界尾部按比例截短）。最小 SAD 超阈值 = 置信
+/// 不足（动态内容干扰），返回 None。
+fn match_scroll_dy(prev: &RgbaImage, cur: &RgbaImage) -> Option<i32> {
     let (w, h) = (prev.width(), prev.height());
     if cur.width() != w || cur.height() != h {
         return None;
@@ -81,25 +134,31 @@ fn match_scroll_dy(prev: &RgbaImage, cur: &RgbaImage) -> Option<u32> {
         (i32::from(p[0]) * 299 + i32::from(p[1]) * 587 + i32::from(p[2]) * 114) / 1000
     };
     let xs = [w / 4 - TW / 2, w * 3 / 4 - TW / 2];
-    let max_dy = (h - th).min(h / 2);
-    let mut best_dy = 0u32;
+    let dmin = -(th as i32) + 1;
+    let dmax = (h - th) as i32;
+    let mut best_dy = 0i32;
     let mut best_sad = f32::MAX;
-    for dy in 0..=max_dy {
+    for d in dmin..=dmax {
+        // d<0（内容下移）时模板尾部移出帧界，按可重叠范围截短行区间
+        let y_end = if d < 0 { (h as i32 + d) as u32 } else { h };
         let mut total = 0i64;
         let mut cnt = 0i64;
         for &tx in &xs {
-            for y in (h - th..h).step_by(3) {
-                let cy = y - dy;
+            for y in (h - th..y_end).step_by(3) {
+                let cy = (y as i32 - d) as u32;
                 for x in (tx..tx + TW).step_by(4) {
                     total += i64::from((gray(prev, x, y) - gray(cur, x, cy)).abs());
                     cnt += 1;
                 }
             }
         }
+        if cnt == 0 {
+            continue;
+        }
         let sad = total as f32 / cnt as f32;
         if sad < best_sad {
             best_sad = sad;
-            best_dy = dy;
+            best_dy = d;
         }
     }
     // 阈值 16/255 ≈ 6% 平均灰度差：页面噪声可过，明显换内容拒绝
@@ -148,7 +207,8 @@ impl CanvasBuf {
 // ── 会话入口 ────────────────────────────────────────────────────────────────
 
 /// 开始滚动会话：rx/ry/rw/rh = 选区显示器相对物理坐标；mx/my = 显示器原点。
-/// 第一帧从会话定格图（session_{seq}.bmp）裁剪，此后 capture_region 捕获实时屏幕。
+/// 第一帧从会话定格图（session_{seq}.bmp）裁剪，此后 capture_region 捕获实时
+/// 屏幕。不移动光标、不注入滚轮：拼接节奏完全跟手（用户下滚才捕获）。
 #[tauri::command]
 pub fn shot_scroll_begin(
     app: AppHandle,
@@ -177,13 +237,14 @@ pub fn shot_scroll_begin(
     // 覆盖窗退场（常驻窗停靠回屏幕外，end_session 即释放内存定格帧；base 已
     // 在内存不受影响）
     super::shot::end_session(&app);
-    // 光标悬停选区中心：滚轮事件落点 = 目标窗口（Win10+ 悬停滚动）
-    unsafe {
-        use windows::Win32::UI::WindowsAndMessaging::SetCursorPos;
-        let _ = SetCursorPos(mx + rx + rw / 2, my + ry + rh / 2);
-    }
-    std::thread::sleep(Duration::from_millis(120));
 
+    // 钩子反应区 = 选区全局物理坐标
+    *HOOK_ZONE.lock().unwrap_or_else(|e| e.into_inner()) = (mon.x + rx, mon.y + ry, rw, rh);
+    WHEEL_DOWN.lock().unwrap_or_else(|e| e.into_inner()).take();
+    WHEEL_PEND.store(false, Ordering::Relaxed);
+    WHEEL_UP.store(false, Ordering::Relaxed);
+    HOOK_TID.store(0, Ordering::Relaxed);
+    HOOK_OK.store(false, Ordering::Relaxed);
     SCROLL_FLAG.store(0, Ordering::Relaxed);
     show_scrollbar_window(&app, &mon)?;
 
@@ -194,16 +255,31 @@ pub fn shot_scroll_begin(
     Ok(())
 }
 
-/// 滚动拼接主循环（独立线程）：注入 → 稳定 → 捕获 → 匹配 → 追加
+/// 滚动拼接主循环（独立线程）：等下滚静默 → 捕获 → 有符号匹配 → 追加/重定基准。
+/// 钩子安装由本线程等待就绪（tid 非零）后判定，装钩失败静默收场关浮条。
 fn scroll_loop(app: AppHandle, mon: MonRect, rw: u32, rh: u32, rx: u32, ry: u32, base: RgbaImage) {
     let mon_obj = xcap::Monitor::all().ok().and_then(|all| {
         all.into_iter()
             .find(|m| m.x().ok() == Some(mon.x) && m.y().ok() == Some(mon.y))
     });
     let Some(monitor) = mon_obj else {
+        quit_hook();
         end_scroll(&app, mon, None, false);
         return;
     };
+    let _hook = spawn_wheel_hook();
+    // 等钩子线程完成安装（tid 非零即已尝试）；装钩失败无法感知用户滚轮，收场
+    for _ in 0..100 {
+        if HOOK_TID.load(Ordering::Relaxed) != 0 {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    if !HOOK_OK.load(Ordering::Relaxed) {
+        quit_hook();
+        end_scroll(&app, mon, None, false);
+        return;
+    }
     let mut canvas = CanvasBuf::new(rw);
     canvas.push(&base, 0);
     let mut last = base;
@@ -216,41 +292,61 @@ fn scroll_loop(app: AppHandle, mon: MonRect, rw: u32, rh: u32, rx: u32, ry: u32,
             truncated = canvas.h >= MAX_H;
             break;
         }
-        send_wheel_down();
-        std::thread::sleep(SETTLE);
-        let frame = monitor.capture_region(rx, ry, rw, rh);
-        let Ok(frame) = frame else {
-            bad_streak += 1;
-            if bad_streak >= BAD_STREAK {
-                truncated = true;
-                break;
-            }
-            continue;
-        };
-        match match_scroll_dy(&last, &frame) {
-            Some(dy) if dy >= 2 => {
-                zero_streak = 0;
-                bad_streak = 0;
-                canvas.push(&frame, dy);
-                last = frame;
-                emit_height(&app, canvas.h);
-            }
-            Some(_) => {
-                // 0/1px：视作未滚动（到底或滚动被拦截）
-                zero_streak += 1;
-                if zero_streak >= BOTTOM_STREAK {
-                    break;
-                }
-            }
-            None => {
-                bad_streak += 1;
-                if bad_streak >= BAD_STREAK {
-                    truncated = true;
-                    break;
+        // 上滚不截取（“上滚不动”）：只重置到底计数，回看后继续下滚仍可拼接
+        if WHEEL_UP.swap(false, Ordering::Relaxed) {
+            zero_streak = 0;
+        }
+        // 下滚后静默 QUIET 才捕获：一格连滚/惯性合并为一帧，免碎片拼接
+        let due = WHEEL_DOWN
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .map(|t| t.elapsed() >= QUIET)
+            .unwrap_or(false);
+        if WHEEL_PEND.load(Ordering::Relaxed) && due {
+            WHEEL_PEND.store(false, Ordering::Relaxed);
+            match monitor.capture_region(rx, ry, rw, rh) {
+                Ok(frame) => match match_scroll_dy(&last, &frame) {
+                    // 内容上移 ≥2px：底部新内容追加
+                    Some(dy) if dy >= 2 => {
+                        zero_streak = 0;
+                        bad_streak = 0;
+                        canvas.push(&frame, dy as u32);
+                        last = frame;
+                        emit_height(&app, canvas.h);
+                    }
+                    // 内容下移（上滚回看）：只重定基准，不追加不倒退
+                    Some(dy) if dy <= -2 => {
+                        zero_streak = 0;
+                        bad_streak = 0;
+                        last = frame;
+                    }
+                    // 0/±1px：视作未滚动（到底或滚动被拦截）
+                    Some(_) => {
+                        zero_streak += 1;
+                        if zero_streak >= BOTTOM_STREAK {
+                            break;
+                        }
+                    }
+                    None => {
+                        bad_streak += 1;
+                        if bad_streak >= BAD_STREAK {
+                            truncated = true;
+                            break;
+                        }
+                    }
+                },
+                Err(_) => {
+                    bad_streak += 1;
+                    if bad_streak >= BAD_STREAK {
+                        truncated = true;
+                        break;
+                    }
                 }
             }
         }
+        std::thread::sleep(POLL);
     }
+    quit_hook();
     if SCROLL_FLAG.load(Ordering::Relaxed) == 2 {
         // 取消：丢弃，不出结果
         return;
@@ -291,7 +387,7 @@ fn end_scroll(app: &AppHandle, mon: MonRect, img: Option<RgbaImage>, truncated: 
 // ── 浮条窗 / 结果窗 ─────────────────────────────────────────────────────────
 
 fn show_scrollbar_window(app: &AppHandle, mon: &MonRect) -> Result<(), String> {
-    const BW: f64 = 356.0;
+    const BW: f64 = 392.0;
     const BH: f64 = 42.0;
     let s = f64::from(mon.scale);
     let boot = serde_json::json!({ "window": "scrollbar" });
@@ -496,9 +592,16 @@ mod tests {
     use super::*;
     use image::Rgba;
 
-    /// 确定性竖向纹理（可分辨 10px 级位移）
+    /// 确定性非周期纹理（整数哈希，可分辨 10px 级位移；线性取模式纹理在
+    /// mod 素数下存在 Δy×13+Δseed×61≡0 的混叠位移，会使错误 d 同得 SAD 0）
     fn pattern(x: u32, y: u32, seed: u32) -> u8 {
-        ((x * 7 + y * 13 + seed * 61) % 251) as u8
+        let mut h = x.wrapping_mul(0x9E37_79B1)
+            ^ y.wrapping_mul(0x85EB_CA77)
+            ^ seed.wrapping_mul(0xC2B2_AE3D);
+        h ^= h >> 13;
+        h = h.wrapping_mul(0x27D4_EB2F);
+        h ^= h >> 15;
+        (h % 251) as u8
     }
 
     fn img(w: u32, h: u32, seed: u32) -> RgbaImage {
@@ -519,6 +622,20 @@ mod tests {
     }
 
     #[test]
+    fn match_scroll_dy_finds_negative_shift() {
+        // cur = prev 内容整体下移 40px（上滚回看：prev[y] 出现在 cur[y+40]），
+        // 返回有符号 -40 供循环线程重定基准而非追加
+        let prev = img(200, 200, 0);
+        let mut cur = img(200, 200, 9); // 顶部回看露出区用不同纹理
+        for y in 40..200u32 {
+            for x in 0..200u32 {
+                cur.put_pixel(x, y, *prev.get_pixel(x, y - 40));
+            }
+        }
+        assert_eq!(match_scroll_dy(&prev, &cur), Some(-40));
+    }
+
+    #[test]
     fn match_scroll_dy_bottom_is_zero() {
         let prev = img(200, 200, 0);
         let cur = prev.clone();
@@ -527,9 +644,13 @@ mod tests {
 
     #[test]
     fn match_scroll_dy_rejects_dynamic_content() {
-        // 完全不相关的两帧（动态内容/换页）：置信不足应返回 None
+        // 完全不相关的两帧（动态内容/换页）：置信不足应返回 None。
+        // cur 用黑白棋盘（对平场 prev 的 SAD ≈ 38，远超阈值；随机哈希纹理
+        // 经隔点采样后平均灰度差可能恰好落入 16 阈值内，不稳）
         let prev = RgbaImage::from_pixel(200, 200, Rgba([128, 128, 128, 255]));
-        let cur = img(200, 200, 3);
+        let cur = RgbaImage::from_fn(200, 200, |x, y| {
+            Rgba([if (x + y) % 2 == 0 { 255 } else { 0 }, 128, 64, 255])
+        });
         assert_eq!(match_scroll_dy(&prev, &cur), None);
     }
 

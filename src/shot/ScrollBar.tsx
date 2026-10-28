@@ -1,4 +1,5 @@
-// 滚动截图控制浮条（§3.6 二期 B 批，label shot-scroll）：显示已捕获高度，
+// 滚动截图控制浮条（§3.6 二期 B 批，label shot-scroll；2026-10-28 改手动模式：
+// 用户滚轮下滚 Rust 侧才捕获拼接，上滚不截取）。显示滚动状态与已捕获高度，
 // 完成 = 用已拼内容出结果，取消 / Esc = 丢弃。窗口生命周期由 Rust 侧管理
 //（拼接收尾时关闭），本组件只发控制命令与接收进度事件。
 import { useCallback, useEffect, useState } from "react";
@@ -6,6 +7,7 @@ import { listen } from "@tauri-apps/api/event";
 import { Check, GalleryVerticalEnd, X } from "lucide-react";
 
 import { api } from "../lib/ipc";
+import { initTooltip } from "../lib/tooltip";
 import { AppIcon } from "../components/AppIcon";
 
 export interface ScrollBarBoot {
@@ -15,6 +17,8 @@ export interface ScrollBarBoot {
 export function ScrollBar() {
   const [height, setHeight] = useState(0);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => initTooltip(), []);
 
   useEffect(() => {
     const un = listen<{ height: number }>("shot-scroll-progress", (e) =>
@@ -52,13 +56,13 @@ export function ScrollBar() {
     <div className="np-shot-sbar">
       <span className="np-shot-sbar-dot" />
       <AppIcon icon={GalleryVerticalEnd} />
-      <span className="np-shot-sbar-label">滚动截图中</span>
+      <span className="np-shot-sbar-label">{height ? "滚动截图中" : "向下滚动开始"}</span>
       <span className="np-shot-sbar-h">已捕获 {height.toLocaleString()} px</span>
-      <button className="np-shot-btn primary" disabled={busy} onClick={() => act("finish")}>
+      <button className="np-shot-btn primary" data-tip="用已拼内容出结果" data-kbd="Enter" disabled={busy} onClick={() => act("finish")}>
         <AppIcon icon={Check} />
         完成
       </button>
-      <button className="np-shot-btn" disabled={busy} onClick={() => act("cancel")}>
+      <button className="np-shot-btn" data-tip="丢弃长图" data-kbd="Esc" disabled={busy} onClick={() => act("cancel")}>
         <AppIcon icon={X} />
         取消
       </button>
