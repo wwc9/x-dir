@@ -49,13 +49,14 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 /// 长图高度上限（物理像素，§3.6 定案 20000）
 const MAX_H: u32 = 20000;
-/// 下滚事件后的静默窗：滚轮停歇此时长才收尾帧（连滚/惯性多格合并）
-const QUIET: Duration = Duration::from_millis(240);
+/// 下滚事件后的静默窗：滚轮停歇此时长才收尾帧（合并连滚/惯性）。步长越小
+/// 帧间行程越小，位移歧义（周期性自相似页面的并列峰）越少
+const QUIET: Duration = Duration::from_millis(160);
 /// 滚动进行中的流式增量帧：最小捕获间隔（每帧行程小，必落在匹配域内——
 /// 首版只做停歇合并，一格连滚 > 选区高时帧间无重叠、匹配必败，实测事故）
-const STREAM_GAP: Duration = Duration::from_millis(150);
+const STREAM_GAP: Duration = Duration::from_millis(80);
 /// 流式帧的单击渲染等待
-const TICK_SETTLE: Duration = Duration::from_millis(60);
+const TICK_SETTLE: Duration = Duration::from_millis(30);
 /// 无滚轮活动的自动收场时限（兜底：钩子被系统摘除等异常不再永久挂死）
 const IDLE_TIMEOUT: Duration = Duration::from_secs(300);
 /// 循环线程轮询节奏
@@ -461,6 +462,18 @@ fn match_scroll_dy(prev: &RgbaImage, cur: &RgbaImage) -> Option<i32> {
         }
     }
     if score < NCC_MIN {
+        return None;
+    }
+    // ── 歧义拒绝：周期性自相似页面（聊天气泡/列表行）在非零位移处出现
+    // 近并列峰时，两帧原理上无法分辨真实位移——取小拼重复、取大挖缺失，
+    // 都比不上留白。诚实拒绝（None → bad_streak，下一帧重试），唯一豁免是
+    // 并列 winner 为 0（未滚动/纯色底，到底检测依赖它，且不追加不产生重复）
+    if dy != 0
+        && refined
+            .iter()
+            .any(|&(d, s)| d != dy && s >= score - TIE_EPS)
+    {
+        log::debug!("滚动截图：位移并列 {refined:?}，拒绝");
         return None;
     }
     // ── 多带共识：各带在终选 ±6px 内独立求峰；定位良好的带（可见 ≥3/4 带
@@ -1512,9 +1525,9 @@ mod tests {
     }
 
     #[test]
-    fn match_scroll_dy_periodic_rows_takes_smallest() {
-        // 24px 周期行（列表/表格惯见）滚动半周期 12px：12/36/60… 全部满分，
-        // 并列取 |d| 最小 = 真实位移
+    fn match_scroll_dy_periodic_rows_ambiguous_rejected() {
+        // 24px 周期行（列表/表格惯见）滚动半周期 12px：±12/±36… 全部满分，
+        // 真实位移原理上不可分辨（取小拼重复、取大挖缺失）——诚实拒绝
         let v = |y: u32, x: u32| -> u8 { pattern(y % 24, x / 40, 7) };
         let mut prev = RgbaImage::from_pixel(200, 200, Rgba([0, 0, 0, 255]));
         for y in 0..200u32 {
@@ -1528,7 +1541,22 @@ mod tests {
                 cur.put_pixel(x, y, *prev.get_pixel(x, y + 12));
             }
         }
-        assert_eq!(match_scroll_dy(&prev, &cur), Some(12));
+        assert_eq!(match_scroll_dy(&prev, &cur), None);
+    }
+
+    #[test]
+    fn match_scroll_dy_bottom_on_periodic_rows() {
+        // 周期页面滚动到尽头（两帧全同）：并列 winner = 0 豁免拒绝，
+        // 到底检测得以推进且不追加任何行
+        let v = |y: u32, x: u32| -> u8 { pattern(y % 24, x / 40, 7) };
+        let mut prev = RgbaImage::from_pixel(200, 200, Rgba([0, 0, 0, 255]));
+        for y in 0..200u32 {
+            for x in 0..200u32 {
+                prev.put_pixel(x, y, Rgba([v(y, x), 128, 64, 255]));
+            }
+        }
+        let cur = prev.clone();
+        assert_eq!(match_scroll_dy(&prev, &cur), Some(0));
     }
 
     #[test]
