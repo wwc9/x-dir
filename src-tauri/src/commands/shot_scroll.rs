@@ -191,11 +191,12 @@ fn quit_hook() {
 // AOSP 的滚动截图（同 Apache-2.0）走 App 协作 API，图块坐标由应用精确提供、
 // 无像素匹配，对外部截屏场景不适用，未采用其流程。
 
-/// 匹配带纵位（帧高占比）：B 上中管大负位移（上滚回看）、A 中部、C 下中
-/// 管大正位移（快速下滚——单帧行程可达 0.85h，旧双带 ±0.5h 搜索域封顶时
-/// 匹配器只能取域内错误次峰 → 每帧少记 600-800px → 长图大段重复，实测事
-/// 故）。均避开 <20%h sticky header；可见行 < 半带的位置不计分
-const BAND_FRACS: [f32; 3] = [0.25, 0.5, 0.75];
+/// 匹配带纵位（帧高占比）：B 上中管大负位移（上滚回看）、A 中部；第三带
+/// 由 h-th 底锚（在 band_tops 追加）管大正位移（快速下滚——单帧行程可达
+/// 0.9375h，旧双带 ±0.5h 搜索域封顶时匹配器只能取域内错误次峰 → 每帧少记
+/// 600-800px → 长图大段重复，实测事故）。均避开 <20%h sticky header；可见
+/// 行 < 半带的位置不计分
+const BAND_FRACS: [f32; 2] = [0.25, 0.5];
 /// 最终多带平均 NCC 下限：低于 = 内容已变（换页/动态刷新），置信不足拒绝
 const NCC_MIN: f32 = 0.55;
 /// 并列判定：精化后分差在此以内视为同分，取 |dy| 更小者（周期列表/纯色底
@@ -348,11 +349,13 @@ fn match_scroll_dy(prev: &RgbaImage, cur: &RgbaImage) -> Option<i32> {
     if cur.width() != w || cur.height() != h || h < 120 {
         return None;
     }
-    // 带高 = 帧高 1/5（4 的倍数便于跨层对位）；三带纵位见 BAND_FRACS
-    let th = ((h as usize) / 5 / 4 * 4).clamp(24, 480);
+    // 带高 = 帧高 1/8（4 的倍数）：带越靠下可见域越远，窄带把正位移覆盖推到
+    // h - th/2 ≈ 0.9375h（每 tick 滚动接近整屏的场景）
+    let th = ((h as usize) / 8 / 4 * 4).clamp(16, 320);
     let band_tops: Vec<usize> = BAND_FRACS
         .iter()
-        .map(|f| ((h as f32 * f) as usize / 4 * 4).min(h as usize - th))
+        .map(|f| (h as f32 * f) as usize / 4 * 4)
+        .chain(std::iter::once(h as usize - th))
         .collect();
     let w4 = (w / 4) as usize;
     let thq = th / 4;
@@ -779,6 +782,25 @@ pub fn shot_scroll_launch(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// dev 构建帧转储（离线分析真位移用）：base 与每个捕获帧写 PPM（P6）到
+/// shot_dir()/scroll_dump_{会话戳}/；保留最近 2 个会话目录。release 构建
+/// 零开销（编译期剔除）
+#[cfg(debug_assertions)]
+fn dump_frame(dir: &Path, name: &str, frame: &RgbaImage) {
+    let (w, h) = frame.dimensions();
+    let mut rgb = Vec::with_capacity((w * h * 3) as usize);
+    for p in frame.pixels() {
+        let c = p.0;
+        rgb.extend_from_slice(&[c[0], c[1], c[2]]);
+    }
+    let path = dir.join(format!("{name}.pnm"));
+    if let Err(e) =
+        image::save_buffer(&path, &rgb, w, h, image::ColorType::Rgb8).map_err(|e| e.to_string())
+    {
+        log::debug!("滚动截图：帧转储失败 {name}: {e}");
+    }
+}
+
 /// 滚动拼接主循环（独立线程）：等下滚静默 → 捕获 → 有符号匹配 → 追加/重定基准。
 /// 钩子已由 shot_scroll_begin 握手装好，本线程只消费标记。
 fn scroll_loop(app: AppHandle, geo: ScrollGeo, base: RgbaImage, canvas: Arc<Mutex<CanvasBuf>>) {
@@ -794,8 +816,35 @@ fn scroll_loop(app: AppHandle, geo: ScrollGeo, base: RgbaImage, canvas: Arc<Mute
         end_scroll(&app, mon, None, false);
         return;
     };
+    #[cfg(debug_assertions)]
+    let dump_dir = {
+        let root = shot_dir().join("scroll_dump");
+        let _ = std::fs::create_dir_all(&root);
+        // 只留最近 2 个会话目录
+        let mut olds: Vec<_> = std::fs::read_dir(&root)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|e| e.path().is_dir())
+            .collect();
+        olds.sort_by_key(|e| e.file_name());
+        if olds.len() > 2 {
+            for o in &olds[..olds.len() - 2] {
+                let _ = std::fs::remove_dir_all(o.path());
+            }
+        }
+        let d = root.join(format!("{}", millis()));
+        let _ = std::fs::create_dir_all(&d);
+        (d, true)
+    };
     let mut last = base;
+    #[cfg(debug_assertions)]
+    if dump_dir.1 {
+        dump_frame(&dump_dir.0, "b000", &last);
+    }
     let mut zero_streak = 0u32;
+    #[cfg(debug_assertions)]
+    let mut dump_seq = 0u32;
     let mut bad_streak = 0u32;
     let mut truncated = false;
     let mut last_activity = Instant::now();
@@ -834,49 +883,60 @@ fn scroll_loop(app: AppHandle, geo: ScrollGeo, base: RgbaImage, canvas: Arc<Mute
                 *LAST_CAPTURE.lock().unwrap_or_else(|e| e.into_inner()) = Some(now);
                 let ticks = HOOK_TICKS.load(Ordering::Relaxed);
                 match monitor.capture_region(rx, ry, rw, rh) {
-                    Ok(frame) => match match_scroll_dy(&last, &frame) {
-                        // 内容上移 ≥2px：底部新内容追加
-                        Some(dy) if dy >= 2 => {
-                            zero_streak = 0;
-                            bad_streak = 0;
-                            canvas
-                                .lock()
-                                .unwrap_or_else(|e| e.into_inner())
-                                .push(&frame, dy as u32);
-                            last = frame;
-                            let h = canvas.lock().unwrap_or_else(|e| e.into_inner()).h;
-                            log::debug!("滚动截图：追加 {dy}px，累计 {h}px（钩子 {ticks} ticks）");
-                            emit_height(&app, h);
-                        }
-                        // 内容下移（上滚回看）：只重定基准，不追加不倒退
-                        Some(dy) if dy <= -2 => {
-                            zero_streak = 0;
-                            bad_streak = 0;
-                            last = frame;
-                            log::debug!(
-                                "滚动截图：上滚回看 {dy}px，重定基准（钩子 {ticks} ticks）"
-                            );
-                        }
-                        // 0/±1px：视作未滚动（到底或滚动被拦截）
-                        Some(_) => {
-                            zero_streak += 1;
-                            log::debug!(
-                                "滚动截图：未滚动 {zero_streak}/{BOTTOM_STREAK}（钩子 {ticks} ticks）"
-                            );
-                            if zero_streak >= BOTTOM_STREAK {
-                                log::info!("滚动截图：到底（连续 {BOTTOM_STREAK} 帧未滚动）");
-                                break;
+                    Ok(frame) => {
+                        #[cfg(debug_assertions)]
+                        {
+                            dump_seq += 1;
+                            if dump_dir.1 {
+                                dump_frame(&dump_dir.0, &format!("f{dump_seq:03}"), &frame);
                             }
                         }
-                        None => {
-                            bad_streak += 1;
-                            log::debug!("滚动截图：匹配失败 {bad_streak}/{BAD_STREAK}");
-                            if bad_streak >= BAD_STREAK {
-                                truncated = true;
-                                break;
+                        match match_scroll_dy(&last, &frame) {
+                            // 内容上移 ≥2px：底部新内容追加
+                            Some(dy) if dy >= 2 => {
+                                zero_streak = 0;
+                                bad_streak = 0;
+                                canvas
+                                    .lock()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .push(&frame, dy as u32);
+                                last = frame;
+                                let h = canvas.lock().unwrap_or_else(|e| e.into_inner()).h;
+                                log::debug!(
+                                    "滚动截图：追加 {dy}px，累计 {h}px（钩子 {ticks} ticks）"
+                                );
+                                emit_height(&app, h);
+                            }
+                            // 内容下移（上滚回看）：只重定基准，不追加不倒退
+                            Some(dy) if dy <= -2 => {
+                                zero_streak = 0;
+                                bad_streak = 0;
+                                last = frame;
+                                log::debug!(
+                                    "滚动截图：上滚回看 {dy}px，重定基准（钩子 {ticks} ticks）"
+                                );
+                            }
+                            // 0/±1px：视作未滚动（到底或滚动被拦截）
+                            Some(_) => {
+                                zero_streak += 1;
+                                log::debug!(
+                                    "滚动截图：未滚动 {zero_streak}/{BOTTOM_STREAK}（钩子 {ticks} ticks）"
+                                );
+                                if zero_streak >= BOTTOM_STREAK {
+                                    log::info!("滚动截图：到底（连续 {BOTTOM_STREAK} 帧未滚动）");
+                                    break;
+                                }
+                            }
+                            None => {
+                                bad_streak += 1;
+                                log::debug!("滚动截图：匹配失败 {bad_streak}/{BAD_STREAK}");
+                                if bad_streak >= BAD_STREAK {
+                                    truncated = true;
+                                    break;
+                                }
                             }
                         }
-                    },
+                    }
                     Err(e) => {
                         log::error!("滚动截图：帧捕获失败：{e}");
                         bad_streak += 1;
