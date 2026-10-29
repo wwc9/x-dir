@@ -782,9 +782,9 @@ pub fn shot_scroll_launch(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// dev 构建帧转储（离线分析真位移用）：base 与每个捕获帧写 PPM（P6）到
-/// shot_dir()/scroll_dump_{会话戳}/；保留最近 2 个会话目录。release 构建
-/// 零开销（编译期剔除）
+/// dev 构建帧转储（离线分析真位移用）：base 与每个捕获帧写裸 RGB（行主序，
+/// 尺寸入文件名）到 shot_dir()/scroll_dump_{会话戳}/；保留最近 2 个会话目
+/// 录。release 构建零开销（编译期剔除）
 #[cfg(debug_assertions)]
 fn dump_frame(dir: &Path, name: &str, frame: &RgbaImage) {
     let (w, h) = frame.dimensions();
@@ -793,10 +793,8 @@ fn dump_frame(dir: &Path, name: &str, frame: &RgbaImage) {
         let c = p.0;
         rgb.extend_from_slice(&[c[0], c[1], c[2]]);
     }
-    let path = dir.join(format!("{name}.pnm"));
-    if let Err(e) =
-        image::save_buffer(&path, &rgb, w, h, image::ColorType::Rgb8).map_err(|e| e.to_string())
-    {
+    let path = dir.join(format!("{name}_{w}x{h}.rgb"));
+    if let Err(e) = std::fs::write(&path, &rgb) {
         log::debug!("滚动截图：帧转储失败 {name}: {e}");
     }
 }
