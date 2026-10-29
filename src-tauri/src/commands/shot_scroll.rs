@@ -990,6 +990,16 @@ fn scroll_loop(app: AppHandle, geo: ScrollGeo, base: RgbaImage, canvas: Arc<Mute
                                     rh - dy as u32
                                 );
                                 emit_height(&app, ch);
+                                // 预览面板高度随长图增长（PixPin 语义）
+                                sync_panel_height(
+                                    &app,
+                                    &mon,
+                                    panel_y,
+                                    panel_w,
+                                    rw,
+                                    ch,
+                                    &mut last_ph,
+                                );
                             }
                             // 内容下移（上滚回看）：只重定基准，不追加不倒退
                             Some(dy) if dy <= -2 => {
