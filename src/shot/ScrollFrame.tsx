@@ -4,7 +4,8 @@
 // 内滚轮直达（滚动截图的数据源），遮罩纯视觉；穿透窗的透明是功能性的，
 // 运行时强制 html/body 背景透明（index.css 注入顺序会盖掉 shot.html 的
 // 内联透明背景）。
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 
 export interface ScrollFrameBoot {
   window: "frame";
@@ -17,16 +18,24 @@ export interface ScrollFrameBoot {
 }
 
 export function ScrollFrame({ boot }: { boot: ScrollFrameBoot }) {
+  const [geom, setGeom] = useState<ScrollFrameBoot>(boot);
+  // 常驻窗复用：Rust 每场会话 show 前发几何事件换装（首场 __BOOT__ 已带同款）
+  useEffect(() => {
+    const un = listen<ScrollFrameBoot>("shot-frame-geom", (e) => setGeom(e.payload));
+    return () => {
+      void un.then((f) => f()).catch(() => undefined);
+    };
+  }, []);
   useEffect(() => {
     document.documentElement.style.background = "transparent";
     document.body.style.background = "transparent";
   }, []);
-  const s = boot.scale || 1;
+  const s = geom.scale || 1;
   const sel = {
-    left: boot.x / s,
-    top: boot.y / s,
-    width: boot.w / s,
-    height: boot.h / s,
+    left: geom.x / s,
+    top: geom.y / s,
+    width: geom.w / s,
+    height: geom.h / s,
   };
   return (
     <>

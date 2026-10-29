@@ -19,11 +19,25 @@ export interface ScrollBarBoot {
 }
 
 export function ScrollBar({ boot }: { boot: ScrollBarBoot }) {
+  /** 常驻窗复用：选区宽随会话变，boot 事件换装并整体重置 */
+  const [selW, setSelW] = useState(boot.w);
   const [height, setHeight] = useState(0);
   const [busy, setBusy] = useState(false);
   /** 滚太快警示（Rust 流式帧匹配失败/捕获失败 = 速度超匹配能力） */
   const [warn, setWarn] = useState(false);
   const warnTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    const un = listen<{ w: number }>("shot-bar-boot", (e) => {
+      setSelW(e.payload.w);
+      setHeight(0);
+      setBusy(false);
+      setWarn(false);
+    });
+    return () => {
+      void un.then((f) => f()).catch(() => undefined);
+    };
+  }, []);
 
   useEffect(() => initTooltip(), []);
 
@@ -79,7 +93,7 @@ export function ScrollBar({ boot }: { boot: ScrollBarBoot }) {
         <span className="np-shot-sbar-warn">滚动过快，请放慢</span>
       ) : height > 0 ? (
         <span className="np-shot-sbar-dim">
-          {boot.w.toLocaleString()} × {height.toLocaleString()}
+          {selW.toLocaleString()} × {height.toLocaleString()}
         </span>
       ) : (
         <span className="np-shot-sbar-dim">向下滚动 · 缓慢匀速</span>

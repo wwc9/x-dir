@@ -87,6 +87,9 @@ type ScrollPayload = (RgbaImage, ScrollGeo);
 static SCROLL_PENDING: Mutex<Option<ScrollPayload>> = Mutex::new(None);
 /// 预览窗增量拉取的数据源：循环线程的累积画布（会话收尾即清）
 static PREVIEW_CANVAS: Mutex<Option<Arc<Mutex<CanvasBuf>>>> = Mutex::new(None);
+/// 已拼长图成品（会话收尾置入，下一场 begin 清）：复制命令直供内存，
+/// 免去大 PNG 落盘后重新解码（200MP 级 PNG 解码秒级）
+static SCROLL_IMAGE: Mutex<Option<RgbaImage>> = Mutex::new(None);
 /// 钩子反应区 = 选区全局物理坐标（x, y, w, h）——光标在内才响应滚轮，
 /// 滚轮落点即目标窗口（Win10+ 悬停滚动），光标挪出选区不误触
 static HOOK_ZONE: Mutex<(i32, i32, i32, i32)> = Mutex::new((0, 0, 0, 0));
@@ -567,12 +570,9 @@ impl CanvasBuf {
         self.buf.get(start..end)
     }
 
-    fn to_image(&self) -> Option<RgbaImage> {
-        RgbaImage::from_raw(
-            self.w,
-            self.h,
-            self.buf[..(self.w * self.h * 4) as usize].to_vec(),
-        )
+    /// 消耗画布取图（缓冲所有权转移，免整图拷贝）
+    fn into_image(mut self) -> Option<RgbaImage> {
+        RgbaImage::from_raw(self.w, self.h, std::mem::take(&mut self.buf))
     }
 }
 
@@ -685,6 +685,7 @@ pub fn shot_scroll_begin(
     }
     // 第一帧 = 定格图裁剪（此刻覆盖窗显示的就是原始画面；定格帧由 shot.rs
     // 会话捕获后留在内存，这里直接裁，无文件 IO）
+    *SCROLL_IMAGE.lock().unwrap_or_else(|e| e.into_inner()) = None;
     let Some(base) = super::shot::session_frame_crop(rx, ry, rw as u32, rh as u32) else {
         log::error!("滚动截图开始被拒绝：无进行中的截图会话（定格帧已被收场清空）");
         return Err("无进行中的截图会话".into());
@@ -741,10 +742,32 @@ pub fn shot_scroll_launch(app: AppHandle) -> Result<(), String> {
         log::error!("滚动截图 launch 被拒绝：无待启动的会话载荷");
         return Err("无待启动的滚动会话".into());
     };
-    log::info!("滚动截图：第二段进场，150ms 后建选区框窗与预览窗");
+    log::info!("滚动截图：第二段进场，150ms 后就位三窗并起循环");
     let app2 = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(150));
+        // 三窗常驻（首场后 hide 不销毁）：boot/几何事件先行——页面在 webview
+        // 线程换装，与主线程建窗/显示并行，无闪屏空窗期。首场窗尚不存在，
+        // 事件落空无害（initialization_script 已带同款初始载荷）
+        let _ = app2.emit_to(
+            "shot-frame",
+            "shot-frame-geom",
+            serde_json::json!({
+                "x": geo.rx, "y": geo.ry, "w": geo.rw, "h": geo.rh,
+                "scale": f64::from(geo.mon.scale),
+            }),
+        );
+        let _ = app2.emit_to(
+            "shot-scroll",
+            "shot-preview-boot",
+            serde_json::json!({ "w": geo.rw, "h": geo.rh }),
+        );
+        let _ = app2.emit_to(
+            "shot-bar",
+            "shot-bar-boot",
+            serde_json::json!({ "w": geo.rw }),
+        );
+        std::thread::sleep(Duration::from_millis(120));
         let runner = app2.clone();
         let dispatch = runner.run_on_main_thread(move || {
             // 框窗纯装饰，失败只记日志不流产；预览窗/控制条失败 = 会话流产
@@ -999,16 +1022,19 @@ fn scroll_loop(app: AppHandle, geo: ScrollGeo, base: RgbaImage, canvas: Arc<Mute
             "滚动截图：用户取消，丢弃已拼内容（{}px）",
             canvas.lock().unwrap_or_else(|e| e.into_inner()).h
         );
-        destroy_session_windows(&app);
+        hide_session_windows(&app);
         return;
     }
-    let (img, h) = {
-        let c = canvas.lock().unwrap_or_else(|e| e.into_inner());
-        (c.to_image(), c.h)
-    };
+    let h = canvas.lock().unwrap_or_else(|e| e.into_inner()).h;
     if truncated {
         log::info!("滚动截图：动态内容/捕获异常截断，累计 {h}px");
     }
+    // into_image：缓冲所有权直移，免整图拷贝
+    let img = {
+        let mut c = canvas.lock().unwrap_or_else(|e| e.into_inner());
+        let cw = c.w;
+        std::mem::replace(&mut *c, CanvasBuf::new(cw)).into_image()
+    };
     match img {
         Some(img) => end_scroll(&app, mon, Some(img), truncated),
         None => {
@@ -1048,6 +1074,18 @@ pub fn shot_scroll_chunk(from_y: u32) -> tauri::ipc::Response {
 
 /// 关闭本会话全部窗口（预览窗 + 选区框窗 + 控制条；destroy 而非 close：
 /// close 走 CloseRequested 语义，实测偶发不奏效留僵尸）
+/// 常驻会话窗收场：hide 不销毁——下一场直接换装复用，免 WebView2 建窗
+/// 闪屏（三窗重建 600-900ms 是启动闪烁主因）。窗内页面保持存活，boot/
+/// 几何事件驱动换装
+fn hide_session_windows(app: &AppHandle) {
+    for label in ["shot-scroll", "shot-frame", "shot-bar"] {
+        if let Some(w) = app.get_webview_window(label) {
+            let _ = w.hide();
+        }
+    }
+}
+
+/// 破坏性清理（启动失败/僵尸窗）：销毁重建，下一场走冷建路径
 fn destroy_session_windows(app: &AppHandle) {
     for label in ["shot-scroll", "shot-frame", "shot-bar"] {
         if let Some(w) = app.get_webview_window(label) {
@@ -1069,16 +1107,37 @@ fn dialog_error(app: &AppHandle, msg: &str) {
 
 /// 收尾：关会话窗，长图存临时盘后开结果窗
 fn end_scroll(app: &AppHandle, mon: MonRect, img: Option<RgbaImage>, truncated: bool) {
-    destroy_session_windows(app);
+    // 常驻窗收场（hide 复用），结果窗随后独占交互
+    hide_session_windows(app);
     let Some(img) = img else {
         log::error!("滚动截图：无拼接结果可出（启动/收场异常）");
         dialog_error(app, "滚动截图未能生成结果（启动异常），请重新截图");
         return;
     };
+    // 成品入内存静态：复制命令直供，免大 PNG 解码；随下一场 begin 清除
+    *SCROLL_IMAGE.lock().unwrap_or_else(|e| e.into_inner()) = Some(img.clone());
     let dir = shot_dir();
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join(format!("scroll_{}.png", millis()));
-    if let Err(e) = img.save(&file) {
+    // 临时中转 PNG 用快速压缩（Fast + Up 行滤波：截图行相关性好，速度优先
+    // ——image 默认 deflate 慢一个量级，200MP 级编码阻塞结果窗出现）
+    use image::ImageEncoder as _;
+    let png_result = std::fs::File::create(&file).and_then(|f| {
+        let encoder = image::codecs::png::PngEncoder::new_with_quality(
+            std::io::BufWriter::new(f),
+            image::codecs::png::CompressionType::Fast,
+            image::codecs::png::FilterType::Up,
+        );
+        encoder
+            .write_image(
+                img.as_raw(),
+                img.width(),
+                img.height(),
+                image::ExtendedColorType::Rgba8,
+            )
+            .map_err(std::io::Error::other)
+    });
+    if let Err(e) = png_result {
         log::error!("滚动长图写盘失败：{e}");
         dialog_error(app, &format!("滚动长图写盘失败：{e}"));
         return;
@@ -1106,26 +1165,34 @@ fn show_frame_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
         "h": rh,
         "scale": f64::from(mon.scale),
     });
-    let win = WebviewWindowBuilder::new(app, "shot-frame", WebviewUrl::App("shot.html".into()))
-        .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
-        .title("X-Dir 滚动选区")
-        .decorations(false)
-        .resizable(false)
-        .maximizable(false)
-        .minimizable(false)
-        .skip_taskbar(true)
-        .always_on_top(true)
-        .shadow(false)
-        .transparent(true)
-        // 不可见窗口默认 focused(true) 在部分 WebView2 上聚焦异常（wry#1798）
-        .focused(false)
-        .visible(false)
-        .initialization_script(format!("window.__BOOT__ = {boot};"))
-        .build()
-        .map_err(|e| format!("创建选区框窗失败：{e}"))?;
-    // 整窗穿透：滚轮/点击直达下层真实窗口（穿透设置须在 show 前，防一拍拦截）
-    win.set_ignore_cursor_events(true)
-        .map_err(|e| format!("选区框窗设置穿透失败：{e}"))?;
+    // 常驻复用：已有窗（上场 hide）直接换装显示，免 WebView2 建窗 300ms+ 闪屏
+    let win = match app.get_webview_window("shot-frame") {
+        Some(w) => w,
+        None => {
+            let w =
+                WebviewWindowBuilder::new(app, "shot-frame", WebviewUrl::App("shot.html".into()))
+                    .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
+                    .title("X-Dir 滚动选区")
+                    .decorations(false)
+                    .resizable(false)
+                    .maximizable(false)
+                    .minimizable(false)
+                    .skip_taskbar(true)
+                    .always_on_top(true)
+                    .shadow(false)
+                    .transparent(true)
+                    // 不可见窗口默认 focused(true) 在部分 WebView2 上聚焦异常（wry#1798）
+                    .focused(false)
+                    .visible(false)
+                    .initialization_script(format!("window.__BOOT__ = {boot};"))
+                    .build()
+                    .map_err(|e| format!("创建选区框窗失败：{e}"))?;
+            // 整窗穿透：滚轮/点击直达下层真实窗口（穿透须在 show 前生效）
+            w.set_ignore_cursor_events(true)
+                .map_err(|e| format!("选区框窗设置穿透失败：{e}"))?;
+            w
+        }
+    };
     win.set_position(PhysicalPosition::new(mon.x, mon.y))
         .map_err(|e| e.to_string())?;
     win.set_size(PhysicalSize::new(mon.w, mon.h))
@@ -1142,11 +1209,15 @@ fn show_preview_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
     let (rx, ry, rw, rh) = (geo.rx, geo.ry, geo.rw, geo.rh);
     let (px, py, pw, ph) = panel_layout((rx as i32, ry as i32, rw as i32, rh as i32), mon);
     let boot = serde_json::json!({ "window": "scroll-preview", "w": rw, "h": rh });
-    // 本机 WebView2 建窗有 0x8007139F 前科（shot.rs 日志在案）：失败清掉可能
-    // 的僵尸 label 重试一次，仍败才报错
-    let mut win = None;
+    // 常驻复用优先（上场 hide 的窗直接换装显示，免建窗闪屏）；仅首场走
+    // 建窗——本机 WebView2 建窗有 0x8007139F 前科（shot.rs 日志在案）：
+    // 失败清掉可能的僵尸 label 重试一次，仍败才报错
+    let mut win = app.get_webview_window("shot-scroll");
     let mut last_err = String::new();
     for attempt in 0..2 {
+        if win.is_some() {
+            break;
+        }
         match WebviewWindowBuilder::new(app, "shot-scroll", WebviewUrl::App("shot.html".into()))
             .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
             .title("X-Dir 滚动截图")
@@ -1200,23 +1271,27 @@ fn show_bar_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
     let (rx, ry, rw, rh) = (geo.rx, geo.ry, geo.rw, geo.rh);
     let (bx, by, bw, bh) = bar_layout((rx as i32, ry as i32, rw as i32, rh as i32), mon);
     let boot = serde_json::json!({ "window": "scrollbar", "w": rw });
-    let win = WebviewWindowBuilder::new(app, "shot-bar", WebviewUrl::App("shot.html".into()))
-        .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
-        .title("X-Dir 滚动截图")
-        .decorations(false)
-        .resizable(false)
-        .maximizable(false)
-        .minimizable(false)
-        .skip_taskbar(true)
-        .always_on_top(true)
-        .shadow(false)
-        // 不可见窗口默认 focused(true) 在部分 WebView2 上聚焦异常（wry#1798）；
-        // show() 后再 set_focus()，保险起见显式关闭
-        .focused(false)
-        .visible(false)
-        .initialization_script(format!("window.__BOOT__ = {boot};"))
-        .build()
-        .map_err(|e| format!("创建控制条失败：{e}"))?;
+    // 常驻复用优先（同预览窗）
+    let win = match app.get_webview_window("shot-bar") {
+        Some(w) => w,
+        None => WebviewWindowBuilder::new(app, "shot-bar", WebviewUrl::App("shot.html".into()))
+            .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
+            .title("X-Dir 滚动截图")
+            .decorations(false)
+            .resizable(false)
+            .maximizable(false)
+            .minimizable(false)
+            .skip_taskbar(true)
+            .always_on_top(true)
+            .shadow(false)
+            // 不可见窗口默认 focused(true) 在部分 WebView2 上聚焦异常
+            // （wry#1798）；show() 后再 set_focus()，保险起见显式关闭
+            .focused(false)
+            .visible(false)
+            .initialization_script(format!("window.__BOOT__ = {boot};"))
+            .build()
+            .map_err(|e| format!("创建控制条失败：{e}"))?,
+    };
     win.set_position(PhysicalPosition::new(mon.x + bx, mon.y + by))
         .map_err(|e| e.to_string())?;
     win.set_size(PhysicalSize::new(bw, bh))
@@ -1298,14 +1373,22 @@ pub fn shot_scroll_control(action: String) -> Result<(), String> {
     Ok(())
 }
 
-/// 结果窗：长图写入剪贴板（大图解码放 blocking 线程）
+/// 结果窗：长图写入剪贴板（大图处理放 blocking 线程）。优先内存成品直供
+/// （SCROLL_IMAGE，免 200MP 级 PNG 解码秒级等待），静态缺失回落文件解码
 #[tauri::command]
 pub async fn shot_result_copy(app: AppHandle, file: String) -> Result<(), String> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
     tauri::async_runtime::spawn_blocking(move || {
-        let img = image::open(&file)
-            .map_err(|e| format!("读取长图失败：{e}"))?
-            .to_rgba8();
+        let mem = SCROLL_IMAGE
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        let img = match mem {
+            Some(img) => img,
+            None => image::open(&file)
+                .map_err(|e| format!("读取长图失败：{e}"))?
+                .to_rgba8(),
+        };
         let (w, h) = img.dimensions();
         app.clipboard()
             .write_image(&tauri::image::Image::new_owned(img.into_raw(), w, h))
@@ -1513,7 +1596,7 @@ mod tests {
                 None => println!("f{idx:03}: 匹配失败（不追加）"),
             }
         }
-        let out = canvas.to_image().unwrap();
+        let out = canvas.into_image().unwrap();
         let path = std::path::Path::new(&dir).join("out.png");
         out.save(&path).unwrap();
         println!(
@@ -1603,7 +1686,7 @@ mod tests {
             // 0/±1：不追加
         }
         // ── 断言：画布 == page[0..canvas.h] 逐像素
-        let out = canvas.to_image().unwrap();
+        let out = canvas.into_image().unwrap();
         assert_eq!(out.width(), w);
         for yy in 0..out.height() {
             for x in 0..w {
@@ -1832,7 +1915,9 @@ mod tests {
         c.push(&f1, 0);
         c.push(&f2, 2); // 追加 f2 的第 2 行起
         assert_eq!(c.h, 3 + 1);
-        let out = c.to_image().unwrap();
+        let out = std::mem::replace(&mut c, CanvasBuf::new(4))
+            .into_image()
+            .unwrap();
         assert_eq!(out.dimensions(), (4, 4));
         assert_eq!(out.get_pixel(0, 3), f2.get_pixel(0, 2));
         assert_eq!(out.get_pixel(2, 0), f1.get_pixel(2, 0));

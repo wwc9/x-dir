@@ -28,6 +28,26 @@ export function ScrollPreview({ boot }: { boot: ScrollPreviewBoot }) {
   const [fail, setFail] = useState(false);
   /** 最新拼接段的高亮区（canvas 显示坐标；null = 无） */
   const [flash, setFlash] = useState<{ top: number; height: number; key: number } | null>(null);
+  /** 常驻窗复用：选区尺寸随会话变，boot 事件换装并整体重置 */
+  const [dim, setDim] = useState({ w: boot.w, h: boot.h });
+  useEffect(() => {
+    const un = listen<{ w: number; h: number }>("shot-preview-boot", (e) => {
+      setDim(e.payload);
+      pulledRef.current = 0;
+      stickRef.current = true;
+      setFail(false);
+      setFlash(null);
+      const c = canvasRef.current;
+      if (c) {
+        c.width = e.payload.w;
+        c.height = e.payload.h;
+        c.getContext("2d")!.clearRect(0, 0, e.payload.w, e.payload.h);
+      }
+    });
+    return () => {
+      void un.then((f) => f()).catch(() => undefined);
+    };
+  }, []);
 
   // 进度事件 → 防抖拉取增量行画到 canvas。canvas 增高会清空位图，此时全量
   // 重拉重画（本地 IPC memcpy，无编码开销）；高度按 1KiB 行台阶预分配，把
@@ -45,7 +65,7 @@ export function ScrollPreview({ boot }: { boot: ScrollPreviewBoot }) {
         const buf = await api.shotScrollChunk(from);
         if (dead) return;
         const rows = new Uint8ClampedArray(buf);
-        const n = rows.length / (boot.w * 4);
+        const n = rows.length / (dim.w * 4);
         if (n <= 0) return;
         const ctx = c.getContext("2d")!;
         const need = from + n;
@@ -55,18 +75,18 @@ export function ScrollPreview({ boot }: { boot: ScrollPreviewBoot }) {
           while (nh < need) nh *= 2;
           c.height = nh;
           const all = new Uint8ClampedArray(await api.shotScrollChunk(0));
-          const total = all.length / (boot.w * 4);
+          const total = all.length / (dim.w * 4);
           if (total > 0) {
-            ctx.putImageData(new ImageData(all, boot.w, total), 0, 0);
+            ctx.putImageData(new ImageData(all, dim.w, total), 0, 0);
             pulledRef.current = total;
           }
         } else {
-          ctx.putImageData(new ImageData(rows, boot.w, n), 0, from);
+          ctx.putImageData(new ImageData(rows, dim.w, n), 0, from);
           pulledRef.current = need;
         }
         // 新段高亮（PixPin 样式）：canvas 显示缩放系数 = 包裹宽 / 自然宽
         const drawn = pulledRef.current;
-        const k = wrap.clientWidth / boot.w;
+        const k = wrap.clientWidth / dim.w;
         setFlash({ top: from * k, height: n * k, key: drawn });
         if (flashTimer !== null) window.clearTimeout(flashTimer);
         flashTimer = window.setTimeout(() => setFlash(null), FLASH_MS);
@@ -86,7 +106,7 @@ export function ScrollPreview({ boot }: { boot: ScrollPreviewBoot }) {
       if (flashTimer !== null) window.clearTimeout(flashTimer);
       void un.then((f) => f()).catch(() => undefined);
     };
-  }, [boot.w]);
+  }, [dim.w]);
 
   return (
     <div className="np-shot-sprev">
@@ -99,7 +119,7 @@ export function ScrollPreview({ boot }: { boot: ScrollPreviewBoot }) {
         }}
       >
         <div ref={wrapRef} className="np-shot-sprev-wrap">
-          <canvas ref={canvasRef} width={boot.w} height={boot.h} />
+          <canvas ref={canvasRef} width={dim.w} height={dim.h} />
           {flash && (
             <div
               className="np-shot-sprev-flash"
