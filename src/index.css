@@ -22,6 +22,8 @@
   --np-sel: rgba(53, 116, 240, 0.12);
   --np-danger: #d1434b;
   --np-danger-fg: #ffffff;
+  /* 成功/新增高亮（滚动截图预览新拼接段闪烁，浅色对齐 SHOT_PALETTE 绿） */
+  --np-success: #46a758;
   --np-shadow: 0 12px 32px rgba(20, 28, 40, 0.14);
   /* 遮罩：所有 Dialog/Overlay backdrop 全局唯一浓度（.dark 另声明） */
   --np-overlay: rgba(15, 22, 34, 0.35);
@@ -110,6 +112,7 @@ html.bp6-dark {
   --np-sel: rgba(92, 157, 255, 0.16);
   --np-danger: #f27073;
   --np-danger-fg: #14161a;
+  --np-success: #5cb964;
   --np-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
   /* 深色遮罩换纯黑、浓度略高于浅色（0.35），压得住深色界面 */
   --np-overlay: rgba(0, 0, 0, 0.45);
@@ -4834,30 +4837,24 @@ mark.np-gsearch-mark {
   color: var(--np-muted);
 }
 
-/* 滚动截图侧边预览窗（§3.6 二期 B 批，label shot-scroll）、选区框窗（label
-   shot-frame，整窗点击穿透只画边框）与结果窗（label shot-result）：独立小窗
-   脱离主界面体系，取值仍全走 --np-* token */
-.np-shot-sprev {
+/* 滚动截图控制条（label shot-bar，停靠选区正下方）、侧边预览窗（label
+   shot-scroll）、选区框窗（label shot-frame，整窗点击穿透只画边框）与结果窗
+   （label shot-result）：独立小窗脱离主界面体系，取值仍全走 --np-* token */
+.np-shot-sbar {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 8px;
   height: 100vh;
+  padding: 0 10px;
   box-sizing: border-box;
   background: var(--np-surface);
   border: 1px solid var(--np-border);
   border-radius: var(--np-radius-lg);
-  overflow: hidden;
-  user-select: none;
+  box-shadow: var(--np-shadow);
   font-size: var(--np-font-sm);
+  user-select: none;
 }
-.np-shot-sprev-head {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--np-hairline);
-}
-.np-shot-sprev-dot {
+.np-shot-sbar-dot {
   width: 8px;
   height: 8px;
   border-radius: var(--np-radius-pill);
@@ -4870,15 +4867,34 @@ mark.np-gsearch-mark {
     opacity: 0.25;
   }
 }
-.np-shot-sprev-label {
+.np-shot-sbar-dim {
   color: var(--np-fg);
-  white-space: nowrap;
-}
-.np-shot-sprev-h {
-  margin-left: auto;
-  color: var(--np-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+.np-shot-sbar-dir {
+  padding: 2px 8px;
+  border: 1px solid var(--np-hairline);
+  border-radius: var(--np-radius-pill);
+  color: var(--np-muted);
+  white-space: nowrap;
+}
+.np-shot-sbar-spacer {
+  flex: 1;
+}
+
+/* 侧边预览窗：纯预览（PixPin 样式），新拼接段绿色高亮渐隐 */
+.np-shot-sprev {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  box-sizing: border-box;
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  border-radius: var(--np-radius-lg);
+  overflow: hidden;
+  user-select: none;
+  font-size: var(--np-font-sm);
 }
 .np-shot-sprev-view {
   flex: 1;
@@ -4886,27 +4902,45 @@ mark.np-gsearch-mark {
   padding: 8px;
   box-sizing: border-box;
 }
-.np-shot-sprev-view canvas {
+.np-shot-sprev-wrap {
+  position: relative;
+}
+.np-shot-sprev-wrap canvas {
   display: block;
   width: 100%;
   border-radius: var(--np-radius);
   background: var(--np-bg);
   min-height: 24px;
 }
-.np-shot-sprev-foot {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-top: 1px solid var(--np-hairline);
+.np-shot-sprev-flash {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: color-mix(in srgb, var(--np-success) 32%, transparent);
+  border: 1px solid var(--np-success);
+  box-sizing: border-box;
+  pointer-events: none;
+  animation: np-shot-flash 0.9s ease-out forwards;
 }
-.np-shot-sprev-tip {
-  flex: 1;
-  color: var(--np-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+@keyframes np-shot-flash {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.np-shot-sprev-fail {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  padding: 4px 8px;
+  border-radius: var(--np-radius);
+  background: var(--np-surface);
+  border: 1px solid var(--np-danger);
+  color: var(--np-danger);
+  text-align: center;
 }
 
 /* 选区框窗：透明窗体上只画选区边框 + 8 角/边中点（锚定捕获区域视觉） */

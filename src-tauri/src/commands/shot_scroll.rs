@@ -318,6 +318,24 @@ fn panel_layout(sel: (i32, i32, i32, i32), mon: &MonRect) -> (i32, i32, u32, u32
     (x, y, pw.max(1) as u32, ph.max(1) as u32)
 }
 
+/// 控制条停靠位（纯函数，单测锁定）：选区正下方居中（PixPin 样式），下方
+/// 放不下翻选区上方，均钳屏内。窗尺寸固定 (310,44)·scale，返回左上角与尺寸
+/// （显示器相对物理像素）
+fn bar_layout(sel: (i32, i32, i32, i32), mon: &MonRect) -> (i32, i32, u32, u32) {
+    let s = f64::from(mon.scale);
+    let bw = (310.0 * s).round() as i32;
+    let bh = (44.0 * s).round() as i32;
+    let (gx, gy, gw, gh) = sel;
+    let x = (gx + (gw - bw) / 2).clamp(8, (mon.w as i32 - bw - 8).max(8));
+    let gap = (10.0 * s).round() as i32;
+    let mut y = gy + gh + gap;
+    if y + bh > mon.h as i32 - 8 {
+        y = gy - gap - bh;
+    }
+    let y = y.clamp(8, (mon.h as i32 - bh - 8).max(8));
+    (x, y, bw.max(1) as u32, bh.max(1) as u32)
+}
+
 // ── 会话入口 ────────────────────────────────────────────────────────────────
 
 /// 开始滚动会话：rx/ry/rw/rh = 选区显示器相对物理坐标；mx/my = 显示器原点。
@@ -342,7 +360,7 @@ pub fn shot_scroll_begin(
         return Err("滚动截图进行中".into());
     }
     // 残留窗 = cancel/finish 收尾 close 未奏效的僵尸（实测 wry 偶发），销毁放行
-    for label in ["shot-scroll", "shot-frame"] {
+    for label in ["shot-scroll", "shot-frame", "shot-bar"] {
         if let Some(w) = app.get_webview_window(label) {
             log::warn!("滚动截图：清理残留窗 {label}（僵尸收尾）");
             let _ = w.destroy();
@@ -437,8 +455,8 @@ pub fn shot_scroll_launch(app: AppHandle) -> Result<(), String> {
         std::thread::sleep(Duration::from_millis(150));
         let runner = app2.clone();
         let dispatch = runner.run_on_main_thread(move || {
-            // 框窗纯装饰，失败只记日志不流产；预览窗失败 = 会话流产（弹原生
-            // 对话框——覆盖窗已收场，无前端提示条可依赖）
+            // 框窗纯装饰，失败只记日志不流产；预览窗/控制条失败 = 会话流产
+            //（弹原生对话框——覆盖窗已收场，无前端提示条可依赖）
             if let Err(e) = show_frame_window(&app2, &geo) {
                 log::error!("滚动截图：{e}");
             }
@@ -448,6 +466,14 @@ pub fn shot_scroll_launch(app: AppHandle) -> Result<(), String> {
                 quit_hook();
                 SCROLL_ACTIVE.store(false, Ordering::Relaxed);
                 dialog_error(&app2, &format!("滚动截图预览窗创建失败：{e}（请重新截图）"));
+                return;
+            }
+            if let Err(e) = show_bar_window(&app2, &geo) {
+                log::error!("滚动截图：{e}");
+                destroy_session_windows(&app2);
+                quit_hook();
+                SCROLL_ACTIVE.store(false, Ordering::Relaxed);
+                dialog_error(&app2, &format!("滚动截图控制条创建失败：{e}（请重新截图）"));
                 return;
             }
             // 清掉装钩握手窗口期落进的滚轮标记（不属于本会话的有效滚动）
@@ -627,11 +653,14 @@ fn scroll_loop(app: AppHandle, geo: ScrollGeo, base: RgbaImage, canvas: Arc<Mute
 }
 
 fn emit_height(app: &AppHandle, height: u32) {
-    let _ = app.emit_to(
-        "shot-scroll",
-        "shot-scroll-progress",
-        serde_json::json!({ "height": height }),
-    );
+    // 预览窗（触发增量拉取）与控制条（尺寸显示）都消费进度
+    for label in ["shot-scroll", "shot-bar"] {
+        let _ = app.emit_to(
+            label,
+            "shot-scroll-progress",
+            serde_json::json!({ "height": height }),
+        );
+    }
 }
 
 /// 预览窗增量拉取已拼行 [from_y..h)（原始 RGBA 行主序二进制直传；空响应 =
@@ -651,10 +680,10 @@ pub fn shot_scroll_chunk(from_y: u32) -> tauri::ipc::Response {
     tauri::ipc::Response::new(bytes)
 }
 
-/// 关闭本会话全部窗口（预览窗 + 选区框窗；destroy 而非 close：close 走
-/// CloseRequested 语义，实测偶发不奏效留僵尸）
+/// 关闭本会话全部窗口（预览窗 + 选区框窗 + 控制条；destroy 而非 close：
+/// close 走 CloseRequested 语义，实测偶发不奏效留僵尸）
 fn destroy_session_windows(app: &AppHandle) {
-    for label in ["shot-scroll", "shot-frame"] {
+    for label in ["shot-scroll", "shot-frame", "shot-bar"] {
         if let Some(w) = app.get_webview_window(label) {
             let _ = w.destroy();
         }
@@ -733,13 +762,13 @@ fn show_frame_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
     Ok(())
 }
 
-/// 侧边预览窗：贴选区右/左侧（panel_layout 定位），实时显示已拼长图
+/// 侧边预览窗：贴选区右/左侧（panel_layout 定位），实时显示已拼长图（纯
+/// 预览，PixPin 样式——控制按钮在选区正下方的 shot-bar 控制条上）
 fn show_preview_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
     let mon = &geo.mon;
     let (rx, ry, rw, rh) = (geo.rx, geo.ry, geo.rw, geo.rh);
-    let s = f64::from(mon.scale);
     let (px, py, pw, ph) = panel_layout((rx as i32, ry as i32, rw as i32, rh as i32), mon);
-    let boot = serde_json::json!({ "window": "scrollbar", "w": rw, "h": rh, "scale": s });
+    let boot = serde_json::json!({ "window": "scroll-preview", "w": rw, "h": rh });
     // 本机 WebView2 建窗有 0x8007139F 前科（shot.rs 日志在案）：失败清掉可能
     // 的僵尸 label 重试一次，仍败才报错
     let mut win = None;
@@ -785,8 +814,43 @@ fn show_preview_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
     win.set_size(PhysicalSize::new(pw, ph))
         .map_err(|e| e.to_string())?;
     win.show().map_err(|e| e.to_string())?;
-    win.set_focus().map_err(|e| e.to_string())?;
+    // 不抢焦点：控制条（shot-bar）才持有焦点（Esc 生效），用户点选目标窗
+    // 滚动时焦点自然移走，预览纯展示
     log::info!("滚动截图：预览窗已显示 @({px},{py}) {pw}×{ph}（选区 {rw}×{rh}）");
+    Ok(())
+}
+
+/// 控制条：停靠选区正下方（bar_layout 定位，PixPin 样式）——尺寸显示 / 方向
+/// 指示 / 完成 / 取消；持有焦点使 Esc/Enter 生效
+fn show_bar_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
+    let mon = &geo.mon;
+    let (rx, ry, rw, rh) = (geo.rx, geo.ry, geo.rw, geo.rh);
+    let (bx, by, bw, bh) = bar_layout((rx as i32, ry as i32, rw as i32, rh as i32), mon);
+    let boot = serde_json::json!({ "window": "scrollbar", "w": rw });
+    let win = WebviewWindowBuilder::new(app, "shot-bar", WebviewUrl::App("shot.html".into()))
+        .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
+        .title("X-Dir 滚动截图")
+        .decorations(false)
+        .resizable(false)
+        .maximizable(false)
+        .minimizable(false)
+        .skip_taskbar(true)
+        .always_on_top(true)
+        .shadow(false)
+        // 不可见窗口默认 focused(true) 在部分 WebView2 上聚焦异常（wry#1798）；
+        // show() 后再 set_focus()，保险起见显式关闭
+        .focused(false)
+        .visible(false)
+        .initialization_script(format!("window.__BOOT__ = {boot};"))
+        .build()
+        .map_err(|e| format!("创建控制条失败：{e}"))?;
+    win.set_position(PhysicalPosition::new(mon.x + bx, mon.y + by))
+        .map_err(|e| e.to_string())?;
+    win.set_size(PhysicalSize::new(bw, bh))
+        .map_err(|e| e.to_string())?;
+    win.show().map_err(|e| e.to_string())?;
+    win.set_focus().map_err(|e| e.to_string())?;
+    log::info!("滚动截图：控制条已显示 @({bx},{by}) {bw}×{bh}");
     Ok(())
 }
 
@@ -1111,5 +1175,35 @@ mod tests {
         let (_x, y, _pw, ph) = panel_layout((100, 0, 400, 1400), &m);
         assert!(ph as f64 <= 1440.0 * 0.86);
         assert!(y >= 8);
+    }
+
+    #[test]
+    fn bar_layout_docks_below_selection() {
+        // 选区在屏幕上部：控制条停靠正下方居中
+        let m = mon(0, 0, 2560, 1440, 1.0);
+        let (x, y, bw, bh) = bar_layout((100, 100, 800, 400), &m);
+        assert_eq!(y, 100 + 400 + 10);
+        assert_eq!(bw, 310);
+        assert_eq!(bh, 44);
+        // 水平居中于选区
+        assert_eq!(x, 100 + (800 - 310) / 2);
+    }
+
+    #[test]
+    fn bar_layout_flips_above_near_bottom() {
+        // 选区贴近屏底：控制条翻到上方
+        let m = mon(0, 0, 2560, 1440, 1.0);
+        let (_x, y, _bw, bh) = bar_layout((100, 1300, 800, 120), &m);
+        assert_eq!(y + bh as i32, 1300 - 10);
+    }
+
+    #[test]
+    fn bar_layout_clamps_to_monitor() {
+        // 选区超宽靠右：x 钳屏内；选区中部：正常停靠下方且整条在屏内
+        let m = mon(0, 0, 2560, 1440, 1.0);
+        let (x, _y, bw, _bh) = bar_layout((2300, 100, 250, 400), &m);
+        assert_eq!(x + bw as i32, 2560 - 8);
+        let (_x, y, _bw, bh) = bar_layout((100, 700, 800, 100), &m);
+        assert!(y >= 8 && y + bh as i32 <= 1440 - 8);
     }
 }
