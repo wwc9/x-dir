@@ -495,9 +495,12 @@ fn match_scroll_dy(prev: &RgbaImage, cur: &RgbaImage) -> Option<i32> {
         log::debug!("滚动截图：位移并列 {refined:?}，拒绝");
         return None;
     }
-    // ── 多带共识：各带在终选 ±6px 内独立求峰；定位良好的带（可见 ≥3/4 带
-    //    高）投票，任意两票分歧 >2px 拒绝（整数位移下带间应一致，超出 = 非
-    //    均匀滚动/视差）；不足两票则依赖 NCC_MIN 门槛起步
+    // ── 多带共识：中位数裁决。各带在终选 ±6px 内独立求峰，定位良好的带
+    //    （可见 ≥3/4 带高、自身得分 ≥0.45）投票，取中位数为最终位移。带间
+    //    小分歧（部分可见带裁剪误差/页面非均匀滚动，实测 274 vs 280）不改
+    //    变「这是同一次滚动」的事实，拒绝的代价是整帧丢失并连锁截断（只留
+    //    第一屏），中位数 ±6px 的接缝误差不可见；大分歧（>12px）才是真异
+    //    常（视差/动态区域），拒绝留待下帧重试
     let argmax = |top: usize, lo: i32, hi: i32| -> Option<i32> {
         let mut pts: Vec<(i32, f32)> = Vec::new();
         for d in lo..=hi {
@@ -522,13 +525,20 @@ fn match_scroll_dy(prev: &RgbaImage, cur: &RgbaImage) -> Option<i32> {
             votes.push(dv);
         }
     }
-    for i in 0..votes.len() {
-        for j in i + 1..votes.len() {
-            if (votes[i] - votes[j]).abs() > 2 {
-                log::debug!("滚动截图：多带分歧 {votes:?}，拒绝");
-                return None;
-            }
+    if votes.len() >= 2 {
+        votes.sort_unstable();
+        let mid = votes.len() / 2;
+        let median = if votes.len() % 2 == 1 {
+            votes[mid]
+        } else {
+            (votes[mid - 1] + votes[mid]) / 2
+        };
+        let spread = votes[votes.len() - 1] - votes[0];
+        if spread > 12 {
+            log::debug!("滚动截图：多带分歧 {votes:?}，拒绝");
+            return None;
         }
+        dy = median;
     }
     Some(dy)
 }
