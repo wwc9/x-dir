@@ -465,7 +465,17 @@ fn match_scroll_dy(prev: &RgbaImage, cur: &RgbaImage) -> Option<i32> {
             score = s;
         }
     }
-    if score < NCC_MIN {
+    // 验收门槛看最佳带而非均分：流式输出/动态区域只污染部分画面高度，把
+    // 均分拖垮（帧转储实证：真实 +764px、全宽 NCC 0.80 的帧被均分误杀）；
+    // 任一水平区域强相关即采信，配合下方投票共识防伪
+    let mut best_band = f32::MIN;
+    for &bt in &band_tops {
+        let (s2, rows) = ff.band(bt, th, dy, 2);
+        if rows >= th / 2 {
+            best_band = best_band.max(s2);
+        }
+    }
+    if best_band < NCC_MIN {
         return None;
     }
     // ── 歧义拒绝：周期性自相似页面（聊天气泡/列表行）在非零位移处出现
@@ -784,8 +794,9 @@ pub fn shot_scroll_launch(app: AppHandle) -> Result<(), String> {
 }
 
 /// dev 构建帧转储（离线分析真位移用）：base 与每个捕获帧写裸 RGB（行主序，
-/// 尺寸入文件名）到 shot_dir()/scroll_dump_{会话戳}/；保留最近 2 个会话目
-/// 录。release 构建零开销（编译期剔除）
+/// 尺寸入文件名）到临时目录 scroll_dump/{会话戳}/（xdir_shot 的兄弟目录，
+/// 免遭启动期 cleanup_stale 整删）；保留最近 2 个会话目录。release 构建
+/// 零开销（编译期剔除）
 #[cfg(debug_assertions)]
 fn dump_frame(dir: &Path, name: &str, frame: &RgbaImage) {
     let (w, h) = frame.dimensions();
@@ -817,7 +828,10 @@ fn scroll_loop(app: AppHandle, geo: ScrollGeo, base: RgbaImage, canvas: Arc<Mute
     };
     #[cfg(debug_assertions)]
     let dump_dir = {
-        let root = shot_dir().join("scroll_dump");
+        let root = shot_dir()
+            .parent()
+            .map(|p| p.join("xdir_scroll_dump"))
+            .unwrap_or_else(|| shot_dir().join("scroll_dump"));
         let _ = std::fs::create_dir_all(&root);
         // 只留最近 2 个会话目录
         let mut olds: Vec<_> = std::fs::read_dir(&root)
@@ -891,20 +905,24 @@ fn scroll_loop(app: AppHandle, geo: ScrollGeo, base: RgbaImage, canvas: Arc<Mute
                             }
                         }
                         match match_scroll_dy(&last, &frame) {
-                            // 内容上移 ≥2px：底部新内容追加
+                            // 内容上移 ≥2px：底部新内容追加。下滚 dy 后新内容
+                            // 在 cur 的底部 dy 行 [h-dy..h)；顶部 [0..h-dy) 是与
+                            // 上一帧的重叠区（追加它 = 整屏重复、丢真新内容
+                            // ——历轮「重复」事故的终极根因）
                             Some(dy) if dy >= 2 => {
                                 zero_streak = 0;
                                 bad_streak = 0;
                                 canvas
                                     .lock()
                                     .unwrap_or_else(|e| e.into_inner())
-                                    .push(&frame, dy as u32);
+                                    .push(&frame, rh - dy as u32);
                                 last = frame;
-                                let h = canvas.lock().unwrap_or_else(|e| e.into_inner()).h;
+                                let ch = canvas.lock().unwrap_or_else(|e| e.into_inner()).h;
                                 log::debug!(
-                                    "滚动截图：追加 {dy}px，累计 {h}px（钩子 {ticks} ticks）"
+                                    "滚动截图：滚动 {dy}px，新增 {}px，累计 {ch}px（钩子 {ticks} ticks）",
+                                    rh - dy as u32
                                 );
-                                emit_height(&app, h);
+                                emit_height(&app, ch);
                             }
                             // 内容下移（上滚回看）：只重定基准，不追加不倒退
                             Some(dy) if dy <= -2 => {
@@ -1429,6 +1447,167 @@ mod tests {
         let (sq, rq) = fq.band(25, 10, 15, 2);
         assert!(rq >= 5, "rq={rq}");
         assert!(sq > 0.99, "nccq={sq}");
+    }
+
+    /// 真实帧回放验证（手动跑）：XDIR_SCROLL_REPLAY=<dump目录> cargo test
+    /// --lib scroll_replay_dump -- --ignored --nocapture。读 dev 帧转储的
+    /// base+f*.rgb，跑与 scroll_loop 相同的 匹配→追加/重定基准 决策，输出
+    /// 拼接 PNG（out.png）与逐帧 dy 表——用真实数据验证拼接语义（base +
+    /// 各帧位移区域，无重复无缺失）
+    #[test]
+    #[ignore]
+    fn scroll_replay_dump() {
+        let dir = std::env::var("XDIR_SCROLL_REPLAY").expect("set XDIR_SCROLL_REPLAY=<dump目录>");
+        let mut names: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.ends_with(".rgb"))
+            .collect();
+        names.sort();
+        assert!(names.len() >= 2, "至少需要 base + 1 帧");
+        let (w, h) = names[0]
+            .split_once('_')
+            .and_then(|(_, wh)| wh.split_once('x'))
+            .map(|(w, h)| (w.parse::<u32>().unwrap(), h.parse::<u32>().unwrap()))
+            .unwrap();
+        let load = |name: &str| -> RgbaImage {
+            let raw = std::fs::read(std::path::Path::new(&dir).join(name)).unwrap();
+            let mut img = RgbaImage::new(w, h);
+            for (i, p) in img.pixels_mut().enumerate() {
+                let o = i * 3;
+                *p = Rgba([raw[o], raw[o + 1], raw[o + 2], 255]);
+            }
+            img
+        };
+        let base = load(&names[0]);
+        let mut canvas = CanvasBuf::new(w);
+        canvas.push(&base, 0);
+        let mut last = base;
+        for (idx, name) in names[1..].iter().enumerate() {
+            let frame = load(name);
+            match match_scroll_dy(&last, &frame) {
+                Some(dy) if dy >= 2 => {
+                    canvas.push(&frame, h - dy as u32);
+                    last = frame;
+                    println!("f{idx:03}: 滚动 {dy}px（新增 {}px）", h - dy as u32);
+                }
+                Some(dy) if dy <= -2 => {
+                    last = frame;
+                    println!("f{idx:03}: 内容下移 {dy}px，重定基准（不追加）");
+                }
+                Some(_) => println!("f{idx:03}: 未滚动（不追加）"),
+                None => println!("f{idx:03}: 匹配失败（不追加）"),
+            }
+        }
+        let out = canvas.to_image().unwrap();
+        let path = std::path::Path::new(&dir).join("out.png");
+        out.save(&path).unwrap();
+        println!(
+            "拼接完成 {}×{} → {}",
+            out.width(),
+            out.height(),
+            path.display()
+        );
+    }
+
+    /// 合成整场回放（拼接语义端到端验证）：构造聊天样式的非周期长页面，
+    /// 按已知偏移序列截取视口帧（大小步进混合 + 一次内容下推重定基准），
+    /// 喂给与 scroll_loop 相同的 匹配→追加/重定基准 决策，断言拼接画布与
+    /// 地面真值 page[0..末帧底] 逐像素一致——「第一屏 + 各帧位移区域，
+    /// 无重复无缺失」
+    #[test]
+    fn scroll_replay_synthetic_full_session() {
+        let (w, vh) = (600u32, 1000u32); // 视口 600×1000
+        let page_h = 6000u32;
+        // ── 构造非周期页面：消息块（头部亮条 + 正文"文字"行 + 间隔），行内
+        //    灰度由块种子 LCG 决定，块高随机 → 无周期性
+        let mut lcg = 0x1234_5678u32;
+        let mut rnd = move || {
+            lcg ^= lcg << 13;
+            lcg ^= lcg >> 17;
+            lcg ^= lcg << 5;
+            lcg
+        };
+        let mut page = vec![200u8; page_h as usize * w as usize]; // 浅底
+        let mut y = 0u32;
+        while y < page_h {
+            let bh = 80 + rnd() % 320; // 块高 80-400
+            let bright = 90 + rnd() % 120;
+            for yy in y..(y + bh).min(page_h) {
+                for x in 0..w {
+                    // 头部 12px 亮条，正文按 (x,yy) 噪声模拟文字
+                    let v: u32 = if yy - y < 12 {
+                        bright + 60
+                    } else if (x * 7 + yy * 13 + rnd() % 3) % 5 < 2 {
+                        bright
+                            .saturating_sub(40 + (rnd() % 60) as u8 as u32)
+                            .min(255)
+                    } else {
+                        bright
+                    };
+                    page[yy as usize * w as usize + x as usize] = v as u8;
+                }
+            }
+            y += bh + 24; // 块间距
+        }
+        let crop = |page: &[u8], off: u32| -> RgbaImage {
+            let mut img = RgbaImage::new(w, vh);
+            for yy in 0..vh {
+                for x in 0..w {
+                    let v = page[(off + yy) as usize * w as usize + x as usize];
+                    img.put_pixel(x, yy, Rgba([v, v, v, 255]));
+                }
+            }
+            img
+        };
+        // ── 滚动会话：偏移序列（大小步进混合 + 一次 -900 内容下推）
+        let offsets: Vec<u32> = vec![0, 120, 430, 460, 980, 1450, 1465, 2100, 2750, 2765, 3400];
+        let frames: Vec<RgbaImage> = offsets.iter().map(|&o| crop(&page, o)).collect();
+        // 与 scroll_loop 相同的决策
+        let mut canvas = CanvasBuf::new(w);
+        canvas.push(&frames[0], 0);
+        let mut last = frames[0].clone();
+        let mut last_off = offsets[0];
+        for (i, frame) in frames.iter().skip(1).enumerate() {
+            let dy = match_scroll_dy(&last, frame)
+                .unwrap_or_else(|| panic!("帧 {i}（偏移 {}）匹配失败", offsets[i + 1]));
+            if dy >= 2 {
+                println!(
+                    "帧 {i}: 偏移 {}→{}，dy={dy}（真值 {}）",
+                    offsets[i],
+                    offsets[i + 1],
+                    offsets[i + 1] as i32 - offsets[i] as i32
+                );
+                canvas.push(frame, vh - dy as u32);
+                last = frame.clone();
+                last_off = offsets[i + 1];
+            } else if dy <= -2 {
+                last = frame.clone();
+                let _ = &mut last_off; // 重定基准：视口内容变化，画布不动
+                println!("帧 {i}: 负位移 {dy}，重定基准");
+            }
+            // 0/±1：不追加
+        }
+        // ── 断言：画布 == page[0..canvas.h] 逐像素
+        let out = canvas.to_image().unwrap();
+        assert_eq!(out.width(), w);
+        for yy in 0..out.height() {
+            for x in 0..w {
+                let want = page[yy as usize * w as usize + x as usize];
+                let got = out.get_pixel(x, yy).0;
+                assert!(
+                    (i32::from(got[0]) - i32::from(want)).abs() <= 2,
+                    "y={yy} x={x} 拼接 {got:?} ≠ 真值 {want}"
+                );
+            }
+        }
+        println!(
+            "合成回放通过：末帧偏移 {last_off}，画布 {}px，真值 {}px",
+            out.height(),
+            last_off + vh
+        );
+        assert_eq!(out.height(), last_off + vh, "画布长度应恰为末帧底");
     }
 
     #[test]
