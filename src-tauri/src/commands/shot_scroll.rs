@@ -483,18 +483,10 @@ fn match_scroll_dy(prev: &RgbaImage, cur: &RgbaImage) -> Option<i32> {
     if best_band < NCC_MIN {
         return None;
     }
-    // ── 歧义拒绝：周期性自相似页面（聊天气泡/列表行）在非零位移处出现
-    // 近并列峰时，两帧原理上无法分辨真实位移——取小拼重复、取大挖缺失，
-    // 都比不上留白。诚实拒绝（None → bad_streak，下一帧重试），唯一豁免是
-    // 并列 winner 为 0（未滚动/纯色底，到底检测依赖它，且不追加不产生重复）
-    if dy != 0
-        && refined
-            .iter()
-            .any(|&(d, s)| d != dy && s >= score - TIE_EPS)
-    {
-        log::debug!("滚动截图：位移并列 {refined:?}，拒绝");
-        return None;
-    }
+    // ── 位移并列不再拒绝（2026-10-29 定案回退）：周期性自相似页面的近并列
+    //    峰取 |d| 最小——负并列走重定基准（不追加，零重复），正并列的重复
+    //    量被追加方向修复限制在一个周期内；而拒绝会让会话截断「只留第一
+    //    屏」，用户实测更不可接受
     // ── 多带共识：中位数裁决。各带在终选 ±6px 内独立求峰，定位良好的带
     //    （可见 ≥3/4 带高、自身得分 ≥0.45）投票，取中位数为最终位移。带间
     //    小分歧（部分可见带裁剪误差/页面非均匀滚动，实测 274 vs 280）不改
@@ -1923,9 +1915,10 @@ mod tests {
     }
 
     #[test]
-    fn match_scroll_dy_periodic_rows_ambiguous_rejected() {
+    fn match_scroll_dy_periodic_rows_takes_smallest() {
         // 24px 周期行（列表/表格惯见）滚动半周期 12px：±12/±36… 全部满分，
-        // 真实位移原理上不可分辨（取小拼重复、取大挖缺失）——诚实拒绝
+        // 真实位移不可分辨——取 |d| 最小。重复量已被追加方向修复限制在
+        // 一个周期内（拒绝策略会让会话截断，用户实测更不可接受）
         let v = |y: u32, x: u32| -> u8 { pattern(y % 24, x / 40, 7) };
         let mut prev = RgbaImage::from_pixel(200, 200, Rgba([0, 0, 0, 255]));
         for y in 0..200u32 {
@@ -1939,7 +1932,7 @@ mod tests {
                 cur.put_pixel(x, y, *prev.get_pixel(x, y + 12));
             }
         }
-        assert_eq!(match_scroll_dy(&prev, &cur), None);
+        assert_eq!(match_scroll_dy(&prev, &cur), Some(12));
     }
 
     #[test]
