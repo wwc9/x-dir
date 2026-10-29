@@ -78,6 +78,18 @@ const FONTS = [16, 22, 30];
 /** 阴影模糊半径 / 边框线宽滑块量程（CSS 像素观感值，随 scale 增密；0 = 关） */
 const SHADOW_W_MAX = 30;
 const BORDER_W_MAX = 10;
+/** 边框颜色色板（黑色在前 = 默认；与标注色板同色系） */
+const BORDER_PALETTE = [
+  "#000000",
+  "#ffffff",
+  "#e5484d",
+  "#f76b15",
+  "#ffc53d",
+  "#46a758",
+  "#00a2c7",
+  "#3b82f6",
+  "#1c1c1c",
+];
 
 const TOOLS: { id: ShotTool; label: string; icon: typeof Square }[] = [
   { id: "select", label: "选择 / 移动选区", icon: MousePointer2 },
@@ -144,6 +156,39 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   /** 导出装饰：阴影 / 边框档位（0=关 1=弱 2=中 3=强，点击循环切换） */
   const [shadowW, setShadowW] = useState(0);
   const [borderW, setBorderW] = useState(0);
+  const [borderColor, setBorderColor] = useState("#000000");
+  /** 标注偏好持久化：读自 settings.json（shotShadowW/shotBorderW/
+   *  shotBorderColor），改动防抖 400ms 经 shot_save_prefs 补丁式写回 */
+  const prefsTimer = useRef<number | null>(null);
+  const savePrefs = useCallback((sw: number, bw: number, bc: string) => {
+    if (prefsTimer.current !== null) window.clearTimeout(prefsTimer.current);
+    prefsTimer.current = window.setTimeout(() => {
+      void api.shotSavePrefs(sw, bw, bc).catch(() => undefined);
+    }, 400);
+  }, []);
+  useEffect(() => {
+    let dead = false;
+    void api
+      .getSettings()
+      .then((st) => {
+        if (dead) return;
+        const clampv = (v: unknown, max: number) => {
+          const n = Math.round(Number(v));
+          return Number.isFinite(n) ? Math.min(Math.max(0, n), max) : 0;
+        };
+        setShadowW(clampv(st?.shotShadowW, SHADOW_W_MAX));
+        setBorderW(clampv(st?.shotBorderW, BORDER_W_MAX));
+        if (typeof st?.shotBorderColor === "string" && st.shotBorderColor) {
+          setBorderColor(st.shotBorderColor);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      dead = true;
+      if (prefsTimer.current !== null) window.clearTimeout(prefsTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 预选跟随模式（PixPin/QQ 惯例，2026-10-27）：进会话默认选中光标下窗口，
   // 鼠标移动时选中框自动跟随切换其他窗口（此时无工具栏，光标恒十字）；用户
@@ -324,7 +369,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         ctx.filter = "none";
       }
       if (bbw) {
-        ctx.strokeStyle = accentRef.current;
+        ctx.strokeStyle = borderColor;
         ctx.lineWidth = bbw;
         ctx.strokeRect(s.x - bbw / 2, s.y - bbw / 2, s.w + bbw, s.h + bbw);
       }
@@ -505,7 +550,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       }
       return out;
     },
-    [cropCanvas, shadowW, borderW, color, scale],
+    [cropCanvas, shadowW, borderW, borderColor, color, scale],
   );
 
   const exportDataUrl = useCallback(
@@ -1286,6 +1331,22 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                       <span className="np-shot-wdot" style={{ width: w.px, height: w.px }} />
                     </button>
                   ))}
+                {panel.kind === "border" && (
+                  <div className="np-shot-slider np-shot-bdcolors">
+                    {BORDER_PALETTE.map((c) => (
+                      <button
+                        key={c}
+                        className={`np-shot-dot ${borderColor === c ? "on" : ""}`}
+                        style={{ background: c }}
+                        data-tip="边框颜色"
+                        onClick={() => {
+                          setBorderColor(c);
+                          savePrefs(shadowW, borderW, c);
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
                 {(panel.kind === "shadow" || panel.kind === "border") && (
                   <div className="np-shot-slider">
                     <input
@@ -1294,11 +1355,15 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                       max={panel.kind === "shadow" ? SHADOW_W_MAX : BORDER_W_MAX}
                       step={1}
                       value={panel.kind === "shadow" ? shadowW : borderW}
-                      onChange={(e) =>
-                        (panel.kind === "shadow" ? setShadowW : setBorderW)(
-                          Number(e.target.value),
-                        )
-                      }
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        (panel.kind === "shadow" ? setShadowW : setBorderW)(v);
+                        savePrefs(
+                          panel.kind === "shadow" ? v : shadowW,
+                          panel.kind === "border" ? v : borderW,
+                          borderColor,
+                        );
+                      }}
                     />
                     <span className="np-shot-slider-val">
                       {panel.kind === "shadow" ? shadowW : borderW}px

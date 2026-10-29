@@ -66,6 +66,9 @@ function toPlain(s: SettingsStore): Settings {
     nameIndex: s.nameIndex,
     shotEnabled: s.shotEnabled,
     shotHotkey: s.shotHotkey,
+    shotShadowW: s.shotShadowW,
+    shotBorderW: s.shotBorderW,
+    shotBorderColor: s.shotBorderColor,
   };
 }
 

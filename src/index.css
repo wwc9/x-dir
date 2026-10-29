@@ -4736,6 +4736,15 @@ mark.np-gsearch-mark {
   color: var(--np-danger-fg);
 }
 /* 粗细/字号档位点 */
+.np-shot-bdcolors {
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.np-shot-bdcolors .np-shot-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--np-radius);
+}
 .np-shot-slider {
   display: flex;
   align-items: center;

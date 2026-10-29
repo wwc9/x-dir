@@ -223,6 +223,7 @@ pub fn run() {
             commands::analyze_cmds::compare_dirs,
             commands::config_cmds::get_settings,
             commands::config_cmds::save_settings,
+            commands::config_cmds::shot_save_prefs,
             commands::config_cmds::get_launch_args,
             commands::config_cmds::list_workspaces,
             commands::config_cmds::load_workspace,

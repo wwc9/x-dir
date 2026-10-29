@@ -325,6 +325,12 @@ export interface Settings {
   shotEnabled: boolean;
   /** 截图热键键位（tauri-plugin-global-shortcut 字符串，如 "Ctrl+Alt+A"） */
   shotHotkey: string;
+  /** 截图标注：阴影宽度（CSS px，0=关；滑块记忆） */
+  shotShadowW: number;
+  /** 截图标注：边框宽度（CSS px，0=关；滑块记忆） */
+  shotBorderW: number;
+  /** 截图标注：边框颜色（默认黑） */
+  shotBorderColor: string;
 }
 
 /** 自定义右键命令：占位符 %f=全部选中路径（逐个引号包裹） %n=首项文件名 %d=所在目录；
@@ -407,6 +413,9 @@ export const DEFAULT_SETTINGS: Settings = {
   nameIndex: { enabled: false },
   shotEnabled: true,
   shotHotkey: "Ctrl+Alt+A",
+  shotShadowW: 0,
+  shotBorderW: 0,
+  shotBorderColor: "#000000",
 };
 
 export const PAGE_SIZE = 500;
@@ -808,6 +817,10 @@ export const api = {
   /** 注册/更新截图全局热键（启动与设置变更时调用；Err = 键位冲突等） */
   shotRegisterHotkey: (enabled: boolean, hotkey: string) =>
     cmd<void>("shot_register_hotkey", { enabled, hotkey }),
+  /** 截图标注偏好（阴影/边框宽度 + 边框颜色）：Rust 侧补丁式只写这三个键，
+   *  避免轻量截图页整对象回写覆盖主窗设置 */
+  shotSavePrefs: (shadowW: number, borderW: number, borderColor: string) =>
+    cmd<void>("shot_save_prefs", { shadowW, borderW, borderColor }),
   /** 滚动长截图（§3.6 二期）：以选区（显示器相对物理坐标）开滚动会话。
    *  两段式（贴图 finish 流同款）：begin 校验+装钩+收覆盖窗后返回，主循环把
    *  停靠消息处理完，前端随即调 launch 建浮条窗起循环——蒙层未离屏即建窗

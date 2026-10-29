@@ -19,6 +19,28 @@ pub fn get_settings() -> Value {
         .unwrap_or(Value::Null)
 }
 
+/// 截图标注偏好（阴影/边框宽度 + 边框颜色）：补丁式只写这三个键的
+/// read-modify-write——轻量截图页拿不到主窗完整设置对象，整对象回写会
+/// 覆盖掉其他键
+#[tauri::command]
+pub fn shot_save_prefs(shadow_w: u32, border_w: u32, border_color: String) -> Result<(), String> {
+    let p = config_root().join("settings.json");
+    let mut v: Value = std::fs::read_to_string(&p)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or(Value::Null);
+    if !v.is_object() {
+        v = serde_json::json!({});
+    }
+    let obj = v.as_object_mut().ok_or("settings.json 结构异常")?;
+    obj.insert("shotShadowW".into(), shadow_w.into());
+    obj.insert("shotBorderW".into(), border_w.into());
+    obj.insert("shotBorderColor".into(), border_color.into());
+    serde_json::to_string_pretty(&v)
+        .map_err(|e| e.to_string())
+        .and_then(|s| std::fs::write(p, s).map_err(|e| e.to_string()))
+}
+
 #[tauri::command]
 pub fn save_settings(json: Value) -> Result<(), String> {
     let p = config_root().join("settings.json");
