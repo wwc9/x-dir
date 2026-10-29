@@ -384,10 +384,12 @@ fn match_scroll_dy(prev: &RgbaImage, cur: &RgbaImage) -> Option<i32> {
     //    覆盖单帧 ~0.85h 的大行程滚动）────────────────────────────────────
     let (d_lo, d_hi) = (-(h as i32) + th as i32 / 2, h as i32 - th as i32 / 2);
     let mut scores: Vec<(i32, f32)> = Vec::with_capacity(((d_hi - d_lo) / 4 + 1) as usize);
+    // 步长 1 个 1/4 像素全量扫（步长 2 有奇偶盲区：真峰落在网格外时粗搜
+    // 打分缺失、候选集丢失真峰——hash 纹理单测实证）。列采样 ×8 控耗时
     for d in (d_lo / 4)..=(d_hi / 4) {
         let (mut sum, mut cnt) = (0.0f32, 0u32);
         for &bt in &band_tops {
-            let (s2, rows) = fq.band(bt / 4, thq, d, 4);
+            let (s2, rows) = fq.band(bt / 4, thq, d, 8);
             if rows >= thq / 2 {
                 sum += s2;
                 cnt += 1;
@@ -956,10 +958,18 @@ fn scroll_loop(app: AppHandle, geo: ScrollGeo, base: RgbaImage, canvas: Arc<Mute
                     }
                     Err(e) => {
                         log::error!("滚动截图：帧捕获失败：{e}");
-                        bad_streak += 1;
-                        if bad_streak >= BAD_STREAK {
-                            truncated = true;
-                            break;
+                        // 捕获错误与匹配失败同口径：滚动中可能是 DXGI 瞬时繁忙，
+                        // 静默后才计截断
+                        let settled_now = WHEEL_DOWN
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .is_some_and(|t| now.duration_since(t) >= QUIET);
+                        if settled_now {
+                            bad_streak += 1;
+                            if bad_streak >= BAD_STREAK {
+                                truncated = true;
+                                break;
+                            }
                         }
                     }
                 }
