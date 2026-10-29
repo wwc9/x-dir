@@ -661,17 +661,21 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   }, [busy, boot.mx, boot.my]);
 
   // ── 撤销 / 重做 ──────────────────────────────────────────────────────────
+  // 两者都同步刷 live 层：redrawBase 不覆盖 live，若 live 有历史预览残影，
+  // 撤销删掉 base 图形后残影仍可见（看似"剩一条撤销不干净"）
   const undo = useCallback(() => {
     if (!shapes.length) return;
     setRedoStack((r) => [...r, shapes]);
     setShapes(shapes.slice(0, -1));
-  }, [shapes]);
+    redrawLive();
+  }, [shapes, redrawLive]);
 
   const redo = useCallback(() => {
     if (!redoStack.length) return;
     setShapes(redoStack[redoStack.length - 1]);
     setRedoStack((r) => r.slice(0, -1));
-  }, [redoStack]);
+    redrawLive();
+  }, [redoStack, redrawLive]);
 
   // ── 文字编辑（防重入：textarea blur 与画布 pointerdown 可能先后触发）──────
   const commitText = useCallback(() => {
@@ -910,6 +914,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         }
         setRedoStack([]);
         setShapes((prev) => [...prev, d]);
+        // 提交后清 live 层：预览笔画只在 live，不清则残留成已撤销图形的
+        // 「影子」（撤销后 base 已删、live 影子仍在，看似撤销不干净）
+        redrawLive();
       } else {
         redrawLive();
       }
