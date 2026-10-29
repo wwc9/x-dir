@@ -587,11 +587,10 @@ fn panel_layout(sel: (i32, i32, i32, i32), mon: &MonRect) -> (i32, i32, u32, u32
     let s = f64::from(mon.scale);
     let (gx, gy, gw, gh) = sel;
     let gap = (12.0 * s).round() as i32;
-    let max_h = (f64::from(mon.h) * 0.86).round() as i32;
     let min_w = (170.0 * s).round() as i32;
     let max_w = (300.0 * s).round() as i32;
-    // PixPin 样式：高度贴选区、宽度定宽窄条（≈选区宽 18%），不随纵横比回算
-    let ph = gh.min(max_h);
+    // PixPin 样式：宽度定宽窄条（≈选区宽 18%），高度随长图实际长度增长
+    // （panel_height：初始 = base 显示高，钳屏底）
     let mut pw = ((gw as f64 * 0.18).round() as i32).clamp(min_w, max_w);
     // 水平落位：右侧优先 → 左侧兜底 → 都不行缩宽钳右缘
     let mon_w = mon.w as i32;
@@ -605,8 +604,23 @@ fn panel_layout(sel: (i32, i32, i32, i32), mon: &MonRect) -> (i32, i32, u32, u32
         pw = (mon_w - 8 - (gx + gw + gap)).clamp((110.0 * s).round() as i32, max_w);
         mon_w - 8 - pw
     };
-    let y = (gy).clamp(8, (mon.h as i32 - 8 - ph).max(8));
-    (x, y, pw.max(1) as u32, ph.max(1) as u32)
+    let y = gy.clamp(8, (mon.h as i32 - 8).max(8));
+    let ph = panel_height(gh.max(0) as u32, pw.max(1) as u32, gw.max(1) as u32, y, mon);
+    (x, y, pw.max(1) as u32, ph)
+}
+
+/// 预览板高度（纯函数，单测锁定）：= 已拼图像按面板宽缩放的显示高 + 容差
+/// （上下 8css 内边距 + 2px 边框），钳 [120css, 屏底-面板顶-8]。PixPin 语义：
+/// 宽度固定、高度随长图实际长度增长，滚到底后面板封顶、内部滚动
+fn panel_height(canvas_h: u32, pw: u32, rw: u32, panel_y: i32, mon: &MonRect) -> u32 {
+    let s = f64::from(mon.scale);
+    let k = pw as f64 / rw.max(1) as f64;
+    let content = canvas_h as f64 * k;
+    let pad = (16.0 * s).round() + 4.0;
+    let max_h = (f64::from(mon.h) - 8.0 - f64::from(panel_y)).max(160.0);
+    ((content + pad).round() as i32)
+        .clamp((120.0 * s).round() as i32, max_h as i32)
+        .max(1) as u32
 }
 
 /// 控制条停靠位（纯函数，单测锁定）：选区正下方居中（PixPin 样式），下方
@@ -837,9 +851,32 @@ fn dump_frame(dir: &Path, name: &str, frame: &RgbaImage) {
 
 /// 滚动拼接主循环（独立线程）：等下滚静默 → 捕获 → 有符号匹配 → 追加/重定基准。
 /// 钩子已由 shot_scroll_begin 握手装好，本线程只消费标记。
+/// 预览面板高度同步（PixPin 语义：宽固定，高随长图实际长度增长，屏底封
+/// 顶后内部滚动）。变化 ≥6px 才 set_size，防抖动
+fn sync_panel_height(
+    app: &AppHandle,
+    mon: &MonRect,
+    panel_y: i32,
+    panel_w: u32,
+    rw: u32,
+    ch: u32,
+    last_ph: &mut u32,
+) {
+    let ph = panel_height(ch, panel_w, rw, panel_y, mon);
+    if ph.abs_diff(*last_ph) >= 6
+        && let Some(w) = app.get_webview_window("shot-scroll")
+    {
+        let _ = w.set_size(PhysicalSize::new(panel_w, ph));
+        *last_ph = ph;
+    }
+}
+
 fn scroll_loop(app: AppHandle, geo: ScrollGeo, base: RgbaImage, canvas: Arc<Mutex<CanvasBuf>>) {
     let mon = geo.mon;
     let (rx, ry, rw, rh) = (geo.rx, geo.ry, geo.rw, geo.rh);
+    #[cfg_attr(not(debug_assertions), allow(unused_mut))]
+    let mut last_ph = 0u32;
+    let (_, panel_y, panel_w, _) = panel_layout((rx as i32, ry as i32, rw as i32, rh as i32), &mon);
     let mon_obj = xcap::Monitor::all().ok().and_then(|all| {
         all.into_iter()
             .find(|m| m.x().ok() == Some(mon.x) && m.y().ok() == Some(mon.y))
@@ -885,10 +922,14 @@ fn scroll_loop(app: AppHandle, geo: ScrollGeo, base: RgbaImage, canvas: Arc<Mute
     let mut bad_streak = 0u32;
     let mut truncated = false;
     let mut last_activity = Instant::now();
-    emit_height(&app, canvas.lock().unwrap_or_else(|e| e.into_inner()).h);
+    let ch0 = canvas.lock().unwrap_or_else(|e| e.into_inner()).h;
+    emit_height(&app, ch0);
+    sync_panel_height(&app, &mon, panel_y, panel_w, rw, ch0, &mut last_ph);
     // 预览窗页加载晚于首发事件会漏听初始高度（实测显示 0px），隔一拍补发
     std::thread::sleep(Duration::from_millis(600));
-    emit_height(&app, canvas.lock().unwrap_or_else(|e| e.into_inner()).h);
+    let ch0 = canvas.lock().unwrap_or_else(|e| e.into_inner()).h;
+    emit_height(&app, ch0);
+    sync_panel_height(&app, &mon, panel_y, panel_w, rw, ch0, &mut last_ph);
     loop {
         let now = Instant::now();
         let h = canvas.lock().unwrap_or_else(|e| e.into_inner()).h;
@@ -1944,7 +1985,7 @@ mod tests {
         let (x, y, pw, ph) = panel_layout((100, 200, 800, 600), &m);
         assert_eq!(x, 100 + 800 + 18); // gap = 12*1.5
         assert_eq!(y, 200);
-        assert_eq!(ph, 600); // 高贴选区（≤86% 屏高）
+        assert_eq!(ph, 219); // 初始面板高 = base 显示高 191 + 容差 28（随长图增长）
         assert_eq!(pw, 255); // 0.18×800 = 144 → min 170css×1.5 = 255
     }
 
@@ -1963,8 +2004,19 @@ mod tests {
         let m = mon(0, 0, 2560, 1440, 1.0);
         let (x, _y, pw, ph) = panel_layout((100, 100, 2420, 600), &m);
         assert_eq!(x + pw as i32, 2560 - 8);
-        assert_eq!(ph, 600);
+        assert_eq!(ph, 120); // 缩窄后显示高 27 + 容差 20 → 钳 120css 下限
         assert!(pw < 300); // 已缩窄
+    }
+
+    #[test]
+    fn panel_height_grows_with_canvas_and_clamps_at_screen_bottom() {
+        let m = mon(0, 0, 2560, 1440, 1.0);
+        // 初始：base 显示高 480×0.25=120 + 容差 20 → 钳 120css 下限
+        assert_eq!(panel_height(480, 200, 800, 100, &m), 140);
+        // 随长图增长：4000 行 → 显示 1000 + 容差 20
+        assert_eq!(panel_height(4000, 200, 800, 100, &m), 1020);
+        // 屏底封顶：面板顶 y=100 → max = 1440-8-100 = 1332
+        assert_eq!(panel_height(20000, 200, 800, 100, &m), 1332);
     }
 
     #[test]
