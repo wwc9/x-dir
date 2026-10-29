@@ -190,7 +190,12 @@ fn quit_hook() {
 // AOSP 的滚动截图（同 Apache-2.0）走 App 协作 API，图块坐标由应用精确提供、
 // 无像素匹配，对外部截屏场景不适用，未采用其流程。
 
-/// 最终两带平均 NCC 下限：低于 = 内容已变（换页/动态刷新），置信不足拒绝
+/// 匹配带纵位（帧高占比）：B 上中管大负位移（上滚回看）、A 中部、C 下中
+/// 管大正位移（快速下滚——单帧行程可达 0.85h，旧双带 ±0.5h 搜索域封顶时
+/// 匹配器只能取域内错误次峰 → 每帧少记 600-800px → 长图大段重复，实测事
+/// 故）。均避开 <20%h sticky header；可见行 < 半带的位置不计分
+const BAND_FRACS: [f32; 3] = [0.25, 0.5, 0.75];
+/// 最终多带平均 NCC 下限：低于 = 内容已变（换页/动态刷新），置信不足拒绝
 const NCC_MIN: f32 = 0.55;
 /// 并列判定：精化后分差在此以内视为同分，取 |dy| 更小者（周期列表/纯色底
 /// 的多峰等价场景落小位移，也使未滚动帧落到 0 供到底检测）
@@ -342,13 +347,14 @@ fn match_scroll_dy(prev: &RgbaImage, cur: &RgbaImage) -> Option<i32> {
     if cur.width() != w || cur.height() != h || h < 120 {
         return None;
     }
-    // 带高 = 帧高 1/5（4 的倍数便于跨层对位）；A 带 = [h/2 .. h/2+th)，
-    // B 带 = [h/4 .. h/4+th)，均避开 <20%h 的 sticky header 区
+    // 带高 = 帧高 1/5（4 的倍数便于跨层对位）；三带纵位见 BAND_FRACS
     let th = ((h as usize) / 5 / 4 * 4).clamp(24, 480);
-    let (ta, tb) = ((h as usize) / 2, (h as usize) / 4);
+    let band_tops: Vec<usize> = BAND_FRACS
+        .iter()
+        .map(|f| ((h as f32 * f) as usize / 4 * 4).min(h as usize - th))
+        .collect();
     let w4 = (w / 4) as usize;
     let thq = th / 4;
-    let taq = ta / 4;
     let pf = GrayPyr::new(prev);
     let cf = GrayPyr::new(cur);
     // 匹配列域：排除静止页边距/侧栏（None = 全宽）
@@ -369,13 +375,21 @@ fn match_scroll_dy(prev: &RgbaImage, cur: &RgbaImage) -> Option<i32> {
         x1: cx1,
     };
 
-    // ── 粗搜（1/4 分辨率，仅 A 带，全可见域 d ∈ [ta+th-h .. ta]）──────────
-    let (a_lo, a_hi) = ((ta + th) as i32 - h as i32, ta as i32);
-    let mut scores: Vec<(i32, f32)> = Vec::with_capacity((a_hi - a_lo + 1) as usize);
-    for d in (a_lo / 4)..=(a_hi / 4) {
-        let (s, rows) = fq.band(taq, thq, d, 2);
-        if rows >= thq / 2 {
-            scores.push((d, s));
+    // ── 粗搜（1/4 分辨率，三带均值，扩展域 ±(h - th/2)——各带可见域并集，
+    //    覆盖单帧 ~0.85h 的大行程滚动）────────────────────────────────────
+    let (d_lo, d_hi) = (-(h as i32) + th as i32 / 2, h as i32 - th as i32 / 2);
+    let mut scores: Vec<(i32, f32)> = Vec::with_capacity(((d_hi - d_lo) / 4 + 1) as usize);
+    for d in (d_lo / 4)..=(d_hi / 4) {
+        let (mut sum, mut cnt) = (0.0f32, 0u32);
+        for &bt in &band_tops {
+            let (s2, rows) = fq.band(bt / 4, thq, d, 4);
+            if rows >= thq / 2 {
+                sum += s2;
+                cnt += 1;
+            }
+        }
+        if cnt > 0 {
+            scores.push((d, sum / cnt as f32));
         }
     }
     let &(_, best_s) = scores.iter().max_by(|a, b| a.1.total_cmp(&b.1))?;
@@ -406,16 +420,22 @@ fn match_scroll_dy(prev: &RgbaImage, cur: &RgbaImage) -> Option<i32> {
         let base = cd * 4;
         let mut local: Option<(i32, f32)> = None;
         for d in (base - 4)..=(base + 4) {
-            if !(a_lo..=a_hi).contains(&d) {
+            if !(d_lo..=d_hi).contains(&d) {
                 continue;
             }
-            let (sa, ra) = ff.band(ta, th, d, 2);
-            if ra < th / 2 {
+            // 可见不足半带的带不计入（大位移场景边带自然退出）
+            let (mut sum, mut cnt) = (0.0f32, 0u32);
+            for &bt in &band_tops {
+                let (s2, rows) = ff.band(bt, th, d, 2);
+                if rows >= th / 2 {
+                    sum += s2;
+                    cnt += 1;
+                }
+            }
+            if cnt == 0 {
                 continue;
             }
-            let (sb, rb) = ff.band(tb, th, d, 2);
-            // B 带可见不足半带（大位移上滚场景）只以 A 带计分
-            let avg = if rb >= th / 2 { (sa + sb) / 2.0 } else { sa };
+            let avg = sum / cnt as f32;
             // 并列（±TIE_EPS）取 (|d|,-d) 字典序更小者：|d| 小优先，
             // 同 |d| 偏正位移（捕获只发生在下滚后，对称并列取内容上移向）
             match local {
@@ -443,29 +463,40 @@ fn match_scroll_dy(prev: &RgbaImage, cur: &RgbaImage) -> Option<i32> {
     if score < NCC_MIN {
         return None;
     }
-    // ── 双带共识：A/B 各自在终选 ±6px 内独立求峰，分歧 >1px 拒绝 ──────────
+    // ── 多带共识：各带在终选 ±6px 内独立求峰；定位良好的带（可见 ≥3/4 带
+    //    高）投票，任意两票分歧 >2px 拒绝（整数位移下带间应一致，超出 = 非
+    //    均匀滚动/视差）；不足两票则依赖 NCC_MIN 门槛起步
     let argmax = |top: usize, lo: i32, hi: i32| -> Option<i32> {
         let mut pts: Vec<(i32, f32)> = Vec::new();
         for d in lo..=hi {
-            let (s, rows) = ff.band(top, th, d, 2);
+            let (s2, rows) = ff.band(top, th, d, 2);
             if rows >= th / 2 {
-                pts.push((d, s));
+                pts.push((d, s2));
             }
         }
         let best = pts.iter().map(|p| p.1).fold(f32::MIN, f32::max);
         pts.iter()
-            .filter(|(_, s)| *s >= best - TIE_EPS)
+            .filter(|(_, s2)| *s2 >= best - TIE_EPS)
             .min_by_key(|(d, _)| (d.unsigned_abs(), -*d))
             .map(|(d, _)| *d)
     };
     let w6 = 6i32;
-    if let (Some(da), Some(db)) = (
-        argmax(ta, dy - 4, dy + 4),
-        argmax(tb, (dy - w6).max(a_lo), (dy + w6).min(a_hi)),
-    ) && (da - db).abs() > 1
-    {
-        log::debug!("滚动截图：双带分歧 A={da} B={db}，拒绝");
-        return None;
+    let mut votes: Vec<i32> = Vec::new();
+    for &bt in &band_tops {
+        let (_, rows) = ff.band(bt, th, dy, 2);
+        if rows * 4 >= th * 3
+            && let Some(dv) = argmax(bt, dy - w6, dy + w6)
+        {
+            votes.push(dv);
+        }
+    }
+    for i in 0..votes.len() {
+        for j in i + 1..votes.len() {
+            if (votes[i] - votes[j]).abs() > 2 {
+                log::debug!("滚动截图：多带分歧 {votes:?}，拒绝");
+                return None;
+            }
+        }
     }
     Some(dy)
 }
@@ -1428,6 +1459,21 @@ mod tests {
             }
         }
         assert_eq!(match_scroll_dy(&prev, &cur), Some(40));
+    }
+
+    #[test]
+    fn match_scroll_dy_large_scroll_beyond_half_height() {
+        // 单帧大行程滚动 300px（=0.75h，常见于快速滚轮/触摸板惯性与平滑滚
+        // 动合并帧）：旧双带搜索域 ±0.5h 覆盖不到、只能取域内错误次峰 →
+        // 大段重复（实测事故）；C 带（75%h 起）扩展域后应得真位移
+        let prev = img(400, 400, 0);
+        let mut cur = img(400, 400, 9);
+        for y in 0..100u32 {
+            for x in 0..400u32 {
+                cur.put_pixel(x, y, *prev.get_pixel(x, y + 300));
+            }
+        }
+        assert_eq!(match_scroll_dy(&prev, &cur), Some(300));
     }
 
     #[test]
