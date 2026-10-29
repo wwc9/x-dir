@@ -4909,6 +4909,7 @@ mark.np-gsearch-mark {
 }
 .np-shot-sprev-wrap {
   position: relative;
+  overflow: hidden;
 }
 .np-shot-sprev-wrap canvas {
   display: block;

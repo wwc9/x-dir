@@ -27,6 +27,9 @@ export function ScrollPreview({ boot }: { boot: ScrollPreviewBoot }) {
   const [flash, setFlash] = useState<{ top: number; height: number; key: number } | null>(null);
   /** 常驻窗复用：选区尺寸随会话变，boot 事件换装并整体重置 */
   const [dim, setDim] = useState({ w: boot.w, h: boot.h });
+  /** 已绘制内容的显示高度（物理行数 × 显示缩放比）：画布位图按 2 的幂预
+   *  分配会留出透明空腔，用裁剪容器按此高度裁掉，灰白底不再露出 */
+  const [drawnH, setDrawnH] = useState(0);
   useEffect(() => {
     const un = listen<{ w: number; h: number }>("shot-preview-boot", (e) => {
       setDim(e.payload);
@@ -34,6 +37,7 @@ export function ScrollPreview({ boot }: { boot: ScrollPreviewBoot }) {
       stickRef.current = true;
       setFail(false);
       setFlash(null);
+      setDrawnH(0);
       const c = canvasRef.current;
       if (c) {
         c.width = e.payload.w;
@@ -84,6 +88,8 @@ export function ScrollPreview({ boot }: { boot: ScrollPreviewBoot }) {
         const drawn = pulledRef.current;
         const k = wrap.clientWidth / dim.w;
         setFlash({ top: from * k, height: n * k, key: drawn });
+        // 裁剪容器高度 = 已绘制内容的显示高（画布位图预分配空腔被裁掉）
+        setDrawnH(drawn * k);
         const v = viewRef.current;
         if (v && stickRef.current) v.scrollTop = v.scrollHeight;
       } catch {
@@ -111,7 +117,11 @@ export function ScrollPreview({ boot }: { boot: ScrollPreviewBoot }) {
           stickRef.current = v.scrollTop + v.clientHeight >= v.scrollHeight - 24;
         }}
       >
-        <div ref={wrapRef} className="np-shot-sprev-wrap">
+        <div
+          ref={wrapRef}
+          className="np-shot-sprev-wrap"
+          style={{ height: drawnH > 0 ? drawnH : undefined }}
+        >
           <canvas ref={canvasRef} width={dim.w} height={dim.h} />
           {flash && (
             <div
