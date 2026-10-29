@@ -4895,7 +4895,7 @@ mark.np-gsearch-mark {
   height: 100vh;
   box-sizing: border-box;
   background: var(--np-surface);
-  border: 1px solid var(--np-border);
+  border: 2px solid var(--np-accent);
   border-radius: var(--np-radius-lg);
   overflow: hidden;
   user-select: none;
@@ -4917,23 +4917,16 @@ mark.np-gsearch-mark {
   background: var(--np-bg);
   min-height: 24px;
 }
+/* PixPin 样式：新段绿色标记持续保留到下一段到来（不淡出），一眼可辨
+   「刚拼了什么」 */
 .np-shot-sprev-flash {
   position: absolute;
   left: 0;
   right: 0;
-  background: color-mix(in srgb, var(--np-success) 32%, transparent);
+  background: color-mix(in srgb, var(--np-success) 30%, transparent);
   border: 1px solid var(--np-success);
   box-sizing: border-box;
   pointer-events: none;
-  animation: np-shot-flash 0.9s ease-out forwards;
-}
-@keyframes np-shot-flash {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
 }
 .np-shot-sprev-fail {
   position: absolute;

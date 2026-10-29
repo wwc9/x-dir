@@ -578,20 +578,21 @@ impl CanvasBuf {
 
 // ── 预览板布局（纯函数，单测锁定）───────────────────────────────────────────
 
-/// 预览板窗位置与尺寸（显示器相对物理像素）：高度贴选区（钳 ≤86% 屏高），
-/// 宽随选区纵横比（钳 [170,430]·scale CSS）；水平贴选区右侧优先、左侧兜底，
-/// 两侧都放不下则缩宽钳到屏幕右缘（窄预览好过盖住选区——盖住区滚轮会被
-/// 预览窗吃掉）；垂直与选区顶对齐、越界上收。
+/// 预览板窗位置与尺寸（显示器相对物理像素，PixPin 样式）：高度贴选区
+/// （顶对齐，钳 ≤86% 屏高），宽度定宽窄条 ≈ 选区宽 18%（钳 [170,300]·scale
+/// CSS），长图按面板宽缩放竖向滚动——面板与选区等高构成「选区的延长体」；
+/// 水平贴选区右侧优先、左侧兜底，两侧都放不下则缩宽钳到屏幕右缘（窄预览
+/// 好过盖住选区——盖住区滚轮会被预览窗吃掉）；垂直越界上收。
 fn panel_layout(sel: (i32, i32, i32, i32), mon: &MonRect) -> (i32, i32, u32, u32) {
     let s = f64::from(mon.scale);
     let (gx, gy, gw, gh) = sel;
     let gap = (12.0 * s).round() as i32;
     let max_h = (f64::from(mon.h) * 0.86).round() as i32;
     let min_w = (170.0 * s).round() as i32;
-    let max_w = (430.0 * s).round() as i32;
-    let mut pw =
-        (((gh.min(max_h)) as f64 * gw as f64 / gh as f64).round() as i32).clamp(min_w, max_w);
-    let mut ph = ((pw as f64 * gh as f64 / gw as f64).round() as i32).min(max_h);
+    let max_w = (300.0 * s).round() as i32;
+    // PixPin 样式：高度贴选区、宽度定宽窄条（≈选区宽 18%），不随纵横比回算
+    let ph = gh.min(max_h);
+    let mut pw = ((gw as f64 * 0.18).round() as i32).clamp(min_w, max_w);
     // 水平落位：右侧优先 → 左侧兜底 → 都不行缩宽钳右缘
     let mon_w = mon.w as i32;
     let fits_right = gx + gw + gap + pw <= mon_w - 8;
@@ -601,9 +602,7 @@ fn panel_layout(sel: (i32, i32, i32, i32), mon: &MonRect) -> (i32, i32, u32, u32
     } else if fits_left {
         gx - gap - pw
     } else {
-        let avail = (mon_w - 8 - (gx + gw + gap)).clamp((110.0 * s).round() as i32, max_w);
-        pw = avail;
-        ph = ((pw as f64 * gh as f64 / gw as f64).round() as i32).min(max_h);
+        pw = (mon_w - 8 - (gx + gw + gap)).clamp((110.0 * s).round() as i32, max_w);
         mon_w - 8 - pw
     };
     let y = (gy).clamp(8, (mon.h as i32 - 8 - ph).max(8));
@@ -1939,14 +1938,14 @@ mod tests {
 
     #[test]
     fn panel_layout_prefers_right_side() {
-        // 选区在屏幕左侧：预览贴右侧；宽随纵横比但钳在 max_w（430css·scale），
-        // 高随钳后宽回算
+        // 选区在屏幕左侧：预览贴右侧；高度贴选区，宽度 ≈ 选区宽 18%
+        // （钳 [170,300]·scale）
         let m = mon(0, 0, 2560, 1440, 1.5);
         let (x, y, pw, ph) = panel_layout((100, 200, 800, 600), &m);
         assert_eq!(x, 100 + 800 + 18); // gap = 12*1.5
         assert_eq!(y, 200);
-        assert_eq!(pw, 645); // 800:600 比例 → 800，撞 max_w 645 上限
-        assert_eq!(ph, 484); // 645×600/800
+        assert_eq!(ph, 600); // 高贴选区（≤86% 屏高）
+        assert_eq!(pw, 255); // 0.18×800 = 144 → min 170css×1.5 = 255
     }
 
     #[test]
@@ -1960,12 +1959,12 @@ mod tests {
 
     #[test]
     fn panel_layout_shrinks_at_right_edge_when_both_sides_tight() {
-        // 选区几乎全屏宽：右侧放不下 → 缩宽钳到屏幕右缘
+        // 选区几乎全屏宽：右侧放不下 → 缩宽钳到屏幕右缘；高度仍贴选区
         let m = mon(0, 0, 2560, 1440, 1.0);
         let (x, _y, pw, ph) = panel_layout((100, 100, 2420, 600), &m);
         assert_eq!(x + pw as i32, 2560 - 8);
-        assert!(pw < 4300); // 已缩窄
-        assert!(ph >= 1 && pw >= 1);
+        assert_eq!(ph, 600);
+        assert!(pw < 300); // 已缩窄
     }
 
     #[test]

@@ -14,9 +14,6 @@ export interface ScrollPreviewBoot {
   h: number;
 }
 
-/** 新段绿色高亮时长（与 np-shot-flash 动画一致） */
-const FLASH_MS = 900;
-
 export function ScrollPreview({ boot }: { boot: ScrollPreviewBoot }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewRef = useRef<HTMLDivElement>(null);
@@ -55,7 +52,6 @@ export function ScrollPreview({ boot }: { boot: ScrollPreviewBoot }) {
   useEffect(() => {
     let dead = false;
     let timer: number | null = null;
-    let flashTimer: number | null = null;
     const pull = async (target: number) => {
       const c = canvasRef.current;
       const wrap = wrapRef.current;
@@ -84,12 +80,10 @@ export function ScrollPreview({ boot }: { boot: ScrollPreviewBoot }) {
           ctx.putImageData(new ImageData(rows, dim.w, n), 0, from);
           pulledRef.current = need;
         }
-        // 新段高亮（PixPin 样式）：canvas 显示缩放系数 = 包裹宽 / 自然宽
+        // 新段绿色标记（PixPin 样式）：持续保留到下一段到来
         const drawn = pulledRef.current;
         const k = wrap.clientWidth / dim.w;
         setFlash({ top: from * k, height: n * k, key: drawn });
-        if (flashTimer !== null) window.clearTimeout(flashTimer);
-        flashTimer = window.setTimeout(() => setFlash(null), FLASH_MS);
         const v = viewRef.current;
         if (v && stickRef.current) v.scrollTop = v.scrollHeight;
       } catch {
@@ -103,7 +97,6 @@ export function ScrollPreview({ boot }: { boot: ScrollPreviewBoot }) {
     return () => {
       dead = true;
       if (timer !== null) window.clearTimeout(timer);
-      if (flashTimer !== null) window.clearTimeout(flashTimer);
       void un.then((f) => f()).catch(() => undefined);
     };
   }, [dim.w]);
