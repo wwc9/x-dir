@@ -1,8 +1,10 @@
 // 滚动截图控制条（§3.6 二期 B 批；2026-10-29 改停靠选区正下方，PixPin
 // 样式）：显示已捕获尺寸与滚动方向，完成 = 用已拼内容出结果，取消 / Esc =
 // 丢弃。长图预览在侧边的 ScrollPreview 窗（label shot-scroll），本窗（label
-// shot-bar）只发控制命令与接收进度事件更新尺寸显示。窗口几何由 Rust 侧决定。
-import { useCallback, useEffect, useState } from "react";
+// shot-bar）只发控制命令与接收进度事件：更新尺寸显示、初始「向下滚动 ·
+// 缓慢匀速」引导、滚太快警示（shot-scroll-fast 事件，2.5s 消退）。窗口几何
+// 由 Rust 侧决定。
+import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Check, X } from "lucide-react";
 
@@ -19,6 +21,9 @@ export interface ScrollBarBoot {
 export function ScrollBar({ boot }: { boot: ScrollBarBoot }) {
   const [height, setHeight] = useState(0);
   const [busy, setBusy] = useState(false);
+  /** 滚太快警示（Rust 流式帧匹配失败/捕获失败 = 速度超匹配能力） */
+  const [warn, setWarn] = useState(false);
+  const warnTimer = useRef<number | null>(null);
 
   useEffect(() => initTooltip(), []);
 
@@ -27,6 +32,19 @@ export function ScrollBar({ boot }: { boot: ScrollBarBoot }) {
       setHeight(e.payload.height),
     );
     return () => {
+      void un.then((f) => f()).catch(() => undefined);
+    };
+  }, []);
+
+  // 滚太快警示：出现 2.5s 自动消退；持续滚快则反复触发
+  useEffect(() => {
+    const un = listen("shot-scroll-fast", () => {
+      setWarn(true);
+      if (warnTimer.current !== null) window.clearTimeout(warnTimer.current);
+      warnTimer.current = window.setTimeout(() => setWarn(false), 2500);
+    });
+    return () => {
+      if (warnTimer.current !== null) window.clearTimeout(warnTimer.current);
       void un.then((f) => f()).catch(() => undefined);
     };
   }, []);
@@ -57,9 +75,15 @@ export function ScrollBar({ boot }: { boot: ScrollBarBoot }) {
   return (
     <div className="np-shot-sbar">
       <span className="np-shot-sbar-dot" />
-      <span className="np-shot-sbar-dim">
-        {boot.w.toLocaleString()} × {height.toLocaleString()}
-      </span>
+      {warn ? (
+        <span className="np-shot-sbar-warn">滚动过快，请放慢</span>
+      ) : height > 0 ? (
+        <span className="np-shot-sbar-dim">
+          {boot.w.toLocaleString()} × {height.toLocaleString()}
+        </span>
+      ) : (
+        <span className="np-shot-sbar-dim">向下滚动 · 缓慢匀速</span>
+      )}
       <span className="np-shot-sbar-dir" data-tip="横向滚动截图暂未支持">
         纵向
       </span>

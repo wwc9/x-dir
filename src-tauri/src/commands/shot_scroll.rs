@@ -964,6 +964,9 @@ fn scroll_loop(app: AppHandle, geo: ScrollGeo, base: RgbaImage, canvas: Arc<Mute
                             .lock()
                             .unwrap_or_else(|e| e.into_inner())
                             .is_some_and(|t| now.duration_since(t) >= QUIET);
+                        if !settled_now {
+                            let _ = app.emit_to("shot-bar", "shot-scroll-fast", ());
+                        }
                         if settled_now {
                             bad_streak += 1;
                             if bad_streak >= BAD_STREAK {

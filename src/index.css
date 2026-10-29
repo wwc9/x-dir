@@ -4872,6 +4872,11 @@ mark.np-gsearch-mark {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.np-shot-sbar-warn {
+  color: var(--np-danger);
+  white-space: nowrap;
+  animation: np-shot-pulse 0.9s ease-in-out infinite;
+}
 .np-shot-sbar-dir {
   padding: 2px 8px;
   border: 1px solid var(--np-hairline);
