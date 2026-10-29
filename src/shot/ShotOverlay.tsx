@@ -75,10 +75,9 @@ export interface ShotBoot {
 /** 三档线宽 / 字号（CSS 像素观感值） */
 const STROKES = [2, 4, 7];
 const FONTS = [16, 22, 30];
-/** 阴影模糊半径 / 边框线宽档位（CSS 像素观感值，随 scale 增密） */
-const SHADOW_W = [0, 10, 18, 30];
-const BORDER_W = [0, 3, 6, 10];
-const SHADOW_LV_LABEL = ["关", "弱", "中", "强"];
+/** 阴影模糊半径 / 边框线宽滑块量程（CSS 像素观感值，随 scale 增密；0 = 关） */
+const SHADOW_W_MAX = 30;
+const BORDER_W_MAX = 10;
 
 const TOOLS: { id: ShotTool; label: string; icon: typeof Square }[] = [
   { id: "select", label: "选择 / 移动选区", icon: MousePointer2 },
@@ -143,8 +142,8 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const coordRelRef = useRef(false);
   const magColorRef = useRef<readonly [number, number, number, number] | null>(null);
   /** 导出装饰：阴影 / 边框档位（0=关 1=弱 2=中 3=强，点击循环切换） */
-  const [shadowLv, setShadowLv] = useState(0);
-  const [borderLv, setBorderLv] = useState(0);
+  const [shadowW, setShadowW] = useState(0);
+  const [borderW, setBorderW] = useState(0);
 
   // 预选跟随模式（PixPin/QQ 惯例，2026-10-27）：进会话默认选中光标下窗口，
   // 鼠标移动时选中框自动跟随切换其他窗口（此时无工具栏，光标恒十字）；用户
@@ -313,8 +312,8 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       }
     }
     // 阴影/边框预览（已确认选区）：选区外围实时呈现导出效果
-    const sbw = Math.round(SHADOW_W[shadowLv] * scale);
-    const bbw = Math.round(BORDER_W[borderLv] * scale);
+    const sbw = Math.round(shadowW * scale);
+    const bbw = Math.round(borderW * scale);
     if (s && !followingRef.current && !dNow && (sbw || bbw)) {
       ctx.save();
       if (sbw) {
@@ -480,8 +479,8 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     (s: Sel): HTMLCanvasElement | null => {
       const base = cropCanvas(s);
       if (!base) return null;
-      const sbw = Math.round(SHADOW_W[shadowLv] * scale);
-      const bbw = Math.round(BORDER_W[borderLv] * scale);
+      const sbw = Math.round(shadowW * scale);
+      const bbw = Math.round(borderW * scale);
       if (!sbw && !bbw) return base;
       const m = Math.ceil(sbw * 1.4 + bbw);
       const out = document.createElement("canvas");
@@ -506,7 +505,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       }
       return out;
     },
-    [cropCanvas, shadowLv, borderLv, color, scale],
+    [cropCanvas, shadowW, borderW, color, scale],
   );
 
   const exportDataUrl = useCallback(
@@ -523,7 +522,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       // 取整对齐像素网格）+ 无标注判定（含未提交的文字输入）——合成结果
       // 像素与 Rust 侧会话定格帧一致，三个动作都能只传矩形由 Rust 进程内裁剪
       // 阴影/边框开启时导出带外扩装饰（尺寸大于选区），必须走画布管线
-      const deco = shadowLv > 0 || borderLv > 0;
+      const deco = shadowW > 0 || borderW > 0;
       const noMarks = !shapesRef.current.length && !editingRef.current && !deco;
       const rx = Math.round(s.x);
       const ry = Math.round(s.y);
@@ -1201,15 +1200,15 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               <AppIcon icon={PenLine} size={DENSITY.iconLg} />
             </button>
             <button
-              className={`np-shot-tool ${shadowLv ? "on" : ""}`}
-              data-tip="阴影"
+              className={`np-shot-tool ${shadowW ? "on" : ""}`}
+              data-tip={`阴影 ${shadowW}px`}
               onClick={openPanel("shadow")}
             >
               <AppIcon icon={Layers} size={DENSITY.iconLg} />
             </button>
             <button
-              className={`np-shot-tool ${borderLv ? "on" : ""}`}
-              data-tip="边框"
+              className={`np-shot-tool ${borderW ? "on" : ""}`}
+              data-tip={`边框 ${borderW}px`}
               onClick={openPanel("border")}
             >
               <AppIcon icon={Frame} size={DENSITY.iconLg} />
@@ -1287,21 +1286,25 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                       <span className="np-shot-wdot" style={{ width: w.px, height: w.px }} />
                     </button>
                   ))}
-                {(panel.kind === "shadow" || panel.kind === "border") &&
-                  SHADOW_LV_LABEL.map((lbl, v) => (
-                    <button
-                      key={v}
-                      className={`np-shot-tool ${
-                        (panel.kind === "shadow" ? shadowLv : borderLv) === v ? "on" : ""
-                      }`}
-                      data-tip={lbl}
-                      onClick={() => {
-                        (panel.kind === "shadow" ? setShadowLv : setBorderLv)(v);
-                        setPanel(null);
-                      }}
-                    >
-                    </button>
-                  ))}
+                {(panel.kind === "shadow" || panel.kind === "border") && (
+                  <div className="np-shot-slider">
+                    <input
+                      type="range"
+                      min={0}
+                      max={panel.kind === "shadow" ? SHADOW_W_MAX : BORDER_W_MAX}
+                      step={1}
+                      value={panel.kind === "shadow" ? shadowW : borderW}
+                      onChange={(e) =>
+                        (panel.kind === "shadow" ? setShadowW : setBorderW)(
+                          Number(e.target.value),
+                        )
+                      }
+                    />
+                    <span className="np-shot-slider-val">
+                      {panel.kind === "shadow" ? shadowW : borderW}px
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           )}
