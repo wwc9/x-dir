@@ -4949,11 +4949,13 @@ mark.np-gsearch-mark {
   position: fixed;
   background: var(--np-overlay);
 }
+/* 边框与角点必须整体落在选区【外侧】：选区框窗盖在捕获区上，任何伸入
+   选区的像素都会被 capture_region 截进长图（实测蓝框线拼进结果）。故用
+   box-shadow 外描边 + 手柄全外置，框窗对捕获区完全零像素 */
 .np-shot-sframe {
   position: fixed;
   z-index: 1;
-  border: 2px solid var(--np-accent);
-  box-sizing: border-box;
+  box-shadow: 0 0 0 2px var(--np-accent);
   pointer-events: none;
 }
 .np-shot-sframe i {
@@ -4964,14 +4966,14 @@ mark.np-gsearch-mark {
   border: 1px solid var(--np-accent);
   box-sizing: border-box;
 }
-.np-shot-sframe .tl { left: -4px; top: -4px; }
-.np-shot-sframe .tt { left: calc(50% - 4px); top: -4px; }
-.np-shot-sframe .tr { right: -4px; top: -4px; }
-.np-shot-sframe .ll { left: -4px; top: calc(50% - 4px); }
-.np-shot-sframe .rr { right: -4px; top: calc(50% - 4px); }
-.np-shot-sframe .bl { left: -4px; bottom: -4px; }
-.np-shot-sframe .bb { left: calc(50% - 4px); bottom: -4px; }
-.np-shot-sframe .br { right: -4px; bottom: -4px; }
+.np-shot-sframe .tl { left: -9px; top: -9px; }
+.np-shot-sframe .tt { left: calc(50% - 4px); top: -9px; }
+.np-shot-sframe .tr { right: -9px; top: -9px; }
+.np-shot-sframe .ll { left: -9px; top: calc(50% - 4px); }
+.np-shot-sframe .rr { right: -9px; top: calc(50% - 4px); }
+.np-shot-sframe .bl { left: -9px; bottom: -9px; }
+.np-shot-sframe .bb { left: calc(50% - 4px); bottom: -9px; }
+.np-shot-sframe .br { right: -9px; bottom: -9px; }
 
 /* 浮条 / 结果窗通用按钮 */
 .np-shot-btn {
