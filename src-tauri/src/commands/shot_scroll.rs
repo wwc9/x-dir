@@ -6,7 +6,7 @@
 // 侧边预览窗（label "shot-scroll"，贴选区右/左侧，实时显示已拼长图，底部
 // 完成/取消）→ WH_MOUSE_LL 低级鼠标钩子监听用户滚轮〔光标在选区内：下滚记
 // 时刻置待捕获；上滚只置标记——"下滚持续截图、上滚不动"〕→ 循环线程在下滚
-// 静默窗（合并连滚/惯性）后 capture_region 实时捕获 → 灰度 SAD 模板匹配求
+// 静默窗（合并连滚/惯性）后 capture_region 实时捕获 → NCC 两带共识模板匹配求
 // 有符号纵向位移 → dy≥2（内容上移）追加底部新内容，dy≤-2（上滚回看）只重
 // 定基准不追加 → 到底 / 用户完成 / 高度上限收尾 → 长图存临时盘 → 结果窗
 // （label "shot-result"：复制 / 保存 / 贴图 / 关闭；窗体尺寸与长图解耦，
@@ -176,67 +176,236 @@ fn quit_hook() {
     }
 }
 
-// ── 纵向位移匹配（灰度 SAD 模板匹配，自研；有符号）──────────────────────────
+// ── 纵向位移匹配（NCC 两带共识模板匹配，自研实现；有符号）──────────────────
+//
+// 参考 Apache-2.0 项目的公开数学（OpenCV matchTemplate 的 TM_CCOEFF_NORMED
+// 归一化互相关公式，未复制其代码）：prev 两条全宽横带在 cur 中搜索归一化互
+// 相关峰值。相比旧 SAD 逐点差：NCC 对全局亮度变化（hover 态/光标/对比度
+// 漂移）不变，归一化分母杜绝「低方差区域假零差」误配。稳健性三件套：
+//   1. 1/4 分辨率粗搜全范围 → 全分辨率 ±4px 两带精化（速度）；
+//   2. A/B 双带（帧高 50% 与 25% 起，避开 <20%h 的 sticky header）精化后
+//      独立求峰，分歧 >1px 拒绝（局部动态内容/视差）；
+//   3. 绝对置信门槛 NCC_MIN（换页/加载动画拒绝）+ 并列取 |dy| 小（周期性
+//      列表/空白底安全落到小位移与到底检测）。
+// AOSP 的滚动截图（同 Apache-2.0）走 App 协作 API，图块坐标由应用精确提供、
+// 无像素匹配，对外部截屏场景不适用，未采用其流程。
+
+/// 最终两带平均 NCC 下限：低于 = 内容已变（换页/动态刷新），置信不足拒绝
+const NCC_MIN: f32 = 0.55;
+/// 并列判定：精化后分差在此以内视为同分，取 |dy| 更小者（周期列表/纯色底
+/// 的多峰等价场景落小位移，也使未滚动帧落到 0 供到底检测）
+const TIE_EPS: f32 = 0.02;
+
+/// 帧灰度 + 两级 2×2 均值降采样（全分辨率精化 / 1/4 粗搜）
+struct GrayPyr {
+    full: Vec<u8>,
+    quarter: Vec<u8>,
+}
+
+impl GrayPyr {
+    fn new(img: &RgbaImage) -> Self {
+        let (w, h) = img.dimensions();
+        let mut full = Vec::with_capacity((w * h) as usize);
+        for p in img.pixels() {
+            let c = p.0;
+            full.push(
+                ((i32::from(c[0]) * 299 + i32::from(c[1]) * 587 + i32::from(c[2]) * 114) / 1000)
+                    as u8,
+            );
+        }
+        let (half, hw, hh) = downsample2(&full, w, h);
+        let (quarter, _, _) = downsample2(&half, hw, hh);
+        Self { full, quarter }
+    }
+}
+
+/// 2×2 均值降采样（奇数尾行/列丢弃）
+fn downsample2(src: &[u8], w: u32, h: u32) -> (Vec<u8>, u32, u32) {
+    let (ow, oh) = (w / 2, h / 2);
+    let mut out = Vec::with_capacity((ow * oh) as usize);
+    for y in 0..oh {
+        let (y0, y1) = ((y * 2) as usize, (y * 2 + 1) as usize);
+        for x in 0..ow {
+            let x0 = (x * 2) as usize;
+            let s = (u16::from(src[y0 * w as usize + x0])
+                + u16::from(src[y0 * w as usize + x0 + 1])
+                + u16::from(src[y1 * w as usize + x0])
+                + u16::from(src[y1 * w as usize + x0 + 1]))
+                / 4;
+            out.push(s as u8);
+        }
+    }
+    (out, ow, oh)
+}
+
+/// 单带归一化互相关（TM_CCOEFF_NORMED 公式）：比较 t 的 [top..top+th) 行与
+/// i 的 [top-d..top+th-d) 行的可见交集（越界部分裁掉，可见不足由调用方
+/// 判断）。col_step 列抽稀提速。分母近零（低方差）时：双方皆低方差 = 同色
+/// 块记满分，仅一方低方差 = 无结构不可比记 0。返回 (score, 可见行数)
+fn ncc_band(
+    t: &[u8],
+    i: &[u8],
+    w: usize,
+    top: usize,
+    th: usize,
+    d: i32,
+    col_step: usize,
+) -> (f32, usize) {
+    let h = i.len() / w;
+    // 模板行 r 对应 cur 行 r-d，可见域：0 ≤ r-d < h → r ∈ [max(top,d) .. min(top+th, d+h))
+    let r0 = (i64::from(top as i32).max(i64::from(d)).max(0)) as usize;
+    let r1 = (i64::from((top + th) as i32)
+        .min(i64::from(d) + h as i64)
+        .max(0)) as usize;
+    let rows = r1.saturating_sub(r0);
+    if rows == 0 {
+        return (0.0, 0);
+    }
+    let cols = w.div_ceil(col_step);
+    let (mut st, mut si, mut stt, mut sii, mut sti) = (0i64, 0i64, 0i64, 0i64, 0i64);
+    for r in r0..r1 {
+        let tr = &t[r * w..];
+        let ir = &i[((r as i64) - i64::from(d)) as usize * w..];
+        let mut x = 0;
+        while x < w {
+            let tv = i64::from(tr[x]);
+            let iv = i64::from(ir[x]);
+            st += tv;
+            si += iv;
+            stt += tv * tv;
+            sii += iv * iv;
+            sti += tv * iv;
+            x += col_step;
+        }
+    }
+    let nf = (rows * cols) as f64;
+    let (vt, vi) = (
+        nf * stt as f64 - (st as f64) * (st as f64),
+        nf * sii as f64 - (si as f64) * (si as f64),
+    );
+    if vt < 1.0 || vi < 1.0 {
+        return (if vt < 1.0 && vi < 1.0 { 1.0 } else { 0.0 }, rows);
+    }
+    let num = nf * sti as f64 - (st as f64) * (si as f64);
+    ((num / (vt * vi).sqrt()) as f32, rows)
+}
 
 /// 求 cur 相对 prev 的纵向位移 dy（有符号）：dy>0 = 内容上移（用户下滚，
 /// 底部新内容 = cur 底部 [h-dy..h)）；dy<0 = 内容下移 |dy|（用户上滚回看）。
-/// 模板取 prev 下部两条窄竖条（左右 1/4 处，规避开居中的 sticky header /
-/// 加载条），灰度 + 隔点采样后做 SAD；对 d ∈ [-(th-1), h-th] 搜索（负向
-/// 只需模板带高度内可重叠，越界尾部按比例截短）。最小 SAD 超阈值 = 置信
-/// 不足（动态内容干扰），返回 None。
 fn match_scroll_dy(prev: &RgbaImage, cur: &RgbaImage) -> Option<i32> {
     let (w, h) = (prev.width(), prev.height());
-    if cur.width() != w || cur.height() != h {
+    if cur.width() != w || cur.height() != h || h < 120 {
         return None;
     }
-    /// 模板条宽（物理像素）
-    const TW: u32 = 48;
-    // 模板条高 = 帧高 1/3（取 prev 下部：滚动后仍在画面内的区域）
-    let th = h / 3;
-    if th < 40 {
-        return None;
+    // 带高 = 帧高 1/5（4 的倍数便于跨层对位）；A 带 = [h/2 .. h/2+th)，
+    // B 带 = [h/4 .. h/4+th)，均避开 <20%h 的 sticky header 区
+    let th = ((h as usize) / 5 / 4 * 4).clamp(24, 480);
+    let (ta, tb) = ((h as usize) / 2, (h as usize) / 4);
+    let w4 = (w / 4) as usize;
+    let thq = th / 4;
+    let taq = ta / 4;
+    let pf = GrayPyr::new(prev);
+    let cf = GrayPyr::new(cur);
+
+    // ── 粗搜（1/4 分辨率，仅 A 带，全可见域 d ∈ [ta+th-h .. ta]）──────────
+    let (a_lo, a_hi) = ((ta + th) as i32 - h as i32, ta as i32);
+    let mut scores: Vec<(i32, f32)> = Vec::with_capacity((a_hi - a_lo + 1) as usize);
+    for d in (a_lo / 4)..=(a_hi / 4) {
+        let (s, rows) = ncc_band(&pf.quarter, &cf.quarter, w4, taq, thq, d, 2);
+        if rows >= thq / 2 {
+            scores.push((d, s));
+        }
     }
-    let gray = |img: &RgbaImage, x: u32, y: u32| -> i32 {
-        let p = img.get_pixel(x, y).0;
-        (i32::from(p[0]) * 299 + i32::from(p[1]) * 587 + i32::from(p[2]) * 114) / 1000
-    };
-    let xs = [w / 4 - TW / 2, w * 3 / 4 - TW / 2];
-    let dmin = -(th as i32) + 1;
-    let dmax = (h - th) as i32;
-    let mut best_dy = 0i32;
-    let mut best_sad = f32::MAX;
-    for d in dmin..=dmax {
-        // d<0（内容下移）时模板尾部移出帧界，按可重叠范围截短行区间
-        let y_end = if d < 0 { (h as i32 + d) as u32 } else { h };
-        let mut total = 0i64;
-        let mut cnt = 0i64;
-        for &tx in &xs {
-            for y in (h - th..y_end).step_by(3) {
-                let cy = (y as i32 - d) as u32;
-                for x in (tx..tx + TW).step_by(4) {
-                    total += i64::from((gray(prev, x, y) - gray(cur, x, cy)).abs());
-                    cnt += 1;
-                }
+    let &(_, best_s) = scores.iter().max_by(|a, b| a.1.total_cmp(&b.1))?;
+    // 候选 = 分离度（≥半带高）约束下的最高 3 峰 + 近并列中 |d| 最小者
+    let mut ranked: Vec<(i32, f32)> = scores.clone();
+    ranked.sort_by(|a, b| b.1.total_cmp(&a.1));
+    let mut cands: Vec<i32> = Vec::new();
+    for &(d, _) in &ranked {
+        if cands.iter().all(|c| (*c - d).abs() >= thq as i32 / 2) {
+            cands.push(d);
+            if cands.len() == 3 {
+                break;
             }
         }
-        if cnt == 0 {
-            continue;
+    }
+    let near_small = scores
+        .iter()
+        .filter(|(_, s)| *s >= best_s - TIE_EPS)
+        .min_by_key(|(d, _)| (d.unsigned_abs(), -*d))
+        .map(|(d, _)| *d);
+    if let Some(sd) = near_small.filter(|sd| !cands.contains(sd)) {
+        cands.push(sd);
+    }
+
+    // ── 精化（全分辨率，候选 ±4px，A/B 带平均分）──────────────────────────
+    let mut refined: Vec<(i32, f32)> = Vec::with_capacity(cands.len());
+    for &cd in &cands {
+        let base = cd * 4;
+        let mut local: Option<(i32, f32)> = None;
+        for d in (base - 4)..=(base + 4) {
+            if !(a_lo..=a_hi).contains(&d) {
+                continue;
+            }
+            let (sa, ra) = ncc_band(&pf.full, &cf.full, w as usize, ta, th, d, 2);
+            if ra < th / 2 {
+                continue;
+            }
+            let (sb, rb) = ncc_band(&pf.full, &cf.full, w as usize, tb, th, d, 2);
+            // B 带可见不足半带（大位移上滚场景）只以 A 带计分
+            let avg = if rb >= th / 2 { (sa + sb) / 2.0 } else { sa };
+            // 并列（±TIE_EPS）取 (|d|,-d) 字典序更小者：|d| 小优先，
+            // 同 |d| 偏正位移（捕获只发生在下滚后，对称并列取内容上移向）
+            match local {
+                Some((_, bs)) if avg < bs - TIE_EPS => {}
+                Some((bd, bs)) if avg <= bs + TIE_EPS => {
+                    if (d.unsigned_abs(), -d) < (bd.unsigned_abs(), -bd) {
+                        local = Some((d, avg));
+                    }
+                }
+                _ => local = Some((d, avg)),
+            }
         }
-        let sad = total as f32 / cnt as f32;
-        // 并列（±0.25 灰阶）取 |dy| 更小者：重复行样式的 UI（列表/表格）易在
-        // 大位移处出现同分误配，滚动帧间位移小者概率远高（流式帧行程本就小）
-        if sad < best_sad - 0.25
-            || (sad <= best_sad + 0.25 && d.unsigned_abs() < best_dy.unsigned_abs())
-        {
-            best_sad = best_sad.min(sad);
-            best_dy = d;
+        if let Some((d, s)) = local {
+            refined.push((d, s));
         }
     }
-    // 阈值 16/255 ≈ 6% 平均灰度差：页面噪声可过，明显换内容拒绝
-    if best_sad > 16.0 {
+    let (mut dy, mut score) = refined.iter().copied().max_by(|a, b| a.1.total_cmp(&b.1))?;
+    // 并列同分取 (|dy|,-dy) 字典序小（cands 已含近并列最小 |d| 成员）
+    for &(d, s) in &refined {
+        if s >= score - TIE_EPS && (d.unsigned_abs(), -d) < (dy.unsigned_abs(), -dy) {
+            dy = d;
+            score = s;
+        }
+    }
+    if score < NCC_MIN {
         return None;
     }
-    Some(best_dy)
+    // ── 双带共识：A/B 各自在终选 ±6px 内独立求峰，分歧 >1px 拒绝 ──────────
+    let argmax = |top: usize, lo: i32, hi: i32| -> Option<i32> {
+        let mut pts: Vec<(i32, f32)> = Vec::new();
+        for d in lo..=hi {
+            let (s, rows) = ncc_band(&pf.full, &cf.full, w as usize, top, th, d, 2);
+            if rows >= th / 2 {
+                pts.push((d, s));
+            }
+        }
+        let best = pts.iter().map(|p| p.1).fold(f32::MIN, f32::max);
+        pts.iter()
+            .filter(|(_, s)| *s >= best - TIE_EPS)
+            .min_by_key(|(d, _)| (d.unsigned_abs(), -*d))
+            .map(|(d, _)| *d)
+    };
+    let w6 = 6i32;
+    if let (Some(da), Some(db)) = (
+        argmax(ta, dy - 4, dy + 4),
+        argmax(tb, (dy - w6).max(a_lo), (dy + w6).min(a_hi)),
+    ) && (da - db).abs() > 1
+    {
+        log::debug!("滚动截图：双带分歧 A={da} B={db}，拒绝");
+        return None;
+    }
+    Some(dy)
 }
 
 /// 累积画布：预分配 MAX_H 高度的行缓冲，逐帧尾部追加，免整图反复搬运
@@ -1064,6 +1233,26 @@ mod tests {
     }
 
     #[test]
+    fn ncc_band_perfect_at_true_shift() {
+        // 原语：真位移处 NCC ≈ 1（排查用，保留作回归锁定）
+        let prev = img(200, 200, 0);
+        let mut cur = img(200, 200, 9);
+        for y in 0..140u32 {
+            for x in 0..200u32 {
+                cur.put_pixel(x, y, *prev.get_pixel(x, y + 60));
+            }
+        }
+        let pf = GrayPyr::new(&prev);
+        let cf = GrayPyr::new(&cur);
+        let (s, rows) = ncc_band(&pf.full, &cf.full, 200, 100, 40, 60, 2);
+        assert!(rows >= 20, "rows={rows}");
+        assert!(s > 0.99, "ncc={s}");
+        let (sq, rq) = ncc_band(&pf.quarter, &cf.quarter, 50, 25, 10, 15, 2);
+        assert!(rq >= 5, "rq={rq}");
+        assert!(sq > 0.99, "nccq={sq}");
+    }
+
+    #[test]
     fn match_scroll_dy_finds_shift() {
         // cur = prev 内容整体上移 60px（prev[y] 出现在 cur[y-60]，底部 60px 新内容）
         let prev = img(200, 200, 0);
@@ -1111,10 +1300,78 @@ mod tests {
 
     #[test]
     fn match_scroll_dy_too_small_frame() {
-        // 帧高不足（th < 40）无法匹配
+        // 帧高不足（< 120，双带放不下）无法匹配
         let a = img(200, 60, 0);
         let b = img(200, 60, 1);
         assert_eq!(match_scroll_dy(&a, &b), None);
+    }
+
+    #[test]
+    fn match_scroll_dy_brightness_shift_invariant() {
+        // 全局亮度 +20（hover 态/对比度漂移）：SAD 旧算法会因 >16 阈值拒绝，
+        // NCC 对线性亮度变化不变，应仍找到位移 50
+        let prev = img(200, 200, 0);
+        let mut cur = img(200, 200, 9);
+        for y in 0..150u32 {
+            for x in 0..200u32 {
+                let p = prev.get_pixel(x, y + 50).0;
+                cur.put_pixel(
+                    x,
+                    y,
+                    Rgba([p[0].saturating_add(20), p[1].saturating_add(20), 64, 255]),
+                );
+            }
+        }
+        assert_eq!(match_scroll_dy(&prev, &cur), Some(50));
+    }
+
+    #[test]
+    fn match_scroll_dy_uniform_blank_is_bottom() {
+        // 纯色空白两帧（滚动到页面尽头常见）：低方差护栏记满分 → 并列取
+        // |d| 最小 = 0，到底检测得以推进
+        let prev = RgbaImage::from_pixel(200, 200, Rgba([240, 240, 240, 255]));
+        let cur = prev.clone();
+        assert_eq!(match_scroll_dy(&prev, &cur), Some(0));
+    }
+
+    #[test]
+    fn match_scroll_dy_sticky_header_pollution() {
+        // 顶部 30px（≈7.5%h，sticky header 惯见比例）内容整体变化 + 真实位移
+        // 40：双带（25%h / 50%h 起）均在污染区之下，匹配不受影响
+        let prev = img(400, 400, 0);
+        let mut cur = img(400, 400, 9); // 底部 = 滚动露出的新内容
+        for y in 0..360u32 {
+            for x in 0..400u32 {
+                cur.put_pixel(x, y, *prev.get_pixel(x, y + 40));
+            }
+        }
+        let header = img(400, 30, 77);
+        for y in 0..30u32 {
+            for x in 0..400u32 {
+                cur.put_pixel(x, y, *header.get_pixel(x, y));
+            }
+        }
+        assert_eq!(match_scroll_dy(&prev, &cur), Some(40));
+    }
+
+    #[test]
+    fn match_scroll_dy_periodic_rows_takes_smallest() {
+        // 24px 周期行（列表/表格惯见）滚动半周期 12px：12/36/60… 全部满分，
+        // 并列取 |d| 最小 = 真实位移
+        let v = |y: u32, x: u32| -> u8 { pattern(y % 24, x / 40, 7) };
+        let mut prev = RgbaImage::from_pixel(200, 200, Rgba([0, 0, 0, 255]));
+        for y in 0..200u32 {
+            for x in 0..200u32 {
+                prev.put_pixel(x, y, Rgba([v(y, x), 128, 64, 255]));
+            }
+        }
+        let mut cur = prev.clone();
+        for y in 0..188u32 {
+            for x in 0..200u32 {
+                cur.put_pixel(x, y, *prev.get_pixel(x, y + 12));
+            }
+        }
+        assert_eq!(match_scroll_dy(&prev, &cur), Some(12));
     }
 
     #[test]
