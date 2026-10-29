@@ -238,56 +238,101 @@ fn downsample2(src: &[u8], w: u32, h: u32) -> (Vec<u8>, u32, u32) {
     (out, ow, oh)
 }
 
-/// 单带归一化互相关（TM_CCOEFF_NORMED 公式）：比较 t 的 [top..top+th) 行与
-/// i 的 [top-d..top+th-d) 行的可见交集（越界部分裁掉，可见不足由调用方
-/// 判断）。col_step 列抽稀提速。分母近零（低方差）时：双方皆低方差 = 同色
-/// 块记满分，仅一方低方差 = 无结构不可比记 0。返回 (score, 可见行数)
-fn ncc_band(
-    t: &[u8],
-    i: &[u8],
+/// 单带归一化互相关求值器：持有一对灰度帧（t=prev / i=cur）与匹配列域
+/// [x0, x1)（静止页边距/侧栏列被 active_cols 排除，全宽传 (0, w)）。
+/// TM_CCOEFF_NORMED 公式；col_step 列抽稀提速。分母近零（低方差）时：双方
+/// 皆低方差 = 同色块记满分，仅一方低方差 = 无结构不可比记 0。返回
+/// (score, 可见行数)
+struct Ncc<'a> {
+    t: &'a [u8],
+    i: &'a [u8],
     w: usize,
-    top: usize,
-    th: usize,
-    d: i32,
-    col_step: usize,
-) -> (f32, usize) {
-    let h = i.len() / w;
-    // 模板行 r 对应 cur 行 r-d，可见域：0 ≤ r-d < h → r ∈ [max(top,d) .. min(top+th, d+h))
-    let r0 = (i64::from(top as i32).max(i64::from(d)).max(0)) as usize;
-    let r1 = (i64::from((top + th) as i32)
-        .min(i64::from(d) + h as i64)
-        .max(0)) as usize;
-    let rows = r1.saturating_sub(r0);
-    if rows == 0 {
-        return (0.0, 0);
+    x0: usize,
+    x1: usize,
+}
+
+impl Ncc<'_> {
+    fn band(&self, top: usize, th: usize, d: i32, col_step: usize) -> (f32, usize) {
+        let h = self.i.len() / self.w;
+        // 模板行 r 对应 cur 行 r-d，可见域：0 ≤ r-d < h → r ∈ [max(top,d) .. min(top+th, d+h))
+        let r0 = (i64::from(top as i32).max(i64::from(d)).max(0)) as usize;
+        let r1 = (i64::from((top + th) as i32)
+            .min(i64::from(d) + h as i64)
+            .max(0)) as usize;
+        let rows = r1.saturating_sub(r0);
+        if rows == 0 || self.x1 <= self.x0 {
+            return (0.0, 0);
+        }
+        let cols = (self.x1 - self.x0).div_ceil(col_step);
+        let (mut st, mut si, mut stt, mut sii, mut sti) = (0i64, 0i64, 0i64, 0i64, 0i64);
+        for r in r0..r1 {
+            let tr = &self.t[r * self.w..];
+            let ir = &self.i[((r as i64) - i64::from(d)) as usize * self.w..];
+            let mut x = self.x0;
+            while x < self.x1 {
+                let tv = i64::from(tr[x]);
+                let iv = i64::from(ir[x]);
+                st += tv;
+                si += iv;
+                stt += tv * tv;
+                sii += iv * iv;
+                sti += tv * iv;
+                x += col_step;
+            }
+        }
+        let nf = (rows * cols) as f64;
+        let (vt, vi) = (
+            nf * stt as f64 - (st as f64) * (st as f64),
+            nf * sii as f64 - (si as f64) * (si as f64),
+        );
+        if vt < 1.0 || vi < 1.0 {
+            return (if vt < 1.0 && vi < 1.0 { 1.0 } else { 0.0 }, rows);
+        }
+        let num = nf * sti as f64 - (st as f64) * (si as f64);
+        ((num / (vt * vi).sqrt()) as f32, rows)
     }
-    let cols = w.div_ceil(col_step);
-    let (mut st, mut si, mut stt, mut sii, mut sti) = (0i64, 0i64, 0i64, 0i64, 0i64);
-    for r in r0..r1 {
-        let tr = &t[r * w..];
-        let ir = &i[((r as i64) - i64::from(d)) as usize * w..];
-        let mut x = 0;
-        while x < w {
-            let tv = i64::from(tr[x]);
-            let iv = i64::from(ir[x]);
-            st += tv;
-            si += iv;
-            stt += tv * tv;
-            sii += iv * iv;
-            sti += tv * iv;
-            x += col_step;
+}
+
+/// 活动列域检测：帧间逐列平均绝对差（隔行采样 + ±2 列平滑）。滚动页常见
+/// 「左右定宽页边距/侧栏静止、中间内容滚动」——全宽横带会被静止列支配产生
+/// d≈0 假峰，真实位移与零位移并列后按并列策略落小位移 → 拼接大段重复（实
+/// 测事故）。返回最长显著变化列段 [x0, x1)（段内允许 ≤5%w 静止小岛：内容
+/// 留白列）；无显著变化列（帧静止/仅光标动）返回 None，调用方回退全宽。
+fn active_cols(prev: &[u8], cur: &[u8], w: usize, h: usize) -> Option<(usize, usize)> {
+    let mut diff = vec![0i64; w];
+    let step = (h / 48).max(1);
+    let mut rows = 0u64;
+    let mut y = 0;
+    while y < h {
+        let (rp, rc) = (&prev[y * w..][..w], &cur[y * w..][..w]);
+        for (x, (a, b)) in rp.iter().zip(rc.iter()).enumerate() {
+            diff[x] += i64::from(a.abs_diff(*b));
+        }
+        rows += 1;
+        y += step;
+    }
+    let f = rows as f64;
+    let sig = |x: usize| -> bool {
+        let lo = x.saturating_sub(2);
+        let hi = (x + 3).min(w);
+        (lo..hi).map(|i| diff[i] as f64 / f).sum::<f64>() / (hi - lo) as f64 > 3.0
+    };
+    let gap = (w / 20).max(4);
+    let mut runs: Vec<(usize, usize)> = Vec::new();
+    let (mut start, mut last_true) = (None, 0usize);
+    for x in 0..w {
+        if sig(x) {
+            start = start.or(Some(x));
+            last_true = x;
+        } else if let Some(st) = start.take_if(|_| x - last_true > gap) {
+            runs.push((st, last_true + 1));
         }
     }
-    let nf = (rows * cols) as f64;
-    let (vt, vi) = (
-        nf * stt as f64 - (st as f64) * (st as f64),
-        nf * sii as f64 - (si as f64) * (si as f64),
-    );
-    if vt < 1.0 || vi < 1.0 {
-        return (if vt < 1.0 && vi < 1.0 { 1.0 } else { 0.0 }, rows);
+    if let Some(st) = start {
+        runs.push((st, last_true + 1));
     }
-    let num = nf * sti as f64 - (st as f64) * (si as f64);
-    ((num / (vt * vi).sqrt()) as f32, rows)
+    let (x0, x1) = runs.into_iter().max_by_key(|r| r.1 - r.0)?;
+    (x1 - x0 >= 16).then_some((x0, x1))
 }
 
 /// 求 cur 相对 prev 的纵向位移 dy（有符号）：dy>0 = 内容上移（用户下滚，
@@ -306,12 +351,29 @@ fn match_scroll_dy(prev: &RgbaImage, cur: &RgbaImage) -> Option<i32> {
     let taq = ta / 4;
     let pf = GrayPyr::new(prev);
     let cf = GrayPyr::new(cur);
+    // 匹配列域：排除静止页边距/侧栏（None = 全宽）
+    let (cx0, cx1) =
+        active_cols(&pf.full, &cf.full, w as usize, h as usize).unwrap_or((0, w as usize));
+    let fq = Ncc {
+        t: &pf.quarter,
+        i: &cf.quarter,
+        w: w4,
+        x0: cx0 / 4,
+        x1: cx1.div_ceil(4).min(w4),
+    };
+    let ff = Ncc {
+        t: &pf.full,
+        i: &cf.full,
+        w: w as usize,
+        x0: cx0,
+        x1: cx1,
+    };
 
     // ── 粗搜（1/4 分辨率，仅 A 带，全可见域 d ∈ [ta+th-h .. ta]）──────────
     let (a_lo, a_hi) = ((ta + th) as i32 - h as i32, ta as i32);
     let mut scores: Vec<(i32, f32)> = Vec::with_capacity((a_hi - a_lo + 1) as usize);
     for d in (a_lo / 4)..=(a_hi / 4) {
-        let (s, rows) = ncc_band(&pf.quarter, &cf.quarter, w4, taq, thq, d, 2);
+        let (s, rows) = fq.band(taq, thq, d, 2);
         if rows >= thq / 2 {
             scores.push((d, s));
         }
@@ -347,11 +409,11 @@ fn match_scroll_dy(prev: &RgbaImage, cur: &RgbaImage) -> Option<i32> {
             if !(a_lo..=a_hi).contains(&d) {
                 continue;
             }
-            let (sa, ra) = ncc_band(&pf.full, &cf.full, w as usize, ta, th, d, 2);
+            let (sa, ra) = ff.band(ta, th, d, 2);
             if ra < th / 2 {
                 continue;
             }
-            let (sb, rb) = ncc_band(&pf.full, &cf.full, w as usize, tb, th, d, 2);
+            let (sb, rb) = ff.band(tb, th, d, 2);
             // B 带可见不足半带（大位移上滚场景）只以 A 带计分
             let avg = if rb >= th / 2 { (sa + sb) / 2.0 } else { sa };
             // 并列（±TIE_EPS）取 (|d|,-d) 字典序更小者：|d| 小优先，
@@ -385,7 +447,7 @@ fn match_scroll_dy(prev: &RgbaImage, cur: &RgbaImage) -> Option<i32> {
     let argmax = |top: usize, lo: i32, hi: i32| -> Option<i32> {
         let mut pts: Vec<(i32, f32)> = Vec::new();
         for d in lo..=hi {
-            let (s, rows) = ncc_band(&pf.full, &cf.full, w as usize, top, th, d, 2);
+            let (s, rows) = ff.band(top, th, d, 2);
             if rows >= th / 2 {
                 pts.push((d, s));
             }
@@ -1244,10 +1306,24 @@ mod tests {
         }
         let pf = GrayPyr::new(&prev);
         let cf = GrayPyr::new(&cur);
-        let (s, rows) = ncc_band(&pf.full, &cf.full, 200, 100, 40, 60, 2);
+        let ff = Ncc {
+            t: &pf.full,
+            i: &cf.full,
+            w: 200,
+            x0: 0,
+            x1: 200,
+        };
+        let (s, rows) = ff.band(100, 40, 60, 2);
         assert!(rows >= 20, "rows={rows}");
         assert!(s > 0.99, "ncc={s}");
-        let (sq, rq) = ncc_band(&pf.quarter, &cf.quarter, 50, 25, 10, 15, 2);
+        let fq = Ncc {
+            t: &pf.quarter,
+            i: &cf.quarter,
+            w: 50,
+            x0: 0,
+            x1: 50,
+        };
+        let (sq, rq) = fq.band(25, 10, 15, 2);
         assert!(rq >= 5, "rq={rq}");
         assert!(sq > 0.99, "nccq={sq}");
     }
@@ -1355,6 +1431,41 @@ mod tests {
     }
 
     #[test]
+    fn match_scroll_dy_static_margins_center_scrolls() {
+        // 三栏布局：左右各 1/4 静止页边距、中间 1/2 滚动 200px（网页定宽
+        // 页边距惯见布局）。全宽匹配被静止列支配 → d≈0 假峰与真位移并列 →
+        // 并列策略落小位移 → 大段重复（实测事故）；活动列域限定后应得真位移
+        let mut prev = RgbaImage::from_pixel(400, 400, Rgba([0, 0, 0, 255]));
+        let mut cur = RgbaImage::from_pixel(400, 400, Rgba([0, 0, 0, 255]));
+        let margin = img(400, 400, 3);
+        let center = img(400, 400, 0);
+        let new_c = img(400, 400, 9);
+        for y in 0..400u32 {
+            for x in 0..400u32 {
+                let m = *margin.get_pixel(x, y);
+                prev.put_pixel(x, y, m);
+                cur.put_pixel(x, y, m);
+            }
+        }
+        for y in 0..400u32 {
+            for x in 100..300u32 {
+                prev.put_pixel(x, y, *center.get_pixel(x, y));
+            }
+        }
+        for y in 0..200u32 {
+            for x in 100..300u32 {
+                cur.put_pixel(x, y, *center.get_pixel(x, y + 200));
+            }
+        }
+        for y in 200..400u32 {
+            for x in 100..300u32 {
+                cur.put_pixel(x, y, *new_c.get_pixel(x, y));
+            }
+        }
+        assert_eq!(match_scroll_dy(&prev, &cur), Some(200));
+    }
+
+    #[test]
     fn match_scroll_dy_periodic_rows_takes_smallest() {
         // 24px 周期行（列表/表格惯见）滚动半周期 12px：12/36/60… 全部满分，
         // 并列取 |d| 最小 = 真实位移
@@ -1396,7 +1507,7 @@ mod tests {
         assert_eq!(c.h, 4);
         // 全量 = h×w×4 字节；增量 [3..4) = 1 行
         assert_eq!(c.rows_from(0).map(<[u8]>::len), Some(4 * 2 * 4));
-        assert_eq!(c.rows_from(3).map(<[u8]>::len), Some(1 * 2 * 4));
+        assert_eq!(c.rows_from(3).map(<[u8]>::len), Some(2 * 4)); // 1 行 × w2 × 4B
         // 越界 = None；恰好等于 h = 空切片（无新行，拉取协议按空响应跳过）
         assert_eq!(c.rows_from(4).map(<[u8]>::len), Some(0));
         assert_eq!(c.rows_from(5), None);

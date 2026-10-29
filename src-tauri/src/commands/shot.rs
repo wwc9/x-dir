@@ -1197,9 +1197,7 @@ mod tests {
     const MON: (i32, i32, i32, i32) = (0, 0, 1920, 1080);
 
     fn rects(v: &[super::ShotWindow]) -> Vec<(i32, i32, i32, i32)> {
-        v.iter()
-            .map(|w| (w.x, w.y, w.w as i32, w.h as i32))
-            .collect()
+        v.iter().map(|w| (w.x, w.y, w.w, w.h)).collect()
     }
 
     #[test]
