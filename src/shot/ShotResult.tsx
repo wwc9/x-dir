@@ -1,11 +1,13 @@
-// 滚动长图结果窗（§3.6 二期 B 批，label shot-result）：长图等比显示、区内
-// 滚动查看，底部工具条复制 / 保存 / 贴图 / 关闭。截断（动态内容中断或高度
-// 上限）时顶部提示条说明。长图文件由 Rust 侧在本窗销毁时清理；贴图会先在
-// Rust 侧复制专属副本，不受本窗清理影响。
-import { useCallback, useEffect, useRef, useState } from "react";
+// 滚动长图结果窗（§3.6 二期 B 批，label shot-result）：图在窗内滚动查看 +
+// 缩放（Ctrl+滚轮 / 按钮 / 适配宽度，默认 min(100%, 适配宽)——2026-10-29
+// 用户定案：长图不再被窗体等比压缩成细窄条，窗体尺寸由 Rust 侧独立钳制）。
+// 底部工具条缩放 / 贴图 / 复制 / 保存 / 关闭。截断（动态内容中断或高度上限）
+// 时顶部提示条说明。长图文件由 Rust 侧在本窗销毁时清理；贴图会先在 Rust 侧
+// 复制专属副本，不受本窗清理影响。
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Check, Copy, Pin, Save, X } from "lucide-react";
+import { Check, Copy, Maximize, Pin, Save, X, ZoomIn, ZoomOut } from "lucide-react";
 
 import { api } from "../lib/ipc";
 import { AppIcon } from "../components/AppIcon";
@@ -20,11 +22,39 @@ export interface ResultBoot {
   truncated: boolean;
 }
 
+const ZOOM_MIN = 0.05;
+const ZOOM_MAX = 5;
+
 export function ShotResult({ boot }: { boot: ResultBoot }) {
   const win = getCurrentWindow();
   const [busy, setBusy] = useState<"" | "copy" | "save" | "pin">("");
   const [tip, setTip] = useState<string | null>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
+  /** 缩放倍率（1 = 物理像素 1:1 的 CSS 观感尺寸）；null = 待首帧量视口 */
+  const [zoom, setZoom] = useState<number | null>(null);
+  const viewRef = useRef<HTMLDivElement>(null);
+  /** 图的 CSS 自然宽 = 物理宽 / DPI（结果窗缩放随窗口所在显示器） */
+  const naturalCss = boot.w / window.devicePixelRatio;
+
+  // 初始 = min(100%, 适配视口宽)
+  useLayoutEffect(() => {
+    const v = viewRef.current;
+    if (v) setZoom(Math.min(1, (v.clientWidth - 24) / naturalCss));
+  }, [naturalCss]);
+
+  // Ctrl+滚轮缩放（视口层非被动监听才能 preventDefault 拦下浏览器整页缩放）
+  useEffect(() => {
+    const v = viewRef.current;
+    if (!v) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      setZoom((z) =>
+        z === null ? z : Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z * Math.exp(-e.deltaY * 0.0015))),
+      );
+    };
+    v.addEventListener("wheel", onWheel, { passive: false });
+    return () => v.removeEventListener("wheel", onWheel);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -34,6 +64,11 @@ export function ShotResult({ boot }: { boot: ResultBoot }) {
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const fitWidth = useCallback(() => {
+    const v = viewRef.current;
+    if (v) setZoom(Math.min(1, (v.clientWidth - 24) / naturalCss));
+  }, [naturalCss]);
 
   const run = useCallback(
     async (action: "copy" | "save" | "pin") => {
@@ -74,26 +109,52 @@ export function ShotResult({ boot }: { boot: ResultBoot }) {
           内容动态变化或已达高度上限，长图在此截断（可框选更小区域重试）
         </div>
       )}
-      <div className="np-shot-result-view">
+      <div ref={viewRef} className="np-shot-result-view">
         <img
-          ref={imgRef}
           src={convertFileSrc(boot.file)}
           crossOrigin="anonymous"
           alt="滚动长图"
           draggable={false}
           // 首帧就绪回执：Rust 此时才 show（提前 show 闪黑屏）
           onLoad={() => void api.shotReady().catch(() => undefined)}
-          style={{ width: boot.w }}
+          style={{ width: zoom === null ? undefined : naturalCss * zoom }}
         />
       </div>
       <div className="np-shot-result-bar">
         <span className="np-shot-result-dim">
           {boot.w.toLocaleString()} × {boot.h.toLocaleString()} px
         </span>
+        <button
+          className="np-shot-btn"
+          data-tip="缩小"
+          disabled={busy !== "" || zoom === null || zoom <= ZOOM_MIN}
+          onClick={() => setZoom((z) => (z ? Math.max(ZOOM_MIN, z / 1.25) : z))}
+        >
+          <AppIcon icon={ZoomOut} />
+        </button>
+        <span className="np-shot-zoom-pct">{zoom === null ? "—" : `${Math.round(zoom * 100)}%`}</span>
+        <button
+          className="np-shot-btn"
+          data-tip="放大"
+          disabled={busy !== "" || zoom === null || zoom >= ZOOM_MAX}
+          onClick={() => setZoom((z) => (z ? Math.min(ZOOM_MAX, z * 1.25) : z))}
+        >
+          <AppIcon icon={ZoomIn} />
+        </button>
+        <button
+          className="np-shot-btn"
+          data-tip="缩放至适配窗宽（不放大超过 100%）"
+          data-kbd="Ctrl+滚轮"
+          disabled={busy !== ""}
+          onClick={fitWidth}
+        >
+          <AppIcon icon={Maximize} />
+          适配
+        </button>
         {tip ? (
           <span className="np-shot-result-tip">{tip}</span>
         ) : (
-          <span className="np-shot-result-tip">Esc 关闭</span>
+          <span className="np-shot-result-tip">Esc 关闭 · Ctrl+滚轮缩放</span>
         )}
         <button className="np-shot-btn" disabled={busy !== ""} onClick={() => void run("pin")}>
           <AppIcon icon={Pin} />

@@ -257,6 +257,7 @@ fn visible_shot_targets(
 }
 
 /// 光标点所在显示器物理参数（找不到 = None，由调用方回落）
+#[derive(Clone, Copy)]
 pub(crate) struct MonRect {
     pub x: i32,
     pub y: i32,
@@ -393,6 +394,12 @@ fn begin_session(app: &AppHandle) {
     // 捕获/下发进行中：连按忽略
     if SESSION_STARTING.load(Ordering::SeqCst) {
         log::debug!("截图热键触发：上一拍仍在进行，忽略");
+        return;
+    }
+    // 滚动截图进行中忽略热键（2026-10-29 实测事故：滚动会话上叠加新截图
+    // 会话，钩子/定格帧/窗口状态互踩）：预览窗上有「完成/取消」，Esc 同效
+    if super::shot_scroll::scroll_active() {
+        log::debug!("截图热键触发：滚动截图进行中，忽略");
         return;
     }
     log::debug!("截图热键触发");
@@ -580,12 +587,16 @@ pub(crate) fn ensure_shot_window(app: &AppHandle) -> Result<(), String> {
     let _ = win.show();
     // 失焦自动收会话（QQ 惯例）：全屏置顶蒙层失焦后 Esc/Enter 全部失效，
     // 留在屏上形同卡死。仅在内容首帧上屏（SHOT_VISIBLE）后生效；保存对话框
-    // 抢焦点时豁免。常驻窗不销毁，销毁只发生在应用退出/异常（门闸复位即可，
-    // 会话文件由下次启动 cleanup_stale 兜底）
+    // 抢焦点时豁免；滚动截图会话期豁免（begin 装钩/建窗期间焦点可能短暂
+    // 抖动，此时收场会清掉刚裁好的定格帧 →「无进行中的截图会话」静默失败，
+    // 2026-10-29「点击滚动截图没反应」事故链在案）。常驻窗不销毁，销毁只发
+    // 生在应用退出/异常（门闸复位即可，会话文件由下次启动 cleanup_stale 兜底）
     let app2 = app.clone();
     win.on_window_event(move |e| match e {
         tauri::WindowEvent::Focused(false)
-            if SHOT_VISIBLE.load(Ordering::SeqCst) && !SAVE_DIALOG_OPEN.load(Ordering::SeqCst) =>
+            if SHOT_VISIBLE.load(Ordering::SeqCst)
+                && !SAVE_DIALOG_OPEN.load(Ordering::SeqCst)
+                && !super::shot_scroll::scroll_active() =>
         {
             end_session(&app2);
         }

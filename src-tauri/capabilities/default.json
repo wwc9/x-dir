@@ -1,8 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "main 主窗 + 截图遮罩窗(shot) + 滚动截图浮条/结果窗(shot-scroll/shot-result) + 贴图窗(pin-*)；会话窗仅使用 invoke、事件监听与窗口定位/尺寸/关闭",
-  "windows": ["main", "shot", "shot-scroll", "shot-result", "pin-*"],
+  "description": "main 主窗 + 截图遮罩窗(shot) + 滚动截图选区框窗/预览窗/结果窗(shot-frame/shot-scroll/shot-result) + 贴图窗(pin-*)；会话窗仅使用 invoke、事件监听与窗口定位/尺寸/关闭",
+  "windows": [
+    "main",
+    "shot",
+    "shot-frame",
+    "shot-scroll",
+    "shot-result",
+    "pin-*"
+  ],
   "permissions": [
     "core:default",
     "opener:default",

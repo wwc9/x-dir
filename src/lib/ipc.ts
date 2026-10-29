@@ -815,7 +815,10 @@ export const api = {
   shotScrollBegin: (rx: number, ry: number, rw: number, rh: number, mx: number, my: number) =>
     cmd<void>("shot_scroll_begin", { rx, ry, rw, rh, mx, my }),
   shotScrollLaunch: () => cmd<void>("shot_scroll_launch", {}),
-  /** 滚动浮条操作：finish = 用已拼内容出结果；cancel = 丢弃 */
+  /** 滚动预览窗增量拉取已拼行 [fromY..h)：原始 RGBA 行主序二进制直传；
+   *  空响应 = 无新内容或会话已收尾 */
+  shotScrollChunk: (fromY: number) => cmd<ArrayBuffer>("shot_scroll_chunk", { fromY }),
+  /** 滚动预览窗操作：finish = 用已拼内容出结果；cancel = 丢弃 */
   shotScrollControl: (action: "finish" | "cancel") =>
     cmd<void>("shot_scroll_control", { action }),
   /** 滚动结果窗：长图（临时 PNG 路径）写入剪贴板 */

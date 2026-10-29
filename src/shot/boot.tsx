@@ -1,9 +1,9 @@
 // 截图族窗口统一轻量入口（shot.html，§3.6 性能 2026-10-27）：截图覆盖窗
-// （常驻隐藏）、贴图、滚动浮条、结果窗都加载本页，不加载完整文件管理器
-// bundle（App + Blueprint + stores）。常驻覆盖窗以 idle 空壳待命，会话数据
-// 经 shot-session 事件驱动挂载 ShotOverlay；Rust 侧等 shot_page_ready 回执
-// （两个监听都注册完成之后才回执）才下发会话，事件不丢。其余三窗仍走
-// initialization_script 注入的 window.__BOOT__ 一次性挂载。
+// （常驻隐藏）、贴图、滚动选区框窗、滚动预览窗、结果窗都加载本页，不加载
+// 完整文件管理器 bundle（App + Blueprint + stores）。常驻覆盖窗以 idle 空壳
+// 待命，会话数据经 shot-session 事件驱动挂载 ShotOverlay；Rust 侧等
+// shot_page_ready 回执（两个监听都注册完成之后才回执）才下发会话，事件不
+// 丢。其余各窗仍走 initialization_script 注入的 window.__BOOT__ 一次性挂载。
 import { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { listen } from "@tauri-apps/api/event";
@@ -13,11 +13,17 @@ import { api } from "../lib/ipc";
 import { ShotOverlay, type ShotBoot } from "./ShotOverlay";
 import { PinWindow, type PinBoot } from "./PinWindow";
 import { ScrollBar, type ScrollBarBoot } from "./ScrollBar";
+import { ScrollFrame } from "./ScrollFrame";
 import { ShotResult, type ResultBoot } from "./ShotResult";
 
 declare global {
   interface Window {
-    __BOOT__?: PinBoot | ScrollBarBoot | ResultBoot | { window: "shot-idle" };
+    __BOOT__?:
+      | PinBoot
+      | ScrollBarBoot
+      | ResultBoot
+      | { window: "frame" }
+      | { window: "shot-idle" };
   }
 }
 
@@ -57,8 +63,10 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <ShotHost />
   ) : boot.window === "pin" ? (
     <PinWindow boot={boot} />
+  ) : boot.window === "frame" ? (
+    <ScrollFrame />
   ) : boot.window === "scrollbar" ? (
-    <ScrollBar />
+    <ScrollBar boot={boot} />
   ) : (
     <ShotResult boot={boot} />
   ),

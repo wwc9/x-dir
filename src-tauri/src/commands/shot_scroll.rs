@@ -1,22 +1,35 @@
-// 滚动长截图（§3.6 二期 B 批，2026-10-24 首版；2026-10-28 改手动滚轮模式）：
-// 框选滚动区 → 覆盖窗隐藏、弹控制浮条窗（label "shot-scroll"）→ WH_MOUSE_LL
-// 低级鼠标钩子监听用户滚轮〔光标在选区内：下滚记时刻置待捕获；上滚只置标记
-// ——“下滚持续截图、上滚不动”〕→ 循环线程在下滚静默窗（合并连滚/惯性）后
-// capture_region 实时捕获 → 灰度 SAD 模板匹配求有符号纵向位移 → dy≥2（内容
-// 上移）追加底部新内容，dy≤-2（上滚回看）只重定基准不追加 → 到底 / 用户完成 /
-// 高度上限收尾 → 长图存临时盘 → 结果窗（label "shot-result"：复制 / 保存 /
-// 贴图 / 关闭）。拼接算法自研（ShareX 思路，未读 GPL 实现）；首版不含固定栏
-// 自动检测与视差修复，动态内容（动画/加载条）连续两帧无法匹配即诚实截断并在
-// 结果窗提示。注入式自动滚动（SendInput + SetCursorPos）已废弃。
+// 滚动长截图（§3.6 二期 B 批，2026-10-24 首版；2026-10-28 改手动滚轮模式；
+// 2026-10-29 改「选区保留 + 侧边实时预览」）：
+// 框选滚动区 → 覆盖窗隐藏、弹两窗：选区框窗（label "shot-frame"，整窗点击
+// 穿透，只画选区边框——选区内容保持可交互，用户滚的是下面的真实窗口）和
+// 侧边预览窗（label "shot-scroll"，贴选区右/左侧，实时显示已拼长图，底部
+// 完成/取消）→ WH_MOUSE_LL 低级鼠标钩子监听用户滚轮〔光标在选区内：下滚记
+// 时刻置待捕获；上滚只置标记——"下滚持续截图、上滚不动"〕→ 循环线程在下滚
+// 静默窗（合并连滚/惯性）后 capture_region 实时捕获 → 灰度 SAD 模板匹配求
+// 有符号纵向位移 → dy≥2（内容上移）追加底部新内容，dy≤-2（上滚回看）只重
+// 定基准不追加 → 到底 / 用户完成 / 高度上限收尾 → 长图存临时盘 → 结果窗
+// （label "shot-result"：复制 / 保存 / 贴图 / 关闭；窗体尺寸与长图解耦，
+// 宽 ≤62% 屏宽、高 =80% 屏高，图在窗内滚动+缩放，2026-10-29 用户定案）。
+// 拼接算法自研（ShareX 思路，未读 GPL 实现）；首版不含固定栏自动检测与视差
+// 修复，动态内容（动画/加载条）连续两帧无法匹配即诚实截断并在结果窗提示。
+// 注入式自动滚动（SendInput + SetCursorPos）已废弃。
 //
-// 会话状态：单会话静态标志（0=滚动中 1=请求完成 2=请求取消），begin 时重置；
-// 循环跑独立 std::thread，经事件 shot-scroll-progress 推送已捕获高度。钩子
-// 回调必须即刻返回，故钩子线程只置静态标记、全部分匹配逻辑在循环线程执行；
-// 收尾经 PostThreadMessageW(WM_QUIT) 令钩子线程退出消息泵并卸钩。
+// 预览像素同步：循环线程的累积画布经 Arc<Mutex<_>> 注册进 PREVIEW_CANVAS
+// 静态，预览窗收到进度事件后 invoke shot_scroll_chunk(fromY) 增量拉取新行
+// （原始 RGBA 二进制直传，免 base64/JSON）。
+// 可观测性（2026-10-29 事故在案）：所有启动期拒绝路径必须 log（曾全部静默，
+// 「点击滚动无任何反应」无从排查）；启动失败另弹原生错误对话框——覆盖窗
+// 可能已收场，前端提示条不可见。
+//
+// 会话状态：SCROLL_ACTIVE = 会话从 begin 到收尾全程（热键/失焦收场的互斥
+// 依据）；SCROLL_FLAG（0=滚动中 1=请求完成 2=请求取消）begin 时重置；循环
+// 跑独立 std::thread，经事件 shot-scroll-progress 推送已捕获高度。钩子回调
+// 必须即刻返回，故钩子线程只置静态标记、全部分匹配逻辑在循环线程执行；收尾
+// 经 PostThreadMessageW(WM_QUIT) 令钩子线程退出消息泵并卸钩。
 
 use std::path::Path;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use image::RgbaImage;
@@ -53,10 +66,25 @@ const BAD_STREAK: u32 = 2;
 
 /// 0=滚动中 1=请求完成（用已拼内容出结果）2=请求取消（丢弃）
 static SCROLL_FLAG: AtomicU8 = AtomicU8::new(0);
+/// 会话进行中（begin 入口到收尾全程）：热键叠加截图、覆盖窗失焦自毁的互斥
+/// 依据（2026-10-29 实测事故：滚动中按热键叠加新会话，钩子/窗口状态互踩）
+static SCROLL_ACTIVE: AtomicBool = AtomicBool::new(false);
+/// 会话几何：选区显示器相对物理坐标 + 目标显示器矩形（launch → 建窗/循环
+/// 线程一次携带，免多参散传）
+struct ScrollGeo {
+    rx: u32,
+    ry: u32,
+    rw: u32,
+    rh: u32,
+    mon: MonRect,
+}
+
 /// begin 与 launch 两段间的会话载荷（定格图裁剪 + 几何），launch 取走即清；
 /// begin 重入（载荷未消费）即拒绝，防重复装钩
-type ScrollPayload = (RgbaImage, u32, u32, u32, u32, MonRect);
+type ScrollPayload = (RgbaImage, ScrollGeo);
 static SCROLL_PENDING: Mutex<Option<ScrollPayload>> = Mutex::new(None);
+/// 预览窗增量拉取的数据源：循环线程的累积画布（会话收尾即清）
+static PREVIEW_CANVAS: Mutex<Option<Arc<Mutex<CanvasBuf>>>> = Mutex::new(None);
 /// 钩子反应区 = 选区全局物理坐标（x, y, w, h）——光标在内才响应滚轮，
 /// 滚轮落点即目标窗口（Win10+ 悬停滚动），光标挪出选区不误触
 static HOOK_ZONE: Mutex<(i32, i32, i32, i32)> = Mutex::new((0, 0, 0, 0));
@@ -71,6 +99,11 @@ static WHEEL_UP: AtomicBool = AtomicBool::new(false);
 static HOOK_TID: AtomicU32 = AtomicU32::new(0);
 /// 钩子收到的选区内滚轮事件计数（诊断：捕获间隔期计数冻结 = 钩子被系统摘除）
 static HOOK_TICKS: AtomicU32 = AtomicU32::new(0);
+
+/// 会话是否进行中（shot.rs 热键互斥 / 失焦自毁豁免用）
+pub(crate) fn scroll_active() -> bool {
+    SCROLL_ACTIVE.load(Ordering::Relaxed)
+}
 
 // ── 用户滚轮监听（WH_MOUSE_LL 低级钩子）─────────────────────────────────────
 
@@ -232,6 +265,16 @@ impl CanvasBuf {
         self.h += frame.height() - from;
     }
 
+    /// 已拼行 [from..h) 的原始 RGBA 切片（预览窗增量拉取；from 越界 = None）
+    fn rows_from(&self, from: u32) -> Option<&[u8]> {
+        if from > self.h || self.w == 0 {
+            return None;
+        }
+        let start = from as usize * self.w as usize * 4;
+        let end = self.h as usize * self.w as usize * 4;
+        self.buf.get(start..end)
+    }
+
     fn to_image(&self) -> Option<RgbaImage> {
         RgbaImage::from_raw(
             self.w,
@@ -241,10 +284,44 @@ impl CanvasBuf {
     }
 }
 
+// ── 预览板布局（纯函数，单测锁定）───────────────────────────────────────────
+
+/// 预览板窗位置与尺寸（显示器相对物理像素）：高度贴选区（钳 ≤86% 屏高），
+/// 宽随选区纵横比（钳 [170,430]·scale CSS）；水平贴选区右侧优先、左侧兜底，
+/// 两侧都放不下则缩宽钳到屏幕右缘（窄预览好过盖住选区——盖住区滚轮会被
+/// 预览窗吃掉）；垂直与选区顶对齐、越界上收。
+fn panel_layout(sel: (i32, i32, i32, i32), mon: &MonRect) -> (i32, i32, u32, u32) {
+    let s = f64::from(mon.scale);
+    let (gx, gy, gw, gh) = sel;
+    let gap = (12.0 * s).round() as i32;
+    let max_h = (f64::from(mon.h) * 0.86).round() as i32;
+    let min_w = (170.0 * s).round() as i32;
+    let max_w = (430.0 * s).round() as i32;
+    let mut pw =
+        (((gh.min(max_h)) as f64 * gw as f64 / gh as f64).round() as i32).clamp(min_w, max_w);
+    let mut ph = ((pw as f64 * gh as f64 / gw as f64).round() as i32).min(max_h);
+    // 水平落位：右侧优先 → 左侧兜底 → 都不行缩宽钳右缘
+    let mon_w = mon.w as i32;
+    let fits_right = gx + gw + gap + pw <= mon_w - 8;
+    let fits_left = gx - gap - pw >= 8;
+    let x = if fits_right {
+        gx + gw + gap
+    } else if fits_left {
+        gx - gap - pw
+    } else {
+        let avail = (mon_w - 8 - (gx + gw + gap)).clamp((110.0 * s).round() as i32, max_w);
+        pw = avail;
+        ph = ((pw as f64 * gh as f64 / gw as f64).round() as i32).min(max_h);
+        mon_w - 8 - pw
+    };
+    let y = (gy).clamp(8, (mon.h as i32 - 8 - ph).max(8));
+    (x, y, pw.max(1) as u32, ph.max(1) as u32)
+}
+
 // ── 会话入口 ────────────────────────────────────────────────────────────────
 
 /// 开始滚动会话：rx/ry/rw/rh = 选区显示器相对物理坐标；mx/my = 显示器原点。
-/// 第一帧从会话定格图（session_{seq}.bmp）裁剪，此后 capture_region 捕获实时
+/// 第一帧从会话定格图（SESSION_FRAME）裁剪，此后 capture_region 捕获实时
 /// 屏幕。不移动光标、不注入滚轮：拼接节奏完全跟手（用户下滚才捕获）。
 #[tauri::command]
 pub fn shot_scroll_begin(
@@ -256,33 +333,52 @@ pub fn shot_scroll_begin(
     mx: i32,
     my: i32,
 ) -> Result<(), String> {
-    // 浮条窗在 = 会话进行中（flag=0）；flag≠0 的残留浮条是 cancel/finish 收尾
-    // close 未奏效的僵尸（实测 wry 偶发），销毁后放行
-    if let Some(w) = app.get_webview_window("shot-scroll") {
-        if SCROLL_FLAG.load(Ordering::Relaxed) == 0 {
-            return Err("滚动截图进行中".into());
+    // 会话互斥：进行中拒绝（预览窗有完成/取消，Esc 也可取消）
+    if SCROLL_ACTIVE.load(Ordering::Relaxed) {
+        log::error!(
+            "滚动截图开始被拒绝：会话进行中（flag={}）",
+            SCROLL_FLAG.load(Ordering::Relaxed)
+        );
+        return Err("滚动截图进行中".into());
+    }
+    // 残留窗 = cancel/finish 收尾 close 未奏效的僵尸（实测 wry 偶发），销毁放行
+    for label in ["shot-scroll", "shot-frame"] {
+        if let Some(w) = app.get_webview_window(label) {
+            log::warn!("滚动截图：清理残留窗 {label}（僵尸收尾）");
+            let _ = w.destroy();
         }
-        log::warn!("滚动截图：清理残留浮条窗（僵尸收尾）");
-        let _ = w.destroy();
     }
     if SCROLL_PENDING
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .is_some()
     {
+        log::error!("滚动截图开始被拒绝：上一会话载荷未被 launch 消费");
         return Err("滚动截图进行中".into());
     }
     if rw < 96 || rh < 80 {
-        return Err("选区太小，请框选更大的滚动区域".into());
+        let m = format!("选区太小（{rw}×{rh}），请框选更大的滚动区域（至少 96×80）");
+        log::error!("滚动截图开始被拒绝：{m}");
+        return Err(m);
     }
-    let mon = monitor_at(mx, my).ok_or("未找到目标显示器")?;
+    let Some(mon) = monitor_at(mx, my) else {
+        log::error!("滚动截图开始被拒绝：未找到显示器（原点 {mx},{my}）");
+        return Err("未找到目标显示器".into());
+    };
     if rx < 0 || ry < 0 || rx + rw > mon.w as i32 || ry + rh > mon.h as i32 {
+        log::error!(
+            "滚动截图开始被拒绝：选区 ({rx},{ry}) {rw}×{rh} 超出显示器 {}×{}",
+            mon.w,
+            mon.h
+        );
         return Err("选区超出显示器范围".into());
     }
     // 第一帧 = 定格图裁剪（此刻覆盖窗显示的就是原始画面；定格帧由 shot.rs
     // 会话捕获后留在内存，这里直接裁，无文件 IO）
-    let base: RgbaImage = super::shot::session_frame_crop(rx, ry, rw as u32, rh as u32)
-        .ok_or("无进行中的截图会话")?;
+    let Some(base) = super::shot::session_frame_crop(rx, ry, rw as u32, rh as u32) else {
+        log::error!("滚动截图开始被拒绝：无进行中的截图会话（定格帧已被收场清空）");
+        return Err("无进行中的截图会话".into());
+    };
     log::info!("滚动截图开始：选区 ({rx},{ry}) {rw}×{rh} @显示器 ({mx},{my})");
 
     // 钩子反应区 = 选区全局物理坐标；会话静态复位（装钩前，防旧值串场）
@@ -292,46 +388,66 @@ pub fn shot_scroll_begin(
     WHEEL_UP.store(false, Ordering::Relaxed);
     HOOK_TID.store(0, Ordering::Relaxed);
     SCROLL_FLAG.store(0, Ordering::Relaxed);
+    SCROLL_ACTIVE.store(true, Ordering::Relaxed);
 
     // 装钩先行（channel 握手，至多 1s）：失败直接报错返回——此刻覆盖窗尚未
     // 收场，用户不丢截图，可直接改用普通复制/保存
     if !install_wheel_hook() {
+        SCROLL_ACTIVE.store(false, Ordering::Relaxed);
+        log::error!("滚动截图启动失败：无法监听鼠标滚轮");
         return Err("滚动截图启动失败：无法监听鼠标滚轮".into());
     }
 
     // 覆盖窗退场（常驻窗停靠回屏幕外，end_session 即释放内存定格帧；base 已
     // 在内存不受影响）。停靠是投给事件循环的异步消息，必须等主循环把窗口真正
-    // 摘离屏幕后才得起建浮条窗——实测蒙层在场时 build() 泵消息永久卡死（贴图
+    // 摘离屏幕后才得起建窗——实测蒙层在场时 build() 泵消息永久卡死（贴图
     // 同款坑，shot.rs 在案），故拆两段命令由前端顺序调用（贴图 finish 流同款
     // 间隙）
     super::shot::end_session(&app);
-    *SCROLL_PENDING.lock().unwrap_or_else(|e| e.into_inner()) =
-        Some((base, rw as u32, rh as u32, rx as u32, ry as u32, mon));
+    *SCROLL_PENDING.lock().unwrap_or_else(|e| e.into_inner()) = Some((
+        base,
+        ScrollGeo {
+            rx: rx as u32,
+            ry: ry as u32,
+            rw: rw as u32,
+            rh: rh as u32,
+            mon,
+        },
+    ));
     Ok(())
 }
 
 /// 滚动会话第二段：不直接在主线程建窗（本命令运行于主线程，蒙层停靠消息可
 /// 能还没被泵到——实测蒙层在场时 build() 泵消息永久卡死），而是派 150ms 后台
-/// 定时再 run_on_main_thread 起建浮条并起拼接循环；此间主循环早已把蒙层摘屏
+/// 定时再 run_on_main_thread 起建框窗+预览窗并起拼接循环；此间主循环早已把
+/// 蒙层摘屏
 #[tauri::command]
 pub fn shot_scroll_launch(app: AppHandle) -> Result<(), String> {
-    let Some((base, rw, rh, rx, ry, mon)) = SCROLL_PENDING
+    let Some((base, geo)) = SCROLL_PENDING
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .take()
     else {
+        log::error!("滚动截图 launch 被拒绝：无待启动的会话载荷");
         return Err("无待启动的滚动会话".into());
     };
-    log::info!("滚动截图：第二段进场，150ms 后起建浮条");
+    log::info!("滚动截图：第二段进场，150ms 后建选区框窗与预览窗");
     let app2 = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(150));
         let runner = app2.clone();
         let dispatch = runner.run_on_main_thread(move || {
-            if let Err(e) = show_scrollbar_window(&app2, &mon) {
+            // 框窗纯装饰，失败只记日志不流产；预览窗失败 = 会话流产（弹原生
+            // 对话框——覆盖窗已收场，无前端提示条可依赖）
+            if let Err(e) = show_frame_window(&app2, &geo) {
                 log::error!("滚动截图：{e}");
+            }
+            if let Err(e) = show_preview_window(&app2, &geo) {
+                log::error!("滚动截图：{e}");
+                destroy_session_windows(&app2);
                 quit_hook();
-                end_scroll(&app2, mon, None, false);
+                SCROLL_ACTIVE.store(false, Ordering::Relaxed);
+                dialog_error(&app2, &format!("滚动截图预览窗创建失败：{e}（请重新截图）"));
                 return;
             }
             // 清掉装钩握手窗口期落进的滚轮标记（不属于本会话的有效滚动）
@@ -342,13 +458,19 @@ pub fn shot_scroll_launch(app: AppHandle) -> Result<(), String> {
                 .take();
             WHEEL_PEND.store(false, Ordering::Relaxed);
             WHEEL_UP.store(false, Ordering::Relaxed);
+            let canvas = Arc::new(Mutex::new(CanvasBuf::new(geo.rw)));
+            canvas
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(&base, 0);
+            *PREVIEW_CANVAS.lock().unwrap_or_else(|e| e.into_inner()) = Some(canvas.clone());
             let app3 = app2.clone();
             std::thread::spawn(move || {
-                scroll_loop(app3, mon, rw, rh, rx, ry, base);
+                scroll_loop(app3, geo, base, canvas);
             });
         });
         if let Err(e) = dispatch {
-            log::error!("滚动截图：浮条建窗任务派发失败：{e}");
+            log::error!("滚动截图：建窗任务派发失败：{e}");
             quit_hook();
         }
     });
@@ -357,7 +479,9 @@ pub fn shot_scroll_launch(app: AppHandle) -> Result<(), String> {
 
 /// 滚动拼接主循环（独立线程）：等下滚静默 → 捕获 → 有符号匹配 → 追加/重定基准。
 /// 钩子已由 shot_scroll_begin 握手装好，本线程只消费标记。
-fn scroll_loop(app: AppHandle, mon: MonRect, rw: u32, rh: u32, rx: u32, ry: u32, base: RgbaImage) {
+fn scroll_loop(app: AppHandle, geo: ScrollGeo, base: RgbaImage, canvas: Arc<Mutex<CanvasBuf>>) {
+    let mon = geo.mon;
+    let (rx, ry, rw, rh) = (geo.rx, geo.ry, geo.rw, geo.rh);
     let mon_obj = xcap::Monitor::all().ok().and_then(|all| {
         all.into_iter()
             .find(|m| m.x().ok() == Some(mon.x) && m.y().ok() == Some(mon.y))
@@ -368,21 +492,20 @@ fn scroll_loop(app: AppHandle, mon: MonRect, rw: u32, rh: u32, rx: u32, ry: u32,
         end_scroll(&app, mon, None, false);
         return;
     };
-    let mut canvas = CanvasBuf::new(rw);
-    canvas.push(&base, 0);
     let mut last = base;
     let mut zero_streak = 0u32;
     let mut bad_streak = 0u32;
     let mut truncated = false;
     let mut last_activity = Instant::now();
-    emit_height(&app, canvas.h);
-    // 浮条页加载晚于首发事件会漏听初始高度（实测显示 0px），隔一拍补发
+    emit_height(&app, canvas.lock().unwrap_or_else(|e| e.into_inner()).h);
+    // 预览窗页加载晚于首发事件会漏听初始高度（实测显示 0px），隔一拍补发
     std::thread::sleep(Duration::from_millis(600));
-    emit_height(&app, canvas.h);
+    emit_height(&app, canvas.lock().unwrap_or_else(|e| e.into_inner()).h);
     loop {
         let now = Instant::now();
-        if SCROLL_FLAG.load(Ordering::Relaxed) != 0 || canvas.h >= MAX_H {
-            truncated = canvas.h >= MAX_H;
+        let h = canvas.lock().unwrap_or_else(|e| e.into_inner()).h;
+        if SCROLL_FLAG.load(Ordering::Relaxed) != 0 || h >= MAX_H {
+            truncated = h >= MAX_H;
             break;
         }
         // 上滚不截取（“上滚不动”）：只重置到底计数，回看后继续下滚仍可拼接
@@ -414,13 +537,14 @@ fn scroll_loop(app: AppHandle, mon: MonRect, rw: u32, rh: u32, rx: u32, ry: u32,
                         Some(dy) if dy >= 2 => {
                             zero_streak = 0;
                             bad_streak = 0;
-                            canvas.push(&frame, dy as u32);
+                            canvas
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .push(&frame, dy as u32);
                             last = frame;
-                            log::debug!(
-                                "滚动截图：追加 {dy}px，累计 {}px（钩子 {ticks} ticks）",
-                                canvas.h
-                            );
-                            emit_height(&app, canvas.h);
+                            let h = canvas.lock().unwrap_or_else(|e| e.into_inner()).h;
+                            log::debug!("滚动截图：追加 {dy}px，累计 {h}px（钩子 {ticks} ticks）");
+                            emit_height(&app, h);
                         }
                         // 内容下移（上滚回看）：只重定基准，不追加不倒退
                         Some(dy) if dy <= -2 => {
@@ -473,19 +597,27 @@ fn scroll_loop(app: AppHandle, mon: MonRect, rw: u32, rh: u32, rx: u32, ry: u32,
         std::thread::sleep(POLL);
     }
     quit_hook();
+    // 会话状态收场（先清预览数据源再关窗：拉取命令对空响应安全）
+    *PREVIEW_CANVAS.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    SCROLL_ACTIVE.store(false, Ordering::Relaxed);
     if SCROLL_FLAG.load(Ordering::Relaxed) == 2 {
-        // 取消：丢弃，不出结果（浮条窗也须关闭——首版此处提前 return 漏关，
-        // 僵尸浮条挂着导致下次 begin 被「滚动截图进行中」挡死，实测事故）
-        log::info!("滚动截图：用户取消，丢弃已拼内容（{}px）", canvas.h);
-        if let Some(w) = app.get_webview_window("shot-scroll") {
-            let _ = w.destroy();
-        }
+        // 取消：丢弃，不出结果（会话窗也须关闭——首版此处提前 return 漏关，
+        // 僵尸窗挂着导致下次 begin 被「滚动截图进行中」挡死，实测事故）
+        log::info!(
+            "滚动截图：用户取消，丢弃已拼内容（{}px）",
+            canvas.lock().unwrap_or_else(|e| e.into_inner()).h
+        );
+        destroy_session_windows(&app);
         return;
     }
+    let (img, h) = {
+        let c = canvas.lock().unwrap_or_else(|e| e.into_inner());
+        (c.to_image(), c.h)
+    };
     if truncated {
-        log::info!("滚动截图：动态内容/捕获异常截断，累计 {}px", canvas.h);
+        log::info!("滚动截图：动态内容/捕获异常截断，累计 {h}px");
     }
-    match canvas.to_image() {
+    match img {
         Some(img) => end_scroll(&app, mon, Some(img), truncated),
         None => {
             log::error!("滚动截图：拼接缓冲转图失败");
@@ -502,14 +634,50 @@ fn emit_height(app: &AppHandle, height: u32) {
     );
 }
 
-/// 收尾：关浮条窗，长图存临时盘后开结果窗
-fn end_scroll(app: &AppHandle, mon: MonRect, img: Option<RgbaImage>, truncated: bool) {
-    // destroy 而非 close：close 走 CloseRequested 语义，实测偶发不奏效留僵尸
-    if let Some(w) = app.get_webview_window("shot-scroll") {
-        let _ = w.destroy();
+/// 预览窗增量拉取已拼行 [from_y..h)（原始 RGBA 行主序二进制直传；空响应 =
+/// 无新内容或会话已收尾）。预览窗收到进度事件后调用，from_y = 已拉到的行号
+#[tauri::command]
+pub fn shot_scroll_chunk(from_y: u32) -> tauri::ipc::Response {
+    let g = PREVIEW_CANVAS.lock().unwrap_or_else(|e| e.into_inner());
+    let bytes = g
+        .as_ref()
+        .and_then(|c| {
+            c.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .rows_from(from_y)
+                .map(<[u8]>::to_vec)
+        })
+        .unwrap_or_default();
+    tauri::ipc::Response::new(bytes)
+}
+
+/// 关闭本会话全部窗口（预览窗 + 选区框窗；destroy 而非 close：close 走
+/// CloseRequested 语义，实测偶发不奏效留僵尸）
+fn destroy_session_windows(app: &AppHandle) {
+    for label in ["shot-scroll", "shot-frame"] {
+        if let Some(w) = app.get_webview_window(label) {
+            let _ = w.destroy();
+        }
     }
+}
+
+/// 原生错误对话框：滚动会话期覆盖窗已收场，前端提示条不可见，失败必须落到
+/// 系统级弹窗（2026-10-29 事故在案：静默失败 = 用户视角「点了没反应」）
+fn dialog_error(app: &AppHandle, msg: &str) {
+    use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+    app.dialog()
+        .message(msg.to_owned())
+        .title("X-Dir 滚动截图")
+        .kind(MessageDialogKind::Error)
+        .show(|_| {});
+}
+
+/// 收尾：关会话窗，长图存临时盘后开结果窗
+fn end_scroll(app: &AppHandle, mon: MonRect, img: Option<RgbaImage>, truncated: bool) {
+    destroy_session_windows(app);
     let Some(img) = img else {
         log::error!("滚动截图：无拼接结果可出（启动/收场异常）");
+        dialog_error(app, "滚动截图未能生成结果（启动异常），请重新截图");
         return;
     };
     let dir = shot_dir();
@@ -517,21 +685,61 @@ fn end_scroll(app: &AppHandle, mon: MonRect, img: Option<RgbaImage>, truncated: 
     let file = dir.join(format!("scroll_{}.png", millis()));
     if let Err(e) = img.save(&file) {
         log::error!("滚动长图写盘失败：{e}");
+        dialog_error(app, &format!("滚动长图写盘失败：{e}"));
         return;
     }
     let (w, h) = img.dimensions();
     if let Err(e) = show_result_window(app, &file, w, h, truncated, &mon) {
         log::error!("打开滚动结果窗失败：{e}");
+        dialog_error(app, &format!("打开滚动结果窗失败：{e}"));
     }
 }
 
-// ── 浮条窗 / 结果窗 ─────────────────────────────────────────────────────────
+// ── 选区框窗 / 预览窗 / 结果窗 ──────────────────────────────────────────────
 
-fn show_scrollbar_window(app: &AppHandle, mon: &MonRect) -> Result<(), String> {
-    const BW: f64 = 392.0;
-    const BH: f64 = 42.0;
+/// 选区框窗：与选区矩形精确重合的透明窗，只画边框与角点提示捕获区域；整窗
+/// 点击穿透（set_ignore_cursor_events）——其下就是真实可交互窗口，滚轮直达
+/// （滚动截图的数据源），选区视觉锚定不挡操作
+fn show_frame_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
+    let mon = &geo.mon;
+    let (rx, ry, rw, rh) = (geo.rx, geo.ry, geo.rw, geo.rh);
+    let boot = serde_json::json!({ "window": "frame" });
+    let win = WebviewWindowBuilder::new(app, "shot-frame", WebviewUrl::App("shot.html".into()))
+        .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
+        .title("X-Dir 滚动选区")
+        .decorations(false)
+        .resizable(false)
+        .maximizable(false)
+        .minimizable(false)
+        .skip_taskbar(true)
+        .always_on_top(true)
+        .shadow(false)
+        .transparent(true)
+        // 不可见窗口默认 focused(true) 在部分 WebView2 上聚焦异常（wry#1798）
+        .focused(false)
+        .visible(false)
+        .initialization_script(format!("window.__BOOT__ = {boot};"))
+        .build()
+        .map_err(|e| format!("创建选区框窗失败：{e}"))?;
+    // 整窗穿透：滚轮/点击直达下层真实窗口（穿透设置须在 show 前，防一拍拦截）
+    win.set_ignore_cursor_events(true)
+        .map_err(|e| format!("选区框窗设置穿透失败：{e}"))?;
+    win.set_position(PhysicalPosition::new(mon.x + rx as i32, mon.y + ry as i32))
+        .map_err(|e| e.to_string())?;
+    win.set_size(PhysicalSize::new(rw, rh))
+        .map_err(|e| e.to_string())?;
+    win.show().map_err(|e| e.to_string())?;
+    log::debug!("滚动截图：选区框窗已显示 ({rx},{ry}) {rw}×{rh}");
+    Ok(())
+}
+
+/// 侧边预览窗：贴选区右/左侧（panel_layout 定位），实时显示已拼长图
+fn show_preview_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
+    let mon = &geo.mon;
+    let (rx, ry, rw, rh) = (geo.rx, geo.ry, geo.rw, geo.rh);
     let s = f64::from(mon.scale);
-    let boot = serde_json::json!({ "window": "scrollbar" });
+    let (px, py, pw, ph) = panel_layout((rx as i32, ry as i32, rw as i32, rh as i32), mon);
+    let boot = serde_json::json!({ "window": "scrollbar", "w": rw, "h": rh, "scale": s });
     // 本机 WebView2 建窗有 0x8007139F 前科（shot.rs 日志在案）：失败清掉可能
     // 的僵尸 label 重试一次，仍败才报错
     let mut win = None;
@@ -559,7 +767,7 @@ fn show_scrollbar_window(app: &AppHandle, mon: &MonRect) -> Result<(), String> {
                 break;
             }
             Err(e) => {
-                last_err = format!("创建滚动浮条窗失败（第 {} 次）：{e}", attempt + 1);
+                last_err = format!("创建预览窗失败（第 {} 次）：{e}", attempt + 1);
                 log::error!("滚动截图：{last_err}");
                 // 建窗失败可能残留僵尸 label，先销毁再重试
                 if let Some(z) = app.get_webview_window("shot-scroll") {
@@ -572,17 +780,13 @@ fn show_scrollbar_window(app: &AppHandle, mon: &MonRect) -> Result<(), String> {
         }
     }
     let win = win.ok_or(last_err)?;
-    let (w, h) = ((BW * s).round() as i32, (BH * s).round() as i32);
-    win.set_position(PhysicalPosition::new(
-        mon.x + (mon.w as i32 - w) / 2,
-        mon.y + mon.h as i32 - h - (32.0 * s).round() as i32,
-    ))
-    .map_err(|e| e.to_string())?;
-    win.set_size(PhysicalSize::new(w as u32, h as u32))
+    win.set_position(PhysicalPosition::new(mon.x + px, mon.y + py))
+        .map_err(|e| e.to_string())?;
+    win.set_size(PhysicalSize::new(pw, ph))
         .map_err(|e| e.to_string())?;
     win.show().map_err(|e| e.to_string())?;
     win.set_focus().map_err(|e| e.to_string())?;
-    log::info!("滚动截图：控制浮条已显示");
+    log::info!("滚动截图：预览窗已显示 @({px},{py}) {pw}×{ph}（选区 {rw}×{rh}）");
     Ok(())
 }
 
@@ -595,13 +799,16 @@ fn show_result_window(
     mon: &MonRect,
 ) -> Result<(), String> {
     let s = f64::from(mon.scale);
-    // 结果窗 fit：宽 ≤ 72% 屏宽，高 ≤ 72% 屏高（先按比例缩到双约束内）
-    let dw = (f64::from(w))
-        .min(f64::from(mon.w) * 0.72)
-        .min(f64::from(w) * (f64::from(mon.h) * 0.72) / f64::from(h));
-    let dh = f64::from(h) * dw / f64::from(w);
-    let pw = (dw * s).round() as i32;
-    let ph = (dh * s).round() as i32;
+    // 窗体尺寸与长图解耦（2026-10-29 用户定案）：旧公式按长图等比缩窗，超长
+    // 图被缩成细窄条不可用。改为宽 = min(图宽+2边距, 62% 屏宽，下限 520css)、
+    // 高 = 80% 屏高；图在窗内滚动查看，缩放由结果窗前端负责
+    let pad = (24.0 * s).round();
+    let ww = ((f64::from(w) + pad * 2.0)
+        .min(f64::from(mon.w) * 0.62)
+        .max(520.0 * s))
+    .min(f64::from(mon.w) - 32.0)
+    .round() as i32;
+    let wh = (f64::from(mon.h) * 0.8).round() as i32;
     let boot = serde_json::json!({
         "window": "result",
         "file": file.to_string_lossy(),
@@ -625,11 +832,11 @@ fn show_result_window(
         .build()
         .map_err(|e| format!("创建结果窗失败：{e}"))?;
     win.set_position(PhysicalPosition::new(
-        mon.x + (mon.w as i32 - pw) / 2,
-        mon.y + (mon.h as i32 - ph) / 2,
+        mon.x + (mon.w as i32 - ww) / 2,
+        mon.y + (mon.h as i32 - wh) / 2,
     ))
     .map_err(|e| e.to_string())?;
-    win.set_size(PhysicalSize::new(pw as u32, ph as u32))
+    win.set_size(PhysicalSize::new(ww as u32, wh as u32))
         .map_err(|e| e.to_string())?;
     let scroll_file = file.to_path_buf();
     win.on_window_event(move |e| {
@@ -641,9 +848,9 @@ fn show_result_window(
     win.set_focus().map_err(|e| e.to_string())
 }
 
-// ── 浮条/结果窗的命令 ───────────────────────────────────────────────────────
+// ── 预览窗/结果窗的命令 ─────────────────────────────────────────────────────
 
-/// 浮条按钮：finish = 用已拼内容出结果；cancel = 丢弃结束
+/// 预览窗按钮：finish = 用已拼内容出结果；cancel = 丢弃结束
 #[tauri::command]
 pub fn shot_scroll_control(action: String) -> Result<(), String> {
     match action.as_str() {
@@ -774,6 +981,16 @@ mod tests {
         RgbaImage::from_fn(w, h, |x, y| Rgba([pattern(x, y, seed), 128, 64, 255]))
     }
 
+    fn mon(x: i32, y: i32, w: i32, h: i32, scale: f32) -> MonRect {
+        MonRect {
+            x,
+            y,
+            w: w as u32,
+            h: h as u32,
+            scale,
+        }
+    }
+
     #[test]
     fn match_scroll_dy_finds_shift() {
         // cur = prev 内容整体上移 60px（prev[y] 出现在 cur[y-60]，底部 60px 新内容）
@@ -840,5 +1057,59 @@ mod tests {
         assert_eq!(out.dimensions(), (4, 4));
         assert_eq!(out.get_pixel(0, 3), f2.get_pixel(0, 2));
         assert_eq!(out.get_pixel(2, 0), f1.get_pixel(2, 0));
+    }
+
+    #[test]
+    fn canvas_buf_rows_from_slices_delta() {
+        let mut c = CanvasBuf::new(2);
+        c.push(&img(2, 3, 0), 0);
+        c.push(&img(2, 2, 7), 1); // 追加第 1 行起（1 行）
+        assert_eq!(c.h, 4);
+        // 全量 = h×w×4 字节；增量 [3..4) = 1 行
+        assert_eq!(c.rows_from(0).map(<[u8]>::len), Some(4 * 2 * 4));
+        assert_eq!(c.rows_from(3).map(<[u8]>::len), Some(1 * 2 * 4));
+        // 越界 = None；恰好等于 h = 空切片（无新行，拉取协议按空响应跳过）
+        assert_eq!(c.rows_from(4).map(<[u8]>::len), Some(0));
+        assert_eq!(c.rows_from(5), None);
+    }
+
+    #[test]
+    fn panel_layout_prefers_right_side() {
+        // 选区在屏幕左侧：预览贴右侧；宽随纵横比但钳在 max_w（430css·scale），
+        // 高随钳后宽回算
+        let m = mon(0, 0, 2560, 1440, 1.5);
+        let (x, y, pw, ph) = panel_layout((100, 200, 800, 600), &m);
+        assert_eq!(x, 100 + 800 + 18); // gap = 12*1.5
+        assert_eq!(y, 200);
+        assert_eq!(pw, 645); // 800:600 比例 → 800，撞 max_w 645 上限
+        assert_eq!(ph, 484); // 645×600/800
+    }
+
+    #[test]
+    fn panel_layout_falls_back_left() {
+        // 选区右侧贴屏：预览翻到左侧
+        let m = mon(0, 0, 2560, 1440, 1.0);
+        let (x, _y, pw, _ph) = panel_layout((1900, 100, 600, 400), &m);
+        assert!(x + pw as i32 <= 1900, "预览应整体落在选区左侧");
+        assert_eq!(x + pw as i32, 1900 - 12);
+    }
+
+    #[test]
+    fn panel_layout_shrinks_at_right_edge_when_both_sides_tight() {
+        // 选区几乎全屏宽：右侧放不下 → 缩宽钳到屏幕右缘
+        let m = mon(0, 0, 2560, 1440, 1.0);
+        let (x, _y, pw, ph) = panel_layout((100, 100, 2420, 600), &m);
+        assert_eq!(x + pw as i32, 2560 - 8);
+        assert!(pw < 4300); // 已缩窄
+        assert!(ph >= 1 && pw >= 1);
+    }
+
+    #[test]
+    fn panel_layout_clamps_height_and_top() {
+        // 选区高超屏 86%：预览高被钳；选区顶在屏外：y 钳回屏内
+        let m = mon(0, 0, 2560, 1440, 1.0);
+        let (_x, y, _pw, ph) = panel_layout((100, 0, 400, 1400), &m);
+        assert!(ph as f64 <= 1440.0 * 0.86);
+        assert!(y >= 8);
     }
 }

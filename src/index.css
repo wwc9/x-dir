@@ -4834,22 +4834,30 @@ mark.np-gsearch-mark {
   color: var(--np-muted);
 }
 
-/* 滚动截图浮条窗（§3.6 二期 B 批，label shot-scroll）与结果窗（label
-   shot-result）：独立小窗脱离主界面体系，取值仍全走 --np-* token */
-.np-shot-sbar {
+/* 滚动截图侧边预览窗（§3.6 二期 B 批，label shot-scroll）、选区框窗（label
+   shot-frame，整窗点击穿透只画边框）与结果窗（label shot-result）：独立小窗
+   脱离主界面体系，取值仍全走 --np-* token */
+.np-shot-sprev {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
   height: 100vh;
-  padding: 0 10px;
   box-sizing: border-box;
   background: var(--np-surface);
   border: 1px solid var(--np-border);
   border-radius: var(--np-radius-lg);
-  font-size: var(--np-font-sm);
+  overflow: hidden;
   user-select: none;
+  font-size: var(--np-font-sm);
 }
-.np-shot-sbar-dot {
+.np-shot-sprev-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--np-hairline);
+}
+.np-shot-sprev-dot {
   width: 8px;
   height: 8px;
   border-radius: var(--np-radius-pill);
@@ -4862,15 +4870,70 @@ mark.np-gsearch-mark {
     opacity: 0.25;
   }
 }
-.np-shot-sbar-label {
+.np-shot-sprev-label {
   color: var(--np-fg);
   white-space: nowrap;
 }
-.np-shot-sbar-h {
+.np-shot-sprev-h {
+  margin-left: auto;
   color: var(--np-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.np-shot-sprev-view {
+  flex: 1;
+  overflow: auto;
+  padding: 8px;
+  box-sizing: border-box;
+}
+.np-shot-sprev-view canvas {
+  display: block;
+  width: 100%;
+  border-radius: var(--np-radius);
+  background: var(--np-bg);
+  min-height: 24px;
+}
+.np-shot-sprev-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--np-hairline);
+}
+.np-shot-sprev-tip {
+  flex: 1;
+  color: var(--np-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 选区框窗：透明窗体上只画选区边框 + 8 角/边中点（锚定捕获区域视觉） */
+.np-shot-sframe {
+  position: fixed;
+  inset: 0;
+  border: 2px solid var(--np-accent);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.np-shot-sframe i {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--np-surface);
+  border: 1px solid var(--np-accent);
+  box-sizing: border-box;
+}
+.np-shot-sframe .tl { left: -4px; top: -4px; }
+.np-shot-sframe .tt { left: calc(50% - 4px); top: -4px; }
+.np-shot-sframe .tr { right: -4px; top: -4px; }
+.np-shot-sframe .ll { left: -4px; top: calc(50% - 4px); }
+.np-shot-sframe .rr { right: -4px; top: calc(50% - 4px); }
+.np-shot-sframe .bl { left: -4px; bottom: -4px; }
+.np-shot-sframe .bb { left: calc(50% - 4px); bottom: -4px; }
+.np-shot-sframe .br { right: -4px; bottom: -4px; }
+
 /* 浮条 / 结果窗通用按钮 */
 .np-shot-btn {
   display: inline-flex;
@@ -4922,14 +4985,14 @@ mark.np-gsearch-mark {
 .np-shot-result-view {
   flex: 1;
   overflow: auto;
-  display: flex;
-  justify-content: center;
   padding: 12px;
   box-sizing: border-box;
 }
+/* 宽度由缩放状态内联控制；窄于视口时 margin 居中、宽于视口时自然溢出滚动
+   （flex 居中会在溢出方向裁掉左侧，不能用） */
 .np-shot-result-view img {
   display: block;
-  max-width: 100%;
+  margin: 0 auto;
   height: auto;
 }
 .np-shot-result-bar {
@@ -4940,6 +5003,13 @@ mark.np-gsearch-mark {
   padding: 8px 12px;
   border-top: 1px solid var(--np-hairline);
   background: var(--np-surface);
+}
+.np-shot-zoom-pct {
+  min-width: 40px;
+  text-align: center;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  font-variant-numeric: tabular-nums;
 }
 .np-shot-result-dim {
   font-size: var(--np-font-sm);
