@@ -1,7 +1,8 @@
 // 滚动长截图（§3.6 二期 B 批，2026-10-24 首版；2026-10-28 改手动滚轮模式；
 // 2026-10-29 改「选区保留 + 侧边实时预览」）：
-// 框选滚动区 → 覆盖窗隐藏、弹两窗：选区框窗（label "shot-frame"，整窗点击
-// 穿透，只画选区边框——选区内容保持可交互，用户滚的是下面的真实窗口）和
+// 框选滚动区 → 覆盖窗隐藏、弹两窗：选区框窗（label "shot-frame"，整显示器
+// 透明窗点击穿透，画选区外遮罩+边框——选区内容保持可交互，用户滚的是下面
+// 的真实窗口）和
 // 侧边预览窗（label "shot-scroll"，贴选区右/左侧，实时显示已拼长图，底部
 // 完成/取消）→ WH_MOUSE_LL 低级鼠标钩子监听用户滚轮〔光标在选区内：下滚记
 // 时刻置待捕获；上滚只置标记——"下滚持续截图、上滚不动"〕→ 循环线程在下滚
@@ -726,13 +727,20 @@ fn end_scroll(app: &AppHandle, mon: MonRect, img: Option<RgbaImage>, truncated: 
 
 // ── 选区框窗 / 预览窗 / 结果窗 ──────────────────────────────────────────────
 
-/// 选区框窗：与选区矩形精确重合的透明窗，只画边框与角点提示捕获区域；整窗
-/// 点击穿透（set_ignore_cursor_events）——其下就是真实可交互窗口，滚轮直达
-/// （滚动截图的数据源），选区视觉锚定不挡操作
+/// 选区框窗：整显示器透明窗（点击穿透），内部画选区外遮罩（PixPin 样式，
+/// 前端 CSS 四条 --np-overlay）+ 选区边框角点；整窗 set_ignore_cursor_events
+/// ——其下就是真实可交互窗口，滚轮直达（滚动截图的数据源），遮罩纯视觉
 fn show_frame_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
     let mon = &geo.mon;
     let (rx, ry, rw, rh) = (geo.rx, geo.ry, geo.rw, geo.rh);
-    let boot = serde_json::json!({ "window": "frame" });
+    let boot = serde_json::json!({
+        "window": "frame",
+        "x": rx,
+        "y": ry,
+        "w": rw,
+        "h": rh,
+        "scale": f64::from(mon.scale),
+    });
     let win = WebviewWindowBuilder::new(app, "shot-frame", WebviewUrl::App("shot.html".into()))
         .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
         .title("X-Dir 滚动选区")
@@ -753,12 +761,12 @@ fn show_frame_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
     // 整窗穿透：滚轮/点击直达下层真实窗口（穿透设置须在 show 前，防一拍拦截）
     win.set_ignore_cursor_events(true)
         .map_err(|e| format!("选区框窗设置穿透失败：{e}"))?;
-    win.set_position(PhysicalPosition::new(mon.x + rx as i32, mon.y + ry as i32))
+    win.set_position(PhysicalPosition::new(mon.x, mon.y))
         .map_err(|e| e.to_string())?;
-    win.set_size(PhysicalSize::new(rw, rh))
+    win.set_size(PhysicalSize::new(mon.w, mon.h))
         .map_err(|e| e.to_string())?;
     win.show().map_err(|e| e.to_string())?;
-    log::debug!("滚动截图：选区框窗已显示 ({rx},{ry}) {rw}×{rh}");
+    log::debug!("滚动截图：选区框窗已显示（整屏遮罩，选区 ({rx},{ry}) {rw}×{rh}）");
     Ok(())
 }
 

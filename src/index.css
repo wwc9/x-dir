@@ -4943,10 +4943,15 @@ mark.np-gsearch-mark {
   text-align: center;
 }
 
-/* 选区框窗：透明窗体上只画选区边框 + 8 角/边中点（锚定捕获区域视觉） */
+/* 选区框窗：透明窗体上画选区外遮罩 + 选区边框 + 8 角/边中点（整窗点击
+   穿透，遮罩纯视觉） */
+.np-shot-smask {
+  position: fixed;
+  background: var(--np-overlay);
+}
 .np-shot-sframe {
   position: fixed;
-  inset: 0;
+  z-index: 1;
   border: 2px solid var(--np-accent);
   box-sizing: border-box;
   pointer-events: none;

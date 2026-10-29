@@ -14,7 +14,7 @@ import { ShotOverlay, type ShotBoot } from "./ShotOverlay";
 import { PinWindow, type PinBoot } from "./PinWindow";
 import { ScrollBar, type ScrollBarBoot } from "./ScrollBar";
 import { ScrollPreview, type ScrollPreviewBoot } from "./ScrollPreview";
-import { ScrollFrame } from "./ScrollFrame";
+import { ScrollFrame, type ScrollFrameBoot } from "./ScrollFrame";
 import { ShotResult, type ResultBoot } from "./ShotResult";
 
 declare global {
@@ -23,8 +23,8 @@ declare global {
       | PinBoot
       | ScrollBarBoot
       | ScrollPreviewBoot
+      | ScrollFrameBoot
       | ResultBoot
-      | { window: "frame" }
       | { window: "shot-idle" };
   }
 }
@@ -66,7 +66,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   ) : boot.window === "pin" ? (
     <PinWindow boot={boot} />
   ) : boot.window === "frame" ? (
-    <ScrollFrame />
+    <ScrollFrame boot={boot} />
   ) : boot.window === "scrollbar" ? (
     <ScrollBar boot={boot} />
   ) : boot.window === "scroll-preview" ? (
