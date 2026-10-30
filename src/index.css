@@ -4853,38 +4853,26 @@ mark.np-gsearch-mark {
   cursor: move;
   background: transparent;
 }
-/* 贴图顶部按钮条（2026-10-30 参考图定案：复制/保存/还原 100%/关闭）：
- * 悬停整窗浮现、离开退场；surface 小圆角条悬浮于贴图顶部内侧居中 */
-.np-shot-pinbar {
+/* 贴图右上角关闭钮（2026-10-30 三次定案：弃四钮条改单钮）：悬停整窗
+ * 浮现、离开退场；圆形半透明黑底 + 白 X，贴图（图像区）右上角内侧 8px
+ * （top/right 由 JS 按阴影余量 pad 偏移注入） */
+.np-shot-pin-close {
   position: absolute;
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
   z-index: 30;
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px;
-  border-radius: var(--np-radius-lg);
-  background: var(--np-surface);
-  border: 1px solid var(--np-border);
-  box-shadow: var(--np-shadow);
-}
-.np-shot-pinbar > button {
-  display: flex;
-  align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   padding: 0;
   border: none;
-  border-radius: var(--np-radius);
-  background: transparent;
-  color: var(--np-fg);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
   cursor: pointer;
 }
-.np-shot-pinbar > button:hover {
-  background: var(--np-hover);
+.np-shot-pin-close:hover {
+  background: rgba(0, 0, 0, 0.62);
 }
 .np-shot-pin img {
   display: block;

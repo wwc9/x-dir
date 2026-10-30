@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { PhysicalSize, getCurrentWindow } from "@tauri-apps/api/window";
-import { Copy, Expand, Save, X } from "lucide-react";
+import { X } from "lucide-react";
 
 import { api } from "../lib/ipc";
 import { initTooltip } from "../lib/tooltip";
@@ -146,8 +146,9 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
     [dataUrl],
   );
 
-  // 顶部按钮条（2026-10-30 参考图定案：复制/保存/还原 100%/关闭 四钮，
-  // 悬停整窗浮现、离开 180ms 后退场——常显会遮挡贴图内容；不抢拖拽）
+  // 右上角关闭钮（2026-10-30 三次定案：弃四钮条，改悬停浮现单关闭钮——
+  // 圆形半透明黑底 + 白 X，贴图右上角内侧 8px）：悬停整窗出现、离开 180ms
+  // 退场（常显遮挡内容）；按下不抢拖拽
   const [barOn, setBarOn] = useState(false);
   const barHideTimer = useRef<number | null>(null);
   const onRootEnter = useCallback(() => {
@@ -179,24 +180,15 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
       }}
     >
       {barOn && (
-        <div
-          className="np-shot-pinbar"
-          data-tip=""
+        <button
+          className="np-shot-pin-close"
+          data-tip="关闭（Esc / 双击同效）"
+          style={{ top: pad / boot.scale + 8, right: pad / boot.scale + 8 }}
           onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => void win.close().catch(() => undefined)}
         >
-          <button data-tip="复制图像" onClick={() => void onMenuAction("copy")}>
-            <AppIcon icon={Copy} size={DENSITY.iconSm} />
-          </button>
-          <button data-tip="保存为…" onClick={() => void onMenuAction("save")}>
-            <AppIcon icon={Save} size={DENSITY.iconSm} />
-          </button>
-          <button data-tip="还原 100%" onClick={() => applyZoom(1)}>
-            <AppIcon icon={Expand} size={DENSITY.iconSm} />
-          </button>
-          <button data-tip="关闭 · Esc / 双击同效" onClick={() => void win.close().catch(() => undefined)}>
-            <AppIcon icon={X} size={DENSITY.iconSm} />
-          </button>
-        </div>
+          <AppIcon icon={X} size={DENSITY.iconSm} />
+        </button>
       )}
       <img
         ref={imgRef}
