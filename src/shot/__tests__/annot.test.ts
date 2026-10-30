@@ -20,6 +20,8 @@ import {
   normalizeSel,
   resizeSel,
   selHandles,
+  adjustShapeProp,
+  shapeAt,
   stepBadgeColor,
   stepBadgeSize,
   type Shape,
@@ -305,5 +307,108 @@ describe("stepBadgeSize", () => {
     const two = stepBadgeSize(4, 1.5, 2);
     expect(two.d).toBeCloseTo(one.d * 1.18, 5);
     expect(two.font).toBeLessThan(two.d);
+  });
+});
+
+describe("shapeAt", () => {
+  const rect: Shape = { type: "rect", x: 0, y: 0, w: 200, h: 100, color: "#fff", width: 4 };
+  const badge: Shape = {
+    type: "step",
+    x: 150,
+    y: 50,
+    w: 0,
+    h: 0,
+    color: "#e5484d",
+    width: 4,
+    seq: 1,
+  };
+
+  it("矩形命中描边带而非包围盒中心", () => {
+    expect(shapeAt([rect], 0, 50, 8)).toBe(0); // 左边框上
+    expect(shapeAt([rect], 100, 50, 8)).toBeNull(); // 内部空白
+    expect(shapeAt([rect], 200, 100, 8)).toBe(0); // 右下角
+  });
+
+  it("极小矩形整体命中", () => {
+    const tiny: Shape = { ...rect, w: 8, h: 8 };
+    expect(shapeAt([tiny], 4, 4, 8)).toBe(0);
+  });
+
+  it("序号徽标命中圆内、圆外未命中", () => {
+    expect(shapeAt([badge], 150, 50, 8)).toBe(0);
+    expect(shapeAt([badge], 150 + 40, 50, 8)).toBeNull(); // r=19.8 之外
+  });
+
+  it("笔迹命中折线段附近", () => {
+    const pen: Shape = {
+      type: "pen",
+      x: 0,
+      y: 0,
+      w: 0,
+      h: 0,
+      pts: [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+        { x: 100, y: 80 },
+      ],
+      color: "#fff",
+      width: 4,
+    };
+    expect(shapeAt([pen], 50, 6, 8)).toBe(0);
+    expect(shapeAt([pen], 50, 60, 8)).toBeNull();
+  });
+
+  it("模糊/马赛克命中包围盒内", () => {
+    const blur: Shape = { type: "blur", x: 10, y: 10, w: 100, h: 60, color: "#fff", width: 4 };
+    expect(shapeAt([blur], 60, 40, 8)).toBe(0);
+    expect(shapeAt([blur], 0, 40, 8)).toBeNull(); // 左缘外（>容差 8）
+  });
+
+  it("重叠取最上层（后画的在下标大）", () => {
+    expect(shapeAt([rect, badge], 150, 50, 8)).toBe(1);
+  });
+
+  it("文字按估算 bbox 命中（CJK 全宽近似）", () => {
+    const txt: Shape = { type: "text", x: 20, y: 20, w: 0, h: 0, color: "#fff", width: 22, text: "标注" };
+    expect(shapeAt([txt], 20 + 22, 20 + 14, 8)).toBe(0); // 两字宽 ~44 内
+    expect(shapeAt([txt], 20 + 90, 20 + 14, 8)).toBeNull();
+  });
+});
+
+describe("adjustShapeProp", () => {
+  it("线形：线宽 ±1，钳 1~30", () => {
+    const r: Shape = { type: "rect", x: 0, y: 0, w: 9, h: 9, color: "#fff", width: 5 };
+    expect(adjustShapeProp(r, 1)).toEqual({ shape: { ...r, width: 6 }, label: "线宽 6px" });
+    expect(adjustShapeProp({ ...r, width: 30 }, 1)?.shape.width).toBe(30);
+    expect(adjustShapeProp({ ...r, width: 1 }, -1)?.shape.width).toBe(1);
+  });
+
+  it("文字：字号 ±2，钳 10~80", () => {
+    const t: Shape = { type: "text", x: 0, y: 0, w: 0, h: 0, color: "#fff", width: 22, text: "a" };
+    expect(adjustShapeProp(t, 1)?.shape.width).toBe(24);
+    expect(adjustShapeProp({ ...t, width: 10 }, -1)?.shape.width).toBe(10);
+    expect(adjustShapeProp(t, 1)?.label).toBe("字号 24px");
+  });
+
+  it("序号圈：±1 钳 1~20，HUD 报直径", () => {
+    const s: Shape = { type: "step", x: 0, y: 0, w: 0, h: 0, color: "#fff", width: 4, seq: 1 };
+    const up = adjustShapeProp(s, 1)!;
+    expect(up.shape.width).toBe(5);
+    expect(up.label).toBe("序号圈 29px"); // 16 + 5*2.6
+  });
+
+  it("模糊：不透明度 ±5% 钳 15%~100%，缺省 1 起", () => {
+    const b: Shape = { type: "blur", x: 0, y: 0, w: 9, h: 9, color: "#fff", width: 4 };
+    expect(adjustShapeProp(b, -1)).toEqual({
+      shape: { ...b, alpha: 0.95 },
+      label: "模糊不透明度 95%",
+    });
+    expect(adjustShapeProp({ ...b, alpha: 0.15 }, -1)?.shape.alpha).toBeCloseTo(0.15);
+    expect(adjustShapeProp({ ...b, alpha: 0.95 }, 1)?.shape.alpha).toBe(1);
+  });
+
+  it("马赛克：±1 钳 2~20，HUD 报格宽", () => {
+    const m: Shape = { type: "mosaic", x: 0, y: 0, w: 9, h: 9, color: "#fff", width: 4 };
+    expect(adjustShapeProp(m, 1)?.label).toBe("马赛克 15px 格");
   });
 });

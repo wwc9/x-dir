@@ -57,9 +57,11 @@ import {
   formatMagColor,
   handleAt,
   hitWindow,
+  adjustShapeProp,
   nextStepSeq,
   normalizeSel,
   resizeSel,
+  shapeAt,
   type ShotTool,
 } from "./annot";
 
@@ -281,6 +283,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const [color, setColor] = useState(SHOT_PALETTE[0]);
   const [strokeIdx, setStrokeIdx] = useState(1);
   const [shapes, setShapes] = useState<Shape[]>([]);
+  /** 撤销栈 = 每次变更（落新图形 / 滚轮编辑一阵）前的完整快照。旧模型只有
+   *  「摘最后一个图形」语义，滚轮编辑后 Ctrl+Z 会整删被调的图形而非回退
+   *  参数——2026-10-30 滚轮编辑引入，快照模型对两类操作统一 */
+  const [undoStack, setUndoStack] = useState<Shape[][]>([]);
   const [redoStack, setRedoStack] = useState<Shape[][]>([]);
   const [editing, setEditing] = useState<{ x: number; y: number; value: string } | null>(null);
   const [savedTip, setSavedTip] = useState<string | null>(null);
@@ -787,21 +793,41 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   }, [busy, boot.mx, boot.my]);
 
   // ── 撤销 / 重做 ──────────────────────────────────────────────────────────
+  // 快照模型：undo 恢复 undoStack 顶快照、当前态压入 redo；redo 对称。
   // 两者都同步刷 live 层：redrawBase 不覆盖 live，若 live 有历史预览残影，
   // 撤销删掉 base 图形后残影仍可见（看似"剩一条撤销不干净"）
   const undo = useCallback(() => {
-    if (!shapes.length) return;
-    setRedoStack((r) => [...r, shapes]);
-    setShapes(shapes.slice(0, -1));
+    if (!undoStack.length) return;
+    const snap = undoStack[undoStack.length - 1];
+    setUndoStack((u) => u.slice(0, -1));
+    setRedoStack((r) => [...r, shapesRef.current]);
+    setShapes(snap);
     redrawLive();
-  }, [shapes, redrawLive]);
+  }, [undoStack, redrawLive]);
 
   const redo = useCallback(() => {
     if (!redoStack.length) return;
-    setShapes(redoStack[redoStack.length - 1]);
+    const snap = redoStack[redoStack.length - 1];
     setRedoStack((r) => r.slice(0, -1));
+    setUndoStack((u) => [...u, shapesRef.current]);
+    setShapes(snap);
     redrawLive();
   }, [redoStack, redrawLive]);
+
+  /** 落新图形 / 编辑前记账：压撤销快照 + 清重做（标准编辑器语义）。
+   *  滚轮调节按「一阵」合帧（600ms 内连滚只记首帧快照），否则每格滚轮
+   *  一个撤销项会把栈灌满 */
+  const wheelEditRef = useRef<{ at: number } | null>(null);
+  const pushUndo = useCallback((cur: Shape[]) => {
+    setUndoStack((u) => [...u, cur]);
+    setRedoStack([]);
+  }, []);
+  const noteWheelEdit = useCallback(() => {
+    const now = Date.now();
+    const burst = wheelEditRef.current && now - wheelEditRef.current.at <= 600;
+    wheelEditRef.current = { at: now };
+    return burst;
+  }, []);
 
   // ── 文字编辑（防重入：textarea blur 与画布 pointerdown 可能先后触发）──────
   const commitText = useCallback(() => {
@@ -821,10 +847,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         width: FONTS[strokeIdx],
         text: ed.value,
       };
-      setRedoStack([]);
+      pushUndo(shapesRef.current);
       setShapes((prev) => [...prev, shape]);
     }
-  }, [color, strokeIdx]);
+  }, [color, strokeIdx, pushUndo]);
 
   const beginTextEdit = useCallback(
     (px: number, py: number) => {
@@ -870,7 +896,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         selRef.current = null;
         setShapes([]);
         shapesRef.current = [];
+        setUndoStack([]);
         setRedoStack([]);
+        wheelEditRef.current = null;
         redrawBase();
         redrawLive();
         return;
@@ -902,8 +930,8 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             width: STROKES[strokeIdx],
             seq: nextStepSeq(shapesRef.current),
           };
+          pushUndo(shapesRef.current);
           shapesRef.current = [...shapesRef.current, shape];
-          setRedoStack([]);
           setShapes(shapesRef.current);
           return;
         }
@@ -922,7 +950,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       selRef.current = null;
       setShapes([]);
       shapesRef.current = [];
+      setUndoStack([]);
       setRedoStack([]);
+      wheelEditRef.current = null;
       redrawBase();
       redrawLive();
     },
@@ -1060,7 +1090,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           d.w = Math.abs(d.w);
           d.h = Math.abs(d.h);
         }
-        setRedoStack([]);
+        pushUndo(shapesRef.current);
         setShapes((prev) => [...prev, d]);
         // 提交后清 live 层：预览笔画只在 live，不清则残留成已撤销图形的
         // 「影子」（撤销后 base 已删、live 影子仍在，看似撤销不干净）
@@ -1183,6 +1213,49 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [exitShot, commitText, undo, redo, finish, redrawLive, busy]);
+
+  // ── 滚轮调节标记（2026-10-30 定案：悬停指哪调哪）────────────────────────
+  // 光标悬停在哪个标记上滚轮就调哪个（shapeAt 线形命中描边带、面形命中包围
+  // 盒），逐档增减（adjustShapeProp）：线形线宽 / 文字字号 / 序号圈尺寸 /
+  // 马赛克格子 / 模糊不透明度；HUD 显示当前值，600ms 连滚合为一阵撤销。
+  // 原生监听（passive:false）——React 合成 wheel 在部分环境按 passive 挂载，
+  // preventDefault 无效会带着页面滚（覆盖层虽无滚动条，防御性收掉）
+  const hudTimer = useRef<number | null>(null);
+  useEffect(() => {
+    const onWheel = (e: WheelEvent) => {
+      if (busy || e.ctrlKey || e.metaKey || e.altKey) return;
+      const s = selRef.current;
+      if (!s) return;
+      const px = Math.round(e.clientX * scale);
+      const py = Math.round(e.clientY * scale);
+      const inside = px >= s.x && px < s.x + s.w && py >= s.y && py < s.y + s.h;
+      if (!inside) return;
+      const idx = shapeAt(shapesRef.current, px - s.x, py - s.y, 8 * scale, scale);
+      if (idx === null) return;
+      e.preventDefault();
+      const cur = shapesRef.current[idx];
+      const dir: 1 | -1 = e.deltaY < 0 ? 1 : -1;
+      const adj = adjustShapeProp(cur, dir);
+      if (!adj) return;
+      const changed =
+        adj.shape.width !== cur.width || adj.shape.alpha !== cur.alpha;
+      if (!changed) return; // 已在量程端点，不记账不重绘
+      if (!noteWheelEdit()) pushUndo(shapesRef.current);
+      const next = shapesRef.current.slice();
+      next[idx] = adj.shape;
+      shapesRef.current = next;
+      setShapes(next);
+      setSavedTip(adj.label);
+      if (hudTimer.current !== null) window.clearTimeout(hudTimer.current);
+      hudTimer.current = window.setTimeout(() => setSavedTip(null), 900);
+    };
+    window.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      window.removeEventListener("wheel", onWheel);
+      if (hudTimer.current !== null) window.clearTimeout(hudTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy, scale, pushUndo, noteWheelEdit]);
 
   // ── 工具栏定位（选区下方 12px，放不下换上方；水平居中钳制屏内）──────────
   const [tbPos, setTbPos] = useState<{ left: number; top: number } | null>(null);
@@ -1411,7 +1484,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               className="np-shot-tool"
               data-tip="撤销"
               data-kbd="Ctrl+Z"
-              disabled={!shapes.length}
+              disabled={!undoStack.length}
               onClick={undo}
             >
               <AppIcon icon={Undo2} size={DENSITY.iconLg} />

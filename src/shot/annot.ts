@@ -36,6 +36,9 @@ export interface Shape {
   line?: ArrowLine;
   /** 序号标记专属：徽标数字（点按时按 nextStepSeq 递增分配）。x/y = 圆心 */
   seq?: number;
+  /** 模糊专属：不透明度 0.15~1（滚轮调节，缺省 1 = 全糊；部分透明让原图
+   *  隐约透出 = 毛玻璃弱化语义） */
+  alpha?: number;
 }
 
 /** 序号标记下一个数字：现有 step 徽标最大 seq + 1（无则 1）。撤销天然回退
@@ -70,6 +73,183 @@ export function stepBadgeSize(
   const base = (16 + width * 2.6) * scale;
   const d = base * (1 + 0.18 * Math.max(0, digits - 1));
   return { d, font: Math.round(d * 0.54) };
+}
+
+/** 点到线段距离（命中测试用） */
+function segDist(
+  px: number,
+  py: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  if (len2 < 1e-9) return Math.hypot(px - x1, py - y1);
+  let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
+
+/** 文字 bbox 估算（Shape 的 text 无 w/h，按字符宽近似：CJK 全宽、西文 0.55） */
+function textBox(s: Shape): { x: number; y: number; w: number; h: number } {
+  const fs = s.width;
+  const lines = (s.text ?? "").split("\n");
+  let w = 0;
+  for (const ln of lines) {
+    let lw = 0;
+    for (const ch of ln) lw += fs * (ch.charCodeAt(0) > 0xff ? 1.0 : 0.55);
+    w = Math.max(w, lw);
+  }
+  return { x: s.x, y: s.y, w, h: lines.length * fs * 1.35 };
+}
+
+/** 标记命中测试：返回最上层命中图形的下标（后画的在上面，倒序探测）。
+ *  px/py 与图形坐标同口径（相对选区左上，物理像素）；tol = 命中容差。
+ *  线形（矩形/椭圆/箭头/笔迹）命中在描边带上而非包围盒内——大包围盒
+ *  整面命中会遮挡下层标记，滚轮编辑指哪打哪 */
+export function shapeAt(
+  shapes: readonly Shape[],
+  px: number,
+  py: number,
+  tol: number,
+  scale = 1,
+): number | null {
+  for (let i = shapes.length - 1; i >= 0; i--) {
+    const s = shapes[i];
+    const lw = s.width * scale;
+    const t = tol + lw / 2;
+    switch (s.type) {
+      case "rect": {
+        const insideBox =
+          px >= s.x - t && px <= s.x + s.w + t && py >= s.y - t && py <= s.y + s.h + t;
+        if (!insideBox) break;
+        // 边框带：四边最近距离；极小矩形（边距小于 2t）整体命中
+        const dEdge = Math.min(
+          Math.abs(px - s.x),
+          Math.abs(px - (s.x + s.w)),
+          Math.abs(py - s.y),
+          Math.abs(py - (s.y + s.h)),
+        );
+        if (s.w <= 2 * t || s.h <= 2 * t || dEdge <= t) return i;
+        break;
+      }
+      case "ellipse": {
+        const rx = s.w / 2;
+        const ry = s.h / 2;
+        if (rx < 1 || ry < 1) break;
+        const cx = s.x + rx;
+        const cy = s.y + ry;
+        // 沿射线取椭圆边界点，点到边界点的距离即描边带距离
+        const dx = px - cx;
+        const dy = py - cy;
+        const r = Math.hypot(dx / rx, dy / ry);
+        if (r < 1e-6) return i;
+        const bx = cx + dx / r;
+        const by = cy + dy / r;
+        if (Math.hypot(px - bx, py - by) <= t) return i;
+        break;
+      }
+      case "arrow": {
+        const x1 = s.x;
+        const y1 = s.y;
+        const x2 = s.x + s.w;
+        const y2 = s.y + s.h;
+        if ((s.line ?? "solid") === "curve") {
+          // 二次贝塞尔采样折线（与绘制同控制点口径）
+          const c = arrowCurveCtrl(x1, y1, x2, y2);
+          let prev = { x: x1, y: y1 };
+          for (let k = 1; k <= 8; k++) {
+            const u = k / 8;
+            const pxk =
+              (1 - u) * (1 - u) * x1 + 2 * (1 - u) * u * c.cx + u * u * x2;
+            const pyk =
+              (1 - u) * (1 - u) * y1 + 2 * (1 - u) * u * c.cy + u * u * y2;
+            if (segDist(px, py, prev.x, prev.y, pxk, pyk) <= t) return i;
+            prev = { x: pxk, y: pyk };
+          }
+        } else if (segDist(px, py, x1, y1, x2, y2) <= t) return i;
+        break;
+      }
+      case "pen":
+      case "marker": {
+        const mt = s.type === "marker" ? t * 3.5 : t;
+        const pts = s.pts ?? [];
+        for (let k = 1; k < pts.length; k++) {
+          if (segDist(px, py, pts[k - 1].x, pts[k - 1].y, pts[k].x, pts[k].y) <= mt)
+            return i;
+        }
+        break;
+      }
+      case "text": {
+        const b = textBox(s);
+        if (px >= b.x - tol && px <= b.x + b.w + tol && py >= b.y - tol && py <= b.y + b.h + tol)
+          return i;
+        break;
+      }
+      case "step": {
+        const { d } = stepBadgeSize(s.width, scale, String(s.seq ?? 1).length);
+        if (Math.hypot(px - s.x, py - s.y) <= d / 2 + tol) return i;
+        break;
+      }
+      case "mosaic":
+      case "blur": {
+        if (px >= s.x - tol && px <= s.x + s.w + tol && py >= s.y - tol && py <= s.y + s.h + tol)
+          return i;
+        break;
+      }
+    }
+  }
+  return null;
+}
+
+/** 滚轮逐档调节单个标记（2026-10-30 定案：悬停指哪调哪）。dir = +1 增大 /
+ *  -1 减小；返回调节后的拷贝 + HUD 文案；无连续可调维度的图形返回 null。
+ *  各类型量程与步长：
+ *  线形（矩形/椭圆/箭头/画笔/马克笔）width 1~30 步 1；
+ *  文字字号 10~80 步 2；序号圈 1~20 步 1（直径 16+w×2.6 css）；
+ *  马赛克格子 2~20 步 1；模糊不透明度 15%~100% 步 5% */
+export function adjustShapeProp(
+  s: Shape,
+  dir: 1 | -1,
+): { shape: Shape; label: string } | null {
+  const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+  switch (s.type) {
+    case "rect":
+    case "ellipse":
+    case "arrow":
+    case "pen":
+    case "marker": {
+      const w = clamp(s.width + dir, 1, 30);
+      return { shape: { ...s, width: w }, label: `线宽 ${w}px` };
+    }
+    case "text": {
+      const w = clamp(s.width + dir * 2, 10, 80);
+      return { shape: { ...s, width: w }, label: `字号 ${w}px` };
+    }
+    case "step": {
+      const w = clamp(s.width + dir, 1, 20);
+      return {
+        shape: { ...s, width: w },
+        label: `序号圈 ${Math.round(16 + w * 2.6)}px`,
+      };
+    }
+    case "mosaic": {
+      const w = clamp(s.width + dir, 2, 20);
+      return { shape: { ...s, width: w }, label: `马赛克 ${Math.max(4, w * 3)}px 格` };
+    }
+    case "blur": {
+      const a = clamp((s.alpha ?? 1) * 100 + dir * 5, 15, 100) / 100;
+      return {
+        shape: { ...s, alpha: a },
+        label: `模糊不透明度 ${Math.round(a * 100)}%`,
+      };
+    }
+    default:
+      return null;
+  }
 }
 
 /** 画布内容色板（QQ 标注惯用色系） */
@@ -612,6 +792,8 @@ export function drawShape(
       ctx.beginPath();
       ctx.rect(s.x + ox, s.y + oy, s.w, s.h);
       ctx.clip();
+      // 滚轮可调不透明度（缺省 1）：部分透明 = 原图隐约透出的毛玻璃弱化
+      ctx.globalAlpha = s.alpha ?? 1;
       ctx.filter = `blur(${Math.max(3, s.width * scale * 1.5)}px)`;
       // 外扩绘制避免边缘泛出透明晕
       const m = s.width * scale * 3;
