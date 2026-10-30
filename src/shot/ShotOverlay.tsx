@@ -2182,6 +2182,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             >
               {panel.kind === "pen" && (
                 <div className="np-shot-pal-row">
+                  <span className="np-shot-pal-lab">笔型</span>
                   {(["pen", "marker"] as const).map((p) => (
                     <button
                       key={p}
@@ -2200,6 +2201,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               )}
               {panel.kind === "arrow" && (
                 <div className="np-shot-pal-row">
+                  <span className="np-shot-pal-lab">头部</span>
                   {(["line", "solid", "hollow"] as ArrowHead[]).map((h) => (
                     <button
                       key={`h-${h}`}
@@ -2214,6 +2216,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               )}
               {panel.kind === "arrow" && (
                 <div className="np-shot-pal-row">
+                  <span className="np-shot-pal-lab">线条</span>
                   {(["solid", "dashed", "curve"] as ArrowLine[]).map((l) => (
                     <button
                       key={`l-${l}`}
@@ -2229,6 +2232,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               {/* 双向箭头（2026-10-30 标记增强）：首尾同头部样式 */}
               {panel.kind === "arrow" && (
                 <div className="np-shot-pal-row">
+                  <span className="np-shot-pal-lab">方向</span>
                   <button
                     className={`np-shot-tool ${!twoWay ? "on" : ""}`}
                     data-tip="单向"
@@ -2250,6 +2254,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               {panel.kind === "shape" && (
                 <>
                   <div className="np-shot-pal-row">
+                  <span className="np-shot-pal-lab">填充</span>
                     <button
                       className={`np-shot-tool ${!fillOn ? "on" : ""}`}
                       data-tip="空心"
@@ -2276,6 +2281,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                         }}
                       />
                     </button>
+                  </div>
+                  <div className="np-shot-pal-row">
+                    <span className="np-shot-pal-lab">线型</span>
                     <button
                       className={`np-shot-tool ${!dashOn ? "on" : ""}`}
                       data-tip="实线"
@@ -2293,6 +2301,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                   </div>
                   {tool === "rect" && (
                     <div className="np-shot-slider">
+                      <span className="np-shot-pal-lab">圆角</span>
                       <input
                         type="range"
                         min={0}
@@ -2302,7 +2311,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                         onChange={(e) => setRectRadius(Number(e.target.value))}
                       />
                       <span className="np-shot-slider-val">
-                        {rectRadius === 0 ? "直角" : `圆角 ${rectRadius}px`}
+                        {rectRadius === 0 ? "直角" : `${rectRadius}px`}
                       </span>
                     </div>
                   )}
@@ -2310,7 +2319,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               )}
               {/* 文字样式（2026-10-30 标记增强）：高亮底色 / 粗体 / 斜体 */}
               {panel.kind === "text" && (
+                <>
                 <div className="np-shot-pal-row">
+                  <span className="np-shot-pal-lab">底色</span>
                   <button
                     className={`np-shot-tool ${!txtHL ? "on" : ""}`}
                     data-tip="无底色"
@@ -2325,6 +2336,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                   >
                     <span className="np-shot-tglyph np-shot-tglyph-hl">A</span>
                   </button>
+                  </div>
+                  <div className="np-shot-pal-row">
+                    <span className="np-shot-pal-lab">字样</span>
                   <button
                     className={`np-shot-tool ${txtBold ? "on" : ""}`}
                     data-tip="粗体"
@@ -2344,10 +2358,12 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                     </span>
                   </button>
                 </div>
+                </>
               )}
               {/* 序号徽标形状（2026-10-30 标记增强）：圆形 / 方形 / 纯数字 */}
               {panel.kind === "step" && (
                 <div className="np-shot-pal-row">
+                  <span className="np-shot-pal-lab">形状</span>
                   {(
                     [
                       ["circle", "圆形"],
@@ -2380,6 +2396,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                   选中即切 tool 并收面板）+ 区域形状行 */}
               {panel.kind === "mask" && (
                 <div className="np-shot-pal-row">
+                  <span className="np-shot-pal-lab">类型</span>
                   {(["mosaic", "blur"] as const).map((m) => (
                     <button
                       key={m}
@@ -2399,6 +2416,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               {/* 马赛克/模糊区域形状（2026-10-30 标记增强）：方形 / 圆形 */}
               {panel.kind === "mask" && (
                 <div className="np-shot-pal-row">
+                  <span className="np-shot-pal-lab">区域</span>
                   <button
                     className={`np-shot-tool ${!maskRound ? "on" : ""}`}
                     data-tip="方形区域"
@@ -2416,6 +2434,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                 </div>
               )}
               <div className="np-shot-pal-row">
+                {panel.kind === "color" && <span className="np-shot-pal-lab">颜色</span>}
                 {panel.kind === "color" &&
                   SHOT_PALETTE.map((c) => (
                     <button
@@ -2429,6 +2448,11 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                       }}
                     />
                   ))}
+                {panel.kind === "width" && (
+                  <span className="np-shot-pal-lab">
+                    {tool === "text" ? "字号" : tool === "mosaic" || tool === "blur" ? "强度" : "线宽"}
+                  </span>
+                )}
                 {panel.kind === "width" &&
                   strokeBtns.map((w) => (
                     <button
@@ -2443,6 +2467,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                       <span className="np-shot-wdot" style={{ width: w.px, height: w.px }} />
                     </button>
                   ))}
+                {panel.kind === "border" && <span className="np-shot-pal-lab">边框色</span>}
                 {panel.kind === "border" && (
                   <div className="np-shot-slider np-shot-bdcolors">
                     {BORDER_PALETTE.map((c) => (
@@ -2461,6 +2486,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                 )}
                 {(panel.kind === "shadow" || panel.kind === "border") && (
                   <div className="np-shot-slider">
+                    <span className="np-shot-pal-lab">
+                      {panel.kind === "shadow" ? "阴影" : "边框"}
+                    </span>
                     <input
                       type="range"
                       min={0}

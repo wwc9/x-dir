@@ -4667,6 +4667,14 @@ mark.np-gsearch-mark {
   align-items: center;
   gap: 8px;
 }
+/* 弹层面板行标签（2026-10-30 用户定案：让用户知道每行设置什么参数）：
+ * 固定 36px 列宽对齐各行，muted 小字 */
+.np-shot-pal-lab {
+  flex: none;
+  width: 36px;
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+}
 .np-shot-grip {
   /* 全高拉长的拖拽把手条（圆角只留左缘，与工具栏外形衔接） */
   display: grid;
