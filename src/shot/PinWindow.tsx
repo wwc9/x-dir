@@ -10,8 +10,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { PhysicalSize, getCurrentWindow } from "@tauri-apps/api/window";
+import { Copy, Expand, Save, X } from "lucide-react";
 
 import { api } from "../lib/ipc";
+import { initTooltip } from "../lib/tooltip";
+import { DENSITY } from "../lib/tokens";
+import { AppIcon } from "../components/AppIcon";
 
 export interface PinBoot {
   window: "pin";
@@ -45,6 +49,8 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
     // index.css 的 body 背景会在阴影余量区铺出不透明底
     document.documentElement.style.background = "transparent";
     document.body.style.background = "transparent";
+    // 顶部按钮条 data-tip 气泡（与主界面/覆盖窗同一套委托）
+    initTooltip();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") void win.close().catch(() => undefined);
     };
@@ -140,6 +146,19 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
     [dataUrl],
   );
 
+  // 顶部按钮条（2026-10-30 参考图定案：复制/保存/还原 100%/关闭 四钮，
+  // 悬停整窗浮现、离开 180ms 后退场——常显会遮挡贴图内容；不抢拖拽）
+  const [barOn, setBarOn] = useState(false);
+  const barHideTimer = useRef<number | null>(null);
+  const onRootEnter = useCallback(() => {
+    if (barHideTimer.current !== null) window.clearTimeout(barHideTimer.current);
+    setBarOn(true);
+  }, []);
+  const onRootLeave = useCallback(() => {
+    if (barHideTimer.current !== null) window.clearTimeout(barHideTimer.current);
+    barHideTimer.current = window.setTimeout(() => setBarOn(false), 180);
+  }, []);
+
   return (
     <div
       className="np-shot-pin"
@@ -148,6 +167,8 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
       onPointerDown={onPointerDown}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
+      onPointerEnter={onRootEnter}
+      onPointerLeave={onRootLeave}
       onDoubleClick={() => void win.close().catch(() => undefined)}
       onContextMenu={(e) => {
         e.preventDefault();
@@ -157,6 +178,26 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
         });
       }}
     >
+      {barOn && (
+        <div
+          className="np-shot-pinbar"
+          data-tip=""
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <button data-tip="复制图像" onClick={() => void onMenuAction("copy")}>
+            <AppIcon icon={Copy} size={DENSITY.iconSm} />
+          </button>
+          <button data-tip="保存为…" onClick={() => void onMenuAction("save")}>
+            <AppIcon icon={Save} size={DENSITY.iconSm} />
+          </button>
+          <button data-tip="还原 100%" onClick={() => applyZoom(1)}>
+            <AppIcon icon={Expand} size={DENSITY.iconSm} />
+          </button>
+          <button data-tip="关闭 · Esc / 双击同效" onClick={() => void win.close().catch(() => undefined)}>
+            <AppIcon icon={X} size={DENSITY.iconSm} />
+          </button>
+        </div>
+      )}
       <img
         ref={imgRef}
         src={convertFileSrc(boot.file)}

@@ -4853,6 +4853,39 @@ mark.np-gsearch-mark {
   cursor: move;
   background: transparent;
 }
+/* 贴图顶部按钮条（2026-10-30 参考图定案：复制/保存/还原 100%/关闭）：
+ * 悬停整窗浮现、离开退场；surface 小圆角条悬浮于贴图顶部内侧居中 */
+.np-shot-pinbar {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--np-radius-lg);
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  box-shadow: var(--np-shadow);
+}
+.np-shot-pinbar > button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--np-radius);
+  background: transparent;
+  color: var(--np-fg);
+  cursor: pointer;
+}
+.np-shot-pinbar > button:hover {
+  background: var(--np-hover);
+}
 .np-shot-pin img {
   display: block;
   pointer-events: none;
