@@ -1,7 +1,12 @@
 // 贴图窗（§3.6，label pin-*）：截图选区钉在屏幕上的置顶小窗（Snipaste 惯例）。
-// 左键拖动移动、滚轮缩放（左上角锚定）、Alt+滚轮调不透明度、双击 / Esc 关闭、
-// 右键自绘小菜单（复制图像 / 保存为… / 关闭）。窗口物理尺寸与图像显示尺寸
-// 由前端经 window API 同步（capabilities 已放行 set-position/set-size）。
+// 拖动 = rAF 合帧 setPosition（2026-10-30「拖动卡顿」修复：旧实现逐
+// pointermove 发 IPC——高轮询鼠标 125-250 次/秒的请求积压在 WebView2 IPC
+// 队列里成批滞后生效，表现为拖动卡顿；现在每帧最多发一次、只发最新位置，
+// 消除积压。原生 WM_NCLBUTTONDOWN(HTCAPTION) 方案在 WebView 宿主实测被
+// 子窗口鼠标重捕获竞态打断（走几步就停），不可用）、滚轮缩放（左上角
+// 锚定）、Alt+滚轮调不透明度、双击 / Esc 关闭、右键自绘小菜单（复制图像 /
+// 保存为… / 关闭）。窗口物理尺寸与图像显示尺寸由前端经 window API 同步
+// （capabilities 已放行 set-position/set-size）。
 import { useCallback, useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { PhysicalPosition, PhysicalSize, getCurrentWindow } from "@tauri-apps/api/window";
@@ -30,18 +35,16 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
   const [zoom, setZoom] = useState(boot.zoom ?? 1);
   const [opacity, setOpacity] = useState(1);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  const posRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const dragRef = useRef<{ lx: number; ly: number } | null>(null);
   const zoomRef = useRef(boot.zoom ?? 1);
   const imgRef = useRef<HTMLImageElement>(null);
+  /** 拖动状态：pointermove 累计目标位置，rAF 每帧最多发一次 setPosition */
+  const dragRef = useRef<{ lx: number; ly: number } | null>(null);
+  const posRef = useRef<{ x: number; y: number } | null>(null);
+  const rafRef = useRef(0);
   /** 阴影余量（物理像素；CSS padding = pad/scale） */
   const pad = boot.pad ?? 0;
 
   useEffect(() => {
-    void win
-      .outerPosition()
-      .then((p) => (posRef.current = { x: p.x, y: p.y }))
-      .catch(() => undefined);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") void win.close().catch(() => undefined);
     };
@@ -96,27 +99,60 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
       if (e.button !== 0) return;
       e.currentTarget.setPointerCapture(e.pointerId);
       dragRef.current = { lx: e.clientX, ly: e.clientY };
+      // 权威起点取窗口实际外框位置（防止本地推算漂移）
+      void win
+        .outerPosition()
+        .then((p) => {
+          posRef.current = { x: p.x, y: p.y };
+        })
+        .catch(() => undefined);
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [menu],
   );
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
       const d = dragRef.current;
-      if (!d) return;
-      // 累计位移（CSS→物理）驱动窗口移动，posRef 自持权威位置避免逐帧查询
-      const dx = (e.clientX - d.lx) * boot.scale;
-      const dy = (e.clientY - d.ly) * boot.scale;
+      const pos = posRef.current;
+      if (!d || !pos) return;
+      // 累计位移（CSS→物理）；一帧内多次 pointermove 只保留最新目标，
+      // rAF 到点统一发一次 setPosition——逐事件发 IPC 会积压成批滞后（卡顿）
+      pos.x += (e.clientX - d.lx) * boot.scale;
+      pos.y += (e.clientY - d.ly) * boot.scale;
       d.lx = e.clientX;
       d.ly = e.clientY;
-      posRef.current = { x: posRef.current.x + dx, y: posRef.current.y + dy };
-      void win
-        .setPosition(new PhysicalPosition(posRef.current.x, posRef.current.y))
-        .catch(() => undefined);
+      if (!rafRef.current) {
+        rafRef.current = requestAnimationFrame(() => {
+          rafRef.current = 0;
+          const p = posRef.current;
+          if (p) {
+            void win
+              .setPosition(new PhysicalPosition(Math.round(p.x), Math.round(p.y)))
+              .catch(() => undefined);
+          }
+        });
+      }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [boot.scale],
   );
+
+  const endDrag = useCallback(() => {
+    dragRef.current = null;
+    // 松手先补发最后一帧（挂起的 rAF 直接取消会丢末端位移，手感回跳）
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = 0;
+      const p = posRef.current;
+      if (p) {
+        void win
+          .setPosition(new PhysicalPosition(Math.round(p.x), Math.round(p.y)))
+          .catch(() => undefined);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const dataUrl = useCallback(async (): Promise<string | null> => {
     const img = imgRef.current;
@@ -157,7 +193,8 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
       onWheel={onWheel}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
-      onPointerUp={() => (dragRef.current = null)}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
       onDoubleClick={() => void win.close().catch(() => undefined)}
       onContextMenu={(e) => {
         e.preventDefault();
