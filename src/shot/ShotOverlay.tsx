@@ -14,6 +14,7 @@
 // 气泡（lib/tooltip 委托 data-tip/data-kbd，样式与 120ms 速度完全一致；
 // 2026-10-28 定案，替代原生 title）。
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import {
   Check,
   Circle,
@@ -792,11 +793,28 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         // 保存/贴图零 IPC 快路优先：只传选区整数矩形、由 Rust 进程内裁剪；
         // 任一环节失败回落下方合成直传 / dataURL 路径
         if (action === "pin") {
+          // 闪动修复（2026-10-30）：先挂 pin-shown 监听再触发建窗——贴图窗
+          // 在专用线程建（WebView2 数百毫秒），期间蒙层保持在场盖住裸奔期；
+          // Rust 在贴图窗 show 后发 pin-shown，到达（或 2.5s 兜底）才收蒙层，
+          // 视觉上贴图原地顶替选区、遮罩随后退场。旧时序点击即收蒙层 =
+          // 整屏遮罩闪没 + 贴图迟到半秒的双重闪动
+          let pinClosed = false;
+          let unPin: (() => void) | null = null;
+          const closeAfterPin = () => {
+            if (pinClosed) return;
+            pinClosed = true;
+            unPin?.();
+            closeWindow();
+          };
+          void listen<void>("pin-shown", closeAfterPin).then((u) => {
+            if (pinClosed) u();
+            else unPin = u;
+          });
+          window.setTimeout(closeAfterPin, 2500);
           if (noMarks) {
             try {
               await api.shotPinCrop(rx, ry, rw, rh, boot.mx + rx, boot.my + ry);
-              closeWindow();
-              return;
+              return; // 收场交 pin-shown / 兜底定时器
             } catch {
               // 落到下方直传/dataURL 路径
             }
@@ -811,15 +829,13 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               .getImageData(0, 0, c.width, c.height);
             try {
               await api.shotPinRaw(img.data, c.width, c.height, boot.mx + rx, boot.my + ry);
-              closeWindow();
-              return;
+              return; // 同上
             } catch {
               // 落到下方 dataURL 路径
             }
           }
           const pinUrl = cropCanvas(s)?.toDataURL("image/png");
           await api.shotPin(pinUrl!, boot.mx + rx, boot.my + ry, rw, rh);
-          closeWindow();
         } else {
           let saved: string | null = null;
           let staged = false; // 暂存成功 = 取消对话框时不能回落（否则弹两次对话框）

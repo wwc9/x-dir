@@ -988,9 +988,13 @@ fn spawn_pin_window(
     w: i32,
     h: i32,
 ) -> Result<(), String> {
-    // 建窗前先收蒙层（2026-10-27 E2E 实证）：全屏置顶蒙层在场时建窗重绘/焦点
-    // 事件重入会让建窗卡死；先收场再建窗，视觉也自然——贴图落屏时蒙层恰好退场
-    end_session(app);
+    // 2026-10-30 闪动修复：不再先收蒙层。旧时序「贴图命令先 end_session →
+    // 专用线程建窗（WebView2 数百毫秒）→ 贴图落位」期间蒙层已退场，整屏
+    // 遮罩瞬间消失 + 贴图迟到 = 双重闪动。新时序：蒙层保持在场盖住建窗期，
+    // 贴图窗 show 后发 pin-shown 事件，前端收到（或 2.5s 兜底）才收蒙层——
+    // 视觉上贴图原地顶替选区、遮罩随后退场。死锁史（2026-10-27/30）均为主
+    // 循环路径 build 内联/run_on_main_thread；专用线程 build 与蒙层在场无
+    // 冲突（E2E 复验：贴图窗 10s 可见性轮询即死锁探测器）
     spawn_pin_zoomed(
         app,
         &PinSpawn {
@@ -1038,7 +1042,8 @@ fn pin_shadow_pad(scale: f64) -> i32 {
 /// 到 about:blank 后握手卡死），后续覆盖窗页面失联（下一会话 5s 看门狗
 /// 连挂）、看门狗 destroy 后进程全挂（Responding:False）。专用线程让
 /// build 的内部派发落到空闲主循环上完成（与启动期 ensure_shot_window
-/// 同效）。60ms 延迟让调用方先行收场的 set_position 先落地
+/// 同效）。蒙层在场不参与该死锁链（2026-10-30 闪动修复 E2E 复验）；窗
+/// 口 show 后发 pin-shown，前端据此收蒙层（贴图原地顶替选区的时序）
 pub(crate) fn spawn_pin_zoomed(app: &AppHandle, p: &PinSpawn) -> Result<(), String> {
     let label = format!("pin-{}", millis());
     let scale = monitor_at(p.x + p.dw / 2, p.y + p.dh / 2)
@@ -1060,7 +1065,6 @@ pub(crate) fn spawn_pin_zoomed(app: &AppHandle, p: &PinSpawn) -> Result<(), Stri
     std::thread::Builder::new()
         .name("pin-window".into())
         .spawn(move || {
-            std::thread::sleep(Duration::from_millis(60));
             let spec = PinWindowSpec {
                 label: &label,
                 boot: &boot,
@@ -1140,6 +1144,9 @@ fn build_pin_window(app: &AppHandle, spec: &PinWindowSpec) -> Result<(), String>
     });
     // 贴图不抢焦点（Snipaste 惯例）：贴完继续手头工作
     win.show().map_err(|e| e.to_string())?;
+    // 上屏回执（2026-10-30 闪动修复）：覆盖层据此收蒙层——先 show 后收，
+    // 贴图原地顶替选区、遮罩随后退场；滚动结果窗无监听者，事件静默无害
+    let _ = app.emit("pin-shown", label);
     log::debug!("贴图窗已建并 show：label={label} 图像区=({x},{y},{w},{h}) pad={pad}");
     Ok(())
 }
