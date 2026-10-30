@@ -694,7 +694,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               // 落到下方直传/dataURL 路径
             }
           }
-          const c = exportCanvas(s);
+          // 贴图 = 精确选区内容（cropCanvas，含标注）：窗口尺寸/落位与所见
+          // 选区逐像素一致——不走 exportCanvas（阴影/边框装饰会外扩画布，
+          // 贴图比选区大一圈且偏移，2026-10-30 定案装饰只属于复制/保存）
+          const c = cropCanvas(s);
           if (c) {
             const img = c
               .getContext("2d", { willReadFrequently: true })!
@@ -707,7 +710,8 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               // 落到下方 dataURL 路径
             }
           }
-          await api.shotPin(exportDataUrl(s)!, boot.mx + rx, boot.my + ry, rw, rh);
+          const pinUrl = cropCanvas(s)?.toDataURL("image/png");
+          await api.shotPin(pinUrl!, boot.mx + rx, boot.my + ry, rw, rh);
           closeWindow();
         } else {
           let saved: string | null = null;

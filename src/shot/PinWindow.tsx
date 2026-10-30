@@ -78,6 +78,10 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
+      // 菜单内点击放行（不吞）：先于 click 卸载菜单会让按钮 click 落空——
+      // 2026-10-30 实测「右键 → 关闭贴图」失效的根因（pointerdown 关菜单
+      // → 按钮随菜单卸载 → click 无人接）。菜单外的点击照旧收起菜单
+      if ((e.target as Element).closest(".np-shot-pinmenu")) return;
       if (menu) {
         setMenu(null);
         return;
@@ -164,8 +168,10 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
         // 首帧就绪回执：Rust 此时才 show（提前 show 闪黑屏）
         onLoad={() => void api.shotReady().catch(() => undefined)}
         style={{
-          width: boot.w * zoom,
-          height: boot.h * zoom,
+          // 物理像素 → CSS 像素（÷scale）：boot.w/h 是物理数，直接作 CSS 宽
+          // 在 150% 缩放下会 1.5× 溢出窗口被裁（2026-10-30 修）
+          width: (boot.w * zoom) / boot.scale,
+          height: (boot.h * zoom) / boot.scale,
           opacity,
         }}
       />
