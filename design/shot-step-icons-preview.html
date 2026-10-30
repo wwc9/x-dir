@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>x-dir · 序号标记图标候选</title>
+<style>
+  :root {
+    --bg:#0b0f14; --surface:#151a21; --surface2:#1d242e; --border:#2a3340;
+    --fg:#e5e7eb; --muted:#9ca3af; --accent:#3b82f6;
+  }
+  * { box-sizing:border-box; margin:0; }
+  body {
+    background:var(--bg); color:var(--fg); font-size:13px; padding:32px 40px;
+    font-family:system-ui,"Segoe UI","Microsoft YaHei",sans-serif;
+  }
+  h1 { font-size:17px; margin-bottom:6px; }
+  .sub { color:var(--muted); margin-bottom:28px; }
+  .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+  .card {
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:20px 16px 16px; display:flex; flex-direction:column; gap:14px;
+    position:relative;
+  }
+  .card.recommend::after {
+    content:"推荐"; position:absolute; top:-9px; right:12px;
+    background:var(--accent); color:#fff; font-size:11px; padding:1px 8px;
+    border-radius:999px;
+  }
+  .card.current::after {
+    content:"当前"; position:absolute; top:-9px; right:12px;
+    background:var(--surface2); color:var(--muted); font-size:11px;
+    padding:1px 8px; border-radius:999px; border:1px solid var(--border);
+  }
+  .big { display:flex; justify-content:center; padding:14px 0 6px; }
+  .big svg { width:72px; height:72px; color:var(--fg); }
+  .name { font-weight:600; font-size:14px; text-align:center; }
+  .en { color:var(--muted); font-size:11px; text-align:center; margin-top:2px; }
+  .desc { color:var(--muted); line-height:1.6; min-height:60px; }
+  .tb {
+    background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+    display:flex; align-items:center; justify-content:center; gap:2px; padding:4px;
+  }
+  .tb svg { width:20px; height:20px; color:var(--fg); }
+  .tb svg.target { color:var(--accent); }
+  .tb .sep { width:1px; height:18px; background:var(--border); margin:0 4px; }
+  .tb-cap { color:var(--muted); font-size:11px; text-align:center; margin-top:6px; }
+  .lucide { fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .lucide text { stroke:none; fill:currentColor; font-weight:700; font-family:inherit; text-anchor:middle; }
+</style>
+</head>
+<body>
+<h1>序号标记 · 图标候选</h1>
+<div class="sub">三套候选 + 当前图标对照。下方缩略条模拟标注条行 1 真实环境（文字 · <b style="color:var(--accent)">候选</b> · 马赛克），用于对比尺寸与笔画密度是否和邻钮一致。</div>
+
+<div class="grid">
+  <!-- A. 双圆数字徽（推荐） -->
+  <div class="card recommend">
+    <div class="big">
+      <svg class="lucide" viewBox="0 0 24 24">
+        <circle cx="9" cy="9" r="5.4"/>
+        <circle cx="15.2" cy="15.2" r="5.4"/>
+        <text x="9" y="9.9" font-size="7" dominant-baseline="middle">1</text>
+        <text x="15.2" y="16.1" font-size="7" dominant-baseline="middle">2</text>
+      </svg>
+    </div>
+    <div>
+      <div class="name">双圆数字徽</div>
+      <div class="en">①② 叠放（自绘）</div>
+    </div>
+    <div class="desc">工具产物的直译：点一下落一枚数字圆徽、再点一枚递增。双圆对角叠放剪影独特，与邻钮（文字/马赛克）零混淆；20px 下两枚数字 7px 仍可辨。</div>
+    <div>
+      <div class="tb">
+        <svg class="lucide" viewBox="0 0 24 24"><path d="M4 20V16a4 4 0 0 1 4-4h8"/><path d="M16 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/><path d="M4 4l.01.01M8 4l.01.01M12 4l.01.01"/></svg>
+        <div class="sep"></div>
+        <svg class="lucide target" viewBox="0 0 24 24">
+          <circle cx="9" cy="9" r="5.4"/>
+          <circle cx="15.2" cy="15.2" r="5.4"/>
+          <text x="9" y="9.9" font-size="7" dominant-baseline="middle">1</text>
+          <text x="15.2" y="16.1" font-size="7" dominant-baseline="middle">2</text>
+        </svg>
+        <svg class="lucide" viewBox="0 0 24 24"><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="12" r="1.2"/><circle cx="8" cy="16" r="1.2"/><circle cx="12" cy="8" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="16" r="1.2"/><circle cx="16" cy="8" r="1.2"/><circle cx="16" cy="12" r="1.2"/><circle cx="16" cy="16" r="1.2"/></svg>
+      </div>
+      <div class="tb-cap">工具栏实尺寸（20px）· 行 1 邻钮</div>
+    </div>
+  </div>
+
+  <!-- B. 单徽 + 放置加号 -->
+  <div class="card">
+    <div class="big">
+      <svg class="lucide" viewBox="0 0 24 24">
+        <circle cx="10" cy="13.5" r="6.6"/>
+        <text x="10" y="14.5" font-size="8.5" dominant-baseline="middle">1</text>
+        <path d="M18 2.5v5M15.5 5h5"/>
+      </svg>
+    </div>
+    <div>
+      <div class="name">单徽 + 放置加号</div>
+      <div class="en">①+（自绘）</div>
+    </div>
+    <div class="desc">动作语义：点按放置数字徽（角上 + 号）。单徽数字 8.5px 在 20px 下最清晰；但 + 角标与「新增/添加」类图标通用语撞型，序列感弱于 A。</div>
+    <div>
+      <div class="tb">
+        <svg class="lucide" viewBox="0 0 24 24"><path d="M4 20V16a4 4 0 0 1 4-4h8"/><path d="M16 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/><path d="M4 4l.01.01M8 4l.01.01M12 4l.01.01"/></svg>
+        <div class="sep"></div>
+        <svg class="lucide target" viewBox="0 0 24 24">
+          <circle cx="10" cy="13.5" r="6.6"/>
+          <text x="10" y="14.5" font-size="8.5" dominant-baseline="middle">1</text>
+          <path d="M18 2.5v5M15.5 5h5"/>
+        </svg>
+        <svg class="lucide" viewBox="0 0 24 24"><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="12" r="1.2"/><circle cx="8" cy="16" r="1.2"/><circle cx="12" cy="8" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="16" r="1.2"/><circle cx="16" cy="8" r="1.2"/><circle cx="16" cy="12" r="1.2"/><circle cx="16" cy="16" r="1.2"/></svg>
+      </div>
+      <div class="tb-cap">工具栏实尺寸（20px）· 行 1 邻钮</div>
+    </div>
+  </div>
+
+  <!-- C. 递进三圆阶梯 -->
+  <div class="card">
+    <div class="big">
+      <svg class="lucide" viewBox="0 0 24 24">
+        <circle cx="5.5" cy="18" r="2.6"/>
+        <circle cx="11" cy="12.5" r="3.4"/>
+        <circle cx="17.5" cy="6" r="4.6"/>
+        <path d="M7.4 16.1 9.1 14.4M12.9 10.6 14.6 8.9" stroke-width="1.6"/>
+        <text x="17.5" y="7" font-size="6" dominant-baseline="middle">3</text>
+      </svg>
+    </div>
+    <div>
+      <div class="name">递进三圆阶梯</div>
+      <div class="en">1→2→3（自绘）</div>
+    </div>
+    <div class="desc">「自动递增序列」语义：三级阶梯从左下到右上，越点越大。剪影有上升趋势、独特；但前两级是无数字的点，20px 下「序号」含义需要脑补，信息密度靠最大一枚兜底。</div>
+    <div>
+      <div class="tb">
+        <svg class="lucide" viewBox="0 0 24 24"><path d="M4 20V16a4 4 0 0 1 4-4h8"/><path d="M16 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/><path d="M4 4l.01.01M8 4l.01.01M12 4l.01.01"/></svg>
+        <div class="sep"></div>
+        <svg class="lucide target" viewBox="0 0 24 24">
+          <circle cx="5.5" cy="18" r="2.6"/>
+          <circle cx="11" cy="12.5" r="3.4"/>
+          <circle cx="17.5" cy="6" r="4.6"/>
+          <path d="M7.4 16.1 9.1 14.4M12.9 10.6 14.6 8.9" stroke-width="1.6"/>
+          <text x="17.5" y="7" font-size="6" dominant-baseline="middle">3</text>
+        </svg>
+        <svg class="lucide" viewBox="0 0 24 24"><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="12" r="1.2"/><circle cx="8" cy="16" r="1.2"/><circle cx="12" cy="8" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="16" r="1.2"/><circle cx="16" cy="8" r="1.2"/><circle cx="16" cy="12" r="1.2"/><circle cx="16" cy="16" r="1.2"/></svg>
+      </div>
+      <div class="tb-cap">工具栏实尺寸（20px）· 行 1 邻钮</div>
+    </div>
+  </div>
+
+  <!-- D. ListOrdered（当前） -->
+  <div class="card current">
+    <div class="big">
+      <svg class="lucide" viewBox="0 0 24 24"><path d="M10 6h11"/><path d="M10 12h11"/><path d="M10 18h11"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>
+    </div>
+    <div>
+      <div class="name">有序列表</div>
+      <div class="en">ListOrdered（lucide · 当前）</div>
+    </div>
+    <div class="desc">行线 + 手写序号。泛「列表」语汇，与截图标注的「数字圆徽」产物形态不一致；左侧数字笔画细密，20px 下发糊。</div>
+    <div>
+      <div class="tb">
+        <svg class="lucide" viewBox="0 0 24 24"><path d="M4 20V16a4 4 0 0 1 4-4h8"/><path d="M16 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/><path d="M4 4l.01.01M8 4l.01.01M12 4l.01.01"/></svg>
+        <div class="sep"></div>
+        <svg class="lucide target" viewBox="0 0 24 24"><path d="M10 6h11"/><path d="M10 12h11"/><path d="M10 18h11"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>
+        <svg class="lucide" viewBox="0 0 24 24"><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="12" r="1.2"/><circle cx="8" cy="16" r="1.2"/><circle cx="12" cy="8" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="16" r="1.2"/><circle cx="16" cy="8" r="1.2"/><circle cx="16" cy="12" r="1.2"/><circle cx="16" cy="16" r="1.2"/></svg>
+      </div>
+      <div class="tb-cap">工具栏实尺寸（20px）· 行 1 邻钮</div>
+    </div>
+  </div>
+</div>
+
+<div class="note" style="margin-top:26px;color:var(--muted);line-height:1.8;border-top:1px solid var(--border);padding-top:16px;max-width:860px">
+  候选 A/B/C 均按 lucide 同风格自绘（24 viewBox / stroke 2 / 圆角端点 / currentColor，
+  数字用 text 无描边），lucide 现库无「数字圆徽」单图标（同 ScrollShotGlyph /
+  ArrowGlyph 自绘先例）。选定后实装替换 ShotOverlay 工具栏 ListOrdered。
+</div>
+</body>
+</html>
