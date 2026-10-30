@@ -28,7 +28,6 @@ import {
   PenLine,
   Pin,
   Save,
-  ScrollText,
   Square,
   Type,
   Undo2,
@@ -108,8 +107,7 @@ const ARROW_LINE_LABELS: Record<ArrowLine, string> = {
 };
 
 /** 箭头样式预览字形（28×16 SVG，currentColor 随按钮态着色；几何与
- *  annot.drawShape 同源——曲线控制点 / 头部两翼复用同一套纯函数） */
-function ArrowGlyph({ head, line }: { head: ArrowHead; line: ArrowLine }) {
+ *  annot.drawShape 同源——曲线控制点 / 头部两翼复用同一套纯函数） */function ArrowGlyph({ head, line }: { head: ArrowHead; line: ArrowLine }) {
   const f = (n: number) => Math.round(n * 10) / 10;
   const x1 = 3;
   const y1 = 13;
@@ -141,6 +139,30 @@ function ArrowGlyph({ head, line }: { head: ArrowHead; line: ArrowLine }) {
       ) : (
         <path d={tri} fill={head === "solid" ? "currentColor" : "none"} />
       )}
+    </svg>
+  );
+}
+
+/** 滚动截图图标（2026-10-30 用户定案样式：竖屏圆角矩形 + 内嵌上下双向
+ *  箭头 = 「选区内上下滚动拼接」）。lucide 现库无此组合单图标，按 lucide
+ *  同风格自绘（24 viewBox / stroke 2 / 圆角端点 / currentColor，同
+ *  ArrowGlyph 先例非 lucide 不走 AppIcon）；rect 几何取自 RectangleVertical */
+function ScrollShotGlyph() {
+  return (
+    <svg
+      className="np-shot-scroll-ic"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect width="12" height="20" x="6" y="2" rx="2" />
+      <path d="M12 6v12" />
+      <path d="m9 9 3-3 3 3" />
+      <path d="m9 15 3 3 3-3" />
     </svg>
   );
 }
@@ -1403,7 +1425,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               data-tip="滚动截图：滚轮下滚拼接长图"
               onClick={startScroll}
             >
-              <AppIcon icon={ScrollText} size={DENSITY.iconLg} />
+              <ScrollShotGlyph />
             </button>
             {/* 行尾三钮（2026-10-30 定案）：保存 → 关闭 → 复制并关闭 */}
             <button

@@ -4745,6 +4745,12 @@ mark.np-gsearch-mark {
   width: 28px;
   height: 16px;
 }
+/* 滚动截图图标（自绘字形，24 viewBox；尺寸对齐 DENSITY.iconLg 档） */
+.np-shot-scroll-ic {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
 /* 粗细/字号档位点 */
 .np-shot-bdcolors {
   gap: 5px;
