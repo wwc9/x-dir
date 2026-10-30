@@ -161,7 +161,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       },
       { id: "shot-copy", keys: ["Enter / 双击"], label: "截图：复制到剪贴板", scope: "system" },
       { id: "shot-pin", keys: ["Ctrl+P"], label: "截图：贴图（钉在屏幕上）", scope: "system" },
-      { id: "shot-undo", keys: ["Ctrl+Z / Ctrl+Y"], label: "截图：撤销 / 重做标注", scope: "system" },
+      { id: "shot-undo", keys: ["Ctrl+Z"], label: "截图：撤销标注", scope: "system" },
       {
         id: "shot-nudge",
         keys: ["WASD / 方向键"],

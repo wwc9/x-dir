@@ -163,7 +163,7 @@ const KEY_HINTS: [string, string][] = [
   ["Esc", "取消截图"],
   ["Enter", "复制并关闭"],
   ["Ctrl+P", "贴图"],
-  ["Ctrl+Z / Y", "撤销 / 重做"],
+  ["Ctrl+Z", "撤销"],
   ["Del", "删除标记"],
   ["Tab", "按住隐藏标注"],
   ["1-8", "标记换色"],
@@ -431,7 +431,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
    *  「摘最后一个图形」语义，滚轮编辑后 Ctrl+Z 会整删被调的图形而非回退
    *  参数——2026-10-30 滚轮编辑引入，快照模型对两类操作统一 */
   const [undoStack, setUndoStack] = useState<Shape[][]>([]);
-  const [redoStack, setRedoStack] = useState<Shape[][]>([]);
   const [editing, setEditing] = useState<{ x: number; y: number; value: string } | null>(null);
   const [savedTip, setSavedTip] = useState<string | null>(null);
   /** 拖拽尺寸 HUD 的自动清除定时器（pointermove 高频更新，到达静止后收起） */
@@ -976,37 +975,26 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     })();
   }, [busy, boot.mx, boot.my]);
 
-  // ── 撤销 / 重做 ──────────────────────────────────────────────────────────
-  // 快照模型：undo 恢复 undoStack 顶快照、当前态压入 redo；redo 对称。
-  // 两者都同步刷 live 层：redrawBase 不覆盖 live，若 live 有历史预览残影，
-  // 撤销删掉 base 图形后残影仍可见（看似"剩一条撤销不干净"）
+  // ── 撤销 ────────────────────────────────────────────────────────────────
+  // 快照模型：undo 恢复 undoStack 顶快照。同步刷 live 层：redrawBase 不覆
+  // 盖 live，若 live 有历史预览残影，撤销删掉 base 图形后残影仍可见（看
+  // 似"剩一条撤销不干净"）。重做已整体退役（2026-10-30 用户定案：工具钮
+  // 早移除、快捷键 Ctrl+Y/Ctrl+Shift+Z 亦弃，redoStack 随之删除）
   const undo = useCallback(() => {
     if (!undoStack.length) return;
     const snap = undoStack[undoStack.length - 1];
     setUndoStack((u) => u.slice(0, -1));
-    setRedoStack((r) => [...r, shapesRef.current]);
     setShapes(snap);
     hoverRef.current = null; // 快照回退后下标失效
     redrawLive();
   }, [undoStack, redrawLive]);
 
-  const redo = useCallback(() => {
-    if (!redoStack.length) return;
-    const snap = redoStack[redoStack.length - 1];
-    setRedoStack((r) => r.slice(0, -1));
-    setUndoStack((u) => [...u, shapesRef.current]);
-    setShapes(snap);
-    hoverRef.current = null;
-    redrawLive();
-  }, [redoStack, redrawLive]);
-
-  /** 落新图形 / 编辑前记账：压撤销快照 + 清重做（标准编辑器语义）。
+  /** 落新图形 / 编辑前记账：压撤销快照（编辑器单向历史语义）。
    *  滚轮调节按「一阵」合帧（600ms 内连滚只记首帧快照），否则每格滚轮
    *  一个撤销项会把栈灌满 */
   const wheelEditRef = useRef<{ at: number } | null>(null);
   const pushUndo = useCallback((cur: Shape[]) => {
     setUndoStack((u) => [...u, cur]);
-    setRedoStack([]);
   }, []);
   const noteWheelEdit = useCallback(() => {
     const now = Date.now();
@@ -1217,7 +1205,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         setShapes([]);
         shapesRef.current = [];
         setUndoStack([]);
-        setRedoStack([]);
         hoverRef.current = null;
         moveMarkRef.current = null;
         wheelEditRef.current = null;
@@ -1319,7 +1306,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       setShapes([]);
       shapesRef.current = [];
       setUndoStack([]);
-      setRedoStack([]);
       hoverRef.current = null;
       moveMarkRef.current = null;
       setMarkMenu(null);
@@ -1677,11 +1663,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         undo();
         return;
       }
-      if (ctrl && (e.key.toLowerCase() === "y" || (e.key.toLowerCase() === "z" && e.shiftKey))) {
-        e.preventDefault();
-        redo();
-        return;
-      }
       if (e.key === "Enter" && selRef.current) {
         e.preventDefault();
         void finish("copy");
@@ -1704,7 +1685,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       window.removeEventListener("keyup", onKeyUp);
       if (hiddenRef.current) hiddenRef.current = false; // 组件卸载兜底
     };
-  }, [exitShot, commitText, undo, redo, finish, redrawLive, busy, setAnnotHidden, delMark, recolorMark]);
+  }, [exitShot, commitText, undo, finish, redrawLive, busy, setAnnotHidden, delMark, recolorMark]);
 
   // ── 滚轮调节标记（2026-10-30 定案：悬停指哪调哪）────────────────────────
   // 光标悬停在哪个标记上滚轮就调哪个（shapeAt 线形命中描边带、面形命中包围
