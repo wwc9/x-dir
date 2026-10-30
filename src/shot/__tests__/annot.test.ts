@@ -295,19 +295,28 @@ describe("stepBadgeColor", () => {
 });
 
 describe("stepBadgeSize", () => {
-  it("直径随线宽与 scale 放大，字号 = 直径 54%", () => {
+  it("直径随线宽与 scale 放大，与位数无关（圈不被多位数撑大）", () => {
     const s1 = stepBadgeSize(4, 1, 1);
     expect(s1.d).toBeCloseTo((16 + 4 * 2.6) * 1, 5);
-    expect(s1.font).toBe(Math.round(s1.d * 0.54));
     const s15 = stepBadgeSize(4, 1.5, 1);
     expect(s15.d).toBeCloseTo(s1.d * 1.5, 5);
+    // 同线宽下 1/2/3 位直径完全一致
+    expect(stepBadgeSize(4, 1.5, 2).d).toBe(s15.d);
+    expect(stepBadgeSize(4, 1.5, 3).d).toBe(s15.d);
   });
 
-  it("多位数按位数加宽且字号不超过直径", () => {
+  it("单位数字号 = 直径 54%，多位数收缩仍塞得进圈", () => {
     const one = stepBadgeSize(4, 1.5, 1);
+    expect(one.font).toBe(Math.round(one.d * 0.54));
     const two = stepBadgeSize(4, 1.5, 2);
-    expect(two.d).toBeCloseTo(one.d * 1.18, 5);
-    expect(two.font).toBeLessThan(two.d);
+    const three = stepBadgeSize(4, 1.5, 3);
+    expect(two.font).toBeLessThanOrEqual(one.font);
+    expect(three.font).toBeLessThanOrEqual(two.font);
+    // 文本宽（≈字宽 0.58em×位数）不超过可容纳宽 0.78d（含取整余量 1px）
+    for (const s of [one, two, three]) {
+      expect(s.font * 0.58).toBeLessThanOrEqual(s.d * 0.78 + 1);
+    }
+    expect(three.font).toBeLessThan(three.d);
   });
 });
 

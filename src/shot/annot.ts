@@ -63,16 +63,18 @@ export function stepBadgeColor(fillHex: string): string {
   return l < 0.6 ? "#ffffff" : "#101010";
 }
 
-/** 序号徽标几何：直径 = (16 + 线宽×2.6)×scale（三档线宽 ≈ 21/26/34 css 观感），
- *  多位数按位数加宽（10+ 不挤压数字）；字号 = 直径×0.54（物理像素） */
+/** 序号徽标几何：直径 = (16 + 线宽×2.6)×scale 只随线宽档变化，**与位数
+ *  无关**（2026-10-30 二次定案：圈不被 10+/100+ 撑大，同尺寸圈视觉一致）；
+ *  多位数改为收缩字号塞进同一直径（数字字宽 ≈ 0.58em，可容纳文本宽
+ *  ≈ 0.78×直径），字号上限仍 = 直径×0.54（单位数观感） */
 export function stepBadgeSize(
   width: number,
   scale: number,
   digits: number,
 ): { d: number; font: number } {
-  const base = (16 + width * 2.6) * scale;
-  const d = base * (1 + 0.18 * Math.max(0, digits - 1));
-  return { d, font: Math.round(d * 0.54) };
+  const d = (16 + width * 2.6) * scale;
+  const font = Math.min(d * 0.54, (d * 0.78) / (Math.max(1, digits) * 0.58));
+  return { d, font: Math.round(font) };
 }
 
 /** 点到线段距离（命中测试用） */
