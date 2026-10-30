@@ -4977,6 +4977,62 @@ mark.np-gsearch-mark {
   background: color-mix(in srgb, currentColor 35%, transparent);
   border-radius: 2px;
 }
+/* 快捷键清单（2026-10-30 用户定案：选区遮罩区四角避让展示）：半透明黑
+ * 底 + 键帽方框两列（参考图口径）。画布覆盖层语义（同信息条 pill 的
+ * rgba 黑半透明先例），非 UI token 体系；pointer-events 不挡画布 */
+.np-shot-keys {
+  position: fixed;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--np-radius-lg);
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+.np-shot-keys-measure {
+  visibility: hidden;
+  left: 12px;
+  top: 12px;
+}
+.np-shot-keys.lt {
+  left: 12px;
+  top: 12px;
+}
+.np-shot-keys.rt {
+  right: 12px;
+  top: 12px;
+}
+.np-shot-keys.lb {
+  left: 12px;
+  bottom: 12px;
+}
+.np-shot-keys.rb {
+  right: 12px;
+  bottom: 12px;
+}
+.np-shot-keys-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 22px;
+}
+.np-shot-kbd {
+  min-width: 54px;
+  padding: 1px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  white-space: nowrap;
+}
+.np-shot-keys-txt {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+}
 
 /* 滚动截图控制条（label shot-bar，停靠选区正下方）、侧边预览窗（label
    shot-scroll）、选区框窗（label shot-frame，整窗点击穿透只画边框）与结果窗

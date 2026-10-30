@@ -65,6 +65,7 @@ import {
   resizeSel,
   shapeAt,
   shapeBounds,
+  keysCorner,
   translateShape,
   type ShotTool,
 } from "./annot";
@@ -155,6 +156,21 @@ const ARROW_LINE_LABELS: Record<ArrowLine, string> = {
     </svg>
   );
 }
+
+/** 快捷键清单行（键帽 + 说明；2026-10-30 用户定案：展示在选区遮罩
+ *  黑色区域，四角避让选区——keysCorner 选角） */
+const KEY_HINTS: [string, string][] = [
+  ["Esc", "取消截图"],
+  ["Enter", "复制并关闭"],
+  ["Ctrl+P", "贴图"],
+  ["Ctrl+Z / Y", "撤销 / 重做"],
+  ["Del", "删除标记"],
+  ["Tab", "按住隐藏标注"],
+  ["1-8", "标记换色"],
+  ["滚轮", "调线宽 / 尺寸"],
+  ["Shift", "正圆 / 正方"],
+  ["WASD", "平移选区"],
+];
 
 /** 滚动截图图标（2026-10-30 用户定案样式：竖屏圆角矩形 + 内嵌上下双向
  *  箭头 = 「选区内上下滚动拼接」）。lucide 现库无此组合单图标，按 lucide
@@ -1830,6 +1846,33 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     setTbPos({ left, top });
   }, [sel, ready, scale, boot.mw, boot.mh, shapes, tool, color, strokeW, textFont]);
 
+  // 快捷键清单（2026-10-30 用户定案）：选区确认后在遮罩区四角避让展示；
+  // 先隐藏渲染量实际尺寸，keysCorner 选第一个与选区不相交的角（全相交
+  // = 不展示），选区变化重算
+  const keysRef = useRef<HTMLDivElement>(null);
+  const [keysPos, setKeysPos] = useState<"lt" | "rt" | "lb" | "rb" | null>(null);
+  useLayoutEffect(() => {
+    const el = keysRef.current;
+    if (!el || !sel || following || busy) {
+      setKeysPos(null);
+      return;
+    }
+    setKeysPos(
+      keysCorner(
+        {
+          x: sel.x / scale,
+          y: sel.y / scale,
+          w: sel.w / scale,
+          h: sel.h / scale,
+        },
+        window.innerWidth,
+        window.innerHeight,
+        el.offsetWidth,
+        el.offsetHeight,
+      ),
+    );
+  }, [sel, following, busy, scale, ready]);
+
   // 工具栏拖动：按住非按钮区（容器空白/尺寸标签/分隔线）拖动，钳制屏内
   const onTbPointerDown = (e: React.PointerEvent) => {
     if ((e.target as Element).closest("button, .np-shot-palette")) return;
@@ -2469,6 +2512,22 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           <button onClick={() => markOp("front")}>置前</button>
           <button onClick={() => markOp("back")}>置后</button>
           <div className="np-shot-pinmenu-hint">拖动移位 · Alt+拖动克隆 · 1-8 换色 · Del 删除</div>
+        </div>
+      )}
+      {/* 快捷键清单：选区遮罩区四角避让（keysCorner 选角；未定角时隐藏
+          渲染供测量）；画布覆盖层语义 = 半透明黑底白字（同信息条 pill 口径，
+          非 UI token 体系） */}
+      {sel && !following && !busy && (
+        <div
+          ref={keysRef}
+          className={`np-shot-keys ${keysPos ?? "np-shot-keys-measure"}`}
+        >
+          {KEY_HINTS.map(([k, t]) => (
+            <div className="np-shot-keys-row" key={k}>
+              <span className="np-shot-kbd">{k}</span>
+              <span className="np-shot-keys-txt">{t}</span>
+            </div>
+          ))}
         </div>
       )}
       {following && !sel && !busy && (

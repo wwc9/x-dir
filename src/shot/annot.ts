@@ -194,6 +194,35 @@ export function translateShape(s: Shape, dx: number, dy: number): Shape {
   return { ...s, x: s.x + dx, y: s.y + dy };
 }
 
+/** 快捷键清单角位选择（2026-10-30 用户定案：清单展示在选区遮罩黑色区
+ *  域、四角取第一个与选区不相交者，全相交 = 不展示）。坐标全 CSS 像素
+ *  （选区物理坐标调用前已 ÷scale）；pw/ph = 清单实测尺寸 */
+export function keysCorner(
+  s: { x: number; y: number; w: number; h: number } | null,
+  vw: number,
+  vh: number,
+  pw: number,
+  ph: number,
+): "lt" | "rt" | "lb" | "rb" | null {
+  if (!s) return null;
+  const m = 12; // 距屏边
+  const gap = 8; // 与选区最小间距
+  const cands: ["lt" | "rt" | "lb" | "rb", number, number][] = [
+    ["lb", m, vh - ph - m],
+    ["rb", vw - pw - m, vh - ph - m],
+    ["lt", m, m],
+    ["rt", vw - pw - m, m],
+  ];
+  const sl = s.x - gap;
+  const st = s.y - gap;
+  const sr = s.x + s.w + gap;
+  const sb = s.y + s.h + gap;
+  for (const [id, x, y] of cands) {
+    if (x + pw < sl || x > sr || y + ph < st || y > sb) return id;
+  }
+  return null;
+}
+
 /** 纯数字序号的 bbox 估算（数字字宽 ≈0.58em，字高 1.2em 居中） */
 function stepPlainBox(s: Shape, scale: number): { x: number; y: number; w: number; h: number } {
   const fs = stepBadgeSize(s.width, scale, 1).d * 0.6;

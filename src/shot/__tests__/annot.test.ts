@@ -27,6 +27,7 @@ import {
   stepBadgeColor,
   stepBadgeSize,
   translateShape,
+  keysCorner,
   type Shape,
 } from "../annot";
 
@@ -517,6 +518,32 @@ describe("translateShape", () => {
     const s: Shape = { type: "step", x: 5, y: 5, w: 0, h: 0, color: "#fff", width: 4, seq: 1 };
     translateShape(s, 1, 1);
     expect(s.x).toBe(5);
+  });
+});
+
+describe("keysCorner", () => {
+  // 屏 2560×1440 css，清单约 220×260
+  it("中部选区：底部两角可用，左下优先", () => {
+    expect(keysCorner({ x: 666, y: 400, w: 480, h: 200 }, 2560, 1440, 220, 260)).toBe("lb");
+  });
+
+  it("左下被选区占住：落右下", () => {
+    // 选区压住左下角（含 gap 外扩）
+    expect(
+      keysCorner({ x: 0, y: 1000, w: 600, h: 440 }, 2560, 1440, 220, 260),
+    ).toBe("rb");
+  });
+
+  it("上半屏选区：底部两角可用（左下优先于右上）", () => {
+    expect(keysCorner({ x: 0, y: 0, w: 2560, h: 500 }, 2560, 1440, 220, 260)).toBe("lb");
+  });
+
+  it("选区近乎全屏：四角全相交 → 不展示", () => {
+    expect(keysCorner({ x: 100, y: 100, w: 2360, h: 1240 }, 2560, 1440, 220, 260)).toBeNull();
+  });
+
+  it("无选区不展示", () => {
+    expect(keysCorner(null, 2560, 1440, 220, 260)).toBeNull();
   });
 });
 
