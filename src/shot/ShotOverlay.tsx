@@ -234,13 +234,18 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const [shadowW, setShadowW] = useState(0);
   const [borderW, setBorderW] = useState(0);
   const [borderColor, setBorderColor] = useState("#000000");
-  /** 标注偏好持久化：读自 settings.json（shotShadowW/shotBorderW/
-   *  shotBorderColor），改动防抖 400ms 经 shot_save_prefs 补丁式写回 */
+  /** 标注偏好持久化：读自 settings.json（装饰三键 + 滚轮记忆五键），改动
+   *  防抖 400ms 经 shot_save_prefs 白名单补丁写回（多次改动按键合并，
+   *  只发最后一次） */
   const prefsTimer = useRef<number | null>(null);
-  const savePrefs = useCallback((sw: number, bw: number, bc: string) => {
+  const pendingPrefs = useRef<Record<string, unknown>>({});
+  const savePrefs = useCallback((patch: Record<string, unknown>) => {
+    Object.assign(pendingPrefs.current, patch);
     if (prefsTimer.current !== null) window.clearTimeout(prefsTimer.current);
     prefsTimer.current = window.setTimeout(() => {
-      void api.shotSavePrefs(sw, bw, bc).catch(() => undefined);
+      const batch = pendingPrefs.current;
+      pendingPrefs.current = {};
+      void api.shotSavePrefs(batch).catch(() => undefined);
     }, 400);
   }, []);
   useEffect(() => {
@@ -258,6 +263,17 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         if (typeof st?.shotBorderColor === "string" && st.shotBorderColor) {
           setBorderColor(st.shotBorderColor);
         }
+        // 滚轮记忆（2026-10-30 定案）：逐类型宽度/尺寸/不透明度从 settings
+        // 读回（会话内即成为新图形默认值），越界值退回中间档默认
+        const clampw = (v: unknown, lo: number, hi: number, d: number) => {
+          const n = Number(v);
+          return Number.isFinite(n) && n >= lo && n <= hi ? n : d;
+        };
+        setStrokeW(clampw(st?.shotStrokeW, 1, 30, STROKES[1]));
+        setTextFont(clampw(st?.shotTextFont, 10, 80, FONTS[1]));
+        setStepW(clampw(st?.shotStepW, 1, 20, STROKES[1]));
+        setMosaicW(clampw(st?.shotMosaicW, 2, 20, STROKES[1]));
+        setBlurAlpha(clampw(st?.shotBlurAlpha, 0.15, 1, 1));
       })
       .catch(() => undefined);
     return () => {
@@ -285,7 +301,16 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const [headStyle, setHeadStyle] = useState<ArrowHead>("line");
   const [lineStyle, setLineStyle] = useState<ArrowLine>("solid");
   const [color, setColor] = useState(SHOT_PALETTE[0]);
-  const [strokeIdx, setStrokeIdx] = useState(1);
+  /** 逐类型线宽/尺寸（连续值，滚轮调节后随动并持久化——「滚轮记忆」
+   *  2026-10-30 定案；旧三档预设索引表达不了 1~30 连续值已弃）。三档
+   *  预设面板点击也写这些值（会话级，不持久化）；blurW 例外：模糊半径
+   *  只由预设档控制（滚轮调的是 alpha），保持会话级 */
+  const [strokeW, setStrokeW] = useState(STROKES[1]); // 线形 1~30
+  const [textFont, setTextFont] = useState(FONTS[1]); // 10~80
+  const [stepW, setStepW] = useState(STROKES[1]); // 序号圈 1~20
+  const [mosaicW, setMosaicW] = useState(STROKES[1]); // 马赛克 2~20
+  const [blurW, setBlurW] = useState(STROKES[1]); // 模糊半径（预设档）
+  const [blurAlpha, setBlurAlpha] = useState(1); // 0.15~1 持久化
   const [shapes, setShapes] = useState<Shape[]>([]);
   /** 撤销栈 = 每次变更（落新图形 / 滚轮编辑一阵）前的完整快照。旧模型只有
    *  「摘最后一个图形」语义，滚轮编辑后 Ctrl+Z 会整删被调的图形而非回退
@@ -871,13 +896,13 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         w: 0,
         h: 0,
         color,
-        width: FONTS[strokeIdx],
+        width: textFont,
         text: ed.value,
       };
       pushUndo(shapesRef.current);
       setShapes((prev) => [...prev, shape]);
     }
-  }, [color, strokeIdx, pushUndo]);
+  }, [color, textFont, pushUndo]);
 
   const beginTextEdit = useCallback(
     (px: number, py: number) => {
@@ -955,7 +980,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             w: 0,
             h: 0,
             color,
-            width: STROKES[strokeIdx],
+            width: stepW,
             seq: nextStepSeq(shapesRef.current),
           };
           pushUndo(shapesRef.current);
@@ -966,10 +991,16 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           return;
         }
         if (inside && tool !== "select") {
-          drawRef.current = startShape(tool, px - s.x, py - s.y, color, STROKES[strokeIdx], {
+          // 逐类型当前宽度：马赛克/模糊有独立档位（模糊半径只走预设，
+          // 滚轮调的是 alpha），其余线形共用 strokeW；模糊草稿带上滚轮
+          // 记忆的不透明度（drawShape blur 分支消费）
+          const curW = tool === "mosaic" ? mosaicW : tool === "blur" ? blurW : strokeW;
+          const draft = startShape(tool, px - s.x, py - s.y, color, curW, {
             head: headStyle,
             line: lineStyle,
           });
+          if (draft && tool === "blur") draft.alpha = blurAlpha;
+          drawRef.current = draft;
           redrawLive();
           return;
         }
@@ -988,7 +1019,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       redrawLive();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [busy, tool, color, strokeIdx, headStyle, lineStyle, redrawBase, redrawLive, commitText, exitShot],
+    [busy, tool, color, strokeW, mosaicW, blurW, stepW, headStyle, lineStyle, redrawBase, redrawLive, commitText, exitShot],
   );
 
   const onPointerMove = useCallback(
@@ -1287,6 +1318,34 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       shapesRef.current = next;
       setShapes(next);
       redrawLive(); // 选中框随调节后的新尺寸即时重画
+      // 滚轮记忆（2026-10-30 定案）：调节值同步为本类型新图形的默认值
+      // （会话内立即生效）并按键防抖持久化到 settings.json（下次会话沿用）
+      switch (adj.shape.type) {
+        case "rect":
+        case "ellipse":
+        case "arrow":
+        case "pen":
+        case "marker":
+          setStrokeW(adj.shape.width);
+          savePrefs({ shotStrokeW: adj.shape.width });
+          break;
+        case "text":
+          setTextFont(adj.shape.width);
+          savePrefs({ shotTextFont: adj.shape.width });
+          break;
+        case "step":
+          setStepW(adj.shape.width);
+          savePrefs({ shotStepW: adj.shape.width });
+          break;
+        case "mosaic":
+          setMosaicW(adj.shape.width);
+          savePrefs({ shotMosaicW: adj.shape.width });
+          break;
+        case "blur":
+          setBlurAlpha(adj.shape.alpha ?? 1);
+          savePrefs({ shotBlurAlpha: adj.shape.alpha ?? 1 });
+          break;
+      }
       setSavedTip(adj.label);
       if (hudTimer.current !== null) window.clearTimeout(hudTimer.current);
       hudTimer.current = window.setTimeout(() => setSavedTip(null), 900);
@@ -1350,7 +1409,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     const below = (s.y + s.h) / scale + 12;
     const top = below + r.height + 8 <= sh ? below : Math.max(8, s.y / scale - r.height - 12);
     setTbPos({ left, top });
-  }, [sel, ready, scale, boot.mw, boot.mh, shapes, tool, color, strokeIdx]);
+  }, [sel, ready, scale, boot.mw, boot.mh, shapes, tool, color, strokeW, textFont]);
 
   // 工具栏拖动：按住非按钮区（容器空白/尺寸标签/分隔线）拖动，钳制屏内
   const onTbPointerDown = (e: React.PointerEvent) => {
@@ -1401,16 +1460,28 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     if (left !== panel.left || top !== panel.top) setPanel({ ...panel, left, top });
   }, [panel]);
 
+  /** 宽度预设三档（2026-10-30 起值为连续量：v = 绝对值，选中态按值比较——
+   *  滚轮调到档间值时无高亮，点预设回落到档值） */
   const strokeBtns =
     tool === "text"
-      ? FONTS.map((f, i) => ({ v: i, px: Math.round(f / 6), title: `字号 ${f}px` }))
+      ? FONTS.map((f) => ({ v: f, px: Math.round(f / 6), title: `字号 ${f}px` }))
       : tool === "mosaic" || tool === "blur"
-        ? [
-            { v: 0, px: 4, title: "弱" },
-            { v: 1, px: 7, title: "中" },
-            { v: 2, px: 11, title: "强" },
-          ]
-        : STROKES.map((w, i) => ({ v: i, px: Math.round(w / 1.6) + 2, title: "粗细" }));
+        ? STROKES.map((f, i) => ({ v: f, px: 4 + i * 3.5, title: ["弱", "中", "强"][i] }))
+        : STROKES.map((f) => ({ v: f, px: Math.round(f / 1.6) + 2, title: "粗细" }));
+  const curToolW =
+    tool === "text"
+      ? textFont
+      : tool === "mosaic"
+        ? mosaicW
+        : tool === "blur"
+          ? blurW
+          : strokeW;
+  const applyWidthPreset = (v: number) => {
+    if (tool === "text") setTextFont(v);
+    else if (tool === "mosaic") setMosaicW(v);
+    else if (tool === "blur") setBlurW(v);
+    else setStrokeW(v);
+  };
 
   /** 工具行按钮（画笔/马克笔、箭头 = 点击立即弹设置面板选择，
    *  2026-10-30 二次定案：不做图标随动切换） */
@@ -1476,7 +1547,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           style={{
             left: (sel.x + editing.x) / scale,
             top: (sel.y + editing.y) / scale,
-            fontSize: FONTS[strokeIdx],
+            fontSize: textFont,
             color,
             width: Math.max(60, Math.min(360, (sel.w - editing.x) / scale - 8)),
           }}
@@ -1671,10 +1742,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                   strokeBtns.map((w) => (
                     <button
                       key={w.v}
-                      className={`np-shot-tool ${strokeIdx === w.v ? "on" : ""}`}
+                      className={`np-shot-tool ${curToolW === w.v ? "on" : ""}`}
                       data-tip={w.title}
                       onClick={() => {
-                        setStrokeIdx(w.v);
+                        applyWidthPreset(w.v);
                         setPanel(null);
                       }}
                     >
@@ -1691,7 +1762,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                         data-tip="边框颜色"
                         onClick={() => {
                           setBorderColor(c);
-                          savePrefs(shadowW, borderW, c);
+                          savePrefs({ shotBorderColor: c });
                         }}
                       />
                     ))}
@@ -1709,9 +1780,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                         const v = Number(e.target.value);
                         (panel.kind === "shadow" ? setShadowW : setBorderW)(v);
                         savePrefs(
-                          panel.kind === "shadow" ? v : shadowW,
-                          panel.kind === "border" ? v : borderW,
-                          borderColor,
+                          panel.kind === "shadow"
+                            ? { shotShadowW: v }
+                            : { shotBorderW: v },
                         );
                       }}
                     />

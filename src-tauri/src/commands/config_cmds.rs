@@ -19,11 +19,26 @@ pub fn get_settings() -> Value {
         .unwrap_or(Value::Null)
 }
 
-/// 截图标注偏好（阴影/边框宽度 + 边框颜色）：补丁式只写这三个键的
-/// read-modify-write——轻量截图页拿不到主窗完整设置对象，整对象回写会
-/// 覆盖掉其他键
+/// 截图标注偏好：白名单键补丁式 read-modify-write——轻量截图页拿不到主窗
+/// 完整设置对象，整对象回写会覆盖掉其他键；只写传入且在白名单内的键。
+/// 键 = 阴影/边框装饰三键 + 滚轮调节持久化的逐类型宽度五键
+/// （shotStrokeW 线形/shotTextFont 字号/shotStepW 序号圈/shotMosaicW
+/// 马赛克格/shotBlurAlpha 模糊不透明度，2026-10-30「滚轮记忆」定案）
 #[tauri::command]
-pub fn shot_save_prefs(shadow_w: u32, border_w: u32, border_color: String) -> Result<(), String> {
+pub fn shot_save_prefs(prefs: Value) -> Result<(), String> {
+    const ALLOWED: &[&str] = &[
+        "shotShadowW",
+        "shotBorderW",
+        "shotBorderColor",
+        "shotStrokeW",
+        "shotTextFont",
+        "shotStepW",
+        "shotMosaicW",
+        "shotBlurAlpha",
+    ];
+    let Some(map) = prefs.as_object() else {
+        return Err("prefs 必须是键值对象".into());
+    };
     let p = config_root().join("settings.json");
     let mut v: Value = std::fs::read_to_string(&p)
         .ok()
@@ -33,9 +48,11 @@ pub fn shot_save_prefs(shadow_w: u32, border_w: u32, border_color: String) -> Re
         v = serde_json::json!({});
     }
     let obj = v.as_object_mut().ok_or("settings.json 结构异常")?;
-    obj.insert("shotShadowW".into(), shadow_w.into());
-    obj.insert("shotBorderW".into(), border_w.into());
-    obj.insert("shotBorderColor".into(), border_color.into());
+    for (k, val) in map {
+        if ALLOWED.contains(&k.as_str()) {
+            obj.insert(k.clone(), val.clone());
+        }
+    }
     serde_json::to_string_pretty(&v)
         .map_err(|e| e.to_string())
         .and_then(|s| std::fs::write(p, s).map_err(|e| e.to_string()))
