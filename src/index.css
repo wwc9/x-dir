@@ -4920,6 +4920,63 @@ mark.np-gsearch-mark {
   font-size: var(--np-font-sm);
   color: var(--np-muted);
 }
+/* 悬停标记右键菜单（2026-10-30 标记增强）：删除/克隆/置前/置后
+ * （覆盖窗内自绘，同贴图右键菜单语言） */
+.np-shot-markmenu {
+  position: fixed;
+  z-index: 40;
+  min-width: 140px;
+  padding: 4px;
+  border-radius: var(--np-radius-lg);
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  box-shadow: var(--np-shadow);
+  display: flex;
+  flex-direction: column;
+}
+.np-shot-markmenu > button {
+  height: var(--np-ctl-h);
+  text-align: left;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--np-radius);
+  background: transparent;
+  color: var(--np-fg);
+  font-size: var(--np-font-ui);
+  cursor: pointer;
+}
+.np-shot-markmenu > button:hover {
+  background: var(--np-hover);
+}
+/* 样式面板小样（2026-10-30 标记增强）：形状/线型/字样 swatch 与文字钮 */
+.np-shot-sw {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+}
+.np-shot-line {
+  display: inline-block;
+  width: 16px;
+  height: 0;
+  border-top: 2.5px solid currentColor;
+}
+.np-shot-line-dash {
+  border-top-style: dashed;
+}
+.np-shot-tglyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  font-size: 13px;
+  line-height: 1;
+}
+.np-shot-tglyph-hl {
+  padding: 0 3px;
+  background: color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 2px;
+}
 
 /* 滚动截图控制条（label shot-bar，停靠选区正下方）、侧边预览窗（label
    shot-scroll）、选区框窗（label shot-frame，整窗点击穿透只画边框）与结果窗

@@ -26,6 +26,7 @@ import {
   shapeBounds,
   stepBadgeColor,
   stepBadgeSize,
+  translateShape,
   type Shape,
 } from "../annot";
 
@@ -379,6 +380,28 @@ describe("shapeAt", () => {
     expect(shapeAt([rect, badge], 150, 50, 8)).toBe(1);
   });
 
+  it("半透明实心矩形整面包围盒命中（2026-10-30 标记增强）", () => {
+    const filled: Shape = { ...rect, filled: true };
+    expect(shapeAt([filled], 100, 50, 8)).toBe(0); // 中心（空心时 miss）
+    expect(shapeAt([rect], 100, 50, 8)).toBeNull(); // 对照：空心仍描边带命中
+  });
+
+  it("圆形马赛克/模糊：内切椭圆内命中、角落不命中（2026-10-30 标记增强）", () => {
+    const m: Shape = {
+      type: "mosaic",
+      x: 0,
+      y: 0,
+      w: 100,
+      h: 100,
+      color: "#fff",
+      width: 4,
+      round: true,
+    };
+    expect(shapeAt([m], 50, 50, 4)).toBe(0); // 圆心
+    expect(shapeAt([m], 50, 30, 4)).toBe(0); // 圆内
+    expect(shapeAt([m], 5, 5, 4)).toBeNull(); // 方形角落（圆外）
+  });
+
   it("文字按估算 bbox 命中（CJK 全宽近似）", () => {
     const txt: Shape = { type: "text", x: 20, y: 20, w: 0, h: 0, color: "#fff", width: 22, text: "标注" };
     expect(shapeAt([txt], 20 + 22, 20 + 14, 8)).toBe(0); // 两字宽 ~44 内
@@ -456,6 +479,44 @@ describe("arrowBaseAt", () => {
     const cross =
       (g.ax - b.x) * (g.by - b.y) - (g.ay - b.y) * (g.bx - b.x);
     expect(Math.abs(cross)).toBeLessThan(1e-9);
+  });
+});
+
+describe("translateShape", () => {
+  it("普通图形平移 x/y，尺寸不变", () => {
+    const r: Shape = { type: "rect", x: 10, y: 20, w: 100, h: 50, color: "#fff", width: 4 };
+    const t = translateShape(r, 5, -3);
+    expect(t.x).toBe(15);
+    expect(t.y).toBe(17);
+    expect(t.w).toBe(100);
+    expect(t.h).toBe(50);
+  });
+
+  it("笔迹连 pts 一起平移", () => {
+    const pen: Shape = {
+      type: "pen",
+      x: 0,
+      y: 0,
+      w: 0,
+      h: 0,
+      pts: [
+        { x: 1, y: 2 },
+        { x: 30, y: 40 },
+      ],
+      color: "#fff",
+      width: 4,
+    };
+    const t = translateShape(pen, 10, 10);
+    expect(t.pts).toEqual([
+      { x: 11, y: 12 },
+      { x: 40, y: 50 },
+    ]);
+  });
+
+  it("不改动原对象（纯函数）", () => {
+    const s: Shape = { type: "step", x: 5, y: 5, w: 0, h: 0, color: "#fff", width: 4, seq: 1 };
+    translateShape(s, 1, 1);
+    expect(s.x).toBe(5);
   });
 });
 

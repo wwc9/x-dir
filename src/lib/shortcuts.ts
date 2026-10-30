@@ -177,6 +177,48 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { id: "pin-wheel", keys: ["滚轮 / Alt+滚轮"], label: "贴图：缩放 / 调整不透明度", scope: "system" },
       { id: "pin-move", keys: ["左键拖动"], label: "贴图：移动位置", scope: "system" },
       { id: "pin-close", keys: ["双击 / Esc"], label: "贴图：关闭", scope: "system" },
+      {
+        id: "shot-mark-move",
+        keys: ["左键拖动 / Alt+拖动"],
+        label: "截图：拖动已落标记移位 / 克隆（悬停标记上）",
+        scope: "system",
+      },
+      {
+        id: "shot-mark-delete",
+        keys: ["Del / Backspace"],
+        label: "截图：删除悬停标记（右键标记也有菜单）",
+        scope: "system",
+      },
+      {
+        id: "shot-mark-color",
+        keys: ["1 ~ 8"],
+        label: "截图：悬停标记换色（色板位序，兼设新图形默认色）",
+        scope: "system",
+      },
+      {
+        id: "shot-mark-props",
+        keys: ["滚轮 / Shift+滚轮"],
+        label: "截图：悬停标记调线宽·字号·尺寸 / 矩形圆角",
+        scope: "system",
+      },
+      {
+        id: "shot-annot-toggle",
+        keys: ["Tab"],
+        label: "截图：显隐全部标注（对比原图，仅显示层）",
+        scope: "system",
+      },
+      {
+        id: "shot-draw-constraint",
+        keys: ["Shift（绘制中）"],
+        label: "截图：正方形 / 正圆 / 箭头 45° 吸附",
+        scope: "system",
+      },
+      {
+        id: "shot-text-reedit",
+        keys: ["双击文字"],
+        label: "截图：已落文字回编辑态",
+        scope: "system",
+      },
     ],
   },
 ];

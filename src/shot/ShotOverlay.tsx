@@ -45,6 +45,7 @@ import {
   SHOT_PALETTE,
   type ArrowHead,
   type ArrowLine,
+  type BadgeShape,
   type HandleId,
   type MagColorFormat,
   type Sel,
@@ -64,6 +65,7 @@ import {
   resizeSel,
   shapeAt,
   shapeBounds,
+  translateShape,
   type ShotTool,
 } from "./annot";
 
@@ -212,14 +214,21 @@ function StepMarkGlyph() {
 }
 
 /** 开始一个标注草稿（pointerdown；坐标相对选区，物理像素）。箭头附带
- *  当前的头部/线条样式设置 */
+ *  当前的头部/线条样式设置；style = 2026-10-30 标记增强的通用样式
+ *  （虚实/实心/圆角/双向/圆形区域） */
 function startShape(
   tool: ShotTool,
   x: number,
   y: number,
   color: string,
   stroke: number,
-  arw?: { head: ArrowHead; line: ArrowLine },
+  arw?: { head: ArrowHead; line: ArrowLine; two: boolean },
+  style?: {
+    dash?: boolean;
+    filled?: boolean;
+    radius?: number;
+    round?: boolean;
+  },
 ): Shape | null {
   if (tool === "select") return null;
   return {
@@ -233,6 +242,14 @@ function startShape(
     width: stroke,
     head: tool === "arrow" ? (arw?.head ?? "line") : undefined,
     line: tool === "arrow" ? (arw?.line ?? "solid") : undefined,
+    two: tool === "arrow" ? (arw?.two ?? false) : undefined,
+    dash:
+      tool === "rect" || tool === "ellipse" || tool === "pen" || tool === "marker"
+        ? (style?.dash ?? false)
+        : undefined,
+    filled: tool === "rect" || tool === "ellipse" ? (style?.filled ?? false) : undefined,
+    radius: tool === "rect" ? (style?.radius ?? 0) : undefined,
+    round: tool === "mosaic" || tool === "blur" ? (style?.round ?? false) : undefined,
   };
 }
 
@@ -259,6 +276,24 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   /** 悬停标记下标（滚轮编辑目标指示）：pointermove 探测 shapeAt，命中
    *  变化才重绘 live 层画选中框；undo/redo/重选后失效置 null */
   const hoverRef = useRef<number | null>(null);
+  /** 已落标记拖动移位（2026-10-30 标记增强）：idx + 上帧指针位；snapshot
+   *  = 抓取时的形状快照，首个实际位移才 pushUndo（点一下不动不污染栈） */
+  const moveMarkRef = useRef<{
+    idx: number;
+    lastX: number;
+    lastY: number;
+    snapshot: Shape[];
+    moved: boolean;
+  } | null>(null);
+  /** 标注显隐 toggle（2026-10-30 标记增强）：Tab 临时隐藏全部标注看原图，
+   *  仅影响显示层（comp/导出仍含标注） */
+  const hiddenRef = useRef(false);
+  /** 悬停标记右键菜单（2026-10-30 标记增强）：删除/克隆/置前/置后 */
+  const [markMenu, setMarkMenu] = useState<{ x: number; y: number } | null>(null);
+  const markMenuIdxRef = useRef<number | null>(null);
+  /** 文字再编辑（2026-10-30 标记增强）：双击已落文字回编辑态，提交时
+   *  原位替换（idx 非空）而非追加新文字 */
+  const editingIdxRef = useRef<number | null>(null);
   const composingRef = useRef(false);
   const toolbarRef = useRef<HTMLDivElement>(null);
   /** 放大镜锚点（最近一次光标物理坐标；跟随/拖拽态显示，确认选区即隐；
@@ -363,6 +398,18 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const [mosaicW, setMosaicW] = useState(STROKES[1]); // 马赛克 2~20
   const [blurW, setBlurW] = useState(STROKES[1]); // 模糊半径（预设档）
   const [blurAlpha, setBlurAlpha] = useState(1); // 0.15~1 持久化
+  /** 2026-10-30 标记增强·样式维度（会话级，不持久化）：矩形/椭圆实心与
+   *  虚线、矩形圆角、箭头双向、文字高亮/粗斜体、序号形状、马赛克/模糊
+   *  圆形区域——新图形落笔时快照进 Shape */
+  const [fillOn, setFillOn] = useState(false);
+  const [dashOn, setDashOn] = useState(false);
+  const [rectRadius, setRectRadius] = useState(0);
+  const [twoWay, setTwoWay] = useState(false);
+  const [txtHL, setTxtHL] = useState(false);
+  const [txtBold, setTxtBold] = useState(false);
+  const [txtItalic, setTxtItalic] = useState(false);
+  const [badgeShape, setBadgeShape] = useState<BadgeShape>("circle");
+  const [maskRound, setMaskRound] = useState(false);
   const [shapes, setShapes] = useState<Shape[]>([]);
   /** 撤销栈 = 每次变更（落新图形 / 滚轮编辑一阵）前的完整快照。旧模型只有
    *  「摘最后一个图形」语义，滚轮编辑后 Ctrl+Z 会整删被调的图形而非回退
@@ -371,6 +418,8 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const [redoStack, setRedoStack] = useState<Shape[][]>([]);
   const [editing, setEditing] = useState<{ x: number; y: number; value: string } | null>(null);
   const [savedTip, setSavedTip] = useState<string | null>(null);
+  /** 拖拽尺寸 HUD 的自动清除定时器（pointermove 高频更新，到达静止后收起） */
+  const hudDragTimer = useRef<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   /** 事件线程直读的镜像（React state 更新是异步的，指针流需要即时值） */
@@ -393,7 +442,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     ctx.clearRect(0, 0, boot.mw, boot.mh);
     ctx.drawImage(img, 0, 0);
     const s = selRef.current;
-    if (s) {
+    if (s && !hiddenRef.current) {
       ctx.save();
       ctx.beginPath();
       ctx.rect(s.x, s.y, s.w, s.h);
@@ -950,6 +999,93 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     return burst;
   }, []);
 
+  // ── 标记操作（2026-10-30 标记增强）：删除/换色/克隆/置前/置后/显隐，
+  //     全部走快照栈记账（滚轮编辑同语义）；换色复用 600ms 编辑阵合帧 ──
+  const delMark = useCallback(
+    (idx: number) => {
+      if (idx < 0 || idx >= shapesRef.current.length) return;
+      pushUndo(shapesRef.current);
+      shapesRef.current = shapesRef.current.filter((_, i) => i !== idx);
+      setShapes(shapesRef.current);
+      hoverRef.current = null;
+      redrawLive();
+    },
+    [pushUndo, redrawLive],
+  );
+
+  const recolorMark = useCallback(
+    (idx: number, c: string) => {
+      const cur = shapesRef.current[idx];
+      if (!cur) return;
+      if (cur.color === c) return;
+      if (!noteWheelEdit()) pushUndo(shapesRef.current);
+      shapesRef.current = shapesRef.current.slice();
+      shapesRef.current[idx] = { ...cur, color: c };
+      setShapes(shapesRef.current);
+      setColor(c); // 同步为新图形默认色
+      redrawLive();
+    },
+    [pushUndo, noteWheelEdit, redrawLive],
+  );
+
+  const cloneMark = useCallback(
+    (idx: number) => {
+      const src = shapesRef.current[idx];
+      if (!src) return;
+      pushUndo(shapesRef.current);
+      // 菜单克隆带 8css 斜下偏移可见「复制出一枚」；Alt+拖动克隆则跟手
+      const off = Math.round(8 * scale);
+      const clone = translateShape({ ...src, pts: src.pts?.map((p) => ({ ...p })) }, off, off);
+      shapesRef.current = [...shapesRef.current, clone];
+      hoverRef.current = shapesRef.current.length - 1;
+      setShapes(shapesRef.current);
+      redrawLive();
+    },
+    [pushUndo, redrawLive, scale],
+  );
+
+  const zorderMark = useCallback(
+    (idx: number, front: boolean) => {
+      if (idx < 0 || idx >= shapesRef.current.length) return;
+      pushUndo(shapesRef.current);
+      const arr = shapesRef.current.slice();
+      const [it] = arr.splice(idx, 1);
+      if (front) arr.push(it);
+      else arr.unshift(it);
+      shapesRef.current = arr;
+      hoverRef.current = front ? arr.length - 1 : 0;
+      setShapes(arr);
+      redrawLive();
+    },
+    [pushUndo, redrawLive],
+  );
+
+  /** Tab 显隐全部标注：仅显示层（base 不画标注看原图），comp/导出仍含
+   *  标注；隐藏态禁一切标记交互（悬停/滚轮/删除/换色） */
+  const toggleHidden = useCallback(() => {
+    hiddenRef.current = !hiddenRef.current;
+    hoverRef.current = null;
+    setSavedTip(hiddenRef.current ? "标注已隐藏（Tab 恢复）" : "标注已恢复");
+    setTimeout(() => setSavedTip(null), 1200);
+    redrawBase();
+    redrawLive();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [redrawBase, redrawLive]);
+
+  /** 右键菜单动作分发（2026-10-30 标记增强） */
+  const markOp = useCallback(
+    (op: "del" | "clone" | "front" | "back") => {
+      const idx = markMenuIdxRef.current;
+      markMenuIdxRef.current = null;
+      setMarkMenu(null);
+      if (idx === null || !shapesRef.current[idx]) return;
+      if (op === "del") delMark(idx);
+      else if (op === "clone") cloneMark(idx);
+      else zorderMark(idx, op === "front");
+    },
+    [delMark, cloneMark, zorderMark],
+  );
+
   // ── 文字编辑（防重入：textarea blur 与画布 pointerdown 可能先后触发）──────
   const commitText = useCallback(() => {
     const ed = editingRef.current;
@@ -967,11 +1103,25 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         color,
         width: textFont,
         text: ed.value,
+        highlight: txtHL || undefined,
+        bold: txtBold || undefined,
+        italic: txtItalic || undefined,
       };
+      // 双击再编辑（2026-10-30 标记增强）：editingIdx 非空 = 原位替换
+      const idx = editingIdxRef.current;
+      editingIdxRef.current = null;
       pushUndo(shapesRef.current);
-      setShapes((prev) => [...prev, shape]);
+      if (idx !== null && shapesRef.current[idx]) {
+        shapesRef.current = shapesRef.current.slice();
+        shapesRef.current[idx] = shape;
+        setShapes(shapesRef.current);
+      } else {
+        setShapes((prev) => [...prev, shape]);
+      }
+    } else {
+      editingIdxRef.current = null;
     }
-  }, [color, textFont, pushUndo]);
+  }, [color, textFont, txtHL, txtBold, txtItalic, pushUndo]);
 
   const beginTextEdit = useCallback(
     (px: number, py: number) => {
@@ -979,10 +1129,20 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       if (!s) return;
       const lx = px - s.x;
       const ly = py - s.y;
+      editingIdxRef.current = null;
       setEditing({ x: lx, y: ly, value: "" });
     },
     [],
   );
+
+  /** 双击已落文字回编辑态（2026-10-30 标记增强）：带入原文与原位，提交替换 */
+  const reEditText = useCallback((idx: number) => {
+    const s = selRef.current;
+    const sh = shapesRef.current[idx];
+    if (!s || !sh || sh.type !== "text") return;
+    editingIdxRef.current = idx;
+    setEditing({ x: sh.x, y: sh.y, value: sh.text ?? "" });
+  }, []);
 
   /** 立即退出（Esc / 右键，2026-10-27 用户定案）：任意状态直接收场，
    *  不再逐层取消（旧语义：文字 → 绘制 → 拖拽 → 工具 → 选区 → 关闭）。
@@ -996,7 +1156,27 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (busy) return;
+      // 悬停标记右键菜单内点击放行（菜单按钮自处理）；菜单外任意按下收起
+      if ((e.target as Element).closest(".np-shot-markmenu")) return;
+      if (markMenu) setMarkMenu(null);
       if (e.button === 2) {
+        // 右键在悬停标记上 = 上下文菜单（删除/克隆/置前/置后），否则退出
+        const s0 = selRef.current;
+        const hov = hoverRef.current;
+        if (s0 && hov !== null && !hiddenRef.current) {
+          const { px: rx, py: ry } = toPhys(e);
+          const idx = shapeAt(shapesRef.current, rx - s0.x, ry - s0.y, 8 * scale, scale);
+          if (idx !== null) {
+            markMenuIdxRef.current = idx;
+            hoverRef.current = idx;
+            setMarkMenu({
+              x: Math.min(e.clientX, window.innerWidth - 150),
+              y: Math.min(e.clientY, window.innerHeight - 160),
+            });
+            redrawLive();
+            return;
+          }
+        }
         exitShot();
         return;
       }
@@ -1020,13 +1200,15 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         setUndoStack([]);
         setRedoStack([]);
         hoverRef.current = null;
+        moveMarkRef.current = null;
         wheelEditRef.current = null;
         redrawBase();
         redrawLive();
         return;
       }
       const s = selRef.current;
-      // 手柄调整 > 选区内移动（select 工具）> 选区内标注 > 重新框选
+      // 手柄调整 > 已落标记抓取（移动/Alt 克隆）> 选区内移动（select 工具）
+      // > 选区内标注 > 重新框选
       if (s) {
         const hd = handleAt(s, px, py);
         if (hd) {
@@ -1034,13 +1216,43 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           return;
         }
         const inside = px >= s.x && px < s.x + s.w && py >= s.y && py < s.y + s.h;
+        // 已落标记抓取（2026-10-30 标记增强）：悬停标记上按下 = 拖动移位
+        // （Alt+按下 = 克隆后拖动克隆体）；画新标记要落在没有旧标记的地方
+        // ——实心形整面命中即整面可抓，属于该交互的既定取舍
+        if (inside && !hiddenRef.current) {
+          const hovIdx = hoverRef.current;
+          if (hovIdx !== null && shapesRef.current[hovIdx]) {
+            let idx = hovIdx;
+            if (e.altKey) {
+              const src = shapesRef.current[hovIdx];
+              const clone: Shape = {
+                ...src,
+                pts: src.pts?.map((p) => ({ ...p })),
+              };
+              pushUndo(shapesRef.current);
+              shapesRef.current = [...shapesRef.current, clone];
+              idx = shapesRef.current.length - 1;
+              setShapes(shapesRef.current);
+            }
+            moveMarkRef.current = {
+              idx,
+              lastX: px,
+              lastY: py,
+              snapshot: shapesRef.current,
+              moved: false,
+            };
+            hoverRef.current = idx;
+            redrawLive();
+            return;
+          }
+        }
         if (inside && tool === "select") {
           moveRef.current = { dx: px - s.x, dy: py - s.y };
           return;
         }
         // 序号标记：点按即落（无拖拽草稿——徽标尺寸由线宽档决定，与落点
         // 无关），数字按 nextStepSeq 自动递增；撤销摘掉最后徽标后数字回退
-        // 复用。x/y = 圆心（drawShape step 分支口径）
+        // 复用。x/y = 中心（drawShape step 分支口径）
         if (inside && tool === "step") {
           const shape: Shape = {
             type: "step",
@@ -1051,10 +1263,12 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             color,
             width: stepW,
             seq: nextStepSeq(shapesRef.current),
+            badge: badgeShape,
           };
           pushUndo(shapesRef.current);
           shapesRef.current = [...shapesRef.current, shape];
           hoverRef.current = shapesRef.current.length - 1; // 落标即选中（光标就在其上）
+          moveMarkRef.current = null;
           setShapes(shapesRef.current);
           redrawLive();
           return;
@@ -1064,10 +1278,15 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           // 滚轮调的是 alpha），其余线形共用 strokeW；模糊草稿带上滚轮
           // 记忆的不透明度（drawShape blur 分支消费）
           const curW = tool === "mosaic" ? mosaicW : tool === "blur" ? blurW : strokeW;
-          const draft = startShape(tool, px - s.x, py - s.y, color, curW, {
-            head: headStyle,
-            line: lineStyle,
-          });
+          const draft = startShape(
+            tool,
+            px - s.x,
+            py - s.y,
+            color,
+            curW,
+            { head: headStyle, line: lineStyle, two: twoWay },
+            { dash: dashOn, filled: fillOn, radius: rectRadius, round: maskRound },
+          );
           if (draft && tool === "blur") draft.alpha = blurAlpha;
           drawRef.current = draft;
           redrawLive();
@@ -1083,12 +1302,37 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       setUndoStack([]);
       setRedoStack([]);
       hoverRef.current = null;
+      moveMarkRef.current = null;
+      setMarkMenu(null);
       wheelEditRef.current = null;
       redrawBase();
       redrawLive();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [busy, tool, color, strokeW, mosaicW, blurW, stepW, headStyle, lineStyle, redrawBase, redrawLive, commitText, exitShot],
+    [
+      busy,
+      tool,
+      color,
+      strokeW,
+      mosaicW,
+      blurW,
+      stepW,
+      headStyle,
+      lineStyle,
+      twoWay,
+      dashOn,
+      fillOn,
+      rectRadius,
+      maskRound,
+      badgeShape,
+      blurAlpha,
+      markMenu,
+      scale,
+      redrawBase,
+      redrawLive,
+      commitText,
+      exitShot,
+    ],
   );
 
   const onPointerMove = useCallback(
@@ -1146,22 +1390,67 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         redrawLive();
         return;
       }
+      if (moveMarkRef.current && s) {
+        // 已落标记拖动移位：首帧记账（点住不动不进撤销栈），之后整形平移
+        const mm = moveMarkRef.current;
+        const dx = px - mm.lastX;
+        const dy = py - mm.lastY;
+        if (dx || dy) {
+          if (!mm.moved) {
+            mm.moved = true;
+            pushUndo(mm.snapshot);
+          }
+          mm.lastX = px;
+          mm.lastY = py;
+          shapesRef.current = shapesRef.current.slice();
+          shapesRef.current[mm.idx] = translateShape(shapesRef.current[mm.idx], dx, dy);
+          setShapes(shapesRef.current);
+          redrawLive();
+        }
+        return;
+      }
       if (drawRef.current && s) {
         const d = drawRef.current;
         if (d.type === "pen" || d.type === "marker") {
           d.pts?.push({ x: px - s.x, y: py - s.y });
         } else if (d.type !== "text") {
-          d.w = px - s.x - d.x;
-          d.h = py - s.y - d.y;
+          let w = px - s.x - d.x;
+          let h = py - s.y - d.y;
+          // Shift 约束（2026-10-30 标记增强）：框形 = 正方形（马赛克/模糊
+          // 同理），箭头 = 角度吸附 45° 系
+          if (e.shiftKey) {
+            if (d.type === "arrow") {
+              const len = Math.hypot(w, h);
+              const a = Math.round(Math.atan2(h, w) / (Math.PI / 4)) * (Math.PI / 4);
+              w = Math.cos(a) * len;
+              h = Math.sin(a) * len;
+            } else {
+              const m = Math.max(Math.abs(w), Math.abs(h));
+              w = Math.sign(w || 1) * m;
+              h = Math.sign(h || 1) * m;
+            }
+          }
+          d.w = w;
+          d.h = h;
+          // 拖拽实时尺寸 HUD（同标记增强）：框形 W×H，箭头线长
+          const label =
+            d.type === "arrow"
+              ? `${Math.round(Math.hypot(d.w, d.h))}px`
+              : `${Math.round(Math.abs(d.w))} × ${Math.round(Math.abs(d.h))} px`;
+          setSavedTip(label);
+          if (hudDragTimer.current !== null) window.clearTimeout(hudDragTimer.current);
+          hudDragTimer.current = window.setTimeout(() => setSavedTip(null), 700);
         }
         redrawLive();
         return;
       }
       // 悬停标记探测（滚轮编辑目标指示）：到此处时各拖拽/绘制分支均已
-      // return，只剩自由移动态；跟随态不探测（无标注可悬停）。命中变化
-      // 才重绘 live（每帧 shapeAt 的开销 = 少量图形的距离计算，可忽略）
+      // return，只剩自由移动态；跟随态不探测（无标注可悬停）；标注隐藏
+      // 时不探测（不可见即不可交互）。命中变化才重绘 live
       if (!followingRef.current && s) {
-        const idx = shapeAt(shapesRef.current, px - s.x, py - s.y, 8 * scale, scale);
+        const idx = hiddenRef.current
+          ? null
+          : shapeAt(shapesRef.current, px - s.x, py - s.y, 8 * scale, scale);
         if (idx !== hoverRef.current) {
           hoverRef.current = idx;
           redrawLive();
@@ -1182,7 +1471,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [busy, tool, boot.mw, boot.mh, boot.windows, redrawBase, redrawLive],
+    [busy, tool, boot.mw, boot.mh, boot.windows, redrawBase, redrawLive, pushUndo],
   );
 
   const onPointerUp = useCallback(() => {
@@ -1201,6 +1490,11 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         selRef.current = hw;
       }
       redrawLive();
+      return;
+    }
+    // 已落标记拖动收场（未移动 = 一次普通点按，不记账）
+    if (moveMarkRef.current) {
+      moveMarkRef.current = null;
       return;
     }
     if (resizeRef.current || moveRef.current) {
@@ -1256,6 +1550,34 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           e.preventDefault();
           commitText();
         }
+        return;
+      }
+      // Tab = 显隐全部标注（2026-10-30 标记增强，仅显示层）
+      if (e.key === "Tab" && !busy) {
+        e.preventDefault();
+        toggleHidden();
+        return;
+      }
+      // Del/Backspace = 删除悬停标记（不依赖选中工具）
+      if (
+        (e.key === "Delete" || e.key === "Backspace") &&
+        !busy &&
+        hoverRef.current !== null &&
+        !hiddenRef.current
+      ) {
+        e.preventDefault();
+        delMark(hoverRef.current);
+        return;
+      }
+      // 1~8 = 悬停标记换色（色板位序，同步为新图形默认色）
+      if (
+        /^[1-8]$/.test(e.key) &&
+        !busy &&
+        hoverRef.current !== null &&
+        !hiddenRef.current
+      ) {
+        e.preventDefault();
+        recolorMark(hoverRef.current, SHOT_PALETTE[Number(e.key) - 1]);
         return;
       }
       // WASD / 方向键微调（2026-10-30 定案）：跟随态（十字准星）/拖拽中 =
@@ -1353,7 +1675,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [exitShot, commitText, undo, redo, finish, redrawLive, busy]);
+  }, [exitShot, commitText, undo, redo, finish, redrawLive, busy, toggleHidden, delMark, recolorMark]);
 
   // ── 滚轮调节标记（2026-10-30 定案：悬停指哪调哪）────────────────────────
   // 光标悬停在哪个标记上滚轮就调哪个（shapeAt 线形命中描边带、面形命中包围
@@ -1365,6 +1687,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   useEffect(() => {
     const onWheel = (e: WheelEvent) => {
       if (busy || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (hiddenRef.current) return;
       const s = selRef.current;
       if (!s) return;
       const px = Math.round(e.clientX * scale);
@@ -1376,6 +1699,20 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       e.preventDefault();
       const cur = shapesRef.current[idx];
       const dir: 1 | -1 = e.deltaY < 0 ? 1 : -1;
+      // Shift+滚轮 = 矩形圆角（2026-10-30 标记增强；主滚轮仍是线宽）
+      if (e.shiftKey && cur.type === "rect") {
+        const r = Math.min(24, Math.max(0, (cur.radius ?? 0) + dir * 2));
+        if (r === (cur.radius ?? 0)) return;
+        if (!noteWheelEdit()) pushUndo(shapesRef.current);
+        shapesRef.current = shapesRef.current.slice();
+        shapesRef.current[idx] = { ...cur, radius: r };
+        setShapes(shapesRef.current);
+        redrawLive();
+        setSavedTip(`圆角 ${r}px`);
+        if (hudTimer.current !== null) window.clearTimeout(hudTimer.current);
+        hudTimer.current = window.setTimeout(() => setSavedTip(null), 900);
+        return;
+      }
       const adj = adjustShapeProp(cur, dir);
       if (!adj) return;
       const changed =
@@ -1434,7 +1771,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const tbDraggedRef = useRef(false);
   /** 弹层设置面板：颜色/线宽/阴影/边框/箭头样式/笔型，锚定触发按钮正上方（越界翻转/钳屏） */
   const [panel, setPanel] = useState<{
-    kind: "color" | "width" | "shadow" | "border" | "arrow" | "pen";
+    kind: "color" | "width" | "shadow" | "border" | "arrow" | "pen" | "shape" | "text" | "step" | "mask";
     cx: number;
     btnTop: number;
     btnBottom: number;
@@ -1443,7 +1780,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   } | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const openPanel =
-    (kind: "color" | "width" | "shadow" | "border" | "arrow" | "pen") =>
+    (kind: "color" | "width" | "shadow" | "border" | "arrow" | "pen" | "shape" | "text" | "step" | "mask") =>
     (e: React.MouseEvent<HTMLButtonElement>) => {
       const r = e.currentTarget.getBoundingClientRect();
       setPanel((prev) =>
@@ -1565,8 +1902,26 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   }[] = [
     { id: "select", label: "选择 / 移动选区", icon: MousePointer2, on: tool === "select", onClick: () => setTool("select") },
-    { id: "rect", label: "矩形", icon: Square, on: tool === "rect", onClick: () => setTool("rect") },
-    { id: "ellipse", label: "椭圆", icon: Circle, on: tool === "ellipse", onClick: () => setTool("ellipse") },
+    {
+      id: "rect",
+      label: "矩形（点击设置样式）",
+      icon: Square,
+      on: tool === "rect",
+      onClick: (e) => {
+        setTool("rect");
+        openPanel("shape")(e);
+      },
+    },
+    {
+      id: "ellipse",
+      label: "椭圆（点击设置样式）",
+      icon: Circle,
+      on: tool === "ellipse",
+      onClick: (e) => {
+        setTool("ellipse");
+        openPanel("shape")(e);
+      },
+    },
     {
       id: "arrow",
       label: "箭头（点击设置样式）",
@@ -1587,16 +1942,46 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         openPanel("pen")(e);
       },
     },
-    { id: "text", label: "文字", icon: Type, on: tool === "text", onClick: () => setTool("text") },
+    {
+      id: "text",
+      label: "文字（点击设置样式）",
+      icon: Type,
+      on: tool === "text",
+      onClick: (e) => {
+        setTool("text");
+        openPanel("text")(e);
+      },
+    },
     {
       id: "step",
       label: "序号标记（同一截图自动递增）",
       glyph: <StepMarkGlyph />,
       on: tool === "step",
-      onClick: () => setTool("step"),
+      onClick: (e) => {
+        setTool("step");
+        openPanel("step")(e);
+      },
     },
-    { id: "mosaic", label: "马赛克", icon: Grip, on: tool === "mosaic", onClick: () => setTool("mosaic") },
-    { id: "blur", label: "模糊", icon: Waves, on: tool === "blur", onClick: () => setTool("blur") },
+    {
+      id: "mosaic",
+      label: "马赛克（点击设置样式）",
+      icon: Grip,
+      on: tool === "mosaic",
+      onClick: (e) => {
+        setTool("mosaic");
+        openPanel("mask")(e);
+      },
+    },
+    {
+      id: "blur",
+      label: "模糊（点击设置样式）",
+      icon: Waves,
+      on: tool === "blur",
+      onClick: (e) => {
+        setTool("blur");
+        openPanel("mask")(e);
+      },
+    },
   ];
 
   return (
@@ -1605,7 +1990,20 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onDoubleClick={() => {
+      onDoubleClick={(e) => {
+        // 双击已落文字 = 回编辑态（2026-10-30 标记增强）；其余维持
+        // 双击选区 = 复制并关闭
+        const hov = hoverRef.current;
+        if (
+          sel &&
+          hov !== null &&
+          !hiddenRef.current &&
+          shapesRef.current[hov]?.type === "text"
+        ) {
+          e.preventDefault();
+          reEditText(hov);
+          return;
+        }
         if (sel && tool === "select") void finish("copy");
       }}
       onContextMenu={(e) => e.preventDefault()}
@@ -1795,6 +2193,175 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                   ))}
                 </div>
               )}
+              {/* 双向箭头（2026-10-30 标记增强）：首尾同头部样式 */}
+              {panel.kind === "arrow" && (
+                <div className="np-shot-pal-row">
+                  <button
+                    className={`np-shot-tool ${!twoWay ? "on" : ""}`}
+                    data-tip="单向"
+                    onClick={() => setTwoWay(false)}
+                  >
+                    <span className="np-shot-tglyph">→</span>
+                  </button>
+                  <button
+                    className={`np-shot-tool ${twoWay ? "on" : ""}`}
+                    data-tip="双向"
+                    onClick={() => setTwoWay(true)}
+                  >
+                    <span className="np-shot-tglyph">↔</span>
+                  </button>
+                </div>
+              )}
+              {/* 矩形/椭圆样式（2026-10-30 标记增强）：空心↔半透明实心、
+                  直↔虚线、矩形圆角（Shift+滚轮也可调已落矩形圆角） */}
+              {panel.kind === "shape" && (
+                <>
+                  <div className="np-shot-pal-row">
+                    <button
+                      className={`np-shot-tool ${!fillOn ? "on" : ""}`}
+                      data-tip="空心"
+                      onClick={() => setFillOn(false)}
+                    >
+                      <span
+                        className="np-shot-sw"
+                        style={{
+                          borderRadius: tool === "ellipse" ? "50%" : 3,
+                          border: "2px solid currentColor",
+                        }}
+                      />
+                    </button>
+                    <button
+                      className={`np-shot-tool ${fillOn ? "on" : ""}`}
+                      data-tip="半透明实心"
+                      onClick={() => setFillOn(true)}
+                    >
+                      <span
+                        className="np-shot-sw"
+                        style={{
+                          borderRadius: tool === "ellipse" ? "50%" : 3,
+                          background: "currentColor",
+                        }}
+                      />
+                    </button>
+                    <button
+                      className={`np-shot-tool ${!dashOn ? "on" : ""}`}
+                      data-tip="实线"
+                      onClick={() => setDashOn(false)}
+                    >
+                      <span className="np-shot-line" />
+                    </button>
+                    <button
+                      className={`np-shot-tool ${dashOn ? "on" : ""}`}
+                      data-tip="虚线"
+                      onClick={() => setDashOn(true)}
+                    >
+                      <span className="np-shot-line np-shot-line-dash" />
+                    </button>
+                  </div>
+                  {tool === "rect" && (
+                    <div className="np-shot-slider">
+                      <input
+                        type="range"
+                        min={0}
+                        max={24}
+                        step={1}
+                        value={rectRadius}
+                        onChange={(e) => setRectRadius(Number(e.target.value))}
+                      />
+                      <span className="np-shot-slider-val">
+                        {rectRadius === 0 ? "直角" : `圆角 ${rectRadius}px`}
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
+              {/* 文字样式（2026-10-30 标记增强）：高亮底色 / 粗体 / 斜体 */}
+              {panel.kind === "text" && (
+                <div className="np-shot-pal-row">
+                  <button
+                    className={`np-shot-tool ${!txtHL ? "on" : ""}`}
+                    data-tip="无底色"
+                    onClick={() => setTxtHL(false)}
+                  >
+                    <span className="np-shot-tglyph">A</span>
+                  </button>
+                  <button
+                    className={`np-shot-tool ${txtHL ? "on" : ""}`}
+                    data-tip="高亮底色"
+                    onClick={() => setTxtHL(true)}
+                  >
+                    <span className="np-shot-tglyph np-shot-tglyph-hl">A</span>
+                  </button>
+                  <button
+                    className={`np-shot-tool ${txtBold ? "on" : ""}`}
+                    data-tip="粗体"
+                    onClick={() => setTxtBold(!txtBold)}
+                  >
+                    <span className="np-shot-tglyph" style={{ fontWeight: 700 }}>
+                      B
+                    </span>
+                  </button>
+                  <button
+                    className={`np-shot-tool ${txtItalic ? "on" : ""}`}
+                    data-tip="斜体"
+                    onClick={() => setTxtItalic(!txtItalic)}
+                  >
+                    <span className="np-shot-tglyph" style={{ fontStyle: "italic" }}>
+                      I
+                    </span>
+                  </button>
+                </div>
+              )}
+              {/* 序号徽标形状（2026-10-30 标记增强）：圆形 / 方形 / 纯数字 */}
+              {panel.kind === "step" && (
+                <div className="np-shot-pal-row">
+                  {(
+                    [
+                      ["circle", "圆形"],
+                      ["square", "方形"],
+                      ["plain", "纯数字"],
+                    ] as [BadgeShape, string][]
+                  ).map(([b, t]) => (
+                    <button
+                      key={b}
+                      className={`np-shot-tool ${badgeShape === b ? "on" : ""}`}
+                      data-tip={t}
+                      onClick={() => setBadgeShape(b)}
+                    >
+                      {b === "plain" ? (
+                        <span className="np-shot-tglyph">1</span>
+                      ) : (
+                        <span
+                          className="np-shot-sw"
+                          style={{
+                            borderRadius: b === "circle" ? "50%" : 3,
+                            background: "currentColor",
+                          }}
+                        />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* 马赛克/模糊区域形状（2026-10-30 标记增强）：方形 / 圆形 */}
+              {panel.kind === "mask" && (
+                <div className="np-shot-pal-row">
+                  <button
+                    className={`np-shot-tool ${!maskRound ? "on" : ""}`}
+                    data-tip="方形区域"
+                    onClick={() => setMaskRound(false)}
+                  >
+                    <span className="np-shot-sw" style={{ borderRadius: 3, background: "currentColor" }} />
+                  </button>
+                  <button
+                    className={`np-shot-tool ${maskRound ? "on" : ""}`}
+                    data-tip="圆形区域"
+                    onClick={() => setMaskRound(true)}
+                  >
+                    <span className="np-shot-sw" style={{ borderRadius: "50%", background: "currentColor" }} />
+                  </button>
+                </div>
+              )}
               <div className="np-shot-pal-row">
                 {panel.kind === "color" &&
                   SHOT_PALETTE.map((c) => (
@@ -1879,6 +2446,16 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           }
         >
           {savedTip}
+        </div>
+      )}
+      {/* 悬停标记右键菜单（2026-10-30 标记增强）：删除/克隆/置前/置后 */}
+      {markMenu && (
+        <div className="np-shot-markmenu" style={{ left: markMenu.x, top: markMenu.y }}>
+          <button onClick={() => markOp("del")}>删除标记</button>
+          <button onClick={() => markOp("clone")}>克隆标记</button>
+          <button onClick={() => markOp("front")}>置前</button>
+          <button onClick={() => markOp("back")}>置后</button>
+          <div className="np-shot-pinmenu-hint">拖动移位 · Alt+拖动克隆 · 1-8 换色 · Del 删除</div>
         </div>
       )}
       {following && !sel && !busy && (

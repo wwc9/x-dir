@@ -18,6 +18,8 @@ export type ShotTool =
 export type ArrowHead = "line" | "solid" | "hollow";
 /** 箭头线条类型：直线 / 虚线 / 曲线（二次贝塞尔） */
 export type ArrowLine = "solid" | "dashed" | "curve";
+/** 序号徽标形状：圆形 / 方形 / 纯数字（无底） */
+export type BadgeShape = "circle" | "square" | "plain";
 
 export interface Shape {
   type: Exclude<ShotTool, "select">;
@@ -39,6 +41,24 @@ export interface Shape {
   /** 模糊专属：不透明度 0.15~1（滚轮调节，缺省 1 = 全糊；部分透明让原图
    *  隐约透出 = 毛玻璃弱化语义） */
   alpha?: number;
+  /** 通用线型扩展（2026-10-30 标记增强）：虚线（矩形/椭圆/画笔/马克笔；
+   *  箭头走 line 字段） */
+  dash?: boolean;
+  /** 矩形/椭圆：半透明实心填充（标注色 30%，空心↔实心切换） */
+  filled?: boolean;
+  /** 矩形：圆角半径（CSS px，绘制 ×scale，钳半短边） */
+  radius?: number;
+  /** 文字：高亮底色（标注色 30% 垫底） */
+  highlight?: boolean;
+  /** 文字：粗体 / 斜体 */
+  bold?: boolean;
+  italic?: boolean;
+  /** 序号：徽标形状（缺省 circle，旧会话兼容） */
+  badge?: BadgeShape;
+  /** 马赛克/模糊：圆形区域（包围盒内切椭圆） */
+  round?: boolean;
+  /** 箭头：双向（首尾同头部样式） */
+  two?: boolean;
 }
 
 /** 序号标记下一个数字：现有 step 徽标最大 seq + 1（无则 1）。撤销天然回退
@@ -153,10 +173,37 @@ export function shapeBounds(
     case "text":
       return textBox(s, scale);
     case "step": {
+      if ((s.badge ?? "circle") === "plain") return stepPlainBox(s, scale);
       const { d } = stepBadgeSize(s.width, scale, String(s.seq ?? 1).length);
       return { x: s.x - d / 2, y: s.y - d / 2, w: d, h: d };
     }
   }
+}
+
+/** 平移标记（2026-10-30 标记增强：已落标记拖动移位/克隆）：pen/marker
+ *  连 pts 一起平移，其余 x/y 平移（w/h 是增量/尺寸不变） */
+export function translateShape(s: Shape, dx: number, dy: number): Shape {
+  if (s.pts?.length) {
+    return {
+      ...s,
+      x: s.x + dx,
+      y: s.y + dy,
+      pts: s.pts.map((p) => ({ x: p.x + dx, y: p.y + dy })),
+    };
+  }
+  return { ...s, x: s.x + dx, y: s.y + dy };
+}
+
+/** 纯数字序号的 bbox 估算（数字字宽 ≈0.58em，字高 1.2em 居中） */
+function stepPlainBox(s: Shape, scale: number): { x: number; y: number; w: number; h: number } {
+  const fs = stepBadgeSize(s.width, scale, 1).d * 0.6;
+  const digits = String(s.seq ?? 1).length;
+  return {
+    x: s.x - (digits * 0.58 * fs) / 2,
+    y: s.y - (fs * 1.2) / 2,
+    w: digits * 0.58 * fs,
+    h: fs * 1.2,
+  };
 }
 
 /** 标记命中测试：返回最上层命中图形的下标（后画的在上面，倒序探测）。
@@ -179,6 +226,8 @@ export function shapeAt(
         const insideBox =
           px >= s.x - t && px <= s.x + s.w + t && py >= s.y - t && py <= s.y + s.h + t;
         if (!insideBox) break;
+        // 半透明实心（2026-10-30 标记增强）：整面包围盒命中
+        if (s.filled) return i;
         // 边框带：四边最近距离；极小矩形（边距小于 2t）整体命中
         const dEdge = Math.min(
           Math.abs(px - s.x),
@@ -199,6 +248,7 @@ export function shapeAt(
         const dx = px - cx;
         const dy = py - cy;
         const r = Math.hypot(dx / rx, dy / ry);
+        if (s.filled && r <= 1) return i; // 实心：内部全域命中
         if (r < 1e-6) return i;
         const bx = cx + dx / r;
         const by = cy + dy / r;
@@ -243,12 +293,28 @@ export function shapeAt(
         break;
       }
       case "step": {
+        // 纯数字形：无底，按数字 bbox 估算（CJK 全宽近似不适用，数字 0.58em）
+        if ((s.badge ?? "circle") === "plain") {
+          const b = stepPlainBox(s, scale);
+          if (px >= b.x - tol && px <= b.x + b.w + tol && py >= b.y - tol && py <= b.y + b.h + tol)
+            return i;
+          break;
+        }
         const { d } = stepBadgeSize(s.width, scale, String(s.seq ?? 1).length);
         if (Math.hypot(px - s.x, py - s.y) <= d / 2 + tol) return i;
         break;
       }
       case "mosaic":
       case "blur": {
+        if (s.round) {
+          const rx = s.w / 2;
+          const ry = s.h / 2;
+          if (rx < 1 || ry < 1) break;
+          const nx = (px - (s.x + rx)) / rx;
+          const ny = (py - (s.y + ry)) / ry;
+          if (nx * nx + ny * ny <= 1) return i;
+          break;
+        }
         if (px >= s.x - tol && px <= s.x + s.w + tol && py >= s.y - tol && py <= s.y + s.h + tol)
           return i;
         break;
@@ -705,7 +771,33 @@ export function drawCrosshair(
 
 // ── 绘制（物理像素坐标系；线宽/字号 ×scale 还原 CSS 观感）─────────────────
 
-/** 文字换行绘制（\n 显式换行），返回实际占用高度 */
+/** 马赛克/模糊的裁剪区域（2026-10-30 标记增强）：方形 = 包围盒矩形，
+ *  圆形 = 内切椭圆（打码人脸等更自然）；调用方负责 save/restore */
+function clipRegion(
+  ctx: CanvasRenderingContext2D,
+  s: Shape,
+  ox: number,
+  oy: number,
+): void {
+  ctx.beginPath();
+  if (s.round) {
+    ctx.ellipse(
+      s.x + ox + s.w / 2,
+      s.y + oy + s.h / 2,
+      Math.abs(s.w / 2),
+      Math.abs(s.h / 2),
+      0,
+      0,
+      Math.PI * 2,
+    );
+  } else {
+    ctx.rect(s.x + ox, s.y + oy, s.w, s.h);
+  }
+  ctx.clip();
+}
+
+/** 文字换行绘制（\n 显式换行），返回实际占用高度；deco = "italic bold "
+ *  前缀（2026-10-30 标记增强） */
 export function drawText(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -713,9 +805,10 @@ export function drawText(
   y: number,
   fontSize: number,
   color: string,
+  deco = "",
 ): number {
   const lines = text.split("\n");
-  ctx.font = `${fontSize}px "Segoe UI", "Microsoft YaHei", sans-serif`;
+  ctx.font = `${deco}${fontSize}px "Segoe UI", "Microsoft YaHei", sans-serif`;
   ctx.fillStyle = color;
   ctx.textBaseline = "top";
   const lh = fontSize * 1.35;
@@ -741,21 +834,49 @@ export function drawShape(
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
   switch (s.type) {
-    case "rect":
-      ctx.strokeRect(s.x + ox, s.y + oy, s.w, s.h);
-      break;
-    case "ellipse": {
-      ctx.beginPath();
-      ctx.ellipse(
-        s.x + ox + s.w / 2,
-        s.y + oy + s.h / 2,
-        Math.abs(s.w / 2),
-        Math.abs(s.h / 2),
-        0,
-        0,
-        Math.PI * 2,
+    case "rect": {
+      const x = s.x + ox;
+      const y = s.y + oy;
+      const r = Math.min(
+        (s.radius ?? 0) * scale,
+        Math.abs(s.w) / 2,
+        Math.abs(s.h) / 2,
       );
+      if (s.filled) {
+        // 半透明实心（2026-10-30 标记增强）：30% 标注色，不遮内容
+        ctx.save();
+        ctx.globalAlpha = 0.3;
+        ctx.beginPath();
+        if (r > 0) ctx.roundRect(x, y, s.w, s.h, r);
+        else ctx.rect(x, y, s.w, s.h);
+        ctx.fill();
+        ctx.restore();
+      }
+      if (s.dash) ctx.setLineDash([s.width * scale * 2.5, s.width * scale * 1.8]);
+      if (r > 0) {
+        ctx.beginPath();
+        ctx.roundRect(x, y, s.w, s.h, r);
+        ctx.stroke();
+      } else {
+        ctx.strokeRect(x, y, s.w, s.h);
+      }
+      ctx.setLineDash([]);
+      break;
+    }
+    case "ellipse": {
+      const cx = s.x + ox + s.w / 2;
+      const cy = s.y + oy + s.h / 2;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, Math.abs(s.w / 2), Math.abs(s.h / 2), 0, 0, Math.PI * 2);
+      if (s.filled) {
+        ctx.save();
+        ctx.globalAlpha = 0.3;
+        ctx.fill();
+        ctx.restore();
+      }
+      if (s.dash) ctx.setLineDash([s.width * scale * 2.5, s.width * scale * 1.8]);
       ctx.stroke();
+      ctx.setLineDash([]);
       break;
     }
     case "arrow": {
@@ -772,36 +893,48 @@ export function drawShape(
         ? Math.atan2(y2 - c.cy, x2 - c.cx)
         : Math.atan2(y2 - y1, x2 - x1);
       const headLen = Math.max(10 * scale, lw * 3);
-      const g = arrowWingsAt(x2, y2, ang, headLen);
       // 空心头（2026-10-30 修）：杆止于翼基线（尖回退 headLen×cos25°）、
       // 两翼开放描边不画底边——旧画法杆穿到尖 + 三角闭合描边，空腔被杆
       // 填满看不出空心
       const hollow = head === "hollow";
+      // 双向（2026-10-30 标记增强）：尾端切向（曲线 = 起点 - 控制点）
+      const tang2 = c
+        ? Math.atan2(y1 - c.cy, x1 - c.cx)
+        : Math.atan2(y1 - y2, x1 - x2);
+      // 空心头：杆两端各止于翼基线（双向时空心尾同样退基线，空腔透出）
       const end = hollow ? arrowBaseAt(x2, y2, ang, headLen) : { x: x2, y: y2 };
+      const start = hollow && s.two
+        ? arrowBaseAt(x1, y1, tang2, headLen)
+        : { x: x1, y: y1 };
       if (line === "dashed") ctx.setLineDash([lw * 2.5, lw * 1.8]);
       ctx.beginPath();
-      ctx.moveTo(x1, y1);
+      ctx.moveTo(start.x, start.y);
       if (c) ctx.quadraticCurveTo(c.cx, c.cy, end.x, end.y);
       else ctx.lineTo(end.x, end.y);
       ctx.stroke();
       ctx.setLineDash([]);
       if (Math.hypot(x2 - x1, y2 - y1) < 1) break;
-      if (head === "solid") {
-        ctx.beginPath();
-        ctx.moveTo(x2, y2);
-        ctx.lineTo(g.ax, g.ay);
-        ctx.lineTo(g.bx, g.by);
-        ctx.closePath();
-        ctx.fill();
-      } else {
-        // 单线 V 翼 / 空心：两翼开放描边（空心杆已止于翼基线，空腔透出）
-        ctx.beginPath();
-        ctx.moveTo(x2, y2);
-        ctx.lineTo(g.ax, g.ay);
-        ctx.moveTo(x2, y2);
-        ctx.lineTo(g.bx, g.by);
-        ctx.stroke();
-      }
+      // 头部绘制（尖点 + 切向）：solid 实心三角 / line·hollow 两翼开放
+      const paintHead = (tx: number, ty: number, tang: number) => {
+        const hg = arrowWingsAt(tx, ty, tang, headLen);
+        if (head === "solid") {
+          ctx.beginPath();
+          ctx.moveTo(tx, ty);
+          ctx.lineTo(hg.ax, hg.ay);
+          ctx.lineTo(hg.bx, hg.by);
+          ctx.closePath();
+          ctx.fill();
+        } else {
+          ctx.beginPath();
+          ctx.moveTo(tx, ty);
+          ctx.lineTo(hg.ax, hg.ay);
+          ctx.moveTo(tx, ty);
+          ctx.lineTo(hg.bx, hg.by);
+          ctx.stroke();
+        }
+      };
+      paintHead(x2, y2, ang);
+      if (s.two) paintHead(x1, y1, tang2);
       break;
     }
     case "pen":
@@ -811,25 +944,61 @@ export function drawShape(
         ctx.globalAlpha = 0.4;
         ctx.lineWidth = s.width * scale * 3.5;
       }
+      if (s.dash) ctx.setLineDash([s.width * scale * 2.5, s.width * scale * 1.8]);
       ctx.beginPath();
       ctx.moveTo(s.pts[0].x + ox, s.pts[0].y + oy);
       for (const p of s.pts.slice(1)) ctx.lineTo(p.x + ox, p.y + oy);
       ctx.stroke();
+      ctx.setLineDash([]);
       break;
     }
-    case "text":
-      drawText(ctx, s.text ?? "", s.x + ox, s.y + oy, s.width * scale, s.color);
+    case "text": {
+      const deco = s.bold || s.italic ? `${s.italic ? "italic " : ""}${s.bold ? "bold " : ""}` : "";
+      if (s.highlight) {
+        // 高亮底色（2026-10-30 标记增强）：标注色 30% 垫底，含少量内边距
+        const b = textBox(s, scale);
+        ctx.save();
+        ctx.globalAlpha = 0.3;
+        ctx.fillRect(
+          b.x + ox - 3 * scale,
+          b.y + oy - 2 * scale,
+          b.w + 6 * scale,
+          b.h + 4 * scale,
+        );
+        ctx.restore();
+      }
+      drawText(ctx, s.text ?? "", s.x + ox, s.y + oy, s.width * scale, s.color, deco);
       break;
+    }
     case "step": {
-      // 序号徽标：x/y = 圆心。实心圆 + 同色系反差描边（同底色背景上仍可辨）
-      // + 反差文字（stepBadgeColor 亮度判定）
+      // 序号徽标：x/y = 中心。形状三档（2026-10-30 标记增强）：圆形（缺省）
+      // / 方形（圆角方）/ 纯数字（无底，反差描边轮廓保可读）；有底形 =
+      // 实心底 + 同色系反差描边与文字（stepBadgeColor 亮度判定）
       const seq = s.seq ?? 1;
-      const { d, font } = stepBadgeSize(s.width, scale, String(seq).length);
+      const badge = s.badge ?? "circle";
       const cx = s.x + ox;
       const cy = s.y + oy;
       const contrast = stepBadgeColor(s.color);
+      if (badge === "plain") {
+        const fs = Math.round(stepBadgeSize(s.width, scale, 1).d * 0.6);
+        ctx.font = `bold ${fs}px "Segoe UI", "Microsoft YaHei", sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.lineWidth = Math.max(2, fs * 0.14);
+        ctx.strokeStyle = contrast;
+        ctx.strokeText(String(seq), cx, cy);
+        ctx.fillStyle = s.color;
+        ctx.fillText(String(seq), cx, cy);
+        break;
+      }
+      const { d, font } = stepBadgeSize(s.width, scale, String(seq).length);
       ctx.beginPath();
-      ctx.arc(cx, cy, d / 2, 0, Math.PI * 2);
+      if (badge === "square") {
+        const r = d * 0.22;
+        ctx.roundRect(cx - d / 2, cy - d / 2, d, d, r);
+      } else {
+        ctx.arc(cx, cy, d / 2, 0, Math.PI * 2);
+      }
       ctx.fill();
       ctx.lineWidth = Math.max(1, scale);
       ctx.strokeStyle = contrast;
@@ -853,16 +1022,17 @@ export function drawShape(
       const octx = off.getContext("2d");
       if (!octx) break;
       octx.drawImage(source, s.x + ox, s.y + oy, s.w, s.h, 0, 0, sw, sh);
+      ctx.save();
+      clipRegion(ctx, s, ox, oy);
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(off, 0, 0, sw, sh, s.x + ox, s.y + oy, s.w, s.h);
       ctx.imageSmoothingEnabled = true;
+      ctx.restore();
       break;
     }
     case "blur": {
       ctx.save();
-      ctx.beginPath();
-      ctx.rect(s.x + ox, s.y + oy, s.w, s.h);
-      ctx.clip();
+      clipRegion(ctx, s, ox, oy);
       // 滚轮可调不透明度（缺省 1）：部分透明 = 原图隐约透出的毛玻璃弱化
       ctx.globalAlpha = s.alpha ?? 1;
       ctx.filter = `blur(${Math.max(3, s.width * scale * 1.5)}px)`;
