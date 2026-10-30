@@ -162,6 +162,12 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { id: "shot-copy", keys: ["Enter / 双击"], label: "截图：复制到剪贴板", scope: "system" },
       { id: "shot-undo", keys: ["Ctrl+Z / Ctrl+Y"], label: "截图：撤销 / 重做标注", scope: "system" },
       {
+        id: "shot-nudge",
+        keys: ["WASD / 方向键"],
+        label: "截图：微调十字准星 / 平移选区框（Shift = 10px 大步）",
+        scope: "system",
+      },
+      {
         id: "shot-scroll-keys",
         keys: ["Enter / Esc"],
         label: "滚动截图浮条：完成出图 / 取消丢弃",

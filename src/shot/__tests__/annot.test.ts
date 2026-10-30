@@ -1,12 +1,14 @@
-// 截图标注纯函数测试（§3.6）：选区归一/调整、手柄命中、箭头头部、窗口命中、
-// 放大镜布局。
+// 截图标注纯函数测试（§3.6）：选区归一/调整、手柄命中、箭头头部与曲线
+// 控制点、窗口命中、放大镜布局。
 import { describe, expect, it } from "vitest";
 
 import {
   MAGNIFIER_GAP,
   MAGNIFIER_SRC,
   MAGNIFIER_ZOOM,
+  arrowCurveCtrl,
   arrowHead,
+  arrowWingsAt,
   formatMagColor,
   formatMagCoords,
   handleAt,
@@ -88,6 +90,44 @@ describe("arrowHead", () => {
 
   it("零长度线段返回 null", () => {
     expect(arrowHead(5, 5, 5, 5, 10)).toBeNull();
+  });
+});
+
+describe("arrowWingsAt", () => {
+  it("以给定切向角为中心两侧对称展开", () => {
+    // 朝右（0 弧度）尖端在原点：两翼都在尖端左侧、上下对称
+    const g = arrowWingsAt(0, 0, 0, 10);
+    expect(g.ay).toBeCloseTo(-g.by, 5);
+    expect(g.ax).toBeCloseTo(g.bx, 5);
+    expect(g.ax).toBeLessThan(0);
+  });
+
+  it("arrowHead 与同角度的 arrowWingsAt 结果一致（曲线末端切向复用）", () => {
+    const a = arrowHead(0, 0, 80, -60, 15);
+    const b = arrowWingsAt(80, -60, Math.atan2(-60, 80), 15);
+    expect(a).not.toBeNull();
+    expect(a!.ax).toBeCloseTo(b.ax, 5);
+    expect(a!.ay).toBeCloseTo(b.ay, 5);
+  });
+});
+
+describe("arrowCurveCtrl", () => {
+  it("控制点 = 中点沿方向左侧法线偏移 22% 线长", () => {
+    // 水平向右：左法线 = (0, 1)（屏幕坐标 y 向下），控制点在中点正下方
+    const c = arrowCurveCtrl(0, 0, 100, 0);
+    expect(c.cx).toBeCloseTo(50, 5);
+    expect(c.cy).toBeCloseTo(22, 5);
+  });
+
+  it("垂直向下：控制点在中点左侧", () => {
+    const c = arrowCurveCtrl(0, 0, 0, 50);
+    expect(c.cx).toBeCloseTo(-11, 5);
+    expect(c.cy).toBeCloseTo(25, 5);
+  });
+
+  it("起终点重合退化为该点本身", () => {
+    const c = arrowCurveCtrl(7, 9, 7, 9);
+    expect(c).toEqual({ cx: 7, cy: 9 });
   });
 });
 

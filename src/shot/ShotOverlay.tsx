@@ -1,6 +1,7 @@
 // 截图覆盖层（§3.6，常驻覆盖窗经 shot-session 事件驱动挂载）：定格截图铺底 +
-// 智能窗口识别（进会话默认预选光标下窗口）+ 选区（拖拽/手柄调整/整体移动）+
-// 标注（矩形/椭圆/箭头/画笔/马克笔/文字）+ 马赛克/模糊 + 复制/保存/贴图。
+// 智能窗口识别（进会话默认预选光标下窗口）+ 选区（拖拽/手柄调整/整体移动/
+// WASD·方向键平移）+ 标注（矩形/椭圆/箭头〔头部×线型样式〕/画笔·马克笔
+// 〔一键切换笔型〕/文字）+ 马赛克/模糊 + 复制/保存/贴图。
 // 全链路物理像素坐标（×boot.scale 与 CSS 像素换算），与定格截图逐像素对齐。
 // 定格帧经 shot_frame IPC 二进制直传 RGBA 原始字节，putImageData 直绘上屏
 // （2026-10-27 感知延迟二期：无 BMP 落盘/asset 读回/浏览器解码三跳）。
@@ -16,7 +17,6 @@ import {
   ArrowUpRight,
   Circle,
   Copy,
-  GalleryVerticalEnd,
   Frame,
   Grip,
   GripVertical,
@@ -27,8 +27,8 @@ import {
   Pencil,
   PenLine,
   Pin,
-  Redo2,
   Save,
+  ScrollText,
   Square,
   Type,
   Undo2,
@@ -42,10 +42,14 @@ import { DENSITY } from "../lib/tokens";
 import { AppIcon } from "../components/AppIcon";
 import {
   SHOT_PALETTE,
+  type ArrowHead,
+  type ArrowLine,
   type HandleId,
   type MagColorFormat,
   type Sel,
   type Shape,
+  arrowWingsAt,
+  arrowCurveCtrl,
   drawCrosshair,
   drawMagnifier,
   drawShape,
@@ -91,25 +95,65 @@ const BORDER_PALETTE = [
   "#1c1c1c",
 ];
 
-const TOOLS: { id: ShotTool; label: string; icon: typeof Square }[] = [
-  { id: "select", label: "选择 / 移动选区", icon: MousePointer2 },
-  { id: "rect", label: "矩形", icon: Square },
-  { id: "ellipse", label: "椭圆", icon: Circle },
-  { id: "arrow", label: "箭头", icon: ArrowUpRight },
-  { id: "pen", label: "画笔", icon: Pencil },
-  { id: "marker", label: "马克笔", icon: Highlighter },
-  { id: "text", label: "文字", icon: Type },
-  { id: "mosaic", label: "马赛克", icon: Grip },
-  { id: "blur", label: "模糊", icon: Waves },
-];
+/** 箭头样式面板文案（头部 × 线条两行独立设置） */
+const ARROW_HEAD_LABELS: Record<ArrowHead, string> = {
+  line: "箭头头部：单线",
+  solid: "箭头头部：实心三角",
+  hollow: "箭头头部：空心三角",
+};
+const ARROW_LINE_LABELS: Record<ArrowLine, string> = {
+  solid: "箭头线条：直线",
+  dashed: "箭头线条：虚线",
+  curve: "箭头线条：曲线",
+};
 
-/** 开始一个标注草稿（pointerdown；坐标相对选区，物理像素） */
+/** 箭头样式预览字形（28×16 SVG，currentColor 随按钮态着色；几何与
+ *  annot.drawShape 同源——曲线控制点 / 头部两翼复用同一套纯函数） */
+function ArrowGlyph({ head, line }: { head: ArrowHead; line: ArrowLine }) {
+  const f = (n: number) => Math.round(n * 10) / 10;
+  const x1 = 3;
+  const y1 = 13;
+  const x2 = 25;
+  const y2 = 3;
+  const c = line === "curve" ? arrowCurveCtrl(x1, y1, x2, y2) : null;
+  const ang = c ? Math.atan2(y2 - c.cy, x2 - c.cx) : Math.atan2(y2 - y1, x2 - x1);
+  const g = arrowWingsAt(x2, y2, ang, 8);
+  const body = c
+    ? `M${x1} ${y1} Q${f(c.cx)} ${f(c.cy)} ${x2} ${y2}`
+    : `M${x1} ${y1} L${x2} ${y2}`;
+  const tri = `M${x2} ${y2} L${f(g.ax)} ${f(g.ay)} L${f(g.bx)} ${f(g.by)} Z`;
+  return (
+    <svg
+      className="np-shot-arw"
+      viewBox="0 0 28 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={head === "solid" ? 1.4 : 1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d={body} strokeDasharray={line === "dashed" ? "3 2.5" : undefined} />
+      {head === "line" ? (
+        <>
+          <path d={`M${x2} ${y2} L${f(g.ax)} ${f(g.ay)}`} />
+          <path d={`M${x2} ${y2} L${f(g.bx)} ${f(g.by)}`} />
+        </>
+      ) : (
+        <path d={tri} fill={head === "solid" ? "currentColor" : "none"} />
+      )}
+    </svg>
+  );
+}
+
+/** 开始一个标注草稿（pointerdown；坐标相对选区，物理像素）。箭头附带
+ *  当前的头部/线条样式设置 */
 function startShape(
   tool: ShotTool,
   x: number,
   y: number,
   color: string,
   stroke: number,
+  arw?: { head: ArrowHead; line: ArrowLine },
 ): Shape | null {
   if (tool === "select") return null;
   return {
@@ -121,6 +165,8 @@ function startShape(
     pts: tool === "pen" || tool === "marker" ? [{ x, y }] : undefined,
     color,
     width: stroke,
+    head: tool === "arrow" ? (arw?.head ?? "line") : undefined,
+    line: tool === "arrow" ? (arw?.line ?? "solid") : undefined,
   };
 }
 
@@ -200,6 +246,12 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     hitWindow(boot.windows, boot.cx, boot.cy),
   );
   const [tool, setTool] = useState<ShotTool>("select");
+  /** 画笔/马克笔合并为一钮（2026-10-30 定案）：penType = 当前笔型，再次
+   *  点击在画笔 ↔ 马克笔间切换；从其他工具切入 = 恢复上次笔型 */
+  const [penType, setPenType] = useState<"pen" | "marker">("pen");
+  /** 箭头样式（头部 × 线条，独立两行设置；箭头钮再次点击开面板） */
+  const [headStyle, setHeadStyle] = useState<ArrowHead>("line");
+  const [lineStyle, setLineStyle] = useState<ArrowLine>("solid");
   const [color, setColor] = useState(SHOT_PALETTE[0]);
   const [strokeIdx, setStrokeIdx] = useState(1);
   const [shapes, setShapes] = useState<Shape[]>([]);
@@ -544,7 +596,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       }
       octx.drawImage(base, m, m);
       if (bbw) {
-        octx.strokeStyle = color;
+        octx.strokeStyle = borderColor;
         octx.lineWidth = bbw;
         octx.strokeRect(m - bbw / 2, m - bbw / 2, s.w + bbw, s.h + bbw);
       }
@@ -807,7 +859,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           return;
         }
         if (inside && tool !== "select") {
-          drawRef.current = startShape(tool, px - s.x, py - s.y, color, STROKES[strokeIdx]);
+          drawRef.current = startShape(tool, px - s.x, py - s.y, color, STROKES[strokeIdx], {
+            head: headStyle,
+            line: lineStyle,
+          });
           redrawLive();
           return;
         }
@@ -823,7 +878,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       redrawLive();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [busy, tool, color, strokeIdx, redrawBase, redrawLive, commitText, exitShot],
+    [busy, tool, color, strokeIdx, headStyle, lineStyle, redrawBase, redrawLive, commitText, exitShot],
   );
 
   const onPointerMove = useCallback(
@@ -983,6 +1038,48 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         }
         return;
       }
+      // WASD / 方向键微调（2026-10-30 定案）：跟随态（十字准星）/拖拽中 =
+      // 移动真实光标（Rust SetCursorPos，指针流自然接管十字线/放大镜/预选
+      // 窗口跟随与拖拽终点）；已确认选区 = 整体平移选区框（标注坐标相对
+      // 选区，随框联动）。Shift = 10 物理像素大步；带修饰键组合不劫持
+      const NUDGE: Record<string, [number, number]> = {
+        arrowleft: [-1, 0],
+        a: [-1, 0],
+        arrowright: [1, 0],
+        d: [1, 0],
+        arrowup: [0, -1],
+        w: [0, -1],
+        arrowdown: [0, 1],
+        s: [0, 1],
+      };
+      const nd = NUDGE[e.key.toLowerCase()];
+      if (nd && !e.ctrlKey && !e.metaKey && !e.altKey && !busy) {
+        e.preventDefault();
+        const step = e.shiftKey ? 10 : 1;
+        if (followingRef.current || dragRef.current) {
+          const cur = magRef.current ?? { x: boot.cx, y: boot.cy };
+          // 目标钳制在显示器内并换算回实际允许位移（贴边按键不再外移）
+          const tx = Math.max(0, Math.min(cur.x + nd[0] * step, boot.mw - 1));
+          const ty = Math.max(0, Math.min(cur.y + nd[1] * step, boot.mh - 1));
+          const dx = tx - cur.x;
+          const dy = ty - cur.y;
+          if (dx || dy) void api.shotNudgeCursor(dx, dy).catch(() => undefined);
+        } else {
+          const s = selRef.current;
+          if (s && !drawRef.current && !resizeRef.current && !moveRef.current) {
+            const ns = {
+              ...s,
+              x: Math.max(0, Math.min(s.x + nd[0] * step, boot.mw - s.w)),
+              y: Math.max(0, Math.min(s.y + nd[1] * step, boot.mh - s.h)),
+            };
+            setSel(ns);
+            selRef.current = ns;
+            redrawBase();
+            redrawLive();
+          }
+        }
+        return;
+      }
       // 放大镜快捷键（跟随/拖拽态）：Shift 切换色值格式 / C 复制色值 /
       // P 全局/相对坐标（PixPin 参考口径；带修饰键的组合不劫持）
       const magColor = magColorRef.current;
@@ -1031,16 +1128,16 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [exitShot, commitText, undo, redo, finish, redrawLive]);
+  }, [exitShot, commitText, undo, redo, finish, redrawLive, busy]);
 
   // ── 工具栏定位（选区下方 12px，放不下换上方；水平居中钳制屏内）──────────
   const [tbPos, setTbPos] = useState<{ left: number; top: number } | null>(null);
   const tbDragRef = useRef<{ dx: number; dy: number } | null>(null);
   /** 拖动过的工具栏粘住手动位置，直到选区重建（新截图/重新框选）才回自动位 */
   const tbDraggedRef = useRef(false);
-  /** 弹层设置面板：颜色/线宽/阴影/边框，锚定触发按钮正上方（越界翻转/钳屏） */
+  /** 弹层设置面板：颜色/线宽/阴影/边框/箭头样式，锚定触发按钮正上方（越界翻转/钳屏） */
   const [panel, setPanel] = useState<{
-    kind: "color" | "width" | "shadow" | "border";
+    kind: "color" | "width" | "shadow" | "border" | "arrow";
     cx: number;
     btnTop: number;
     btnBottom: number;
@@ -1049,7 +1146,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   } | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const openPanel =
-    (kind: "color" | "width" | "shadow" | "border") =>
+    (kind: "color" | "width" | "shadow" | "border" | "arrow") =>
     (e: React.MouseEvent<HTMLButtonElement>) => {
       const r = e.currentTarget.getBoundingClientRect();
       setPanel((prev) =>
@@ -1146,6 +1243,51 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           ]
         : STROKES.map((w, i) => ({ v: i, px: Math.round(w / 1.6) + 2, title: "粗细" }));
 
+  /** 工具行按钮（画笔/马克笔一钮两型、箭头再点开样式面板，2026-10-30 定案） */
+  const penActive = tool === "pen" || tool === "marker";
+  const toolBtns: {
+    id: ShotTool;
+    label: string;
+    icon: typeof Square;
+    on: boolean;
+    onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  }[] = [
+    { id: "select", label: "选择 / 移动选区", icon: MousePointer2, on: tool === "select", onClick: () => setTool("select") },
+    { id: "rect", label: "矩形", icon: Square, on: tool === "rect", onClick: () => setTool("rect") },
+    { id: "ellipse", label: "椭圆", icon: Circle, on: tool === "ellipse", onClick: () => setTool("ellipse") },
+    {
+      id: "arrow",
+      label: tool === "arrow" ? "箭头（再次点击设置样式）" : "箭头",
+      icon: ArrowUpRight,
+      on: tool === "arrow",
+      onClick: (e) => (tool === "arrow" ? openPanel("arrow")(e) : setTool("arrow")),
+    },
+    {
+      id: "pen",
+      label: penActive
+        ? penType === "pen"
+          ? "画笔（点击切换马克笔）"
+          : "马克笔（点击切换画笔）"
+        : penType === "pen"
+          ? "画笔"
+          : "马克笔",
+      icon: penType === "pen" ? Pencil : Highlighter,
+      on: penActive,
+      onClick: () => {
+        if (penActive) {
+          const next = penType === "pen" ? "marker" : "pen";
+          setPenType(next);
+          setTool(next);
+        } else {
+          setTool(penType);
+        }
+      },
+    },
+    { id: "text", label: "文字", icon: Type, on: tool === "text", onClick: () => setTool("text") },
+    { id: "mosaic", label: "马赛克", icon: Grip, on: tool === "mosaic", onClick: () => setTool("mosaic") },
+    { id: "blur", label: "模糊", icon: Waves, on: tool === "blur", onClick: () => setTool("blur") },
+  ];
+
   return (
     <div
       className="np-shot"
@@ -1200,15 +1342,15 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           </span>
           <div className="np-shot-tb-rows">
           <div className="np-shot-tb-row">
-            {TOOLS.map((t) => (
+            {toolBtns.map((t) => (
               <button
                 key={t.id}
-                className={`np-shot-tool ${tool === t.id ? "on" : ""}`}
+                className={`np-shot-tool ${t.on ? "on" : ""}`}
                 data-tip={t.label}
-                onClick={() => setTool(t.id)}
+                onClick={t.onClick}
               >
                 <AppIcon icon={t.icon} size={DENSITY.iconLg} />
-                </button>
+              </button>
             ))}
             <button
               className="np-shot-tool"
@@ -1218,15 +1360,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               onClick={undo}
             >
               <AppIcon icon={Undo2} size={DENSITY.iconLg} />
-            </button>
-            <button
-              className="np-shot-tool"
-              data-tip="重做"
-              data-kbd="Ctrl+Y"
-              disabled={!redoStack.length}
-              onClick={redo}
-            >
-              <AppIcon icon={Redo2} size={DENSITY.iconLg} />
             </button>
           </div>
           <div className="np-shot-tb-row">
@@ -1285,7 +1418,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               data-tip="滚动截图：滚轮下滚拼接长图"
               onClick={startScroll}
             >
-              <AppIcon icon={GalleryVerticalEnd} size={DENSITY.iconLg} />
+              <AppIcon icon={ScrollText} size={DENSITY.iconLg} />
             </button>
             <button
               className="np-shot-tool np-shot-danger"
@@ -1303,6 +1436,34 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               className="np-shot-palette"
               style={{ position: "fixed", left: panel.left, top: panel.top }}
             >
+              {panel.kind === "arrow" && (
+                <div className="np-shot-pal-row">
+                  {(["line", "solid", "hollow"] as ArrowHead[]).map((h) => (
+                    <button
+                      key={`h-${h}`}
+                      className={`np-shot-tool ${headStyle === h ? "on" : ""}`}
+                      data-tip={ARROW_HEAD_LABELS[h]}
+                      onClick={() => setHeadStyle(h)}
+                    >
+                      <ArrowGlyph head={h} line="solid" />
+                    </button>
+                  ))}
+                </div>
+              )}
+              {panel.kind === "arrow" && (
+                <div className="np-shot-pal-row">
+                  {(["solid", "dashed", "curve"] as ArrowLine[]).map((l) => (
+                    <button
+                      key={`l-${l}`}
+                      className={`np-shot-tool ${lineStyle === l ? "on" : ""}`}
+                      data-tip={ARROW_LINE_LABELS[l]}
+                      onClick={() => setLineStyle(l)}
+                    >
+                      <ArrowGlyph head="line" line={l} />
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="np-shot-pal-row">
                 {panel.kind === "color" &&
                   SHOT_PALETTE.map((c) => (
@@ -1377,9 +1538,13 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       )}
       {savedTip && <div className="np-shot-saved">{savedTip}</div>}
       {following && !sel && !busy && (
-        <div className="np-shot-hint">移动选择窗口 · 按住拖拽自定义区域 · Esc 退出</div>
+        <div className="np-shot-hint">
+          移动选择窗口 · 按住拖拽自定义区域 · WASD/方向键微调准星 · Esc 退出
+        </div>
       )}
-      {!following && !sel && !busy && <div className="np-shot-hint">拖拽框选区域 · 点击选中窗口 · Esc 退出</div>}
+      {!following && !sel && !busy && (
+        <div className="np-shot-hint">拖拽框选区域 · 点击选中窗口 · WASD/方向键移动选区 · Esc 退出</div>
+      )}
     </div>
   );
 }

@@ -4731,9 +4731,19 @@ mark.np-gsearch-mark {
 .np-shot-tool.np-shot-primary {
   color: var(--np-accent);
 }
+/* 关闭钮：图标恒红（2026-10-30 定案；hover 反白底放大危险语义） */
+.np-shot-tool.np-shot-danger {
+  color: var(--np-danger);
+}
 .np-shot-tool.np-shot-danger:hover {
   background: var(--np-danger);
   color: var(--np-danger-fg);
+}
+/* 箭头样式面板预览字形（28×16 viewBox，currentColor 随按钮态着色） */
+.np-shot-arw {
+  display: block;
+  width: 28px;
+  height: 16px;
 }
 /* 粗细/字号档位点 */
 .np-shot-bdcolors {

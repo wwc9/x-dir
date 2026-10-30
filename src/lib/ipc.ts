@@ -766,6 +766,9 @@ export const api = {
   /** 会话定格帧二进制直传（RGBA 原始字节，显示器整幅）：前端 putImageData
    *  直绘，无 BMP 落盘/asset 读回/解码三跳；空 ArrayBuffer = 无进行中的会话 */
   shotFrame: () => cmd<ArrayBuffer>("shot_frame"),
+  /** 截图准星键盘微调（WASD/方向键）：移动真实光标（物理像素相对位移），
+   *  生成的鼠标移动由覆盖窗 pointermove 正常接管 */
+  shotNudgeCursor: (dx: number, dy: number) => cmd<void>("shot_nudge_cursor", { dx, dy }),
   /** 复制图像 PNG（dataURL）到系统剪贴板（回落路径：含 PNG 编码/解码） */
   shotCopy: (dataUrl: string) => cmd<void>("shot_copy", { dataUrl }),
   /** 复制选区到剪贴板（感知优先路径）：RGBA 原始字节整体作为 invoke 请求体

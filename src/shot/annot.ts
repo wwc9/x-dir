@@ -13,6 +13,11 @@ export type ShotTool =
   | "mosaic"
   | "blur";
 
+/** 箭头头部样式：单线 V 翼 / 实心三角 / 空心三角 */
+export type ArrowHead = "line" | "solid" | "hollow";
+/** 箭头线条类型：直线 / 虚线 / 曲线（二次贝塞尔） */
+export type ArrowLine = "solid" | "dashed" | "curve";
+
 export interface Shape {
   type: Exclude<ShotTool, "select">;
   /** 包围盒（相对选区左上角的物理像素；pen/marker 用 pts） */
@@ -25,6 +30,9 @@ export interface Shape {
   /** 线宽 / 文字字号（CSS 像素，绘制时 ×scale） */
   width: number;
   text?: string;
+  /** 箭头专属：头部样式 / 线条类型（缺省 = line/solid，旧会话图形兼容） */
+  head?: ArrowHead;
+  line?: ArrowLine;
 }
 
 /** 画布内容色板（QQ 标注惯用色系） */
@@ -115,6 +123,23 @@ export function resizeSel(
   };
 }
 
+/** 箭头头部两翼端点（沿给定切向角的 ±25° 张角；曲线箭头末端切向 =
+ *  端点 - 贝塞尔控制点，头部随切向自然转向） */
+export function arrowWingsAt(
+  tipX: number,
+  tipY: number,
+  angle: number,
+  headLen: number,
+): { ax: number; ay: number; bx: number; by: number } {
+  const wing = (off: number) => ({
+    x: tipX - headLen * Math.cos(angle + off),
+    y: tipY - headLen * Math.sin(angle + off),
+  });
+  const a = wing(Math.PI / 7);
+  const b = wing(-Math.PI / 7);
+  return { ax: a.x, ay: a.y, bx: b.x, by: b.y };
+}
+
 /** 箭头头部两翼端点（线段末端的 ±25° 张角） */
 export function arrowHead(
   x1: number,
@@ -125,14 +150,20 @@ export function arrowHead(
 ): { ax: number; ay: number; bx: number; by: number } | null {
   const len = Math.hypot(x2 - x1, y2 - y1);
   if (len < 1) return null;
-  const ang = Math.atan2(y2 - y1, x2 - x1);
-  const wing = (off: number) => ({
-    x: x2 - headLen * Math.cos(ang + off),
-    y: y2 - headLen * Math.sin(ang + off),
-  });
-  const a = wing(Math.PI / 7);
-  const b = wing(-Math.PI / 7);
-  return { ax: a.x, ay: a.y, bx: b.x, by: b.y };
+  return arrowWingsAt(x2, y2, Math.atan2(y2 - y1, x2 - x1), headLen);
+}
+
+/** 曲线箭头二次贝塞尔控制点：起终点中点沿方向左侧法线偏移 22% 线长
+ *  （弓高随箭头长短自适应；统一偏向行进方向左侧，成图方向可预期） */
+export function arrowCurveCtrl(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+): { cx: number; cy: number } {
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
+  return { cx: mx - (y2 - y1) * 0.22, cy: my + (x2 - x1) * 0.22 };
 }
 
 /** 可截目标命中：候选按 z 序（前→后）排列且已经过 Rust 侧可见层过滤
@@ -449,17 +480,38 @@ export function drawShape(
       const y1 = s.y + oy;
       const x2 = s.x + ox + s.w;
       const y2 = s.y + oy + s.h;
+      const lw = s.width * scale;
+      const line = s.line ?? "solid";
+      const head = s.head ?? "line";
+      // 曲线箭头：二次贝塞尔；末端切向 = 端点 - 控制点，头部随切向转向
+      const c = line === "curve" ? arrowCurveCtrl(x1, y1, x2, y2) : null;
+      const ang = c
+        ? Math.atan2(y2 - c.cy, x2 - c.cx)
+        : Math.atan2(y2 - y1, x2 - x1);
+      if (line === "dashed") ctx.setLineDash([lw * 2.5, lw * 1.8]);
       ctx.beginPath();
       ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
+      if (c) ctx.quadraticCurveTo(c.cx, c.cy, x2, y2);
+      else ctx.lineTo(x2, y2);
       ctx.stroke();
-      const head = arrowHead(x1, y1, x2, y2, Math.max(10 * scale, s.width * scale * 3));
-      if (head) {
+      ctx.setLineDash([]);
+      if (Math.hypot(x2 - x1, y2 - y1) < 1) break;
+      const headLen = Math.max(10 * scale, lw * 3);
+      const g = arrowWingsAt(x2, y2, ang, headLen);
+      if (head === "solid" || head === "hollow") {
         ctx.beginPath();
         ctx.moveTo(x2, y2);
-        ctx.lineTo(head.ax, head.ay);
+        ctx.lineTo(g.ax, g.ay);
+        ctx.lineTo(g.bx, g.by);
+        ctx.closePath();
+        if (head === "solid") ctx.fill();
+        else ctx.stroke();
+      } else {
+        ctx.beginPath();
         ctx.moveTo(x2, y2);
-        ctx.lineTo(head.bx, head.by);
+        ctx.lineTo(g.ax, g.ay);
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(g.bx, g.by);
         ctx.stroke();
       }
       break;

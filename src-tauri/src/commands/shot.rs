@@ -695,6 +695,23 @@ pub fn shot_close(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// 截图准星键盘微调（WASD/方向键，物理像素相对位移）：GetCursorPos 后
+/// SetCursorPos 移动真实光标——移动本身生成 WM_MOUSEMOVE，覆盖窗的
+/// pointermove 正常驱动十字线/放大镜/预选窗口跟随，前端无需手动重绘；
+/// Shift 加速由前端换算成大步长再传入。仅截图会话内有意义，无会话
+/// 状态可查（命令无副作用安全性），直接执行。
+#[tauri::command]
+pub fn shot_nudge_cursor(dx: i32, dy: i32) -> Result<(), String> {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, SetCursorPos};
+    let mut pt = POINT::default();
+    unsafe {
+        GetCursorPos(&mut pt).map_err(|e| format!("GetCursorPos 失败：{e}"))?;
+        SetCursorPos(pt.x + dx, pt.y + dy).map_err(|e| format!("SetCursorPos 失败：{e}"))?;
+    }
+    Ok(())
+}
+
 // ── 三个完成动作：复制 / 贴图 / 保存 ────────────────────────────────────────
 
 #[tauri::command]
