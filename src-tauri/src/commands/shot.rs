@@ -961,7 +961,12 @@ pub fn shot_pin(
     w: i32,
     h: i32,
 ) -> Result<(), String> {
+    log::debug!(
+        "贴图 dataURL 入口：{} 字符，落位=({x},{y})，{w}×{h}",
+        data_url.len()
+    );
     if w < 8 || h < 8 || w > 20000 || h > 20000 {
+        log::warn!("贴图 dataURL 拒绝：尺寸非法 {w}×{h}");
         return Err("贴图尺寸非法".into());
     }
     let bytes = decode_data_url(&data_url)?;
@@ -974,7 +979,7 @@ pub fn shot_pin(
 }
 
 /// 建贴图窗并落位（shot_pin dataURL 回落与 shot_pin_raw 直传共用）。
-/// 返回前已 end_session 收蒙层（build() 泵消息与全屏蒙层互卡的既有防护）
+/// 返回前已 end_session 收蒙层；建窗在专用线程执行（见函数尾注释）
 fn spawn_pin_window(
     app: &AppHandle,
     file: &std::path::Path,
@@ -987,10 +992,8 @@ fn spawn_pin_window(
     let scale = monitor_at(x + w / 2, y + h / 2)
         .map(|m| m.scale as f64)
         .unwrap_or(1.0);
-    // 建窗前先收蒙层（2026-10-27 E2E 实证）：build() 会泵主线程消息，全屏
-    // 置顶蒙层在场时其重绘/焦点事件重入会让 build 卡死不返回（窗口已建、
-    // set_position/show 永不执行，贴图永不可见）。先收场再建窗，视觉也
-    // 自然——贴图落屏时蒙层恰好退场
+    // 建窗前先收蒙层（2026-10-27 E2E 实证）：全屏置顶蒙层在场时建窗重绘/焦点
+    // 事件重入会让建窗卡死；先收场再建窗，视觉也自然——贴图落屏时蒙层恰好退场
     end_session(app);
     let boot = serde_json::json!({
         "window": "pin",
@@ -999,7 +1002,52 @@ fn spawn_pin_window(
         "h": h,
         "scale": scale,
     });
-    let win = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("shot.html".into()))
+    let file = file.to_path_buf();
+    let app2 = app.clone();
+    // 建窗放专用线程执行（2026-10-30 死锁链修复）：无论命令内联（同步命令
+    // 本身在主线程）还是 run_on_main_thread 投递，build() 的内部等待都在
+    // 主循环自己的执行路径上——WebView2 建窗握手与事件循环互相等待即挂死
+    // （贴图直传入口后 build 永不返回，带/不带调试端口均实证；WebView 已建
+    // 到 about:blank 后握手卡死），后续覆盖窗页面失联（下一会话 5s 看门狗
+    // 连挂）、看门狗 destroy 后进程全挂（Responding:False）。专用线程让
+    // build 的内部派发落到空闲主循环上完成（与启动期 ensure_shot_window
+    // 同效）。60ms 延迟让 end_session 的停靠 set_position 先落地
+    std::thread::Builder::new()
+        .name("pin-window".into())
+        .spawn(move || {
+            std::thread::sleep(Duration::from_millis(60));
+            let spec = PinWindowSpec {
+                label: &label,
+                boot: &boot,
+                file: &file,
+                x,
+                y,
+                w,
+                h,
+            };
+            if let Err(e) = build_pin_window(&app2, &spec) {
+                log::error!("贴图窗创建失败：{e}");
+            }
+        })
+        .map_err(|e| format!("贴图建窗线程启动失败：{e}"))?;
+    Ok(())
+}
+
+/// 贴图窗创建参数（spawn 闭包打包，过 clippy 参数上限）
+struct PinWindowSpec<'a> {
+    label: &'a str,
+    boot: &'a serde_json::Value,
+    file: &'a std::path::Path,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+}
+
+/// 建窗线程内执行：建窗 + 落位 + 临时文件清理钩子
+fn build_pin_window(app: &AppHandle, spec: &PinWindowSpec) -> Result<(), String> {
+    let (label, x, y, w, h) = (spec.label, spec.x, spec.y, spec.w, spec.h);
+    let win = WebviewWindowBuilder::new(app, label, WebviewUrl::App("shot.html".into()))
         .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
         .title("X-Dir 贴图")
         .decorations(false)
@@ -1014,7 +1062,7 @@ fn spawn_pin_window(
         .transparent(true)
         .focused(false)
         .visible(false)
-        .initialization_script(format!("window.__BOOT__ = {boot};"))
+        .initialization_script(format!("window.__BOOT__ = {};", spec.boot))
         .build()
         .map_err(|e| format!("创建贴图窗口失败：{e}"))?;
     #[cfg(windows)]
@@ -1031,7 +1079,7 @@ fn spawn_pin_window(
             log::warn!("贴图 set_size 失败：{e}");
             e.to_string()
         })?;
-    let pin_file = file.to_path_buf();
+    let pin_file = spec.file.to_path_buf();
     win.on_window_event(move |e| {
         if matches!(e, tauri::WindowEvent::Destroyed) {
             let _ = std::fs::remove_file(&pin_file);
@@ -1087,10 +1135,14 @@ pub async fn shot_save_data(
 #[tauri::command]
 pub fn shot_pin_raw(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<(), String> {
     let bytes = match request.body() {
-        tauri::ipc::InvokeBody::Raw(b) => b,
+        tauri::ipc::InvokeBody::Raw(b) => {
+            log::debug!("贴图直传入口：{} 字节", b.len());
+            b
+        }
         _ => return Err("需要二进制请求体".into()),
     };
     let Some((w, h, x, y, rgba)) = parse_frame_header(bytes) else {
+        log::warn!("贴图直传拒绝：帧头不合法");
         return Err("帧头不合法".into());
     };
     let (w, h) = (w as i32, h as i32);
@@ -1130,7 +1182,9 @@ pub fn shot_pin_crop(
     sx: i32,
     sy: i32,
 ) -> Result<(), String> {
+    log::debug!("贴图快路入口：rect=({x},{y},{w},{h}) 落位=({sx},{sy})");
     if w < 8 || h < 8 || w > 20000 || h > 20000 {
+        log::warn!("贴图快路拒绝：尺寸非法 {w}×{h}");
         return Err("贴图尺寸非法".into());
     }
     let cropped = {

@@ -1126,6 +1126,11 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         e.preventDefault();
         void finish("copy");
       }
+      // Ctrl+P = 贴图（与 Enter=复制同族的完成动作快捷键）
+      if (ctrl && e.key.toLowerCase() === "p" && selRef.current) {
+        e.preventDefault();
+        void finish("pin");
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

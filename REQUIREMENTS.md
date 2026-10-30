@@ -140,7 +140,9 @@ PixPin 闭源；electron-screenshots（MIT）深度绑定 Electron API 无法用
   （composite：底图+标注按序压平）区域像素化/ctx.filter blur，后画糊先画
 - **完成动作**：复制（tauri-plugin-clipboard-manager 写位图）/ 保存（原生保存
   对话框，默认名 `截图_yyyymmdd_hhmmss.png`）/ 贴图（label `pin-*` 置顶无边框
-  小窗：拖动移动、滚轮缩放、Alt+滚轮不透明度、双击/Esc 关、右键复制/保存）；
+  小窗：拖动移动、滚轮缩放、Alt+滚轮不透明度、双击/Esc 关、右键复制/保存；
+  Ctrl+P 快捷键同点贴图钮，2026-10-30 补；贴图建窗在专用线程执行——主循环
+  路径上建窗与 WebView2 握手互等永挂的实机事故在案）；
   Esc/右键逐层取消（文字→标注→拖拽→工具→选区→关闭）；Enter/双击=复制
 - **设置**：`shotEnabled`（默认开）+ `shotHotkey`（预设 5 键位）；设置页「截图」
   分页含「立即试一次」入口（shot_begin 命令，即热键同款会话）
