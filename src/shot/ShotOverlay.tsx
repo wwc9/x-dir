@@ -172,10 +172,10 @@ function ScrollShotGlyph() {
   );
 }
 
-/** 序号标记工具图标（2026-10-30 用户定案「单徽 + 放置加号」）：数字圆徽 +
- *  右上角放置 + 号——点按即落数字徽的动作语义。lucide 无数字圆徽单图标，
- *  按 lucide 同风格自绘（同 ScrollShotGlyph/ArrowGlyph 先例）；数字用
- *  text 无描边（fill currentColor，粗体随系统 UI 字体） */
+/** 序号标记工具图标（2026-10-30 三次定案：纯单徽——在二选一定案「单徽+
+ *  放置加号」基础上去掉 + 号，只留居中数字圆徽）。lucide 无数字圆徽单
+ *  图标，按 lucide 同风格自绘（同 ScrollShotGlyph/ArrowGlyph 先例）；
+ *  数字用 text 无描边（fill currentColor，粗体随系统 UI 字体） */
 function StepMarkGlyph() {
   return (
     <svg
@@ -188,11 +188,11 @@ function StepMarkGlyph() {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <circle cx="10" cy="13.5" r="6.6" />
+      <circle cx="12" cy="12" r="7" />
       <text
-        x="10"
-        y="14.5"
-        fontSize="8.5"
+        x="12"
+        y="12.8"
+        fontSize="9"
         fontWeight="700"
         textAnchor="middle"
         dominantBaseline="middle"
@@ -201,7 +201,6 @@ function StepMarkGlyph() {
       >
         1
       </text>
-      <path d="M18 2.5v5M15.5 5h5" />
     </svg>
   );
 }
