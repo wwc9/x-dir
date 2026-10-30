@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>x-dir · 滚动截图图标候选</title>
+<style>
+  :root {
+    --bg:#0b0f14; --surface:#151a21; --surface2:#1d242e; --border:#2a3340;
+    --fg:#e5e7eb; --muted:#9ca3af; --accent:#3b82f6; --sel:rgba(59,130,246,.22);
+    --danger:#e5484d;
+  }
+  * { box-sizing:border-box; margin:0; }
+  body {
+    background:var(--bg); color:var(--fg); font-size:13px; padding:32px 40px;
+    font-family:system-ui,"Segoe UI","Microsoft YaHei",sans-serif;
+  }
+  h1 { font-size:17px; margin-bottom:6px; }
+  .sub { color:var(--muted); margin-bottom:28px; }
+  .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+  .card {
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:20px 16px 16px; display:flex; flex-direction:column; gap:14px;
+    position:relative;
+  }
+  .card.recommend::after {
+    content:"推荐"; position:absolute; top:-9px; right:12px;
+    background:var(--accent); color:#fff; font-size:11px; padding:1px 8px;
+    border-radius:999px;
+  }
+  .card.current::after {
+    content:"当前"; position:absolute; top:-9px; right:12px;
+    background:var(--surface2); color:var(--muted); font-size:11px;
+    padding:1px 8px; border-radius:999px; border:1px solid var(--border);
+  }
+  .big { display:flex; justify-content:center; padding:14px 0 6px; }
+  .big svg { width:72px; height:72px; color:var(--fg); }
+  .name { font-weight:600; font-size:14px; text-align:center; }
+  .en { color:var(--muted); font-size:11px; text-align:center; margin-top:2px; }
+  .desc { color:var(--muted); line-height:1.6; min-height:60px; }
+  .tb {
+    background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+    display:flex; align-items:center; justify-content:center; gap:2px; padding:4px;
+  }
+  .tb svg { width:20px; height:20px; color:var(--fg); }
+  .tb svg.target { color:var(--accent); }
+  .tb .sep { width:1px; height:18px; background:var(--border); margin:0 4px; }
+  .tb-cap { color:var(--muted); font-size:11px; text-align:center; margin-top:6px; }
+  .lucide { fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .note {
+    margin-top:26px; color:var(--muted); line-height:1.8;
+    border-top:1px solid var(--border); padding-top:16px; max-width:860px;
+  }
+</style>
+</head>
+<body>
+<h1>滚动截图 · 图标候选</h1>
+<div class="sub">四个候选，按语义与 20px 工具栏实尺寸对比选定。下方缩略条模拟标注条行尾真实环境（贴图 · <b class="target" style="color:var(--accent)">候选</b> · 保存 · 关闭 · 复制并关闭）。</div>
+
+<div class="grid">
+  <!-- 1. Scroll -->
+  <div class="card">
+    <div class="big">
+      <svg class="lucide" viewBox="0 0 24 24"><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/></svg>
+    </div>
+    <div>
+      <div class="name">卷轴</div>
+      <div class="en">Scroll</div>
+    </div>
+    <div class="desc">空白卷轴。「滚动」最直白的意象，笔画少、20px 下最清爽；无文字线，不与「文档/文本」混淆。</div>
+    <div>
+      <div class="tb">
+        <svg class="lucide" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>
+        <div class="sep"></div>
+        <svg class="lucide target" viewBox="0 0 24 24"><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/></svg>
+        <svg class="lucide" viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>
+        <svg class="lucide" viewBox="0 0 24 24" style="color:var(--danger)"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        <svg class="lucide" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+      </div>
+      <div class="tb-cap">工具栏实尺寸（20px）</div>
+    </div>
+  </div>
+
+  <!-- 2. ScrollText（当前） -->
+  <div class="card current">
+    <div class="big">
+      <svg class="lucide" viewBox="0 0 24 24"><path d="M15 12h-5"/><path d="M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/></svg>
+    </div>
+    <div>
+      <div class="name">带文字的卷轴</div>
+      <div class="en">ScrollText（当前）</div>
+    </div>
+    <div class="desc">卷轴 + 两行文字。同上但信息更密，20px 下两行线略糊；「文字」元素与截图语义无直接关联。</div>
+    <div>
+      <div class="tb">
+        <svg class="lucide" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>
+        <div class="sep"></div>
+        <svg class="lucide target" viewBox="0 0 24 24"><path d="M15 12h-5"/><path d="M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/></svg>
+        <svg class="lucide" viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>
+        <svg class="lucide" viewBox="0 0 24 24" style="color:var(--danger)"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        <svg class="lucide" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+      </div>
+      <div class="tb-cap">工具栏实尺寸（20px）</div>
+    </div>
+  </div>
+
+  <!-- 3. ImageDown -->
+  <div class="card">
+    <div class="big">
+      <svg class="lucide" viewBox="0 0 24 24"><path d="M10.3 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10l-3.1-3.1a2 2 0 0 0-2.814.014L6 21"/><path d="m14 19 3 3v-5.5"/><path d="m17 22 3-3"/><circle cx="9" cy="9" r="2"/></svg>
+    </div>
+    <div>
+      <div class="name">图片下载</div>
+      <div class="en">ImageDown</div>
+    </div>
+    <div class="desc">图片 + 向下箭头。「截图产出长图」语义直给；但下载箭头偏「保存文件」，与旁边的保存钮略撞意。</div>
+    <div>
+      <div class="tb">
+        <svg class="lucide" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>
+        <div class="sep"></div>
+        <svg class="lucide target" viewBox="0 0 24 24"><path d="M10.3 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10l-3.1-3.1a2 2 0 0 0-2.814.014L6 21"/><path d="m14 19 3 3v-5.5"/><path d="m17 22 3-3"/><circle cx="9" cy="9" r="2"/></svg>
+        <svg class="lucide" viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>
+        <svg class="lucide" viewBox="0 0 24 24" style="color:var(--danger)"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        <svg class="lucide" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+      </div>
+      <div class="tb-cap">工具栏实尺寸（20px）</div>
+    </div>
+  </div>
+
+  <!-- 4. ListEnd -->
+  <div class="card recommend">
+    <div class="big">
+      <svg class="lucide" viewBox="0 0 24 24"><path d="M16 5H3"/><path d="M16 12H3"/><path d="M9 19H3"/><path d="m16 16-3 3 3 3"/><path d="M21 5v12a2 2 0 0 1-2 2h-6"/></svg>
+    </div>
+    <div>
+      <div class="name">列表到底</div>
+      <div class="en">ListEnd</div>
+    </div>
+    <div class="desc">内容行 + 到底箭头。最贴「向下滚动、内容持续追加、到底收尾」的实际交互；与滚动条/长页面心智一致。</div>
+    <div>
+      <div class="tb">
+        <svg class="lucide" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>
+        <div class="sep"></div>
+        <svg class="lucide target" viewBox="0 0 24 24"><path d="M16 5H3"/><path d="M16 12H3"/><path d="M9 19H3"/><path d="m16 16-3 3 3 3"/><path d="M21 5v12a2 2 0 0 1-2 2h-6"/></svg>
+        <svg class="lucide" viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>
+        <svg class="lucide" viewBox="0 0 24 24" style="color:var(--danger)"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        <svg class="lucide" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+      </div>
+      <div class="tb-cap">工具栏实尺寸（20px）</div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  说明：SVG 均取自 lucide（Apache-2.0/MIT 兼容口径）原始路径内联，与正式图标渲染
+  （AppIcon · stroke-width 2 · 圆角端点）完全一致。选定后替换
+  src/shot/ShotOverlay.tsx 的 ScrollText 导入即可。个人推荐 <b style="color:var(--fg)">ListEnd</b>
+  （交互语义最准）或 <b style="color:var(--fg)">Scroll</b>（视觉最简）。
+</div>
+</body>
+</html>

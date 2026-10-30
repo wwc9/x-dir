@@ -14,7 +14,6 @@
 // 2026-10-28 定案，替代原生 title）。
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-  ArrowUpRight,
   Circle,
   Copy,
   Frame,
@@ -23,6 +22,7 @@ import {
   Highlighter,
   Layers,
   MousePointer2,
+  MoveUpRight,
   Palette,
   Pencil,
   PenLine,
@@ -1265,7 +1265,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     {
       id: "arrow",
       label: "箭头（点击设置样式）",
-      icon: ArrowUpRight,
+      icon: MoveUpRight,
       on: tool === "arrow",
       onClick: (e) => {
         setTool("arrow");
@@ -1400,12 +1400,12 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             </button>
             <button
               className="np-shot-tool np-shot-primary"
-              data-tip="复制到剪贴板 · 双击选区同效"
-              data-kbd="Enter"
-              onClick={() => void finish("copy")}
+              data-tip="滚动截图：滚轮下滚拼接长图"
+              onClick={startScroll}
             >
-              <AppIcon icon={Copy} size={DENSITY.iconLg} />
+              <AppIcon icon={ScrollText} size={DENSITY.iconLg} />
             </button>
+            {/* 行尾三钮（2026-10-30 定案）：保存 → 关闭 → 复制并关闭 */}
             <button
               className="np-shot-tool np-shot-primary"
               data-tip="保存为 PNG 文件"
@@ -1414,19 +1414,20 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               <AppIcon icon={Save} size={DENSITY.iconLg} />
             </button>
             <button
-              className="np-shot-tool np-shot-primary"
-              data-tip="滚动截图：滚轮下滚拼接长图"
-              onClick={startScroll}
-            >
-              <AppIcon icon={ScrollText} size={DENSITY.iconLg} />
-            </button>
-            <button
               className="np-shot-tool np-shot-danger"
               data-tip="取消截图"
               data-kbd="Esc"
               onClick={closeWindow}
             >
               <AppIcon icon={X} size={DENSITY.iconLg} />
+            </button>
+            <button
+              className="np-shot-tool np-shot-primary"
+              data-tip="复制并关闭 · 双击选区同效"
+              data-kbd="Enter"
+              onClick={() => void finish("copy")}
+            >
+              <AppIcon icon={Copy} size={DENSITY.iconLg} />
             </button>
           </div>
           </div>
