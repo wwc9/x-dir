@@ -10,6 +10,7 @@ export type ShotTool =
   | "pen"
   | "marker"
   | "text"
+  | "step"
   | "mosaic"
   | "blur";
 
@@ -33,6 +34,42 @@ export interface Shape {
   /** 箭头专属：头部样式 / 线条类型（缺省 = line/solid，旧会话图形兼容） */
   head?: ArrowHead;
   line?: ArrowLine;
+  /** 序号标记专属：徽标数字（点按时按 nextStepSeq 递增分配）。x/y = 圆心 */
+  seq?: number;
+}
+
+/** 序号标记下一个数字：现有 step 徽标最大 seq + 1（无则 1）。撤销天然回退
+ *  ——undo 摘掉的是最后落下的徽标（seq 恒为当时的最大值），max+1 自动
+ *  复用其数字；重做带回原 seq 不受影响。同一截图会话内连续点按即 1,2,3… */
+export function nextStepSeq(shapes: readonly Shape[]): number {
+  let max = 0;
+  for (const s of shapes) if (s.type === "step" && (s.seq ?? 1) > max) max = s.seq ?? 1;
+  return max + 1;
+}
+
+/** 序号徽标文字/描边配色：底色相对亮度 < 0.6 用白、否则用近黑（黄/白底
+ *  白字不可读）；非法色值按深色处理（配白字）。画布内容色同 fileIcons
+ *  语义，不走 --np-* */
+export function stepBadgeColor(fillHex: string): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(fillHex.trim());
+  if (!m) return "#ffffff";
+  const n = parseInt(m[1], 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => v / 255);
+  const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const l = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return l < 0.6 ? "#ffffff" : "#101010";
+}
+
+/** 序号徽标几何：直径 = (16 + 线宽×2.6)×scale（三档线宽 ≈ 21/26/34 css 观感），
+ *  多位数按位数加宽（10+ 不挤压数字）；字号 = 直径×0.54（物理像素） */
+export function stepBadgeSize(
+  width: number,
+  scale: number,
+  digits: number,
+): { d: number; font: number } {
+  const base = (16 + width * 2.6) * scale;
+  const d = base * (1 + 0.18 * Math.max(0, digits - 1));
+  return { d, font: Math.round(d * 0.54) };
 }
 
 /** 画布内容色板（QQ 标注惯用色系） */
@@ -532,6 +569,27 @@ export function drawShape(
     case "text":
       drawText(ctx, s.text ?? "", s.x + ox, s.y + oy, s.width * scale, s.color);
       break;
+    case "step": {
+      // 序号徽标：x/y = 圆心。实心圆 + 同色系反差描边（同底色背景上仍可辨）
+      // + 反差文字（stepBadgeColor 亮度判定）
+      const seq = s.seq ?? 1;
+      const { d, font } = stepBadgeSize(s.width, scale, String(seq).length);
+      const cx = s.x + ox;
+      const cy = s.y + oy;
+      const contrast = stepBadgeColor(s.color);
+      ctx.beginPath();
+      ctx.arc(cx, cy, d / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = Math.max(1, scale);
+      ctx.strokeStyle = contrast;
+      ctx.stroke();
+      ctx.fillStyle = contrast;
+      ctx.font = `bold ${font}px "Segoe UI", "Microsoft YaHei", sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(seq), cx, cy + font * 0.04);
+      break;
+    }
     case "mosaic": {
       // 取合成画布当前内容打码：下采样再上采样（像素化）。source 由调用方
       // 指定（预览传 comp 层——live 层挖孔区域是透明像素，采样它预览不可见）

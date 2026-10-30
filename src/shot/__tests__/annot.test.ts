@@ -1,5 +1,5 @@
 // 截图标注纯函数测试（§3.6）：选区归一/调整、手柄命中、箭头头部与曲线
-// 控制点、窗口命中、放大镜布局。
+// 控制点、窗口命中、放大镜布局、序号徽标。
 import { describe, expect, it } from "vitest";
 
 import {
@@ -16,9 +16,13 @@ import {
   hitWindow,
   magnifierBox,
   magnifierLayout,
+  nextStepSeq,
   normalizeSel,
   resizeSel,
   selHandles,
+  stepBadgeColor,
+  stepBadgeSize,
+  type Shape,
 } from "../annot";
 
 describe("normalizeSel", () => {
@@ -232,5 +236,74 @@ describe("hexToRgba", () => {
   it("非法输入退回白色", () => {
     expect(hexToRgba("rgb(1,2,3)", 0.5)).toBe("rgba(255,255,255,0.5)");
     expect(hexToRgba("#12345", 0.5)).toBe("rgba(255,255,255,0.5)");
+  });
+});
+
+describe("nextStepSeq", () => {
+  const step = (seq: number): Shape => ({
+    type: "step",
+    x: 0,
+    y: 0,
+    w: 0,
+    h: 0,
+    color: "#e5484d",
+    width: 4,
+    seq,
+  });
+  const rect: Shape = { type: "rect", x: 0, y: 0, w: 9, h: 9, color: "#fff", width: 2 };
+
+  it("无徽标从 1 起", () => {
+    expect(nextStepSeq([])).toBe(1);
+    expect(nextStepSeq([rect])).toBe(1);
+  });
+
+  it("取现有最大 seq + 1，只认 step 图形", () => {
+    expect(nextStepSeq([step(1)])).toBe(2);
+    expect(nextStepSeq([rect, step(1), step(2)])).toBe(3);
+  });
+
+  it("撤销摘掉最后徽标后数字回退复用（max+1 语义）", () => {
+    // 落了 1、2 后 undo 摘 2 → 剩 [step1] → 下一个应复用 2
+    const afterUndo = [step(1)];
+    expect(nextStepSeq(afterUndo)).toBe(2);
+  });
+
+  it("重做带回原 seq 不影响后续递增", () => {
+    const redone = [step(1), step(2)];
+    expect(nextStepSeq(redone)).toBe(3);
+  });
+});
+
+describe("stepBadgeColor", () => {
+  it("深底配白字（色板红/蓝/黑）", () => {
+    expect(stepBadgeColor("#e5484d")).toBe("#ffffff");
+    expect(stepBadgeColor("#3b82f6")).toBe("#ffffff");
+    expect(stepBadgeColor("#1c1c1c")).toBe("#ffffff");
+  });
+
+  it("亮底配近黑字（色板黄/白）", () => {
+    expect(stepBadgeColor("#ffc53d")).toBe("#101010");
+    expect(stepBadgeColor("#ffffff")).toBe("#101010");
+  });
+
+  it("非法色值按深色处理", () => {
+    expect(stepBadgeColor("not-a-color")).toBe("#ffffff");
+  });
+});
+
+describe("stepBadgeSize", () => {
+  it("直径随线宽与 scale 放大，字号 = 直径 54%", () => {
+    const s1 = stepBadgeSize(4, 1, 1);
+    expect(s1.d).toBeCloseTo((16 + 4 * 2.6) * 1, 5);
+    expect(s1.font).toBe(Math.round(s1.d * 0.54));
+    const s15 = stepBadgeSize(4, 1.5, 1);
+    expect(s15.d).toBeCloseTo(s1.d * 1.5, 5);
+  });
+
+  it("多位数按位数加宽且字号不超过直径", () => {
+    const one = stepBadgeSize(4, 1.5, 1);
+    const two = stepBadgeSize(4, 1.5, 2);
+    expect(two.d).toBeCloseTo(one.d * 1.18, 5);
+    expect(two.font).toBeLessThan(two.d);
   });
 });

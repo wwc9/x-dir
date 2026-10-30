@@ -1,7 +1,8 @@
 // 截图覆盖层（§3.6，常驻覆盖窗经 shot-session 事件驱动挂载）：定格截图铺底 +
 // 智能窗口识别（进会话默认预选光标下窗口）+ 选区（拖拽/手柄调整/整体移动/
 // WASD·方向键平移）+ 标注（矩形/椭圆/箭头〔点击弹面板选头部×线型〕/画笔·
-// 马克笔〔一钮弹面板选笔型〕/文字）+ 马赛克/模糊 + 复制/保存/贴图。
+// 马克笔〔一钮弹面板选笔型〕/文字/序号标记〔点按即落，同一截图自动递增〕）
+// + 马赛克/模糊 + 复制/保存/贴图。
 // 全链路物理像素坐标（×boot.scale 与 CSS 像素换算），与定格截图逐像素对齐。
 // 定格帧经 shot_frame IPC 二进制直传 RGBA 原始字节，putImageData 直绘上屏
 // （2026-10-27 感知延迟二期：无 BMP 落盘/asset 读回/浏览器解码三跳）。
@@ -21,6 +22,7 @@ import {
   GripVertical,
   Highlighter,
   Layers,
+  ListOrdered,
   MousePointer2,
   MoveUpRight,
   Palette,
@@ -55,6 +57,7 @@ import {
   formatMagColor,
   handleAt,
   hitWindow,
+  nextStepSeq,
   normalizeSel,
   resizeSel,
   type ShotTool,
@@ -885,6 +888,25 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           moveRef.current = { dx: px - s.x, dy: py - s.y };
           return;
         }
+        // 序号标记：点按即落（无拖拽草稿——徽标尺寸由线宽档决定，与落点
+        // 无关），数字按 nextStepSeq 自动递增；撤销摘掉最后徽标后数字回退
+        // 复用。x/y = 圆心（drawShape step 分支口径）
+        if (inside && tool === "step") {
+          const shape: Shape = {
+            type: "step",
+            x: px - s.x,
+            y: py - s.y,
+            w: 0,
+            h: 0,
+            color,
+            width: STROKES[strokeIdx],
+            seq: nextStepSeq(shapesRef.current),
+          };
+          shapesRef.current = [...shapesRef.current, shape];
+          setRedoStack([]);
+          setShapes(shapesRef.current);
+          return;
+        }
         if (inside && tool !== "select") {
           drawRef.current = startShape(tool, px - s.x, py - s.y, color, STROKES[strokeIdx], {
             head: headStyle,
@@ -1309,6 +1331,13 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       },
     },
     { id: "text", label: "文字", icon: Type, on: tool === "text", onClick: () => setTool("text") },
+    {
+      id: "step",
+      label: "序号标记（同一截图自动递增）",
+      icon: ListOrdered,
+      on: tool === "step",
+      onClick: () => setTool("step"),
+    },
     { id: "mosaic", label: "马赛克", icon: Grip, on: tool === "mosaic", onClick: () => setTool("mosaic") },
     { id: "blur", label: "模糊", icon: Waves, on: tool === "blur", onClick: () => setTool("blur") },
   ];
