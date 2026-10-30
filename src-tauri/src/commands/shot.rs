@@ -1183,6 +1183,75 @@ pub async fn shot_save_data(
     })?
 }
 
+/// 贴图窗拖动会话（2026-10-30「卡顿→闪动→抖动」三轮手感修复的终案）：
+/// JS 侧逐 pointermove 发 setPosition 无论怎么合帧/串行，都要经过
+/// 「页面事件 → IPC → SetWindowPos」链路，坐标快照过期与到达时序不匀
+/// 不可避免地产生抖动。改为 Rust 线程内 6ms 轮询 GetCursorPos 直接驱动
+/// set_position（125Hz、读的是 OS 权威光标、与 WebView 事件投递完全解耦）；
+/// 抓取偏移 = 按下时光标 - 窗口位。左键松开（GetAsyncKeyState 轮询）自动
+/// 结束，JS 的 stop 命令仅作冗余兜底。
+static PIN_DRAG_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+pub fn shot_pin_drag_start(window: tauri::WebviewWindow) -> Result<(), String> {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+    if PIN_DRAG_ACTIVE.swap(true, Ordering::SeqCst) {
+        return Ok(()); // 已有拖动会话
+    }
+    let mut cur = POINT::default();
+    unsafe {
+        GetCursorPos(&mut cur).map_err(|e| format!("GetCursorPos 失败：{e}"))?;
+    }
+    let pos = window
+        .outer_position()
+        .map_err(|e| format!("outer_position 失败：{e}"))?;
+    let (ox, oy) = (cur.x - pos.x, cur.y - pos.y);
+    std::thread::Builder::new()
+        .name("pin-drag".into())
+        .spawn(move || {
+            let mut last = (i32::MIN, i32::MIN);
+            let mut steps = 0u32;
+            let mut errs = 0u32;
+            while PIN_DRAG_ACTIVE.load(Ordering::SeqCst) {
+                // 左键已松开 → 收场（高位为 1 = 按下）
+                let pressed = unsafe {
+                    (windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(i32::from(
+                        windows::Win32::UI::Input::KeyboardAndMouse::VK_LBUTTON.0,
+                    )) as u16)
+                        & 0x8000
+                        != 0
+                };
+                if !pressed {
+                    break;
+                }
+                let mut p = POINT::default();
+                if unsafe { GetCursorPos(&mut p).is_ok() } && (p.x, p.y) != last {
+                    last = (p.x, p.y);
+                    if let Err(e) = window.set_position(PhysicalPosition::new(p.x - ox, p.y - oy)) {
+                        errs += 1;
+                        if errs <= 3 {
+                            log::warn!("贴图拖动 set_position 失败：{e}");
+                        }
+                    } else {
+                        steps += 1;
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(6));
+            }
+            log::debug!("贴图拖动会话收场：{steps} 步成功 / {errs} 步失败");
+            PIN_DRAG_ACTIVE.store(false, Ordering::SeqCst);
+        })
+        .map_err(|e| format!("贴图拖动线程启动失败：{e}"))?;
+    Ok(())
+}
+
+/// 冗余兜底：正常由 GetAsyncKeyState 检测松键收场
+#[tauri::command]
+pub fn shot_pin_drag_stop() {
+    PIN_DRAG_ACTIVE.store(false, Ordering::SeqCst);
+}
+
 /// 贴图（感知优先路径）：RGBA 原始字节直传，落盘为 BMP（编码 memcpy 级，
 /// 浏览器原生显示）——免 PNG 编码/解码；前端失败回落 shot_pin dataURL 路径
 #[tauri::command]

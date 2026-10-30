@@ -263,6 +263,8 @@ pub fn run() {
             commands::shot::shot_copy_raw,
             commands::shot::shot_frame,
             commands::shot::shot_nudge_cursor,
+            commands::shot::shot_pin_drag_start,
+            commands::shot::shot_pin_drag_stop,
             commands::shot::shot_ready,
             commands::shot::shot_page_ready,
             commands::shot::shot_pin,

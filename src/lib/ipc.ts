@@ -769,6 +769,11 @@ export const api = {
   /** 截图准星键盘微调（WASD/方向键）：移动真实光标（物理像素相对位移），
    *  生成的鼠标移动由覆盖窗 pointermove 正常接管 */
   shotNudgeCursor: (dx: number, dy: number) => cmd<void>("shot_nudge_cursor", { dx, dy }),
+  /** 贴图拖动会话：Rust 线程 125Hz 轮询系统光标直接驱动窗口（零逐帧 IPC）；
+   *  松开左键自动结束 */
+  shotPinDragStart: () => cmd<void>("shot_pin_drag_start"),
+  /** 贴图拖动冗余收场（正常由松键检测结束） */
+  shotPinDragStop: () => cmd<void>("shot_pin_drag_stop"),
   /** 复制图像 PNG（dataURL）到系统剪贴板（回落路径：含 PNG 编码/解码） */
   shotCopy: (dataUrl: string) => cmd<void>("shot_copy", { dataUrl }),
   /** 复制选区到剪贴板（感知优先路径）：RGBA 原始字节整体作为 invoke 请求体
