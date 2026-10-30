@@ -22,7 +22,6 @@ import {
   GripVertical,
   Highlighter,
   Layers,
-  ListOrdered,
   MousePointer2,
   MoveUpRight,
   Palette,
@@ -169,6 +168,40 @@ function ScrollShotGlyph() {
       <path d="M12 6v12" />
       <path d="m9 9 3-3 3 3" />
       <path d="m9 15 3 3 3-3" />
+    </svg>
+  );
+}
+
+/** 序号标记工具图标（2026-10-30 用户定案「单徽 + 放置加号」）：数字圆徽 +
+ *  右上角放置 + 号——点按即落数字徽的动作语义。lucide 无数字圆徽单图标，
+ *  按 lucide 同风格自绘（同 ScrollShotGlyph/ArrowGlyph 先例）；数字用
+ *  text 无描边（fill currentColor，粗体随系统 UI 字体） */
+function StepMarkGlyph() {
+  return (
+    <svg
+      className="np-shot-step-ic"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="10" cy="13.5" r="6.6" />
+      <text
+        x="10"
+        y="14.5"
+        fontSize="8.5"
+        fontWeight="700"
+        textAnchor="middle"
+        dominantBaseline="middle"
+        stroke="none"
+        fill="currentColor"
+      >
+        1
+      </text>
+      <path d="M18 2.5v5M15.5 5h5" />
     </svg>
   );
 }
@@ -1505,7 +1538,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const toolBtns: {
     id: ShotTool;
     label: string;
-    icon: typeof Square;
+    icon?: typeof Square;
+    /** 自绘图标（lucide 无对应单图标时；优先于 icon 渲染） */
+    glyph?: React.ReactNode;
     on: boolean;
     onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   }[] = [
@@ -1536,7 +1571,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     {
       id: "step",
       label: "序号标记（同一截图自动递增）",
-      icon: ListOrdered,
+      glyph: <StepMarkGlyph />,
       on: tool === "step",
       onClick: () => setTool("step"),
     },
@@ -1606,7 +1641,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                 data-tip={t.label}
                 onClick={t.onClick}
               >
-                <AppIcon icon={t.icon} size={DENSITY.iconLg} />
+                {t.glyph ?? <AppIcon icon={t.icon!} size={DENSITY.iconLg} />}
               </button>
             ))}
             <button

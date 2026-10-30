@@ -4752,6 +4752,12 @@ mark.np-gsearch-mark {
   width: 20px;
   height: 20px;
 }
+/* 序号标记工具图标（自绘 StepMarkGlyph）：与工具栏 iconLg=20 同尺寸口径 */
+.np-shot-step-ic {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
 /* 粗细/字号档位点 */
 .np-shot-bdcolors {
   gap: 5px;
