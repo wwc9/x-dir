@@ -4824,6 +4824,7 @@ mark.np-gsearch-mark {
   left: 50%;
   transform: translateX(-50%);
   z-index: 11;
+  pointer-events: none; /* HUD 只示值不接交互，别挡画布指针 */
   padding: 6px 16px;
   border-radius: var(--np-radius-pill);
   background: var(--np-surface);

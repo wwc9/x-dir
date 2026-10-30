@@ -62,6 +62,7 @@ import {
   normalizeSel,
   resizeSel,
   shapeAt,
+  shapeBounds,
   type ShotTool,
 } from "./annot";
 
@@ -217,6 +218,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const moveRef = useRef<{ dx: number; dy: number } | null>(null);
   const resizeRef = useRef<HandleId | null>(null);
   const drawRef = useRef<Shape | null>(null);
+  /** 悬停标记下标（滚轮编辑目标指示）：pointermove 探测 shapeAt，命中
+   *  变化才重绘 live 层画选中框；undo/redo/重选后失效置 null */
+  const hoverRef = useRef<number | null>(null);
   const composingRef = useRef(false);
   const toolbarRef = useRef<HTMLDivElement>(null);
   /** 放大镜锚点（最近一次光标物理坐标；跟随/拖拽态显示，确认选区即隐；
@@ -506,6 +510,27 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       ctx.clip();
       drawShape(ctx, dr, s.x, s.y, scale, compRef.current ?? undefined);
       ctx.restore();
+    }
+    // 悬停标记选中框（滚轮编辑目标指示，2026-10-30）：accent 虚线包围盒
+    // + 内侧留白，随标记滚轮调节后的新尺寸即时重画
+    const hov = hoverRef.current;
+    if (hov !== null && s && !followingRef.current && !dragRef.current) {
+      const hs = shapesRef.current[hov];
+      if (hs) {
+        const b = shapeBounds(hs, scale);
+        ctx.save();
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = Math.max(1, Math.round(scale));
+        ctx.setLineDash([5 * scale, 3 * scale]);
+        ctx.strokeRect(
+          s.x + b.x - 3 * scale,
+          s.y + b.y - 3 * scale,
+          b.w + 6 * scale,
+          b.h + 6 * scale,
+        );
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
     }
     if (mag && magVisible) {
       const sizeLabel = d
@@ -802,6 +827,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     setUndoStack((u) => u.slice(0, -1));
     setRedoStack((r) => [...r, shapesRef.current]);
     setShapes(snap);
+    hoverRef.current = null; // 快照回退后下标失效
     redrawLive();
   }, [undoStack, redrawLive]);
 
@@ -811,6 +837,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     setRedoStack((r) => r.slice(0, -1));
     setUndoStack((u) => [...u, shapesRef.current]);
     setShapes(snap);
+    hoverRef.current = null;
     redrawLive();
   }, [redoStack, redrawLive]);
 
@@ -898,6 +925,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         shapesRef.current = [];
         setUndoStack([]);
         setRedoStack([]);
+        hoverRef.current = null;
         wheelEditRef.current = null;
         redrawBase();
         redrawLive();
@@ -932,7 +960,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           };
           pushUndo(shapesRef.current);
           shapesRef.current = [...shapesRef.current, shape];
+          hoverRef.current = shapesRef.current.length - 1; // 落标即选中（光标就在其上）
           setShapes(shapesRef.current);
+          redrawLive();
           return;
         }
         if (inside && tool !== "select") {
@@ -952,6 +982,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       shapesRef.current = [];
       setUndoStack([]);
       setRedoStack([]);
+      hoverRef.current = null;
       wheelEditRef.current = null;
       redrawBase();
       redrawLive();
@@ -1025,6 +1056,16 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         }
         redrawLive();
         return;
+      }
+      // 悬停标记探测（滚轮编辑目标指示）：到此处时各拖拽/绘制分支均已
+      // return，只剩自由移动态；跟随态不探测（无标注可悬停）。命中变化
+      // 才重绘 live（每帧 shapeAt 的开销 = 少量图形的距离计算，可忽略）
+      if (!followingRef.current && s) {
+        const idx = shapeAt(shapesRef.current, px - s.x, py - s.y, 8 * scale, scale);
+        if (idx !== hoverRef.current) {
+          hoverRef.current = idx;
+          redrawLive();
+        }
       }
       // 预选跟随：选中框实时切到鼠标下窗口（面积最小者优先）；无窗口则空选区
       if (followingRef.current) {
@@ -1245,6 +1286,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       next[idx] = adj.shape;
       shapesRef.current = next;
       setShapes(next);
+      redrawLive(); // 选中框随调节后的新尺寸即时重画
       setSavedTip(adj.label);
       if (hudTimer.current !== null) window.clearTimeout(hudTimer.current);
       hudTimer.current = window.setTimeout(() => setSavedTip(null), 900);
@@ -1255,7 +1297,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       if (hudTimer.current !== null) window.clearTimeout(hudTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busy, scale, pushUndo, noteWheelEdit]);
+  }, [busy, scale, pushUndo, noteWheelEdit, redrawLive]);
 
   // ── 工具栏定位（选区下方 12px，放不下换上方；水平居中钳制屏内）──────────
   const [tbPos, setTbPos] = useState<{ left: number; top: number } | null>(null);
@@ -1683,7 +1725,20 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           )}
         </div>
       )}
-      {savedTip && <div className="np-shot-saved">{savedTip}</div>}
+      {/* HUD（滚轮调节当前值 / 保存提示）：选区存在时锚定选区内顶部居中
+          （2026-10-30 定案「选区内部中上方」），无选区回退窗顶居中 */}
+      {savedTip && (
+        <div
+          className="np-shot-saved"
+          style={
+            sel
+              ? { left: (sel.x + sel.w / 2) / scale, top: sel.y / scale + 12 }
+              : undefined
+          }
+        >
+          {savedTip}
+        </div>
+      )}
       {following && !sel && !busy && (
         <div className="np-shot-hint">
           移动选择窗口 · 按住拖拽自定义区域 · WASD/方向键微调准星 · Esc 退出

@@ -22,6 +22,7 @@ import {
   selHandles,
   adjustShapeProp,
   shapeAt,
+  shapeBounds,
   stepBadgeColor,
   stepBadgeSize,
   type Shape,
@@ -372,6 +373,53 @@ describe("shapeAt", () => {
     const txt: Shape = { type: "text", x: 20, y: 20, w: 0, h: 0, color: "#fff", width: 22, text: "标注" };
     expect(shapeAt([txt], 20 + 22, 20 + 14, 8)).toBe(0); // 两字宽 ~44 内
     expect(shapeAt([txt], 20 + 90, 20 + 14, 8)).toBeNull();
+  });
+});
+
+describe("shapeBounds", () => {
+  it("矩形外扩半线宽（描边感知）", () => {
+    const r: Shape = { type: "rect", x: 100, y: 50, w: 200, h: 100, color: "#fff", width: 4 };
+    const b = shapeBounds(r, 1.5);
+    expect(b).toEqual({ x: 97, y: 47, w: 206, h: 106 }); // pad = 4*1.5/2 = 3
+  });
+
+  it("笔迹取 pts 包围盒，马克笔按 3.5 倍线宽外扩", () => {
+    const pen: Shape = {
+      type: "pen",
+      x: 0,
+      y: 0,
+      w: 0,
+      h: 0,
+      pts: [
+        { x: 10, y: 20 },
+        { x: 110, y: 20 },
+      ],
+      color: "#fff",
+      width: 4,
+    };
+    expect(shapeBounds(pen, 1)).toEqual({ x: 8, y: 18, w: 104, h: 4 });
+    const mk = shapeBounds({ ...pen, type: "marker" }, 1);
+    expect(mk.x).toBe(10 - 7); // 4*3.5/2
+  });
+
+  it("序号圈取徽标直径正方形", () => {
+    const s: Shape = { type: "step", x: 150, y: 50, w: 0, h: 0, color: "#fff", width: 4, seq: 1 };
+    const d = (16 + 4 * 2.6) * 1.5;
+    const b = shapeBounds(s, 1.5);
+    expect(b.x).toBeCloseTo(150 - d / 2, 5);
+    expect(b.w).toBeCloseTo(d, 5);
+  });
+
+  it("文字 bbox 字号随 scale 成物理像素（CJK 全宽）", () => {
+    const t: Shape = { type: "text", x: 20, y: 20, w: 0, h: 0, color: "#fff", width: 20, text: "注" };
+    const b = shapeBounds(t, 1.5);
+    expect(b.w).toBeCloseTo(30, 5); // 20*1.5 一字全宽
+    expect(b.h).toBeCloseTo(40.5, 5); // 1.35 行高
+  });
+
+  it("马赛克/模糊面形不外扩", () => {
+    const m: Shape = { type: "mosaic", x: 5, y: 5, w: 90, h: 50, color: "#fff", width: 7 };
+    expect(shapeBounds(m, 1)).toEqual({ x: 5, y: 5, w: 90, h: 50 });
   });
 });
 

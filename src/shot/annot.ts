@@ -93,9 +93,10 @@ function segDist(
   return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
 }
 
-/** 文字 bbox 估算（Shape 的 text 无 w/h，按字符宽近似：CJK 全宽、西文 0.55） */
-function textBox(s: Shape): { x: number; y: number; w: number; h: number } {
-  const fs = s.width;
+/** 文字 bbox 估算（Shape 的 text 无 w/h，按字符宽近似：CJK 全宽、西文 0.55；
+ *  字号与绘制同口径 ×scale 成物理像素） */
+function textBox(s: Shape, scale: number): { x: number; y: number; w: number; h: number } {
+  const fs = s.width * scale;
   const lines = (s.text ?? "").split("\n");
   let w = 0;
   for (const ln of lines) {
@@ -104,6 +105,56 @@ function textBox(s: Shape): { x: number; y: number; w: number; h: number } {
     w = Math.max(w, lw);
   }
   return { x: s.x, y: s.y, w, h: lines.length * fs * 1.35 };
+}
+
+/** 标记包围盒（相对选区左上，物理像素，描边感知）：悬停选中框 / 命中
+ *  估算共用。线形外扩半线宽（马克笔 ×3.5 同绘制）、箭头含箭头翼展、
+ *  序号圈取徽标直径、文字走 textBox 估算 */
+export function shapeBounds(
+  s: Shape,
+  scale: number,
+): { x: number; y: number; w: number; h: number } {
+  const lw = s.width * scale;
+  switch (s.type) {
+    case "rect":
+    case "ellipse":
+    case "mosaic":
+    case "blur": {
+      const pad = s.type === "rect" || s.type === "ellipse" ? lw / 2 : 0;
+      return { x: s.x - pad, y: s.y - pad, w: s.w + pad * 2, h: s.h + pad * 2 };
+    }
+    case "arrow": {
+      // 端点包围盒外扩箭头翼展（headLen 口径与 drawShape 一致）
+      const headLen = Math.max(10 * scale, lw * 3);
+      const x1 = Math.min(s.x, s.x + s.w) - headLen;
+      const y1 = Math.min(s.y, s.y + s.h) - headLen;
+      const x2 = Math.max(s.x, s.x + s.w) + headLen;
+      const y2 = Math.max(s.y, s.y + s.h) + headLen;
+      return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+    }
+    case "pen":
+    case "marker": {
+      const pad = (s.type === "marker" ? lw * 3.5 : lw) / 2;
+      let x1 = Infinity;
+      let y1 = Infinity;
+      let x2 = -Infinity;
+      let y2 = -Infinity;
+      for (const p of s.pts ?? []) {
+        x1 = Math.min(x1, p.x);
+        y1 = Math.min(y1, p.y);
+        x2 = Math.max(x2, p.x);
+        y2 = Math.max(y2, p.y);
+      }
+      if (x1 === Infinity) return { x: s.x, y: s.y, w: 0, h: 0 };
+      return { x: x1 - pad, y: y1 - pad, w: x2 - x1 + pad * 2, h: y2 - y1 + pad * 2 };
+    }
+    case "text":
+      return textBox(s, scale);
+    case "step": {
+      const { d } = stepBadgeSize(s.width, scale, String(s.seq ?? 1).length);
+      return { x: s.x - d / 2, y: s.y - d / 2, w: d, h: d };
+    }
+  }
 }
 
 /** 标记命中测试：返回最上层命中图形的下标（后画的在上面，倒序探测）。
@@ -184,7 +235,7 @@ export function shapeAt(
         break;
       }
       case "text": {
-        const b = textBox(s);
+        const b = textBox(s, scale);
         if (px >= b.x - tol && px <= b.x + b.w + tol && py >= b.y - tol && py <= b.y + b.h + tol)
           return i;
         break;
