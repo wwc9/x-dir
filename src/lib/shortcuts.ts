@@ -203,8 +203,8 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       },
       {
         id: "shot-annot-toggle",
-        keys: ["Tab"],
-        label: "截图：显隐全部标注（对比原图，仅显示层）",
+        keys: ["按住 Tab"],
+        label: "截图：按住隐藏全部标注看原图，松开恢复（仅显示层）",
         scope: "system",
       },
       {

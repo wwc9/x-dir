@@ -1060,17 +1060,20 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     [pushUndo, redrawLive],
   );
 
-  /** Tab 显隐全部标注：仅显示层（base 不画标注看原图），comp/导出仍含
-   *  标注；隐藏态禁一切标记交互（悬停/滚轮/删除/换色） */
-  const toggleHidden = useCallback(() => {
-    hiddenRef.current = !hiddenRef.current;
-    hoverRef.current = null;
-    setSavedTip(hiddenRef.current ? "标注已隐藏（Tab 恢复）" : "标注已恢复");
-    setTimeout(() => setSavedTip(null), 1200);
-    redrawBase();
-    redrawLive();
+  /** 按住 Tab 查看原图（2026-10-30 标记增强，二次定案改按住制：按下
+   *  隐藏、keyup 释放恢复，toggle 制已弃）：仅显示层（base 不画标注），
+   *  comp/导出仍含标注；隐藏态禁一切标记交互（悬停/滚轮/删除/换色） */
+  const setAnnotHidden = useCallback(
+    (v: boolean) => {
+      hiddenRef.current = v;
+      hoverRef.current = null;
+      setSavedTip(v ? "已隐藏标注（松开 Tab 恢复）" : null);
+      redrawBase();
+      redrawLive();
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [redrawBase, redrawLive]);
+    [redrawBase, redrawLive],
+  );
 
   /** 右键菜单动作分发（2026-10-30 标记增强） */
   const markOp = useCallback(
@@ -1552,10 +1555,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         }
         return;
       }
-      // Tab = 显隐全部标注（2026-10-30 标记增强，仅显示层）
+      // 按住 Tab = 隐藏全部标注看原图（仅显示层；keyup 释放恢复）
       if (e.key === "Tab" && !busy) {
         e.preventDefault();
-        toggleHidden();
+        if (!e.repeat && !hiddenRef.current) setAnnotHidden(true);
         return;
       }
       // Del/Backspace = 删除悬停标记（不依赖选中工具）
@@ -1674,8 +1677,18 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [exitShot, commitText, undo, redo, finish, redrawLive, busy, toggleHidden, delMark, recolorMark]);
+    // Tab 按住制的释放半边：抬起即恢复标注（busy/编辑态也无条件恢复，
+    // 防止按住期间收场把隐藏态漏到下一会话）
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Tab" && hiddenRef.current) setAnnotHidden(false);
+    };
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKeyUp);
+      if (hiddenRef.current) hiddenRef.current = false; // 组件卸载兜底
+    };
+  }, [exitShot, commitText, undo, redo, finish, redrawLive, busy, setAnnotHidden, delMark, recolorMark]);
 
   // ── 滚轮调节标记（2026-10-30 定案：悬停指哪调哪）────────────────────────
   // 光标悬停在哪个标记上滚轮就调哪个（shapeAt 线形命中描边带、面形命中包围
