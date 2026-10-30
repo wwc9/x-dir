@@ -2897,6 +2897,43 @@ body.np-col-resizing * {
   color: var(--np-fg);
 }
 
+/* 热键录制按钮（设置 → 截图）：填充式控件语言（surface-2 / --np-ctl-h），
+   录制态 = surface 底 + accent 淡染描边（§4.7 激活口径） */
+.np-hotrec {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--np-gutter);
+  min-height: var(--np-ctl-h);
+  padding: 2px 6px 2px 4px;
+  border-radius: var(--np-radius);
+  background: var(--np-surface-2);
+  border: 1px solid var(--np-hairline);
+  font-family: inherit;
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+  cursor: pointer;
+}
+.np-hotrec:hover {
+  background: var(--np-hover);
+}
+.np-hotrec:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.np-hotrec.is-rec {
+  background: var(--np-surface);
+  border-color: transparent;
+  box-shadow: var(--np-ring);
+}
+.np-hotrec-hint {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  white-space: nowrap;
+}
+.np-hotrec.is-rec .np-hotrec-hint {
+  color: var(--np-accent);
+}
+
 /* ═══ 快速预览浮层（Quick Look 模型，V2）：非阻断式大版式，Space/Esc/↑↓ 闭环 ═══ */
 /* 遮罩轻染（非阻断式：四周仍见列表），面板 = 标准 np-dialog 卡片 */
 .np-pv {

@@ -33,6 +33,7 @@ import { SHORTCUT_GROUPS } from "../lib/shortcuts";
 import { setThemeWithFx, useSettings } from "../stores/settings";
 import { confirmDialog, useUi } from "../stores/ui";
 import { AppIcon, ic } from "./AppIcon";
+import { HotkeyRecorder } from "./HotkeyRecorder";
 import { NpSelect } from "./NpSelect";
 
 const TAG_COLORS: { key: TagColor; label: string }[] = [
@@ -55,8 +56,8 @@ const SORT_LABELS: Record<SortKey, string> = {
   type: "类型",
 };
 
-/** 截图热键预设（tauri-plugin-global-shortcut 可解析的组合；覆盖常用位避免手输） */
-const SHOT_HOTKEYS = ["Ctrl+Alt+A", "Ctrl+Alt+S", "Ctrl+Shift+A", "Alt+A", "F7"];
+/** 截图热键（旧版 5 个预设下拉已退役 2026-10-30：改 HotkeyRecorder 按键录制，
+ *  支持任意 Ctrl/Alt/Shift 组合——预设只是无录制器时的权宜） */
 
 const TABS = [
   { id: "appearance", label: "外观", icon: Palette },
@@ -275,11 +276,15 @@ export function SettingsPanel() {
                 onChange={(e) => applyShotHotkey(e.currentTarget.checked, s.shotHotkey)}
               />
             </SetRow>
-            <SetRow label="热键键位" desc="被其他程序占用时换一个；更改即时生效">
-              <NpSelect
+            <SetRow
+              label="热键键位（自定义）"
+              desc="点击后直接按下组合键录制；需含 Ctrl / Alt / Shift 修饰键（或单独 F1-F12），更改即时生效"
+            >
+              <HotkeyRecorder
                 value={s.shotHotkey}
-                options={SHOT_HOTKEYS.map((h) => ({ value: h, label: h }))}
-                onChange={(h) => applyShotHotkey(s.shotEnabled, h)}
+                disabled={!s.shotEnabled}
+                onApply={(h) => applyShotHotkey(s.shotEnabled, h)}
+                notify={(msg) => useUi.getState().toast(msg, "error")}
               />
             </SetRow>
             <SetRow label={t("立即试一次")} desc="直接开始一次截图（等同按下全局热键）">
@@ -289,7 +294,7 @@ export function SettingsPanel() {
             </SetRow>
             <div className="np-set-hint">
               {t(
-                "截图支持框选 / 窗口识别 / 矩形·椭圆·箭头·画笔·马克笔·文字标注 / 马赛克与模糊 / 贴图（钉在屏幕上）/ 复制与保存；关闭 X-Dir 后热键失效。滚动长截图将在后续版本提供。",
+                "截图支持框选 / 窗口识别 / 矩形·椭圆·箭头·画笔·马克笔·文字标注 / 马赛克与模糊 / 序号标记 / 滚动长截图 / 贴图（钉在屏幕上）/ 复制与保存；关闭 X-Dir 后热键失效。",
               )}
             </div>
           </>
@@ -376,22 +381,30 @@ export function SettingsPanel() {
           SHORTCUT_GROUPS.map((g) => (
             <section key={g.title}>
               <div className="np-set-group-title">{t(g.title)}</div>
-              {g.items.map((it) => (
-                <SetRow key={it.id} label={t(it.label)}>
-                  <span className="np-kbds">
-                    {it.keys.map((combo) => (
-                      <span key={combo} className="np-kbd-combo">
-                        {combo.split("+").map((seg, j) => (
-                          <Fragment key={j}>
-                            {j > 0 && <span className="np-kbd-plus">+</span>}
-                            <kbd className="np-kbd">{seg}</kbd>
-                          </Fragment>
-                        ))}
-                      </span>
-                    ))}
-                  </span>
-                </SetRow>
-              ))}
+              {g.items.map((it) => {
+                // 截图热键已支持自定义：清单里的键位是默认值，实际以设置当前值
+                // 为准（关闭时显示未启用）
+                const keys =
+                  it.id === "shot-open"
+                    ? [s.shotEnabled ? s.shotHotkey : "未启用"]
+                    : it.keys;
+                return (
+                  <SetRow key={it.id} label={t(it.label)}>
+                    <span className="np-kbds">
+                      {keys.map((combo) => (
+                        <span key={combo} className="np-kbd-combo">
+                          {combo.split("+").map((seg, j) => (
+                            <Fragment key={j}>
+                              {j > 0 && <span className="np-kbd-plus">+</span>}
+                              <kbd className="np-kbd">{seg}</kbd>
+                            </Fragment>
+                          ))}
+                        </span>
+                      ))}
+                    </span>
+                  </SetRow>
+                );
+              })}
             </section>
           ))}
         {tab === "config" && (

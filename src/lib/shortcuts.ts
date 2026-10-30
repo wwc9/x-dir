@@ -150,7 +150,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       {
         id: "shot-open",
         keys: ["Ctrl+Alt+A"],
-        label: "截图（系统级热键，X-Dir 运行时任意界面生效；键位可在设置 → 截图更改）",
+        label: "截图（系统级热键，X-Dir 运行时任意界面生效；键位可在设置 → 截图自定义录制）",
         scope: "system",
       },
       {
