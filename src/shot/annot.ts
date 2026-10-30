@@ -194,32 +194,35 @@ export function translateShape(s: Shape, dx: number, dy: number): Shape {
   return { ...s, x: s.x + dx, y: s.y + dy };
 }
 
-/** 快捷键清单角位选择（2026-10-30 用户定案：清单展示在选区遮罩黑色区
- *  域、四角取第一个与选区不相交者，全相交 = 不展示）。坐标全 CSS 像素
- *  （选区物理坐标调用前已 ÷scale）；pw/ph = 清单实测尺寸 */
-export function keysCorner(
+/** 快捷键清单贴选区外围定位（2026-10-30 用户定案：贴选区四周外围展示，
+ *  弃屏角方案）：右 → 左 → 上 → 下取第一个放得下的边；下方为末选且
+ *  左对齐选区（工具栏居中停靠选区下方，错开）。坐标全 CSS 像素（选区
+ *  物理坐标调用前已 ÷scale）；pw/ph = 清单实测尺寸；四边都放不下返回
+ *  null（近乎全屏选区不展示） */
+export function keysSide(
   s: { x: number; y: number; w: number; h: number } | null,
   vw: number,
   vh: number,
   pw: number,
   ph: number,
-): "lt" | "rt" | "lb" | "rb" | null {
+): { x: number; y: number } | null {
   if (!s) return null;
-  const m = 12; // 距屏边
-  const gap = 8; // 与选区最小间距
-  const cands: ["lt" | "rt" | "lb" | "rb", number, number][] = [
-    ["lb", m, vh - ph - m],
-    ["rb", vw - pw - m, vh - ph - m],
-    ["lt", m, m],
-    ["rt", vw - pw - m, m],
-  ];
-  const sl = s.x - gap;
-  const st = s.y - gap;
-  const sr = s.x + s.w + gap;
-  const sb = s.y + s.h + gap;
-  for (const [id, x, y] of cands) {
-    if (x + pw < sl || x > sr || y + ph < st || y > sb) return id;
-  }
+  const m = 12; // 与选区间距
+  const e = 8; // 距屏边
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(v, hi));
+  // 右侧：垂直居中（钳屏内）
+  const rx = s.x + s.w + m;
+  if (rx + pw <= vw - e)
+    return { x: rx, y: clamp(s.y + s.h / 2 - ph / 2, e, vh - ph - e) };
+  // 左侧：垂直居中
+  const lx = s.x - m - pw;
+  if (lx >= e) return { x: lx, y: clamp(s.y + s.h / 2 - ph / 2, e, vh - ph - e) };
+  // 上方：水平居中（钳屏内）
+  const ty = s.y - m - ph;
+  if (ty >= e) return { x: clamp(s.x + s.w / 2 - pw / 2, e, vw - pw - e), y: ty };
+  // 下方（末选）：左对齐选区，避开居中的工具栏
+  const by = s.y + s.h + m;
+  if (by + ph <= vh - e) return { x: clamp(s.x, e, vw - pw - e), y: by };
   return null;
 }
 

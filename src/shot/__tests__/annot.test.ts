@@ -27,7 +27,7 @@ import {
   stepBadgeColor,
   stepBadgeSize,
   translateShape,
-  keysCorner,
+  keysSide,
   type Shape,
 } from "../annot";
 
@@ -521,29 +521,33 @@ describe("translateShape", () => {
   });
 });
 
-describe("keysCorner", () => {
+describe("keysSide", () => {
   // 屏 2560×1440 css，清单约 220×260
-  it("中部选区：底部两角可用，左下优先", () => {
-    expect(keysCorner({ x: 666, y: 400, w: 480, h: 200 }, 2560, 1440, 220, 260)).toBe("lb");
+  it("中部选区：右侧放得下优先（垂直居中）", () => {
+    const p = keysSide({ x: 666, y: 400, w: 480, h: 200 }, 2560, 1440, 220, 260);
+    expect(p).toEqual({ x: 666 + 480 + 12, y: 400 + 100 - 130 });
   });
 
-  it("左下被选区占住：落右下", () => {
-    // 选区压住左下角（含 gap 外扩）
-    expect(
-      keysCorner({ x: 0, y: 1000, w: 600, h: 440 }, 2560, 1440, 220, 260),
-    ).toBe("rb");
+  it("选区靠右：右侧放不下落左侧", () => {
+    const p = keysSide({ x: 2200, y: 400, w: 300, h: 200 }, 2560, 1440, 220, 260);
+    expect(p?.x).toBe(2200 - 12 - 220);
   });
 
-  it("上半屏选区：底部两角可用（左下优先于右上）", () => {
-    expect(keysCorner({ x: 0, y: 0, w: 2560, h: 500 }, 2560, 1440, 220, 260)).toBe("lb");
+  it("近全宽选区：左右都放不下、上方有空间 → 上方水平居中", () => {
+    const p = keysSide({ x: 60, y: 500, w: 2440, h: 300 }, 2560, 1440, 220, 260);
+    expect(p?.y).toBe(500 - 12 - 260);
+    expect(p?.x).toBe(60 + 1220 - 110);
   });
 
-  it("选区近乎全屏：四角全相交 → 不展示", () => {
-    expect(keysCorner({ x: 100, y: 100, w: 2360, h: 1240 }, 2560, 1440, 220, 260)).toBeNull();
+  it("近全宽 + 贴顶：落下方（左对齐选区，避让居中工具栏）", () => {
+    const p = keysSide({ x: 60, y: 40, w: 2440, h: 600 }, 2560, 1440, 220, 260);
+    expect(p?.y).toBe(40 + 600 + 12);
+    expect(p?.x).toBe(60);
   });
 
-  it("无选区不展示", () => {
-    expect(keysCorner(null, 2560, 1440, 220, 260)).toBeNull();
+  it("近乎全屏：四边放不下 → null；无选区 → null", () => {
+    expect(keysSide({ x: 40, y: 40, w: 2480, h: 1300 }, 2560, 1440, 220, 260)).toBeNull();
+    expect(keysSide(null, 2560, 1440, 220, 260)).toBeNull();
   });
 });
 

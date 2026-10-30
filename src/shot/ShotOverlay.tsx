@@ -65,7 +65,7 @@ import {
   resizeSel,
   shapeAt,
   shapeBounds,
-  keysCorner,
+  keysSide,
   translateShape,
   type ShotTool,
 } from "./annot";
@@ -1846,11 +1846,11 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     setTbPos({ left, top });
   }, [sel, ready, scale, boot.mw, boot.mh, shapes, tool, color, strokeW, textFont]);
 
-  // 快捷键清单（2026-10-30 用户定案）：选区确认后在遮罩区四角避让展示；
-  // 先隐藏渲染量实际尺寸，keysCorner 选第一个与选区不相交的角（全相交
-  // = 不展示），选区变化重算
+  // 快捷键清单（2026-10-30 用户定案，二次改贴选区四周外围）：选区确认后
+  // 展示；先隐藏渲染量实际尺寸，keysSide 按 右→左→上→下 取放得下的边
+  // （下方末选左对齐避让居中的工具栏），四边放不下不展示；选区变化重算
   const keysRef = useRef<HTMLDivElement>(null);
-  const [keysPos, setKeysPos] = useState<"lt" | "rt" | "lb" | "rb" | null>(null);
+  const [keysPos, setKeysPos] = useState<{ x: number; y: number } | null>(null);
   useLayoutEffect(() => {
     const el = keysRef.current;
     if (!el || !sel || following || busy) {
@@ -1858,7 +1858,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       return;
     }
     setKeysPos(
-      keysCorner(
+      keysSide(
         {
           x: sel.x / scale,
           y: sel.y / scale,
@@ -2514,13 +2514,14 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           <div className="np-shot-pinmenu-hint">拖动移位 · Alt+拖动克隆 · 1-8 换色 · Del 删除</div>
         </div>
       )}
-      {/* 快捷键清单：选区遮罩区四角避让（keysCorner 选角；未定角时隐藏
+      {/* 快捷键清单：贴选区四周外围（keysSide 右→左→上→下；未定位时隐藏
           渲染供测量）；画布覆盖层语义 = 半透明黑底白字（同信息条 pill 口径，
           非 UI token 体系） */}
       {sel && !following && !busy && (
         <div
           ref={keysRef}
-          className={`np-shot-keys ${keysPos ?? "np-shot-keys-measure"}`}
+          className={`np-shot-keys ${keysPos ? "" : "np-shot-keys-measure"}`}
+          style={keysPos ? { left: keysPos.x, top: keysPos.y } : undefined}
         >
           {KEY_HINTS.map(([k, t]) => (
             <div className="np-shot-keys-row" key={k}>

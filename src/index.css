@@ -4996,22 +4996,6 @@ mark.np-gsearch-mark {
   left: 12px;
   top: 12px;
 }
-.np-shot-keys.lt {
-  left: 12px;
-  top: 12px;
-}
-.np-shot-keys.rt {
-  right: 12px;
-  top: 12px;
-}
-.np-shot-keys.lb {
-  left: 12px;
-  bottom: 12px;
-}
-.np-shot-keys.rb {
-  right: 12px;
-  bottom: 12px;
-}
 .np-shot-keys-row {
   display: flex;
   align-items: center;
