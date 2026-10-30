@@ -126,6 +126,21 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
     return c.toDataURL("image/png");
   }, [boot.w, boot.h]);
 
+  /** 贴图原始像素（RGBA 快路用；null = 图未就绪）。willReadFrequently 画布
+   *  一次 getImageData 拿全帧，免 toDataURL 的 JS 端 PNG 编码（4K ~300ms+，
+   *  2026-10-30 响应速度优化） */
+  const frameData = useCallback((): ImageData | null => {
+    const img = imgRef.current;
+    if (!img || !img.complete) return null;
+    const c = document.createElement("canvas");
+    c.width = boot.w;
+    c.height = boot.h;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, boot.w, boot.h);
+    return ctx.getImageData(0, 0, c.width, c.height);
+  }, [boot.w, boot.h]);
+
   const onMenuAction = useCallback(
     async (action: "copy" | "save" | "close") => {
       setMenu(null);
@@ -133,9 +148,26 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
         void win.close().catch(() => undefined);
         return;
       }
-      const url = await dataUrl();
-      if (!url) return;
       try {
+        // 原始字节快路优先（与覆盖窗 finish 同族）：复制直写 CF_DIB，保存先
+        // 暂存帧再开对话框（PNG 编码在 Rust 后台与对话框并行）；失败回落
+        // dataURL 慢路
+        const data = frameData();
+        if (data) {
+          try {
+            if (action === "copy") {
+              await api.shotCopyRaw(data.data, data.width, data.height);
+              return;
+            }
+            await api.shotStageRaw(data.data, data.width, data.height);
+            await api.shotSaveRaw();
+            return;
+          } catch {
+            // 落到下方 dataURL 回落路径
+          }
+        }
+        const url = await dataUrl();
+        if (!url) return;
         if (action === "copy") await api.shotCopy(url);
         else await api.shotSaveData(url);
       } catch {
@@ -143,7 +175,7 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dataUrl],
+    [dataUrl, frameData],
   );
 
   // 右上角关闭钮（2026-10-30 三次定案：弃四钮条，改悬停浮现单关闭钮——

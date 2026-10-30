@@ -88,8 +88,10 @@ static SCROLL_PENDING: Mutex<Option<ScrollPayload>> = Mutex::new(None);
 /// 预览窗增量拉取的数据源：循环线程的累积画布（会话收尾即清）
 static PREVIEW_CANVAS: Mutex<Option<Arc<Mutex<CanvasBuf>>>> = Mutex::new(None);
 /// 已拼长图成品（会话收尾置入，下一场 begin 清）：复制命令直供内存，
-/// 免去大 PNG 落盘后重新解码（200MP 级 PNG 解码秒级）
-static SCROLL_IMAGE: Mutex<Option<RgbaImage>> = Mutex::new(None);
+/// 免去大 PNG 落盘后重新解码（200MP 级 PNG 解码秒级）。Arc 共享——收尾
+/// 存入与复制命令取用都只克隆句柄，免整图深拷贝（200MP ~100ms 级 + 峰值
+/// 内存翻倍，2026-10-30 响应速度优化）
+static SCROLL_IMAGE: Mutex<Option<Arc<RgbaImage>>> = Mutex::new(None);
 /// 钩子反应区 = 选区全局物理坐标（x, y, w, h）——光标在内才响应滚轮，
 /// 滚轮落点即目标窗口（Win10+ 悬停滚动），光标挪出选区不误触
 static HOOK_ZONE: Mutex<(i32, i32, i32, i32)> = Mutex::new((0, 0, 0, 0));
@@ -927,11 +929,24 @@ fn scroll_loop(app: AppHandle, geo: ScrollGeo, base: RgbaImage, canvas: Arc<Mute
     let ch0 = canvas.lock().unwrap_or_else(|e| e.into_inner()).h;
     emit_height(&app, ch0);
     sync_panel_height(&app, &mon, panel_y, panel_w, rw, ch0, &mut last_ph);
-    // 预览窗页加载晚于首发事件会漏听初始高度（实测显示 0px），隔一拍补发
-    std::thread::sleep(Duration::from_millis(600));
-    let ch0 = canvas.lock().unwrap_or_else(|e| e.into_inner()).h;
-    emit_height(&app, ch0);
-    sync_panel_height(&app, &mon, panel_y, panel_w, rw, ch0, &mut last_ph);
+    // 预览窗页加载晚于首发事件会漏听初始高度（实测显示 0px），隔一拍补发。
+    // 补发放独立线程（2026-10-30 响应速度优化）：旧实现主循环先睡 600ms
+    // 再起步，用户开滚后首帧捕获被白白推迟 600ms
+    {
+        let app2 = app.clone();
+        let canvas2 = canvas.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(600));
+            let ch = canvas2.lock().unwrap_or_else(|e| e.into_inner()).h;
+            for label in ["shot-scroll", "shot-bar"] {
+                let _ = app2.emit_to(
+                    label,
+                    "shot-scroll-progress",
+                    serde_json::json!({ "height": ch }),
+                );
+            }
+        });
+    }
     loop {
         let now = Instant::now();
         let h = canvas.lock().unwrap_or_else(|e| e.into_inner()).h;
@@ -1166,7 +1181,10 @@ fn end_scroll(app: &AppHandle, mon: MonRect, img: Option<RgbaImage>, truncated: 
         dialog_error(app, "滚动截图未能生成结果（启动异常），请重新截图");
         return;
     };
-    // 成品入内存静态：复制命令直供，免大 PNG 解码；随下一场 begin 清除
+    // 成品入内存静态：复制命令直供，免大 PNG 解码；随下一场 begin 清除。
+    // Arc 包裹：存入/取用只克隆句柄（旧整图 clone 在 200MP 级 ~100ms +
+    // 峰值内存翻倍，2026-10-30 响应速度优化）
+    let img = Arc::new(img);
     *SCROLL_IMAGE.lock().unwrap_or_else(|e| e.into_inner()) = Some(img.clone());
     let dir = shot_dir();
     let _ = std::fs::create_dir_all(&dir);
@@ -1426,25 +1444,29 @@ pub fn shot_scroll_control(action: String) -> Result<(), String> {
 }
 
 /// 结果窗：长图写入剪贴板（大图处理放 blocking 线程）。优先内存成品直供
-/// （SCROLL_IMAGE，免 200MP 级 PNG 解码秒级等待），静态缺失回落文件解码
+/// （SCROLL_IMAGE，免 200MP 级 PNG 解码秒级等待），静态缺失回落文件解码。
+/// 写剪贴板走原生 CF_DIB（clip.rs 行式转换）——剪贴板插件的逐像素路径
+/// 在 4K 就要 2.3s（shot.rs 在案实测），200MP 级长图要数十秒，2026-10-30
+/// 响应速度优化换原生路径（4K ~百 ms 量级）
 #[tauri::command]
 pub async fn shot_result_copy(app: AppHandle, file: String) -> Result<(), String> {
-    use tauri_plugin_clipboard_manager::ClipboardExt;
     tauri::async_runtime::spawn_blocking(move || {
         let mem = SCROLL_IMAGE
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone();
+        let owned;
         let img = match mem {
             Some(img) => img,
-            None => image::open(&file)
-                .map_err(|e| format!("读取长图失败：{e}"))?
-                .to_rgba8(),
+            None => {
+                owned = image::open(&file)
+                    .map_err(|e| format!("读取长图失败：{e}"))?
+                    .to_rgba8();
+                Arc::new(owned)
+            }
         };
         let (w, h) = img.dimensions();
-        app.clipboard()
-            .write_image(&tauri::image::Image::new_owned(img.into_raw(), w, h))
-            .map_err(|e| format!("写入剪贴板失败：{e}"))
+        super::shot::write_clipboard_image(&app, w, h, img.as_raw())
     })
     .await
     .map_err(|e| format!("复制线程失败：{e}"))?
@@ -1491,15 +1513,14 @@ pub fn shot_pin_file(app: AppHandle, file: String, cx: i32, cy: i32) -> Result<(
     let dw = (f64::from(w) * fit).round() as i32;
     let dh = (f64::from(h) * fit).round() as i32;
 
-    let ts = millis();
-    let dst = shot_dir().join(format!("pin_{ts}.png"));
-    std::fs::copy(&file, &dst).map_err(|e| format!("贴图副本创建失败：{e}"))?;
     // 共用贴图建窗核心（专用线程建窗 + 四周阴影余量 + shot.html 轻量入口；
-    // 2026-10-30 修：旧实现在命令内联建窗且误加载 index.html 主界面包）
+    // 副本拷贝也在建窗线程——同步命令在主线程，长图几十 MB 的 fs::copy
+    // 会卡住窗口管理操作，2026-10-30 响应速度优化；源临时 PNG 随结果窗
+    // 销毁清理，贴图用专属副本不受影响）
     crate::commands::shot::spawn_pin_zoomed(
         &app,
-        &crate::commands::shot::PinSpawn {
-            file: &dst,
+        crate::commands::shot::PinSpawn {
+            source: crate::commands::shot::PinSource::CopyFile(file.into()),
             x: cx - dw / 2,
             y: cy - dh / 2,
             w,

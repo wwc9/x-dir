@@ -494,6 +494,13 @@ fn capture_session(app: &AppHandle, reentry: bool) -> Result<ShotCapture, String
     let mon = monitor_at(cx, cy).ok_or("未找到光标所在显示器")?;
     let t0 = std::time::Instant::now();
 
+    // 可截窗口枚举与屏幕捕获并行（互不依赖，2026-10-30 响应速度优化）：
+    // 枚举含逐窗口 DWM 调用（窗口多时 5-50ms），藏在 DXGI 捕获（4K
+    // ~60-100ms）里整段消隐——两者都坐在热键→定格上屏的关键路径上
+    let mon_key = (mon.x, mon.y, mon.w as i32, mon.h as i32);
+    let enum_thread =
+        std::thread::spawn(move || visible_shot_targets(&enum_windows_abs(mon_key), mon_key));
+
     // DXGI Desktop Duplication 优先（4K ~60-100ms，会话保活零初始化），任何
     // 不满足回落 xcap/GDI
     let img = crate::commands::shot_dxgi::capture(&mon)
@@ -522,8 +529,12 @@ fn capture_session(app: &AppHandle, reentry: bool) -> Result<ShotCapture, String
         std::thread::sleep(Duration::from_millis(8));
     }
 
-    let mon_key = (mon.x, mon.y, mon.w as i32, mon.h as i32);
-    let windows = visible_shot_targets(&enum_windows_abs(mon_key), mon_key);
+    // 枚举线程早于捕获启动，此刻通常早已完成（join 即取）；极小概率线程
+    // panic 则现场补枚举一次兜底
+    let windows = match enum_thread.join() {
+        Ok(w) => w,
+        Err(_) => visible_shot_targets(&enum_windows_abs(mon_key), mon_key),
+    };
 
     Ok(ShotCapture {
         mx: mon.x,
@@ -714,18 +725,22 @@ pub fn shot_nudge_cursor(dx: i32, dy: i32) -> Result<(), String> {
 
 // ── 三个完成动作：复制 / 贴图 / 保存 ────────────────────────────────────────
 
+/// 复制 PNG dataURL 到剪贴板（回落路径）：base64 解码 + PNG 解码 + 写剪贴板
+/// 全部在 blocking 线程（同步命令在主线程跑，4K dataURL 解码 ~百 ms 会卡住
+/// 全部窗口的窗口管理操作，2026-10-30 响应速度优化）
 #[tauri::command]
-pub fn shot_copy(app: AppHandle, data_url: String) -> Result<(), String> {
-    use tauri_plugin_clipboard_manager::ClipboardExt;
+pub async fn shot_copy(app: AppHandle, data_url: String) -> Result<(), String> {
     log::debug!("剪贴板走 dataURL 回落路径（{} 字节）", data_url.len());
-    let bytes = decode_data_url(&data_url)?;
-    let img = image::load_from_memory(&bytes)
-        .map_err(|e| format!("PNG 解码失败：{e}"))?
-        .to_rgba8();
-    let (w, h) = img.dimensions();
-    app.clipboard()
-        .write_image(&tauri::image::Image::new_owned(img.into_raw(), w, h))
-        .map_err(|e| format!("写入剪贴板失败：{e}"))
+    tauri::async_runtime::spawn_blocking(move || {
+        let bytes = decode_data_url(&data_url)?;
+        let img = image::load_from_memory(&bytes)
+            .map_err(|e| format!("PNG 解码失败：{e}"))?
+            .to_rgba8();
+        let (w, h) = img.dimensions();
+        write_clipboard_image(&app, w, h, &img.into_raw())
+    })
+    .await
+    .map_err(|e| format!("复制线程失败：{e}"))?
 }
 
 /// 帧头解析：前 16 字节 = [width u32 LE][height u32 LE][x i32 LE][y i32 LE]
@@ -769,15 +784,18 @@ static STAGED_FRAME: Mutex<Option<SessionFrame>> = Mutex::new(None);
 /// 经 ipc 二进制（fetch POST octet-stream）直传——免「canvas PNG 编码 /
 /// base64 膨胀传输 / JSON 解析 / PNG 解码」四道工序（4K 整屏省 ~0.5-2s）。
 /// 请求体 = [w u32 LE][h u32 LE][RGBA...]；前端失败时回落 shot_copy dataURL
-/// 路径，两条路并存。
+/// 路径，两条路并存。帧头解析在主线程（微秒级），写剪贴板（4K CF_DIB
+/// ~百 ms）在 blocking 线程——主线程零卡顿，返回时序不变（写完才回）
 #[tauri::command]
-pub fn shot_copy_raw(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<(), String> {
-    let bytes = match request.body() {
-        tauri::ipc::InvokeBody::Raw(b) => b,
+pub async fn shot_copy_raw(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    let (w, h, rgba): (u32, u32, Vec<u8>) = match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => {
+            let Some((w, h, _, _, _)) = parse_frame_header(b) else {
+                return Err("帧头不合法".into());
+            };
+            (w, h, b[16..].to_vec())
+        }
         _ => return Err("需要二进制请求体".into()),
-    };
-    let Some((w, h, _, _, rgba)) = parse_frame_header(bytes) else {
-        return Err("帧头不合法".into());
     };
     if rgba.len() != w as usize * h as usize * 4 {
         return Err(format!(
@@ -788,21 +806,29 @@ pub fn shot_copy_raw(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result
         ));
     }
     let t0 = std::time::Instant::now();
-    write_clipboard_image(&app, w, h, rgba)?;
+    let kb = rgba.len() / 1024;
+    let r = tauri::async_runtime::spawn_blocking(move || write_clipboard_image(&app, w, h, &rgba))
+        .await
+        .map_err(|e| format!("复制线程失败：{e}"))?;
     log::debug!(
-        "剪贴板直传：{}×{} {}KB，写剪贴板 {}ms",
+        "剪贴板直传：{}×{} {}KB，写剪贴板 {}ms（后台线程）",
         w,
         h,
-        rgba.len() / 1024,
+        kb,
         t0.elapsed().as_millis()
     );
-    Ok(())
+    r
 }
 
 /// 写入位图到剪贴板：Windows 走原生 CF_DIB（clip.rs 行式转换，4K 全屏
-/// ~百 ms 级——剪贴板插件的逐像素路径 debug 下 4K 要 2.3s）；其他平台走
-/// tauri 剪贴板插件
-fn write_clipboard_image(_app: &AppHandle, w: u32, h: u32, rgba: &[u8]) -> Result<(), String> {
+/// ~百 ms 级——剪贴板插件的逐像素路径 debug 下 4K 要 2.3s，滚动长图复用
+/// 此路）；其他平台走 tauri 剪贴板插件。纯 Win32 调用，任意线程可用
+pub(crate) fn write_clipboard_image(
+    _app: &AppHandle,
+    w: u32,
+    h: u32,
+    rgba: &[u8],
+) -> Result<(), String> {
     #[cfg(windows)]
     return crate::clip::set_image(w, h, rgba);
     #[cfg(not(windows))]
@@ -818,9 +844,12 @@ fn write_clipboard_image(_app: &AppHandle, w: u32, h: u32, rgba: &[u8]) -> Resul
 /// 整数矩形，Rust 进程内从 SESSION_FRAME 裁剪后直写剪贴板——免前端
 /// getImageData（GPU→CPU 同步回读）与整幅选区 RGBA 跨进程拷贝；写完才返回
 /// 供前端收场（点击→剪贴板就绪 ~50ms，且消除「先收场、贴上时还没写完」的
-/// 竞态）。有标注或失败时前端回落 shot_copy_raw / dataURL 路径
+/// 竞态）。裁剪在主线程（行拷贝毫秒级），写剪贴板（4K CF_DIB ~百 ms）在
+/// blocking 线程——同步命令留在主线程会卡住所有窗口的窗口管理操作
+/// （2026-10-30 响应速度优化）。有标注或失败时前端回落 shot_copy_raw /
+/// dataURL 路径
 #[tauri::command]
-pub fn shot_copy_crop(app: AppHandle, x: i32, y: i32, w: i32, h: i32) -> Result<(), String> {
+pub async fn shot_copy_crop(app: AppHandle, x: i32, y: i32, w: i32, h: i32) -> Result<(), String> {
     let cropped = {
         let g = SESSION_FRAME.lock().unwrap_or_else(|p| p.into_inner());
         let Some(f) = g.as_ref() else {
@@ -844,14 +873,17 @@ pub fn shot_copy_crop(app: AppHandle, x: i32, y: i32, w: i32, h: i32) -> Result<
         }
     };
     let t0 = std::time::Instant::now();
-    write_clipboard_image(&app, cropped.mw, cropped.mh, &cropped.rgba).map_err(|e| {
-        log::warn!("复制快存写剪贴板失败：{e}");
-        e
-    })?;
+    let (cw, ch, rgba) = (cropped.mw, cropped.mh, cropped.rgba);
+    tauri::async_runtime::spawn_blocking(move || write_clipboard_image(&app, cw, ch, &rgba))
+        .await
+        .map_err(|e| {
+            log::warn!("复制快存写剪贴板失败：{e}");
+            format!("复制线程失败：{e}")
+        })??;
     log::debug!(
-        "复制快存：定格帧裁剪 {}×{}（零 IPC 路），写剪贴板 {}ms",
-        cropped.mw,
-        cropped.mh,
+        "复制快存：定格帧裁剪 {}×{}（零 IPC 路），写剪贴板 {}ms（后台线程）",
+        cw,
+        ch,
         t0.elapsed().as_millis()
     );
     Ok(())
@@ -969,36 +1001,12 @@ pub fn shot_pin(
         log::warn!("贴图 dataURL 拒绝：尺寸非法 {w}×{h}");
         return Err("贴图尺寸非法".into());
     }
-    let bytes = decode_data_url(&data_url)?;
-    let dir = shot_dir();
-    std::fs::create_dir_all(&dir).map_err(|e| format!("创建临时目录失败：{e}"))?;
-    let ts = millis();
-    let file = dir.join(format!("pin_{ts}.png"));
-    std::fs::write(&file, &bytes).map_err(|e| format!("贴图写盘失败：{e}"))?;
-    spawn_pin_window(&app, &file, x, y, w, h)
-}
-
-/// 建贴图窗并落位（shot_pin dataURL 回落与 shot_pin_raw 直传共用）。
-/// 返回前已 end_session 收蒙层；建窗在专用线程执行（见 spawn_pin_zoomed 注释）
-fn spawn_pin_window(
-    app: &AppHandle,
-    file: &std::path::Path,
-    x: i32,
-    y: i32,
-    w: i32,
-    h: i32,
-) -> Result<(), String> {
-    // 2026-10-30 闪动修复：不再先收蒙层。旧时序「贴图命令先 end_session →
-    // 专用线程建窗（WebView2 数百毫秒）→ 贴图落位」期间蒙层已退场，整屏
-    // 遮罩瞬间消失 + 贴图迟到 = 双重闪动。新时序：蒙层保持在场盖住建窗期，
-    // 贴图窗 show 后发 pin-shown 事件，前端收到（或 2.5s 兜底）才收蒙层——
-    // 视觉上贴图原地顶替选区、遮罩随后退场。死锁史（2026-10-27/30）均为主
-    // 循环路径 build 内联/run_on_main_thread；专用线程 build 与蒙层在场无
-    // 冲突（E2E 复验：贴图窗 10s 可见性轮询即死锁探测器）
+    // base64 解码 + 落盘在建窗线程（2026-10-30 响应速度优化：同步命令在主
+    // 线程跑，4K dataURL 解码 ~百 ms 会卡住全部窗口的窗口管理操作）
     spawn_pin_zoomed(
-        app,
-        &PinSpawn {
-            file,
+        &app,
+        PinSpawn {
+            source: PinSource::PngDataUrl(data_url),
             x,
             y,
             w,
@@ -1010,9 +1018,19 @@ fn spawn_pin_window(
     )
 }
 
+/// 贴图内容来源：建窗线程内落成临时文件后再建窗（三类共用一条线程路径）
+pub(crate) enum PinSource {
+    /// 源文件的专属副本（滚动长图贴图：源临时 PNG 随结果窗销毁清理）
+    CopyFile(std::path::PathBuf),
+    /// RGBA 帧直接落盘 BMP（编码 memcpy 级，浏览器原生显示）
+    Frame(SessionFrame),
+    /// PNG dataURL（前端回落路径）：base64 解码后落盘
+    PngDataUrl(String),
+}
+
 /// 贴图窗落位参数（图像区 = 显示矩形；boot.w/h = 原始像素）
-pub(crate) struct PinSpawn<'a> {
-    pub(crate) file: &'a std::path::Path,
+pub(crate) struct PinSpawn {
+    pub(crate) source: PinSource,
     /// 图像区显示矩形左上（虚拟桌面物理坐标）
     pub(crate) x: i32,
     pub(crate) y: i32,
@@ -1044,40 +1062,44 @@ fn pin_shadow_pad(scale: f64) -> i32 {
 /// 到 about:blank 后握手卡死），后续覆盖窗页面失联（下一会话 5s 看门狗
 /// 连挂）、看门狗 destroy 后进程全挂（Responding:False）。专用线程让
 /// build 的内部派发落到空闲主循环上完成（与启动期 ensure_shot_window
-/// 同效）。蒙层在场不参与该死锁链（2026-10-30 闪动修复 E2E 复验）；窗
-/// 口 show 后发 pin-shown，前端据此收蒙层（贴图原地顶替选区的时序）
-pub(crate) fn spawn_pin_zoomed(app: &AppHandle, p: &PinSpawn) -> Result<(), String> {
-    let label = format!("pin-{}", millis());
-    let scale = monitor_at(p.x + p.dw / 2, p.y + p.dh / 2)
-        .map(|m| m.scale as f64)
-        .unwrap_or(1.0);
-    let pad = pin_shadow_pad(scale);
-    let boot = serde_json::json!({
-        "window": "pin",
-        "file": p.file.to_string_lossy(),
-        "w": p.w,
-        "h": p.h,
-        "scale": scale,
-        "zoom": p.zoom,
-        "pad": pad,
-    });
-    let file = p.file.to_path_buf();
-    let (x, y, dw, dh) = (p.x, p.y, p.dw, p.dh);
+/// 同效）。2026-10-30 响应速度优化：内容就绪（BMP 编码 / dataURL 解码 /
+/// 副本拷贝）与显示器探测也全部移入本线程——同步命令留在主线程会卡住
+/// 全部窗口的窗口管理操作（贴图拖动的 set_position 同样被拖累）。
+/// 蒙层在场不参与该死锁链（2026-10-30 闪动修复 E2E 复验）；窗口 show 后
+/// 发 pin-shown，前端据此收蒙层（贴图原地顶替选区的时序）——蒙层盖住
+/// 编码+建窗全程，贴图出现总时序不变
+pub(crate) fn spawn_pin_zoomed(app: &AppHandle, p: PinSpawn) -> Result<(), String> {
     let app2 = app.clone();
     std::thread::Builder::new()
         .name("pin-window".into())
         .spawn(move || {
+            let Some(file) = materialize_pin_file(p.source) else {
+                return;
+            };
+            let scale = monitor_at(p.x + p.dw / 2, p.y + p.dh / 2)
+                .map(|m| m.scale as f64)
+                .unwrap_or(1.0);
+            let pad = pin_shadow_pad(scale);
+            let boot = serde_json::json!({
+                "window": "pin",
+                "file": file.to_string_lossy(),
+                "w": p.w,
+                "h": p.h,
+                "scale": scale,
+                "zoom": p.zoom,
+                "pad": pad,
+            });
             let spec = PinWindowSpec {
-                label: &label,
-                boot: &boot,
-                file: &file,
-                x,
-                y,
-                w: dw,
-                h: dh,
+                label: format!("pin-{}", millis()),
+                boot,
+                file,
+                x: p.x,
+                y: p.y,
+                w: p.dw,
+                h: p.dh,
                 pad,
             };
-            if let Err(e) = build_pin_window(&app2, &spec) {
+            if let Err(e) = build_pin_window(&app2, spec) {
                 log::error!("贴图窗创建失败：{e}");
             }
         })
@@ -1085,11 +1107,67 @@ pub(crate) fn spawn_pin_zoomed(app: &AppHandle, p: &PinSpawn) -> Result<(), Stri
     Ok(())
 }
 
-/// 贴图窗创建参数（spawn 闭包打包，过 clippy 参数上限）
-struct PinWindowSpec<'a> {
-    label: &'a str,
-    boot: &'a serde_json::Value,
-    file: &'a std::path::Path,
+/// 贴图内容落成临时文件（建窗线程内执行；失败返回 None 只记日志——蒙层
+/// 由前端 2.5s 兜底收场，本线程无法把错误送回前端）
+fn materialize_pin_file(source: PinSource) -> Option<std::path::PathBuf> {
+    let dir = shot_dir();
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        log::error!("贴图：创建临时目录失败：{e}");
+        return None;
+    }
+    match source {
+        PinSource::CopyFile(src) => {
+            let dst = dir.join(format!("pin_{}.png", millis()));
+            match std::fs::copy(&src, &dst) {
+                Ok(_) => Some(dst),
+                Err(e) => {
+                    log::error!("贴图副本创建失败：{e}");
+                    None
+                }
+            }
+        }
+        PinSource::Frame(frame) => {
+            let dst = dir.join(format!("pin_{}.bmp", millis()));
+            let img = match image::RgbaImage::from_raw(frame.mw, frame.mh, frame.rgba) {
+                Some(i) => i,
+                None => {
+                    log::error!("贴图：帧尺寸与数据不符");
+                    return None;
+                }
+            };
+            match img.save_with_format(&dst, image::ImageFormat::Bmp) {
+                Ok(()) => Some(dst),
+                Err(e) => {
+                    log::error!("贴图写盘失败：{e}");
+                    None
+                }
+            }
+        }
+        PinSource::PngDataUrl(data_url) => {
+            let bytes = match decode_data_url(&data_url) {
+                Ok(b) => b,
+                Err(e) => {
+                    log::error!("贴图：{e}");
+                    return None;
+                }
+            };
+            let dst = dir.join(format!("pin_{}.png", millis()));
+            match std::fs::write(&dst, &bytes) {
+                Ok(()) => Some(dst),
+                Err(e) => {
+                    log::error!("贴图写盘失败：{e}");
+                    None
+                }
+            }
+        }
+    }
+}
+
+/// 贴图窗创建参数（建窗线程打包，过 clippy 参数上限）
+struct PinWindowSpec {
+    label: String,
+    boot: serde_json::Value,
+    file: std::path::PathBuf,
     /// 图像区显示矩形（物理像素；窗口 = 显示矩形外扩 pad）
     x: i32,
     y: i32,
@@ -1100,9 +1178,9 @@ struct PinWindowSpec<'a> {
 }
 
 /// 建窗线程内执行：建窗 + 落位（图像区精确、窗口含阴影余量）+ 临时文件清理钩子
-fn build_pin_window(app: &AppHandle, spec: &PinWindowSpec) -> Result<(), String> {
-    let (label, x, y, w, h, pad) = (spec.label, spec.x, spec.y, spec.w, spec.h, spec.pad);
-    let win = WebviewWindowBuilder::new(app, label, WebviewUrl::App("shot.html".into()))
+fn build_pin_window(app: &AppHandle, spec: PinWindowSpec) -> Result<(), String> {
+    let (label, x, y, w, h, pad) = (&spec.label, spec.x, spec.y, spec.w, spec.h, spec.pad);
+    let win = WebviewWindowBuilder::new(app, label.as_str(), WebviewUrl::App("shot.html".into()))
         .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
         .title("X-Dir 贴图")
         .decorations(false)
@@ -1138,7 +1216,7 @@ fn build_pin_window(app: &AppHandle, spec: &PinWindowSpec) -> Result<(), String>
         log::warn!("贴图 set_size 失败：{e}");
         e.to_string()
     })?;
-    let pin_file = spec.file.to_path_buf();
+    let pin_file = spec.file;
     win.on_window_event(move |e| {
         if matches!(e, tauri::WindowEvent::Destroyed) {
             let _ = std::fs::remove_file(&pin_file);
@@ -1331,19 +1409,23 @@ pub fn shot_pin_crop(
     pin_from_frame(&app, cropped, sx, sy)
 }
 
-/// RGBA 帧落盘为贴图临时 BMP 并建贴图窗（shot_pin_raw 直传与 shot_pin_crop
-/// 快存共用；BMP 编码 memcpy 级，浏览器原生显示）
+/// RGBA 帧建贴图窗（shot_pin_raw 直传与 shot_pin_crop 快存共用）：BMP 编码
+/// 落盘在建窗线程（编码 memcpy 级，浏览器原生显示；主线程零阻塞）
 fn pin_from_frame(app: &AppHandle, frame: SessionFrame, x: i32, y: i32) -> Result<(), String> {
     let (w, h) = (frame.mw as i32, frame.mh as i32);
-    let img =
-        image::RgbaImage::from_raw(frame.mw, frame.mh, frame.rgba).ok_or("帧尺寸与数据不符")?;
-    let dir = shot_dir();
-    std::fs::create_dir_all(&dir).map_err(|e| format!("创建临时目录失败：{e}"))?;
-    let ts = millis();
-    let file = dir.join(format!("pin_{ts}.bmp"));
-    img.save_with_format(&file, image::ImageFormat::Bmp)
-        .map_err(|e| format!("贴图写盘失败：{e}"))?;
-    spawn_pin_window(app, &file, x, y, w, h)
+    spawn_pin_zoomed(
+        app,
+        PinSpawn {
+            source: PinSource::Frame(frame),
+            x,
+            y,
+            w,
+            h,
+            zoom: 1.0,
+            dw: w,
+            dh: h,
+        },
+    )
 }
 
 /// 本地时间戳 yyyymmdd_hhmmss（GetLocalTime，免 chrono；同 fs 模块口径）

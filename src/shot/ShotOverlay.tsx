@@ -721,6 +721,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       const comp = document.createElement("canvas");
       comp.width = boot.mw;
       comp.height = boot.mh;
+      // willReadFrequently：放大镜逐 pointermove 1×1 取色 + 马赛克/模糊采样
+      // 都读本画布——软件后备免 GPU→CPU 回读停顿（Chromium 对未标记画布的
+      // getImageData 可能触发同步回传，2026-10-30 响应速度优化）
+      comp.getContext("2d", { willReadFrequently: true });
       compRef.current = comp;
       accentRef.current =
         getComputedStyle(document.documentElement).getPropertyValue("--np-accent").trim() ||
@@ -751,6 +755,25 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   useEffect(() => {
     if (ready) redrawLive();
   }, [ready, redrawLive]);
+
+  /** pointermove 高频路径的 rAF 合帧（2026-10-30 响应速度优化）：125Hz 指针
+   *  流每帧至多重绘一次 live 层——旧实现逐事件整幅重绘（4K 下遮罩挖孔 +
+   *  十字线 + 放大镜全套一帧画两遍）；离散事件（按下/抬起/滚轮/撤销）仍走
+   *  同步 redrawLive 即时反馈。重绘读的全是 ref，合帧不丢最终状态 */
+  const liveRafRef = useRef<number | null>(null);
+  const scheduleLive = useCallback(() => {
+    if (liveRafRef.current !== null) return;
+    liveRafRef.current = requestAnimationFrame(() => {
+      liveRafRef.current = null;
+      redrawLive();
+    });
+  }, [redrawLive]);
+  useEffect(
+    () => () => {
+      if (liveRafRef.current !== null) cancelAnimationFrame(liveRafRef.current);
+    },
+    [],
+  );
 
   // ── 完成动作 ─────────────────────────────────────────────────────────────
   const closeWindow = useCallback(() => {
@@ -1378,7 +1401,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       if (dragRef.current) {
         dragRef.current.x2 = px;
         dragRef.current.y2 = py;
-        redrawLive();
+        scheduleLive();
         return;
       }
       if (resizeRef.current && s) {
@@ -1386,7 +1409,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         setSel(ns);
         selRef.current = ns;
         redrawBase();
-        redrawLive();
+        scheduleLive();
         return;
       }
       if (moveRef.current && s) {
@@ -1396,7 +1419,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         setSel(ns);
         selRef.current = ns;
         redrawBase();
-        redrawLive();
+        scheduleLive();
         return;
       }
       if (moveMarkRef.current && s) {
@@ -1414,7 +1437,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           shapesRef.current = shapesRef.current.slice();
           shapesRef.current[mm.idx] = translateShape(shapesRef.current[mm.idx], dx, dy);
           setShapes(shapesRef.current);
-          redrawLive();
+          scheduleLive();
         }
         return;
       }
@@ -1450,7 +1473,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           if (hudDragTimer.current !== null) window.clearTimeout(hudDragTimer.current);
           hudDragTimer.current = window.setTimeout(() => setSavedTip(null), 700);
         }
-        redrawLive();
+        scheduleLive();
         return;
       }
       // 悬停标记探测（滚轮编辑目标指示）：到此处时各拖拽/绘制分支均已
@@ -1462,7 +1485,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           : shapeAt(shapesRef.current, px - s.x, py - s.y, 8 * scale, scale);
         if (idx !== hoverRef.current) {
           hoverRef.current = idx;
-          redrawLive();
+          scheduleLive();
         }
       }
       // 预选跟随：选中框实时切到鼠标下窗口（面积最小者优先）；无窗口则空选区
@@ -1476,11 +1499,11 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           setSel(hw);
           selRef.current = hw;
         }
-        redrawLive();
+        scheduleLive();
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [busy, tool, boot.mw, boot.mh, boot.windows, redrawBase, redrawLive, pushUndo],
+    [busy, tool, boot.mw, boot.mh, boot.windows, redrawBase, scheduleLive, pushUndo],
   );
 
   const onPointerUp = useCallback(() => {
