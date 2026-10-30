@@ -236,18 +236,32 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const [borderColor, setBorderColor] = useState("#000000");
   /** 标注偏好持久化：读自 settings.json（装饰三键 + 滚轮记忆五键），改动
    *  防抖 400ms 经 shot_save_prefs 白名单补丁写回（多次改动按键合并，
-   *  只发最后一次） */
+   *  只发最后一次）；收场动作前 flushPrefs 立即冲刷——防抖窗内退出应用
+   *  会丢末次调节（2026-10-30 用户复报排查补） */
   const prefsTimer = useRef<number | null>(null);
   const pendingPrefs = useRef<Record<string, unknown>>({});
-  const savePrefs = useCallback((patch: Record<string, unknown>) => {
-    Object.assign(pendingPrefs.current, patch);
-    if (prefsTimer.current !== null) window.clearTimeout(prefsTimer.current);
-    prefsTimer.current = window.setTimeout(() => {
-      const batch = pendingPrefs.current;
+  const flushPrefs = useCallback(() => {
+    if (prefsTimer.current !== null) {
+      window.clearTimeout(prefsTimer.current);
+      prefsTimer.current = null;
+    }
+    const batch = pendingPrefs.current;
+    if (Object.keys(batch).length) {
       pendingPrefs.current = {};
       void api.shotSavePrefs(batch).catch(() => undefined);
-    }, 400);
+    }
   }, []);
+  const savePrefs = useCallback(
+    (patch: Record<string, unknown>) => {
+      Object.assign(pendingPrefs.current, patch);
+      if (prefsTimer.current !== null) window.clearTimeout(prefsTimer.current);
+      prefsTimer.current = window.setTimeout(() => {
+        prefsTimer.current = null;
+        flushPrefs();
+      }, 400);
+    },
+    [flushPrefs],
+  );
   useEffect(() => {
     let dead = false;
     void api
@@ -696,6 +710,8 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     async (action: "copy" | "pin" | "save") => {
       const s = selRef.current;
       if (!s || busy) return;
+      // 收场前冲刷未落盘的滚轮记忆/装饰偏好（防抖窗内退出会丢末次调节）
+      flushPrefs();
       setBusy(true);
       // 零 IPC 快路公共参数：选区整数矩形（150% 缩放下坐标可能带半像素，
       // 取整对齐像素网格）+ 无标注判定（含未提交的文字输入）——合成结果
@@ -814,7 +830,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         setBusy(false);
       }
     },
-    [boot.mx, boot.my, busy, closeWindow, cropCanvas, exportDataUrl],
+    [boot.mx, boot.my, busy, closeWindow, cropCanvas, exportDataUrl, flushPrefs],
   );
 
   // ── 滚动长截图（§3.6 二期 B 批）：以当前选区开滚动会话，覆盖窗由 Rust 侧
