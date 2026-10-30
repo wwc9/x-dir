@@ -1,7 +1,7 @@
 // 截图覆盖层（§3.6，常驻覆盖窗经 shot-session 事件驱动挂载）：定格截图铺底 +
 // 智能窗口识别（进会话默认预选光标下窗口）+ 选区（拖拽/手柄调整/整体移动/
-// WASD·方向键平移）+ 标注（矩形/椭圆/箭头〔头部×线型样式〕/画笔·马克笔
-// 〔一键切换笔型〕/文字）+ 马赛克/模糊 + 复制/保存/贴图。
+// WASD·方向键平移）+ 标注（矩形/椭圆/箭头〔点击弹面板选头部×线型〕/画笔·
+// 马克笔〔一钮弹面板选笔型〕/文字）+ 马赛克/模糊 + 复制/保存/贴图。
 // 全链路物理像素坐标（×boot.scale 与 CSS 像素换算），与定格截图逐像素对齐。
 // 定格帧经 shot_frame IPC 二进制直传 RGBA 原始字节，putImageData 直绘上屏
 // （2026-10-27 感知延迟二期：无 BMP 落盘/asset 读回/浏览器解码三跳）。
@@ -246,8 +246,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     hitWindow(boot.windows, boot.cx, boot.cy),
   );
   const [tool, setTool] = useState<ShotTool>("select");
-  /** 画笔/马克笔合并为一钮（2026-10-30 定案）：penType = 当前笔型，再次
-   *  点击在画笔 ↔ 马克笔间切换；从其他工具切入 = 恢复上次笔型 */
+  /** 画笔/马克笔合并为一钮（2026-10-30 二次定案）：点击按钮 = 激活笔族并
+   *  立即弹出 pen 面板选择笔型（图标固定 Pencil 不随笔型切换）；从其他
+   *  工具切入 = 恢复上次笔型 */
   const [penType, setPenType] = useState<"pen" | "marker">("pen");
   /** 箭头样式（头部 × 线条，独立两行设置；箭头钮再次点击开面板） */
   const [headStyle, setHeadStyle] = useState<ArrowHead>("line");
@@ -1135,9 +1136,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const tbDragRef = useRef<{ dx: number; dy: number } | null>(null);
   /** 拖动过的工具栏粘住手动位置，直到选区重建（新截图/重新框选）才回自动位 */
   const tbDraggedRef = useRef(false);
-  /** 弹层设置面板：颜色/线宽/阴影/边框/箭头样式，锚定触发按钮正上方（越界翻转/钳屏） */
+  /** 弹层设置面板：颜色/线宽/阴影/边框/箭头样式/笔型，锚定触发按钮正上方（越界翻转/钳屏） */
   const [panel, setPanel] = useState<{
-    kind: "color" | "width" | "shadow" | "border" | "arrow";
+    kind: "color" | "width" | "shadow" | "border" | "arrow" | "pen";
     cx: number;
     btnTop: number;
     btnBottom: number;
@@ -1146,7 +1147,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   } | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const openPanel =
-    (kind: "color" | "width" | "shadow" | "border" | "arrow") =>
+    (kind: "color" | "width" | "shadow" | "border" | "arrow" | "pen") =>
     (e: React.MouseEvent<HTMLButtonElement>) => {
       const r = e.currentTarget.getBoundingClientRect();
       setPanel((prev) =>
@@ -1243,7 +1244,8 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           ]
         : STROKES.map((w, i) => ({ v: i, px: Math.round(w / 1.6) + 2, title: "粗细" }));
 
-  /** 工具行按钮（画笔/马克笔一钮两型、箭头再点开样式面板，2026-10-30 定案） */
+  /** 工具行按钮（画笔/马克笔、箭头 = 点击立即弹设置面板选择，
+   *  2026-10-30 二次定案：不做图标随动切换） */
   const penActive = tool === "pen" || tool === "marker";
   const toolBtns: {
     id: ShotTool;
@@ -1257,30 +1259,22 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     { id: "ellipse", label: "椭圆", icon: Circle, on: tool === "ellipse", onClick: () => setTool("ellipse") },
     {
       id: "arrow",
-      label: tool === "arrow" ? "箭头（再次点击设置样式）" : "箭头",
+      label: "箭头（点击设置样式）",
       icon: ArrowUpRight,
       on: tool === "arrow",
-      onClick: (e) => (tool === "arrow" ? openPanel("arrow")(e) : setTool("arrow")),
+      onClick: (e) => {
+        setTool("arrow");
+        openPanel("arrow")(e);
+      },
     },
     {
       id: "pen",
-      label: penActive
-        ? penType === "pen"
-          ? "画笔（点击切换马克笔）"
-          : "马克笔（点击切换画笔）"
-        : penType === "pen"
-          ? "画笔"
-          : "马克笔",
-      icon: penType === "pen" ? Pencil : Highlighter,
+      label: "画笔 / 马克笔（点击选笔型）",
+      icon: Pencil,
       on: penActive,
-      onClick: () => {
-        if (penActive) {
-          const next = penType === "pen" ? "marker" : "pen";
-          setPenType(next);
-          setTool(next);
-        } else {
-          setTool(penType);
-        }
+      onClick: (e) => {
+        setTool(penType);
+        openPanel("pen")(e);
       },
     },
     { id: "text", label: "文字", icon: Type, on: tool === "text", onClick: () => setTool("text") },
@@ -1325,6 +1319,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         <div
           ref={toolbarRef}
           className="np-shot-toolbar"
+          data-tip-up=""
           style={{
             visibility: tbPos ? "visible" : "hidden",
             left: tbPos?.left ?? -9999,
@@ -1436,6 +1431,24 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               className="np-shot-palette"
               style={{ position: "fixed", left: panel.left, top: panel.top }}
             >
+              {panel.kind === "pen" && (
+                <div className="np-shot-pal-row">
+                  {(["pen", "marker"] as const).map((p) => (
+                    <button
+                      key={p}
+                      className={`np-shot-tool ${penType === p ? "on" : ""}`}
+                      data-tip={p === "pen" ? "画笔" : "马克笔"}
+                      onClick={() => {
+                        setPenType(p);
+                        setTool(p);
+                        setPanel(null);
+                      }}
+                    >
+                      <AppIcon icon={p === "pen" ? Pencil : Highlighter} size={DENSITY.iconLg} />
+                    </button>
+                  ))}
+                </div>
+              )}
               {panel.kind === "arrow" && (
                 <div className="np-shot-pal-row">
                   {(["line", "solid", "hollow"] as ArrowHead[]).map((h) => (

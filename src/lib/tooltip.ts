@@ -3,7 +3,9 @@
 // （约 1s 延迟、系统样式不可控、快捷键无键帽质感）。内容截断场景
 // （np-ellipsis 单元格等）保留原生 title 不走此组件。App.tsx 挂载一次。
 // 行为：120ms 延迟淡入 + 轻微缩放；按钮下方居中、贴底自动上翻、视口钳制；
-// mousedown（含拖拽起始）/ Escape / 滚动 / 窗口缩放 / 指针离开文档即隐。
+// 容器标 data-tip-up（截图标注条，2026-10-30 定案）改为优先上方、贴顶翻
+// 下方；mousedown（含拖拽起始）/ Escape / 滚动 / 窗口缩放 / 指针离开文档
+// 即隐。
 let el: HTMLDivElement | null = null;
 let timer: number | null = null;
 let cur: Element | null = null;
@@ -50,9 +52,13 @@ function position(target: Element) {
   const r = target.getBoundingClientRect();
   const w = el.offsetWidth;
   const h = el.offsetHeight;
+  // data-tip-up 容器（截图标注条）优先上方展示，贴顶自动翻下方
+  const up = target.closest("[data-tip-up]") !== null;
   let x = r.left + r.width / 2 - w / 2;
-  let y = r.bottom + GAP;
-  if (y + h > window.innerHeight - EDGE) y = r.top - h - GAP;
+  let y = up ? r.top - h - GAP : r.bottom + GAP;
+  if (up ? y < EDGE : y + h > window.innerHeight - EDGE) {
+    y = up ? r.bottom + GAP : r.top - h - GAP;
+  }
   x = Math.max(EDGE, Math.min(x, window.innerWidth - w - EDGE));
   el.style.left = `${x}px`;
   el.style.top = `${y}px`;
