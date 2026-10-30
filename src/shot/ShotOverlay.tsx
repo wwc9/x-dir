@@ -188,11 +188,11 @@ function StepMarkGlyph() {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <circle cx="12" cy="12" r="7" />
+      <circle cx="12" cy="12" r="10" />
       <text
         x="12"
         y="12.8"
-        fontSize="9"
+        fontSize="10"
         fontWeight="700"
         textAnchor="middle"
         dominantBaseline="middle"
