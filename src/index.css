@@ -4850,6 +4850,11 @@ mark.np-gsearch-mark {
   display: block;
   pointer-events: none;
   image-rendering: pixelated;
+  /* 四周透明阴影（2026-10-30 定案）：窗口透明 + 外扩 pad 余量承载，
+   * 落在桌面上呈悬浮感 */
+  box-shadow:
+    0 7px 30px rgba(0, 0, 0, 0.45),
+    0 2px 9px rgba(0, 0, 0, 0.32);
 }
 /* 贴图右键小菜单（独立窗无 useUi.openMenu，自绘 surface 卡片） */
 .np-shot-pinmenu {

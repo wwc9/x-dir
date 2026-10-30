@@ -979,7 +979,7 @@ pub fn shot_pin(
 }
 
 /// 建贴图窗并落位（shot_pin dataURL 回落与 shot_pin_raw 直传共用）。
-/// 返回前已 end_session 收蒙层；建窗在专用线程执行（见函数尾注释）
+/// 返回前已 end_session 收蒙层；建窗在专用线程执行（见 spawn_pin_zoomed 注释）
 fn spawn_pin_window(
     app: &AppHandle,
     file: &std::path::Path,
@@ -988,30 +988,75 @@ fn spawn_pin_window(
     w: i32,
     h: i32,
 ) -> Result<(), String> {
-    let label = format!("pin-{}", millis());
-    let scale = monitor_at(x + w / 2, y + h / 2)
-        .map(|m| m.scale as f64)
-        .unwrap_or(1.0);
     // 建窗前先收蒙层（2026-10-27 E2E 实证）：全屏置顶蒙层在场时建窗重绘/焦点
     // 事件重入会让建窗卡死；先收场再建窗，视觉也自然——贴图落屏时蒙层恰好退场
     end_session(app);
+    spawn_pin_zoomed(
+        app,
+        &PinSpawn {
+            file,
+            x,
+            y,
+            w,
+            h,
+            zoom: 1.0,
+            dw: w,
+            dh: h,
+        },
+    )
+}
+
+/// 贴图窗落位参数（图像区 = 显示矩形；boot.w/h = 原始像素）
+pub(crate) struct PinSpawn<'a> {
+    pub(crate) file: &'a std::path::Path,
+    /// 图像区显示矩形左上（虚拟桌面物理坐标）
+    pub(crate) x: i32,
+    pub(crate) y: i32,
+    /// 图像原始物理尺寸
+    pub(crate) w: i32,
+    pub(crate) h: i32,
+    /// 初始缩放（滚轮缩放延续）
+    pub(crate) zoom: f64,
+    /// 图像区显示尺寸（= w/h × zoom 取整）
+    pub(crate) dw: i32,
+    pub(crate) dh: i32,
+}
+
+/// 贴图窗阴影余量（CSS 像素口径 ×scale 转物理）：窗口四周外扩的透明阴影
+/// 渲染区（2026-10-30 定案「贴图四周默认透明阴影」）；图像区仍按传入矩形
+/// 精确落位，窗口位置左/上移 pad、尺寸加 2×pad
+fn pin_shadow_pad(scale: f64) -> i32 {
+    (18.0 * scale).round() as i32
+}
+
+/// 建贴图窗共用核心（截图贴图与滚动长图贴图共用）：图像区按 (x,y,dw,dh)
+/// 显示矩形落位；boot.w/h = 原始像素、zoom = 初始缩放（滚轮缩放延续）。
+/// 建窗在专用线程执行（2026-10-30 死锁链修复）：无论命令内联（同步命令
+/// 本身在主线程）还是 run_on_main_thread 投递，build() 的内部等待都在
+/// 主循环自己的执行路径上——WebView2 建窗握手与事件循环互相等待即挂死
+/// （贴图直传入口后 build 永不返回，带/不带调试端口均实证；WebView 已建
+/// 到 about:blank 后握手卡死），后续覆盖窗页面失联（下一会话 5s 看门狗
+/// 连挂）、看门狗 destroy 后进程全挂（Responding:False）。专用线程让
+/// build 的内部派发落到空闲主循环上完成（与启动期 ensure_shot_window
+/// 同效）。60ms 延迟让调用方先行收场的 set_position 先落地
+pub(crate) fn spawn_pin_zoomed(app: &AppHandle, p: &PinSpawn) -> Result<(), String> {
+    let label = format!("pin-{}", millis());
+    let scale = monitor_at(p.x + p.dw / 2, p.y + p.dh / 2)
+        .map(|m| m.scale as f64)
+        .unwrap_or(1.0);
+    let pad = pin_shadow_pad(scale);
     let boot = serde_json::json!({
         "window": "pin",
-        "file": file.to_string_lossy(),
-        "w": w,
-        "h": h,
+        "file": p.file.to_string_lossy(),
+        "w": p.w,
+        "h": p.h,
         "scale": scale,
+        "zoom": p.zoom,
+        "pad": pad,
     });
-    let file = file.to_path_buf();
+    let file = p.file.to_path_buf();
+    let (x, y, dw, dh) = (p.x, p.y, p.dw, p.dh);
     let app2 = app.clone();
-    // 建窗放专用线程执行（2026-10-30 死锁链修复）：无论命令内联（同步命令
-    // 本身在主线程）还是 run_on_main_thread 投递，build() 的内部等待都在
-    // 主循环自己的执行路径上——WebView2 建窗握手与事件循环互相等待即挂死
-    // （贴图直传入口后 build 永不返回，带/不带调试端口均实证；WebView 已建
-    // 到 about:blank 后握手卡死），后续覆盖窗页面失联（下一会话 5s 看门狗
-    // 连挂）、看门狗 destroy 后进程全挂（Responding:False）。专用线程让
-    // build 的内部派发落到空闲主循环上完成（与启动期 ensure_shot_window
-    // 同效）。60ms 延迟让 end_session 的停靠 set_position 先落地
     std::thread::Builder::new()
         .name("pin-window".into())
         .spawn(move || {
@@ -1022,8 +1067,9 @@ fn spawn_pin_window(
                 file: &file,
                 x,
                 y,
-                w,
-                h,
+                w: dw,
+                h: dh,
+                pad,
             };
             if let Err(e) = build_pin_window(&app2, &spec) {
                 log::error!("贴图窗创建失败：{e}");
@@ -1038,15 +1084,18 @@ struct PinWindowSpec<'a> {
     label: &'a str,
     boot: &'a serde_json::Value,
     file: &'a std::path::Path,
+    /// 图像区显示矩形（物理像素；窗口 = 显示矩形外扩 pad）
     x: i32,
     y: i32,
     w: i32,
     h: i32,
+    /// 阴影余量（物理像素）
+    pad: i32,
 }
 
-/// 建窗线程内执行：建窗 + 落位 + 临时文件清理钩子
+/// 建窗线程内执行：建窗 + 落位（图像区精确、窗口含阴影余量）+ 临时文件清理钩子
 fn build_pin_window(app: &AppHandle, spec: &PinWindowSpec) -> Result<(), String> {
-    let (label, x, y, w, h) = (spec.label, spec.x, spec.y, spec.w, spec.h);
+    let (label, x, y, w, h, pad) = (spec.label, spec.x, spec.y, spec.w, spec.h, spec.pad);
     let win = WebviewWindowBuilder::new(app, label, WebviewUrl::App("shot.html".into()))
         .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
         .title("X-Dir 贴图")
@@ -1058,7 +1107,7 @@ fn build_pin_window(app: &AppHandle, spec: &PinWindowSpec) -> Result<(), String>
         .always_on_top(true)
         .shadow(false)
         // 透明兜底：img onLoad 回执后 show，仍可能有陈旧帧先上屏——透出桌面
-        // 好过白闪（与覆盖窗同族处理）
+        // 好过白闪（与覆盖窗同族处理）；四周余量区透出桌面承载阴影
         .transparent(true)
         .focused(false)
         .visible(false)
@@ -1070,15 +1119,19 @@ fn build_pin_window(app: &AppHandle, spec: &PinWindowSpec) -> Result<(), String>
         disable_dwm_transitions(hwnd);
     }
     log::debug!("贴图窗 build 返回：label={label}");
-    win.set_position(PhysicalPosition::new(x, y)).map_err(|e| {
-        log::warn!("贴图 set_position 失败：{e}");
-        e.to_string()
-    })?;
-    win.set_size(PhysicalSize::new(w as u32, h as u32))
+    win.set_position(PhysicalPosition::new(x - pad, y - pad))
         .map_err(|e| {
-            log::warn!("贴图 set_size 失败：{e}");
+            log::warn!("贴图 set_position 失败：{e}");
             e.to_string()
         })?;
+    win.set_size(PhysicalSize::new(
+        (w + pad * 2).max(1) as u32,
+        (h + pad * 2).max(1) as u32,
+    ))
+    .map_err(|e| {
+        log::warn!("贴图 set_size 失败：{e}");
+        e.to_string()
+    })?;
     let pin_file = spec.file.to_path_buf();
     win.on_window_event(move |e| {
         if matches!(e, tauri::WindowEvent::Destroyed) {
@@ -1087,7 +1140,7 @@ fn build_pin_window(app: &AppHandle, spec: &PinWindowSpec) -> Result<(), String>
     });
     // 贴图不抢焦点（Snipaste 惯例）：贴完继续手头工作
     win.show().map_err(|e| e.to_string())?;
-    log::debug!("贴图窗已建并 show：label={label} rect=({x},{y},{w},{h})");
+    log::debug!("贴图窗已建并 show：label={label} 图像区=({x},{y},{w},{h}) pad={pad}");
     Ok(())
 }
 

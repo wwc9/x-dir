@@ -1483,8 +1483,8 @@ pub async fn shot_result_save(
 #[tauri::command]
 pub fn shot_pin_file(app: AppHandle, file: String, cx: i32, cy: i32) -> Result<(), String> {
     let (w, h) = image::image_dimensions(&file).map_err(|e| format!("读取长图尺寸失败：{e}"))?;
+    let (w, h) = (w as i32, h as i32);
     let mon = monitor_at(cx, cy).ok_or("未找到目标显示器")?;
-    let s = f64::from(mon.scale);
     let fit = (f64::from(mon.w) * 0.8 / f64::from(w))
         .min(f64::from(mon.h) * 0.8 / f64::from(h))
         .min(1.0);
@@ -1494,42 +1494,21 @@ pub fn shot_pin_file(app: AppHandle, file: String, cx: i32, cy: i32) -> Result<(
     let ts = millis();
     let dst = shot_dir().join(format!("pin_{ts}.png"));
     std::fs::copy(&file, &dst).map_err(|e| format!("贴图副本创建失败：{e}"))?;
-
-    let label = format!("pin-{ts}");
-    let boot = serde_json::json!({
-        "window": "pin",
-        "file": dst.to_string_lossy(),
-        "w": w,
-        "h": h,
-        "scale": s,
-        "zoom": fit,
-    });
-    let win = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html".into()))
-        .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
-        .title("X-Dir 贴图")
-        .decorations(false)
-        .resizable(false)
-        .maximizable(false)
-        .minimizable(false)
-        .skip_taskbar(true)
-        .always_on_top(true)
-        .shadow(false)
-        .focused(false)
-        .visible(false)
-        .initialization_script(format!("window.__BOOT__ = {boot};"))
-        .build()
-        .map_err(|e| format!("创建贴图窗口失败：{e}"))?;
-    win.set_position(PhysicalPosition::new(cx - dw / 2, cy - dh / 2))
-        .map_err(|e| e.to_string())?;
-    win.set_size(PhysicalSize::new(dw as u32, dh as u32))
-        .map_err(|e| e.to_string())?;
-    let pin_file = dst.clone();
-    win.on_window_event(move |e| {
-        if matches!(e, tauri::WindowEvent::Destroyed) {
-            let _ = std::fs::remove_file(&pin_file);
-        }
-    });
-    win.show().map_err(|e| e.to_string())
+    // 共用贴图建窗核心（专用线程建窗 + 四周阴影余量 + shot.html 轻量入口；
+    // 2026-10-30 修：旧实现在命令内联建窗且误加载 index.html 主界面包）
+    crate::commands::shot::spawn_pin_zoomed(
+        &app,
+        &crate::commands::shot::PinSpawn {
+            file: &dst,
+            x: cx - dw / 2,
+            y: cy - dh / 2,
+            w,
+            h,
+            zoom: fit,
+            dw,
+            dh,
+        },
+    )
 }
 
 #[cfg(test)]

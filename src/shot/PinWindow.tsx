@@ -17,6 +17,8 @@ export interface PinBoot {
   scale: number;
   /** 初始缩放（长图贴图由 Rust 侧按 80% 屏幅算好；常规贴图缺省 1） */
   zoom?: number;
+  /** 四周阴影余量（物理像素；缺省 0 兼容旧 boot）。窗口 = 图像区外扩 pad */
+  pad?: number;
 }
 
 const ZOOM_MIN = 0.02; // 长图贴图初始 fit 可低于 0.1（20000px 高适配 ~800 屏高）
@@ -32,6 +34,8 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
   const dragRef = useRef<{ lx: number; ly: number } | null>(null);
   const zoomRef = useRef(boot.zoom ?? 1);
   const imgRef = useRef<HTMLImageElement>(null);
+  /** 阴影余量（物理像素；CSS padding = pad/scale） */
+  const pad = boot.pad ?? 0;
 
   useEffect(() => {
     void win
@@ -46,7 +50,7 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** 缩放并同步窗口尺寸（物理 = 原始 × zoom） */
+  /** 缩放并同步窗口尺寸（物理 = 原始 × zoom + 四周阴影余量 2×pad） */
   const applyZoom = useCallback(
     (z: number) => {
       const zz = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
@@ -54,12 +58,15 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
       setZoom(zz);
       void win
         .setSize(
-          new PhysicalSize(Math.round(boot.w * zz), Math.round(boot.h * zz)),
+          new PhysicalSize(
+            Math.round(boot.w * zz) + pad * 2,
+            Math.round(boot.h * zz) + pad * 2,
+          ),
         )
         .catch(() => undefined);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [boot.w, boot.h],
+    [boot.w, boot.h, pad],
   );
 
   const onWheel = useCallback(
@@ -146,6 +153,7 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
   return (
     <div
       className="np-shot-pin"
+      style={{ padding: pad / boot.scale }}
       onWheel={onWheel}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
