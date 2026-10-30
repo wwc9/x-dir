@@ -14,8 +14,8 @@
 // 2026-10-28 定案，替代原生 title）。
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
+  Check,
   Circle,
-  Copy,
   Frame,
   Grip,
   GripVertical,
@@ -1444,12 +1444,12 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               <AppIcon icon={X} size={DENSITY.iconLg} />
             </button>
             <button
-              className="np-shot-tool np-shot-primary"
+              className="np-shot-tool np-shot-ok"
               data-tip="复制并关闭 · 双击选区同效"
               data-kbd="Enter"
               onClick={() => void finish("copy")}
             >
-              <AppIcon icon={Copy} size={DENSITY.iconLg} />
+              <AppIcon icon={Check} size={DENSITY.iconLg} />
             </button>
           </div>
           </div>

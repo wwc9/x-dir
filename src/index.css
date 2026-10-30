@@ -4731,13 +4731,14 @@ mark.np-gsearch-mark {
 .np-shot-tool.np-shot-primary {
   color: var(--np-accent);
 }
-/* 关闭钮：图标恒红（2026-10-30 定案；hover 反白底放大危险语义） */
+/* 关闭钮：图标恒红（2026-10-30 定案）；悬浮与其他按钮一致（不做红底反白，
+ * 2026-10-30 二次定案） */
 .np-shot-tool.np-shot-danger {
   color: var(--np-danger);
 }
-.np-shot-tool.np-shot-danger:hover {
-  background: var(--np-danger);
-  color: var(--np-danger-fg);
+/* 复制并关闭钮：绿色打勾（完成态语义，2026-10-30 定案） */
+.np-shot-tool.np-shot-ok {
+  color: var(--np-success);
 }
 /* 箭头样式面板预览字形（28×16 viewBox，currentColor 随按钮态着色） */
 .np-shot-arw {
