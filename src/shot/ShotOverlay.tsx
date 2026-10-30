@@ -400,6 +400,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
    *  立即弹出 pen 面板选择笔型（图标固定 Pencil 不随笔型切换）；从其他
    *  工具切入 = 恢复上次笔型 */
   const [penType, setPenType] = useState<"pen" | "marker">("pen");
+  /** 马赛克/模糊合并为一钮（2026-10-30 定案，同笔族先例）：点击 = 激活
+   *  打码族并弹 mask 面板选类型（图标固定 Grip 网格不随类型切换）；从其
+   *  他工具切入 = 恢复上次类型 */
+  const [maskType, setMaskType] = useState<"mosaic" | "blur">("mosaic");
   /** 箭头样式（头部 × 线条，独立两行设置；箭头钮再次点击开面板） */
   const [headStyle, setHeadStyle] = useState<ArrowHead>("line");
   const [lineStyle, setLineStyle] = useState<ArrowLine>("solid");
@@ -1929,8 +1933,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   /** 工具行按钮（画笔/马克笔、箭头 = 点击立即弹设置面板选择，
    *  2026-10-30 二次定案：不做图标随动切换） */
   const penActive = tool === "pen" || tool === "marker";
+  const maskActive = tool === "mosaic" || tool === "blur";
   const toolBtns: {
-    id: ShotTool;
+    /** 合并族按钮可用族名占位（"mask" = 马赛克/模糊合并钮），仅作 key */
+    id: ShotTool | "mask";
     label: string;
     icon?: typeof Square;
     /** 自绘图标（lucide 无对应单图标时；优先于 icon 渲染） */
@@ -2000,22 +2006,12 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       },
     },
     {
-      id: "mosaic",
-      label: "马赛克（点击设置样式）",
+      id: "mask",
+      label: "马赛克 / 模糊（点击选类型）",
       icon: Grip,
-      on: tool === "mosaic",
+      on: maskActive,
       onClick: (e) => {
-        setTool("mosaic");
-        openPanel("mask")(e);
-      },
-    },
-    {
-      id: "blur",
-      label: "模糊（点击设置样式）",
-      icon: Waves,
-      on: tool === "blur",
-      onClick: (e) => {
-        setTool("blur");
+        setTool(maskType);
         openPanel("mask")(e);
       },
     },
@@ -2376,6 +2372,26 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                           }}
                         />
                       )}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* 马赛克/模糊合并钮的类型行（2026-10-30 定案，同笔族先例：
+                  选中即切 tool 并收面板）+ 区域形状行 */}
+              {panel.kind === "mask" && (
+                <div className="np-shot-pal-row">
+                  {(["mosaic", "blur"] as const).map((m) => (
+                    <button
+                      key={m}
+                      className={`np-shot-tool ${maskType === m ? "on" : ""}`}
+                      data-tip={m === "mosaic" ? "马赛克" : "模糊"}
+                      onClick={() => {
+                        setMaskType(m);
+                        setTool(m);
+                        setPanel(null);
+                      }}
+                    >
+                      <AppIcon icon={m === "mosaic" ? Grip : Waves} size={DENSITY.iconLg} />
                     </button>
                   ))}
                 </div>
