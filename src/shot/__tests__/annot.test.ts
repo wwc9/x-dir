@@ -7,6 +7,7 @@ import {
   MAGNIFIER_SRC,
   MAGNIFIER_ZOOM,
   arrowCurveCtrl,
+  arrowBaseAt,
   arrowHead,
   arrowWingsAt,
   formatMagColor,
@@ -429,6 +430,32 @@ describe("shapeBounds", () => {
   it("马赛克/模糊面形不外扩", () => {
     const m: Shape = { type: "mosaic", x: 5, y: 5, w: 90, h: 50, color: "#fff", width: 7 };
     expect(shapeBounds(m, 1)).toEqual({ x: 5, y: 5, w: 90, h: 50 });
+  });
+});
+
+describe("arrowBaseAt", () => {
+  it("基点 = 尖沿轴回退 headLen×cos(25°)", () => {
+    const b = arrowBaseAt(100, 50, 0, 10); // 轴向 +x
+    expect(b.x).toBeCloseTo(100 - 10 * Math.cos(Math.PI / 7), 5);
+    expect(b.y).toBeCloseTo(50, 5);
+  });
+
+  it("任意方向同理（-y 轴向）", () => {
+    const b = arrowBaseAt(0, 0, -Math.PI / 2, 8);
+    expect(b.x).toBeCloseTo(0, 5);
+    expect(b.y).toBeCloseTo(8 * Math.cos(Math.PI / 7), 5);
+  });
+
+  it("基点落在两翼端点连线上（翼基线与轴相交）", () => {
+    const ang = 0.6;
+    const tip = { x: 200, y: 120 };
+    const headLen = 12;
+    const g = arrowWingsAt(tip.x, tip.y, ang, headLen);
+    const b = arrowBaseAt(tip.x, tip.y, ang, headLen);
+    // 两翼端点与基点共线（叉积为 0）
+    const cross =
+      (g.ax - b.x) * (g.by - b.y) - (g.ay - b.y) * (g.bx - b.x);
+    expect(Math.abs(cross)).toBeLessThan(1e-9);
   });
 });
 

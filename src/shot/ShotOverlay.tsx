@@ -50,6 +50,7 @@ import {
   type Sel,
   type Shape,
   arrowWingsAt,
+  arrowBaseAt,
   arrowCurveCtrl,
   drawCrosshair,
   drawMagnifier,
@@ -122,9 +123,13 @@ const ARROW_LINE_LABELS: Record<ArrowLine, string> = {
   const c = line === "curve" ? arrowCurveCtrl(x1, y1, x2, y2) : null;
   const ang = c ? Math.atan2(y2 - c.cy, x2 - c.cx) : Math.atan2(y2 - y1, x2 - x1);
   const g = arrowWingsAt(x2, y2, ang, 8);
+  // 空心头：杆止于翼基线 + 两翼开放（与 drawShape 同口径，空腔透出）
+  const base = head === "hollow" ? arrowBaseAt(x2, y2, ang, 8) : null;
+  const ex = base ? f(base.x) : x2;
+  const ey = base ? f(base.y) : y2;
   const body = c
-    ? `M${x1} ${y1} Q${f(c.cx)} ${f(c.cy)} ${x2} ${y2}`
-    : `M${x1} ${y1} L${x2} ${y2}`;
+    ? `M${x1} ${y1} Q${f(c.cx)} ${f(c.cy)} ${ex} ${ey}`
+    : `M${x1} ${y1} L${ex} ${ey}`;
   const tri = `M${x2} ${y2} L${f(g.ax)} ${f(g.ay)} L${f(g.bx)} ${f(g.by)} Z`;
   return (
     <svg
@@ -137,13 +142,13 @@ const ARROW_LINE_LABELS: Record<ArrowLine, string> = {
       strokeLinejoin="round"
     >
       <path d={body} strokeDasharray={line === "dashed" ? "3 2.5" : undefined} />
-      {head === "line" ? (
+      {head === "solid" ? (
+        <path d={tri} fill="currentColor" />
+      ) : (
         <>
           <path d={`M${x2} ${y2} L${f(g.ax)} ${f(g.ay)}`} />
           <path d={`M${x2} ${y2} L${f(g.bx)} ${f(g.by)}`} />
         </>
-      ) : (
-        <path d={tri} fill={head === "solid" ? "currentColor" : "none"} />
       )}
     </svg>
   );

@@ -423,6 +423,19 @@ export function arrowHead(
   return arrowWingsAt(x2, y2, Math.atan2(y2 - y1, x2 - x1), headLen);
 }
 
+/** 空心箭头翼基线与杆轴的交点（杆的止点）：尖沿轴回退 headLen×cos(±25°
+ *  张角)。空心头必须让杆停在这里且两翼开放描边——杆穿到尖会把空腔填满
+ *  看不出空心（2026-10-30 用户反馈修复） */
+export function arrowBaseAt(
+  tipX: number,
+  tipY: number,
+  angle: number,
+  headLen: number,
+): { x: number; y: number } {
+  const back = headLen * Math.cos(Math.PI / 7);
+  return { x: tipX - Math.cos(angle) * back, y: tipY - Math.sin(angle) * back };
+}
+
 /** 曲线箭头二次贝塞尔控制点：起终点中点沿方向左侧法线偏移 22% 线长
  *  （弓高随箭头长短自适应；统一偏向行进方向左侧，成图方向可预期） */
 export function arrowCurveCtrl(
@@ -758,25 +771,30 @@ export function drawShape(
       const ang = c
         ? Math.atan2(y2 - c.cy, x2 - c.cx)
         : Math.atan2(y2 - y1, x2 - x1);
+      const headLen = Math.max(10 * scale, lw * 3);
+      const g = arrowWingsAt(x2, y2, ang, headLen);
+      // 空心头（2026-10-30 修）：杆止于翼基线（尖回退 headLen×cos25°）、
+      // 两翼开放描边不画底边——旧画法杆穿到尖 + 三角闭合描边，空腔被杆
+      // 填满看不出空心
+      const hollow = head === "hollow";
+      const end = hollow ? arrowBaseAt(x2, y2, ang, headLen) : { x: x2, y: y2 };
       if (line === "dashed") ctx.setLineDash([lw * 2.5, lw * 1.8]);
       ctx.beginPath();
       ctx.moveTo(x1, y1);
-      if (c) ctx.quadraticCurveTo(c.cx, c.cy, x2, y2);
-      else ctx.lineTo(x2, y2);
+      if (c) ctx.quadraticCurveTo(c.cx, c.cy, end.x, end.y);
+      else ctx.lineTo(end.x, end.y);
       ctx.stroke();
       ctx.setLineDash([]);
       if (Math.hypot(x2 - x1, y2 - y1) < 1) break;
-      const headLen = Math.max(10 * scale, lw * 3);
-      const g = arrowWingsAt(x2, y2, ang, headLen);
-      if (head === "solid" || head === "hollow") {
+      if (head === "solid") {
         ctx.beginPath();
         ctx.moveTo(x2, y2);
         ctx.lineTo(g.ax, g.ay);
         ctx.lineTo(g.bx, g.by);
         ctx.closePath();
-        if (head === "solid") ctx.fill();
-        else ctx.stroke();
+        ctx.fill();
       } else {
+        // 单线 V 翼 / 空心：两翼开放描边（空心杆已止于翼基线，空腔透出）
         ctx.beginPath();
         ctx.moveTo(x2, y2);
         ctx.lineTo(g.ax, g.ay);
