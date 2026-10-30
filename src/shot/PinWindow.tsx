@@ -1,12 +1,14 @@
 // 贴图窗（§3.6，label pin-*）：截图选区钉在屏幕上的置顶小窗（Snipaste 惯例）。
-// 拖动 = rAF 合帧 setPosition（2026-10-30「拖动卡顿」修复：旧实现逐
-// pointermove 发 IPC——高轮询鼠标 125-250 次/秒的请求积压在 WebView2 IPC
-// 队列里成批滞后生效，表现为拖动卡顿；现在每帧最多发一次、只发最新位置，
-// 消除积压。原生 WM_NCLBUTTONDOWN(HTCAPTION) 方案在 WebView 宿主实测被
-// 子窗口鼠标重捕获竞态打断（走几步就停），不可用）、滚轮缩放（左上角
-// 锚定）、Alt+滚轮调不透明度、双击 / Esc 关闭、右键自绘小菜单（复制图像 /
-// 保存为… / 关闭）。窗口物理尺寸与图像显示尺寸由前端经 window API 同步
-// （capabilities 已放行 set-position/set-size）。
+// 拖动 = rAF 合帧 + 串行 setPosition（2026-10-30 两轮手感修复：①逐
+// pointermove 发 IPC 会积压成批滞后（卡顿）→ 每帧最多一次只发最新位置；
+// ②重叠的 SetWindowPos 互相竞争位图拷贝与 WebView2 重绘（闪动）→ 单飞行
+// + 脏标串行。原生 WM_NCLBUTTONDOWN(HTCAPTION) 方案在 WebView 宿主被
+// WebView2 子窗口鼠标重捕获竞态打断（实测走几步即停），不可用；
+// data-tauri-drag-region 本应用实测不生效）。四周阴影余量区要求页面根
+// 透明（同 ScrollFrame 先例），滚轮缩放（左上角锚定）、Alt+滚轮调不透明
+// 度、双击 / Esc 关闭、右键自绘小菜单（复制图像 / 保存为… / 关闭）。
+// 窗口物理尺寸与图像显示尺寸由前端经 window API 同步（capabilities 已
+// 放行 set-position/set-size）。
 import { useCallback, useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { PhysicalPosition, PhysicalSize, getCurrentWindow } from "@tauri-apps/api/window";
@@ -41,10 +43,18 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
   const dragRef = useRef<{ lx: number; ly: number } | null>(null);
   const posRef = useRef<{ x: number; y: number } | null>(null);
   const rafRef = useRef(0);
+  /** setPosition 串行化：单飞行 + 脏标（重叠 SetWindowPos 竞争位图拷贝与
+   *  WebView2 重绘，是拖动闪动来源） */
+  const inflightRef = useRef(false);
+  const dirtyRef = useRef(false);
   /** 阴影余量（物理像素；CSS padding = pad/scale） */
   const pad = boot.pad ?? 0;
 
   useEffect(() => {
+    // 窗口 transparent 的前提：页面根不铺底色（同 ScrollFrame 先例）——
+    // index.css 的 body 背景会在阴影余量区铺出不透明底
+    document.documentElement.style.background = "transparent";
+    document.body.style.background = "transparent";
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") void win.close().catch(() => undefined);
     };
@@ -116,8 +126,7 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
       const d = dragRef.current;
       const pos = posRef.current;
       if (!d || !pos) return;
-      // 累计位移（CSS→物理）；一帧内多次 pointermove 只保留最新目标，
-      // rAF 到点统一发一次 setPosition——逐事件发 IPC 会积压成批滞后（卡顿）
+      // 累计位移（CSS→物理）；一帧内多次 pointermove 只保留最新目标
       pos.x += (e.clientX - d.lx) * boot.scale;
       pos.y += (e.clientY - d.ly) * boot.scale;
       d.lx = e.clientX;
@@ -126,11 +135,27 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
         rafRef.current = requestAnimationFrame(() => {
           rafRef.current = 0;
           const p = posRef.current;
-          if (p) {
+          if (!p) return;
+          const send = () => {
+            // 串行发送（单飞行 + 脏标）：重叠的 SetWindowPos 会互相竞争位图
+            // 拷贝与 WebView2 重绘，是拖动闪动的主要来源
+            inflightRef.current = true;
             void win
               .setPosition(new PhysicalPosition(Math.round(p.x), Math.round(p.y)))
-              .catch(() => undefined);
+              .catch(() => undefined)
+              .finally(() => {
+                inflightRef.current = false;
+                if (dirtyRef.current) {
+                  dirtyRef.current = false;
+                  send();
+                }
+              });
+          };
+          if (inflightRef.current) {
+            dirtyRef.current = true;
+            return;
           }
+          send();
         });
       }
     },
@@ -144,12 +169,25 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
     if (rafRef.current) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = 0;
-      const p = posRef.current;
-      if (p) {
-        void win
-          .setPosition(new PhysicalPosition(Math.round(p.x), Math.round(p.y)))
-          .catch(() => undefined);
-      }
+    }
+    const p = posRef.current;
+    if (p && !inflightRef.current) {
+      inflightRef.current = true;
+      void win
+        .setPosition(new PhysicalPosition(Math.round(p.x), Math.round(p.y)))
+        .catch(() => undefined)
+        .finally(() => {
+          inflightRef.current = false;
+          if (dirtyRef.current) {
+            dirtyRef.current = false;
+            const p2 = posRef.current;
+            if (p2) {
+              void win
+                .setPosition(new PhysicalPosition(Math.round(p2.x), Math.round(p2.y)))
+                .catch(() => undefined);
+            }
+          }
+        });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
