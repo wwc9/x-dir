@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { onGlobalKeyDown } from "./lib/keyboard";
+import { hotkeySpecs } from "./lib/hotkey";
 import { initOleDnd } from "./lib/oleDispatch";
 import { installMouseNav } from "./lib/mouseNav";
 import { setupAutoScrollbar } from "./lib/autoScrollbar";
@@ -61,10 +62,14 @@ export default function App() {
         await useSettings.getState().load();
         const st: Settings = useSettings.getState();
 
-        // 截图全局热键（§3.6）：按用户设置注册，失败静默（设置页改动时会
-        // 重新注册并经灵动岛回执提示冲突）
+        // 系统级全局热键（§3.7）：全部热键单点全量注册（截图 + 剪贴板历史），
+        // 失败静默（设置页改动时会重新注册并经灵动岛回执提示冲突）
         void api
-          .shotRegisterHotkey(st.shotEnabled, st.shotHotkey)
+          .hotkeysSync(hotkeySpecs(st))
+          .catch(() => undefined);
+        // 剪贴板历史监听（§3.7）：启停 + 护栏推送
+        void api
+          .cliphistConfigure(st.cliphistEnabled, st.cliphistCapacity, st.cliphistKeepDays)
           .catch(() => undefined);
 
         const args = await api.getLaunchArgs().catch<string[]>(() => []);

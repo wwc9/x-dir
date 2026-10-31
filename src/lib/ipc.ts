@@ -341,6 +341,17 @@ export interface Settings {
   shotMosaicW?: number;
   /** 滚轮记忆：模糊不透明度 0.15~1（缺省 1） */
   shotBlurAlpha?: number;
+  /** ── 剪贴板历史（§3.7，2026-10-30 定案，Ditto 式）── */
+  /** 剪贴板监听开关（系统级热键呼出浮窗） */
+  cliphistEnabled: boolean;
+  /** 呼出热键（tauri-plugin-global-shortcut 字符串，可自定义录制） */
+  cliphistHotkey: string;
+  /** 选中条目后直接粘贴到目标窗口（恢复焦点 + 模拟 Ctrl+V；失败降级仅复制） */
+  cliphistDirectPaste: boolean;
+  /** 历史容量上限（条，后端钳制 50–10000，超限删最旧非置顶） */
+  cliphistCapacity: number;
+  /** 保留天数（0 = 永不按时清理；置顶条目豁免清理） */
+  cliphistKeepDays: number;
 }
 
 /** 自定义右键命令：占位符 %f=全部选中路径（逐个引号包裹） %n=首项文件名 %d=所在目录；
@@ -426,8 +437,36 @@ export const DEFAULT_SETTINGS: Settings = {
   shotShadowW: 0,
   shotBorderW: 0,
   shotBorderColor: "#000000",
+  cliphistEnabled: true,
+  cliphistHotkey: "Ctrl+Shift+V",
+  cliphistDirectPaste: true,
+  cliphistCapacity: 500,
+  cliphistKeepDays: 30,
 };
 export const PAGE_SIZE = 500;
+
+/** 剪贴板历史条目（分页元数据；thumb = 缩略图 dataURL 或 null） */
+export interface ClipHistItem {
+  id: number;
+  kind: "text" | "image" | "files";
+  preview: string;
+  size: number;
+  pinned: boolean;
+  createdAt: number;
+  lastUsedAt: number;
+  thumb: string | null;
+}
+
+export interface ClipHistPage {
+  items: ClipHistItem[];
+  total: number;
+}
+
+/** 全局热键注册项（hotkeysSync 全量重建，回调按 id 分发） */
+export interface HotkeySpec {
+  id: string;
+  hotkey: string;
+}
 
 function cmd<T>(
   name: string,
@@ -831,9 +870,29 @@ export const api = {
    *  Rust 进程内裁剪定格帧后直接建贴图窗；Err 时前端回落 shotPinRaw */
   shotPinCrop: (x: number, y: number, w: number, h: number, sx: number, sy: number) =>
     cmd<void>("shot_pin_crop", { x, y, w, h, sx, sy }),
-  /** 注册/更新截图全局热键（启动与设置变更时调用；Err = 键位冲突等） */
-  shotRegisterHotkey: (enabled: boolean, hotkey: string) =>
-    cmd<void>("shot_register_hotkey", { enabled, hotkey }),
+  /** 全局热键全量重建（§3.7，2026-10-30）：全部系统级热键单点注册（截图
+   *  shot-open / 剪贴板 cliphist-toggle），取代旧 shotRegisterHotkey——
+   *  其 unregister_all 全清语义无法与第二个热键并存 */
+  hotkeysSync: (hotkeys: HotkeySpec[]) => cmd<void>("hotkeys_sync", { hotkeys }),
+  /** 剪贴板历史（§3.7）：启停监听 + 推送容量/天数护栏（启动与设置变更时调用） */
+  cliphistConfigure: (enabled: boolean, capacity: number, keepDays: number) =>
+    cmd<void>("cliphist_configure", { enabled, capacity, keepDays }),
+  /** 剪贴板历史：分页查询（query 空串=全部；kind 空串=全部类型） */
+  cliphistList: (query: string, kind: string, offset: number, limit: number) =>
+    cmd<ClipHistPage>("cliphist_list", { query, kind, offset, limit }),
+  /** 剪贴板历史：写回系统剪贴板；paste=true 直接粘贴（返回 pasted，失败
+   *  由前端降级提示「已复制」） */
+  cliphistWriteBack: (id: number, paste: boolean) =>
+    cmd<boolean>("cliphist_write_back", { id, paste }),
+  /** 剪贴板历史：置顶 / 取消置顶（置顶豁免容量与天数清理） */
+  cliphistSetPin: (id: number, pinned: boolean) =>
+    cmd<void>("cliphist_set_pin", { id, pinned }),
+  /** 剪贴板历史：删除单条 */
+  cliphistDelete: (id: number) => cmd<void>("cliphist_delete", { id }),
+  /** 剪贴板历史：清空全部未置顶条目 */
+  cliphistClear: () => cmd<void>("cliphist_clear"),
+  /** 剪贴板历史：收浮窗（Esc / 选中条目后；失焦自动收由 Rust 窗口事件处理） */
+  cliphistHide: () => cmd<void>("cliphist_hide"),
   /** 截图标注偏好补丁写：Rust 侧白名单键合并（装饰三键 + 滚轮记忆五键
    *  shotStrokeW/shotTextFont/shotStepW/shotMosaicW/shotBlurAlpha），
    *  避免轻量截图页整对象回写覆盖主窗设置 */

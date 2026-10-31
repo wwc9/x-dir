@@ -33,9 +33,11 @@ export default defineConfig(() => ({
   build: {
     rollupOptions: {
       // 多页入口：主窗口 index.html + 截图族窗口轻量入口 shot.html（§3.6）
+      // + 剪贴板历史浮窗轻量入口 clipboard.html（§3.7）
       input: {
         main: "index.html",
         shot: "shot.html",
+        clip: "clipboard.html",
       },
     },
   },

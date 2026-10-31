@@ -5292,3 +5292,186 @@ mark.np-gsearch-mark {
   white-space: nowrap;
   text-align: right;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   剪贴板历史浮窗（§3.7，2026-10-30）：独立面板窗（clipboard.html 轻量
+   入口），共用 token 体系；列表行高 --np-row-h（虚拟滚动），行内动作按钮
+   仅悬停显现，选中行 = surface 底 + accent 左缘（激活=3px accent 实线的
+   浮层口径）。
+   ══════════════════════════════════════════════════════════════ */
+.np-clip {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  border-radius: var(--np-radius-lg);
+  overflow: hidden;
+}
+.np-clip-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--np-gap);
+  padding: var(--np-gap) var(--np-gutter) 0 var(--np-gutter);
+}
+.np-clip-searchrow {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+  min-height: var(--np-ctl-h);
+  color: var(--np-muted);
+}
+.np-clip-search {
+  flex: 1;
+  min-width: 0;
+  height: var(--np-ctl-h);
+  padding: 0 var(--np-gap);
+  font-size: var(--np-font-ui);
+}
+.np-clip-seg {
+  display: flex;
+  gap: var(--np-gap);
+}
+.np-clip-seg button {
+  border: none;
+  background: transparent;
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+  line-height: var(--np-ctl-h);
+  height: var(--np-ctl-h);
+  padding: 0 var(--np-gutter);
+  border-radius: var(--np-radius-pill);
+  cursor: pointer;
+}
+.np-clip-seg button:hover {
+  background: var(--np-surface-2);
+  color: var(--np-fg);
+}
+.np-clip-seg button.is-on {
+  background: var(--np-surface-2);
+  color: var(--np-fg);
+  box-shadow: var(--np-ring);
+}
+.np-clip-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin-top: var(--np-gap);
+  padding: 0 var(--np-gap);
+}
+.np-clip-row {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+  height: var(--np-row-h);
+  padding: 0 var(--np-gap);
+  border-radius: var(--np-radius);
+  cursor: pointer;
+  color: var(--np-fg);
+}
+.np-clip-row:hover {
+  background: var(--np-surface-2);
+}
+.np-clip-row.is-sel {
+  background: var(--np-surface-2);
+  box-shadow: inset 3px 0 0 var(--np-accent);
+}
+.np-clip-thumb {
+  width: var(--np-row-h);
+  height: calc(var(--np-row-h) - 6px);
+  object-fit: contain;
+  border-radius: var(--np-radius);
+  background: var(--np-surface);
+  flex: none;
+}
+.np-clip-preview {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--np-font-ui);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.np-clip-pinmark {
+  flex: none;
+  width: var(--np-gap);
+  height: var(--np-gap);
+  border-radius: var(--np-radius-pill);
+  background: var(--np-accent);
+}
+.np-clip-meta {
+  flex: none;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  font-variant-numeric: tabular-nums;
+}
+.np-clip-actions {
+  display: none;
+  flex: none;
+  gap: var(--np-gap);
+}
+.np-clip-row:hover .np-clip-actions {
+  display: inline-flex;
+}
+.np-clip-row:hover .np-clip-meta {
+  display: none;
+}
+.np-clip-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--np-muted);
+  width: var(--np-ctl-h);
+  height: var(--np-ctl-h);
+  border-radius: var(--np-radius);
+  cursor: pointer;
+}
+.np-clip-actions button:hover {
+  background: var(--np-surface);
+  color: var(--np-fg);
+}
+.np-clip-empty {
+  padding: var(--np-gutter);
+  font-size: var(--np-font-ui);
+  color: var(--np-muted);
+  text-align: center;
+}
+.np-clip-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+  height: var(--np-row-h);
+  padding: 0 var(--np-gutter);
+  border-top: 1px solid var(--np-hairline);
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-clip-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--np-gap);
+  margin-left: auto;
+}
+.np-clip-keys .np-kbd {
+  margin-left: var(--np-gap);
+}
+.np-clip-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--np-gap);
+  border: none;
+  background: transparent;
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+  line-height: var(--np-ctl-h);
+  height: var(--np-ctl-h);
+  padding: 0 var(--np-gap);
+  border-radius: var(--np-radius);
+  cursor: pointer;
+}
+.np-clip-clear:hover {
+  background: var(--np-surface-2);
+  color: var(--np-fg);
+}

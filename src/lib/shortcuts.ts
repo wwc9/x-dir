@@ -221,6 +221,32 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       },
     ],
   },
+  {
+    title: "剪贴板历史",
+    items: [
+      {
+        id: "cliphist-open",
+        keys: ["Ctrl+Shift+V"],
+        label: "呼出剪贴板历史浮窗（系统级热键，任意界面生效；键位可在设置 → 剪贴板自定义录制）",
+        scope: "system",
+      },
+      { id: "cliphist-nav", keys: ["↑ / ↓"], label: "浮窗内移动选择", scope: "system" },
+      {
+        id: "cliphist-paste",
+        keys: ["Enter / Ctrl+Enter"],
+        label: "直接粘贴到目标窗口 / 仅复制回剪贴板",
+        scope: "system",
+      },
+      { id: "cliphist-pin", keys: ["Ctrl+P"], label: "置顶 / 取消置顶（豁免清理）", scope: "system" },
+      { id: "cliphist-delete", keys: ["Del"], label: "删除选中条目", scope: "system" },
+      {
+        id: "cliphist-esc",
+        keys: ["Esc"],
+        label: "关闭浮窗（浮窗失焦亦自动关闭）",
+        scope: "system",
+      },
+    ],
+  },
 ];
 
 /** scope=global 的全部 id（测试覆盖校验用） */

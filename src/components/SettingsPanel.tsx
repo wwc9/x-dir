@@ -14,6 +14,7 @@ import {
 } from "@blueprintjs/core";
 import {
   Camera,
+  ClipboardList,
   Download,
   Files,
   FolderOpen,
@@ -30,6 +31,7 @@ import { api, type ColorRule, type SortKey, type TagColor, type ViewMode } from 
 import { ZOOM_STEPS } from "../lib/zoom";
 import { DENSITY } from "../lib/tokens";
 import { SHORTCUT_GROUPS } from "../lib/shortcuts";
+import { hotkeySpecs } from "../lib/hotkey";
 import { setThemeWithFx, useSettings } from "../stores/settings";
 import { confirmDialog, useUi } from "../stores/ui";
 import { AppIcon, ic } from "./AppIcon";
@@ -65,6 +67,7 @@ const TABS = [
   { id: "ops", label: "文件操作", icon: Files },
   { id: "search", label: "全盘搜索", icon: Search },
   { id: "shot", label: "截图", icon: Camera },
+  { id: "clip", label: "剪贴板", icon: ClipboardList },
   { id: "rules", label: "着色规则", icon: Tag },
   { id: "keys", label: "快捷键", icon: Keyboard },
   { id: "config", label: "配置", icon: Download },
@@ -102,11 +105,40 @@ export function SettingsPanel() {
     s.update({ colorRules: rules });
   };
 
-  /** 截图热键/开关变更：落盘并即时重注册（冲突经灵动岛回执提示） */
+  /** 截图热键/开关变更：落盘并即时重注册（冲突经灵动岛回执提示）。
+   *  系统热键为全量重建（§3.7 hotkeys_sync）：任一热键变更都重发全部 */
   const applyShotHotkey = (enabled: boolean, hotkey: string) => {
     s.update({ shotEnabled: enabled, shotHotkey: hotkey });
-    api.shotRegisterHotkey(enabled, hotkey).catch((e) =>
+    api.hotkeysSync(hotkeySpecs(useSettings.getState())).catch((e) =>
       useUi.getState().toast(`截图热键未生效：${String(e)}`, "error"),
+    );
+  };
+
+  /** 剪贴板历史总开关：落盘 + 热键重注册 + 监听启停 */
+  const applyClipEnabled = (enabled: boolean) => {
+    s.update({ cliphistEnabled: enabled });
+    const st = useSettings.getState();
+    void api
+      .hotkeysSync(hotkeySpecs(st))
+      .catch((e) => useUi.getState().toast(`剪贴板热键未生效：${String(e)}`, "error"));
+    void api.cliphistConfigure(enabled, st.cliphistCapacity, st.cliphistKeepDays).catch(
+      () => undefined,
+    );
+  };
+
+  /** 剪贴板呼出热键变更：落盘并全量重注册 */
+  const applyClipHotkey = (hotkey: string) => {
+    s.update({ cliphistHotkey: hotkey });
+    api.hotkeysSync(hotkeySpecs(useSettings.getState())).catch((e) =>
+      useUi.getState().toast(`剪贴板热键未生效：${String(e)}`, "error"),
+    );
+  };
+
+  /** 容量/天数护栏变更：落盘并推送后端 */
+  const applyClipLimits = (capacity: number, keepDays: number) => {
+    s.update({ cliphistCapacity: capacity, cliphistKeepDays: keepDays });
+    void api.cliphistConfigure(useSettings.getState().cliphistEnabled, capacity, keepDays).catch(
+      () => undefined,
     );
   };
 
@@ -299,6 +331,66 @@ export function SettingsPanel() {
             </div>
           </>
         )}
+        {tab === "clip" && (
+          <>
+            <SetRow
+              label={t("启用剪贴板历史")}
+              desc="后台记录复制/剪切的文本·图片·文件，存本地 clipboard.db（不上传；关闭 X-Dir 后监听停止，历史保留）"
+            >
+              <Switch
+                checked={s.cliphistEnabled}
+                onChange={(e) => applyClipEnabled(e.currentTarget.checked)}
+              />
+            </SetRow>
+            <SetRow
+              label="呼出热键（自定义）"
+              desc="系统级全局热键，任意界面可按；点击后直接按下组合键录制，更改即时生效"
+            >
+              <HotkeyRecorder
+                value={s.cliphistHotkey}
+                disabled={!s.cliphistEnabled}
+                onApply={(h) => applyClipHotkey(h)}
+                notify={(msg) => useUi.getState().toast(msg, "error")}
+              />
+            </SetRow>
+            <SetRow
+              label={t("选中后直接粘贴")}
+              desc="回写剪贴板后自动切回原窗口并模拟 Ctrl+V；对管理员权限窗口等场景失败时降级为仅复制"
+            >
+              <Switch
+                checked={s.cliphistDirectPaste}
+                onChange={(e) => s.update({ cliphistDirectPaste: e.currentTarget.checked })}
+              />
+            </SetRow>
+            <SetRow label={t("历史容量")} desc="超过上限自动删除最旧的未置顶条目">
+              <NpSelect
+                value={s.cliphistCapacity}
+                options={[200, 500, 1000, 2000].map((v) => ({
+                  value: v,
+                  label: `${v} 条`,
+                }))}
+                onChange={(v) => applyClipLimits(v, s.cliphistKeepDays)}
+              />
+            </SetRow>
+            <SetRow label={t("保留天数")} desc="到期自动清理（置顶条目豁免）">
+              <NpSelect
+                value={s.cliphistKeepDays}
+                options={[
+                  { value: 7, label: "7 天" },
+                  { value: 30, label: "30 天" },
+                  { value: 90, label: "90 天" },
+                  { value: 0, label: "永不清" },
+                ]}
+                onChange={(v) => applyClipLimits(s.cliphistCapacity, v)}
+              />
+            </SetRow>
+            <div className="np-set-hint">
+              {t(
+                "浮窗内 ↑↓ 选择、Enter 直接粘贴、Ctrl+Enter 仅复制、Ctrl+P 置顶、Del 删除、输入即搜索（文本与文件路径）；重复复制同一条会自动置顶。",
+              )}
+            </div>
+          </>
+        )}
         {tab === "rules" && (
           <>
             <div className="np-set-hint">
@@ -382,12 +474,14 @@ export function SettingsPanel() {
             <section key={g.title}>
               <div className="np-set-group-title">{t(g.title)}</div>
               {g.items.map((it) => {
-                // 截图热键已支持自定义：清单里的键位是默认值，实际以设置当前值
-                // 为准（关闭时显示未启用）
+                // 可自定义的系统级热键（截图/剪贴板）：清单里的键位是默认值，
+                // 实际以设置当前值为准（关闭时显示未启用）
                 const keys =
                   it.id === "shot-open"
                     ? [s.shotEnabled ? s.shotHotkey : "未启用"]
-                    : it.keys;
+                    : it.id === "cliphist-open"
+                      ? [s.cliphistEnabled ? s.cliphistHotkey : "未启用"]
+                      : it.keys;
                 return (
                   <SetRow key={it.id} label={t(it.label)}>
                     <span className="np-kbds">

@@ -1,0 +1,22 @@
+<!doctype html>
+<!-- 剪贴板历史浮窗轻量入口（§3.7）：只加载 src/clip/boot.tsx，不加载完整
+     文件管理器 bundle（App + Blueprint + stores）；样式与主界面共用
+     index.css（不透明面板窗，与 shot.html 的透明覆盖窗不同）。主窗口仍走
+     index.html -->
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>X-Dir 剪贴板</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/clip/boot.tsx"></script>
+  </body>
+</html>

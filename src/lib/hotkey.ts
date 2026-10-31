@@ -6,6 +6,8 @@
 // 修饰键只认 Ctrl / Alt / Shift（Win 键被系统保留不收），且必须出现在主键
 // 之前。裸字母数字会吞掉全局输入，一律拒绝；单独 F1-F12 允许。
 
+import type { HotkeySpec, Settings } from "./ipc";
+
 /** 录制判定结果：ok = 得到完整组合；pending = 修饰键未齐/按下纯修饰键，
  *  继续等待；invalid = 组合不成立（原因供提示） */
 export type HotkeyCapture =
@@ -54,4 +56,16 @@ export function captureHotkey(e: HotkeyEventLike): HotkeyCapture {
     return { state: "invalid", reason: "需包含 Ctrl / Alt / Shift 修饰键（或单独使用 F1-F12）" };
   }
   return { state: "ok", combo: [...mods, main].join("+") };
+}
+
+/** 组装当前全部系统级热键（§3.7 hotkeys_sync 单点全量重建）：截图 +
+ *  剪贴板历史；关闭的功能不入册（后端 unregister_all 后按本表重建）。
+ *  App.tsx 启动与 SettingsPanel 改动共用，防止两处各写一份漂移 */
+export function hotkeySpecs(
+  st: Pick<Settings, "shotEnabled" | "shotHotkey" | "cliphistEnabled" | "cliphistHotkey">,
+): HotkeySpec[] {
+  const specs: HotkeySpec[] = [];
+  if (st.shotEnabled) specs.push({ id: "shot-open", hotkey: st.shotHotkey });
+  if (st.cliphistEnabled) specs.push({ id: "cliphist-toggle", hotkey: st.cliphistHotkey });
+  return specs;
 }
