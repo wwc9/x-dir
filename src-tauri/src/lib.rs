@@ -303,6 +303,8 @@ pub fn run() {
             commands::cliphist::cliphist_get_image,
             commands::cliphist::cliphist_ocr,
             commands::cliphist::cliphist_set_fav,
+            commands::cliphist::cliphist_export,
+            commands::cliphist::cliphist_import,
             commands::shot_scroll::shot_scroll_begin,
             commands::shot_scroll::shot_scroll_launch,
             commands::shot_scroll::shot_scroll_chunk,

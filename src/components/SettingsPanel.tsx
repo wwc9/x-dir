@@ -423,9 +423,19 @@ export function SettingsPanel() {
                 onChange={(v) => applyClipLimits(s.cliphistCapacity, v)}
               />
             </SetRow>
+            <SetRow label={t("备份导出")} desc="全部历史条目导出为 JSON（含图片/收藏/富文本）">
+              <Button minimal size="small" onClick={() => void onCliphistExport()}>
+                {t("导出…")}
+              </Button>
+            </SetRow>
+            <SetRow label={t("备份导入")} desc="从备份 JSON 追加导入（保留收藏与时间戳）">
+              <Button minimal size="small" onClick={() => void onCliphistImport()}>
+                {t("导入…")}
+              </Button>
+            </SetRow>
             <div className="np-set-hint">
               {t(
-                "浮窗内 ↑↓ 选择、Enter 直接粘贴、Ctrl+Enter 仅复制、Ctrl+P 置顶、Del 删除、输入即搜索（文本与文件路径）；重复复制同一条会自动置顶。",
+                "浮窗内 ↑↓ 选择、Enter 直接粘贴、Ctrl+Enter 仅复制、Ctrl+P 置顶、Del 删除、Space 勾选多条合并粘贴、1-9 取条；≥3 字全文搜索、拼音首字母可查中文。",
               )}
             </div>
           </>
@@ -559,6 +569,41 @@ export function SettingsPanel() {
       </DialogBody>
     </Dialog>
   );
+}
+
+/** 剪贴板历史导出（T3-3）：原生保存框 → cliphist_export */
+async function onCliphistExport() {
+  const { save } = await import("@tauri-apps/plugin-dialog");
+  const path = await save({
+    title: "导出剪贴板备份",
+    defaultPath: "xdir-clipboard-backup.json",
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+  if (!path) return;
+  try {
+    const n = await api.cliphistExport(path);
+    useUi.getState().toast(`已导出 ${n} 条剪贴板历史`);
+  } catch (e) {
+    useUi.getState().toast(`导出失败：${String(e)}`, "error");
+  }
+}
+
+/** 剪贴板历史导入（T3-3）：原生打开框 → cliphist_import（追加） */
+async function onCliphistImport() {
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const path = await open({
+    title: "导入剪贴板备份",
+    multiple: false,
+    directory: false,
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+  if (typeof path !== "string" || !path) return;
+  try {
+    const n = await api.cliphistImport(path);
+    useUi.getState().toast(`已导入 ${n} 条（追加）`);
+  } catch (e) {
+    useUi.getState().toast(`导入失败：${String(e)}`, "error");
+  }
 }
 
 /** 导出配置：原生保存对话框选路径 → Rust 打包 settings.json + 全部工作区 */

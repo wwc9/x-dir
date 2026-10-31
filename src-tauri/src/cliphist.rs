@@ -175,6 +175,34 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
         conn.execute_batch("ALTER TABLE clip_items ADD COLUMN fav INTEGER NOT NULL DEFAULT 0;")
             .map_err(|e| format!("补 fav 列失败：{e}"))?;
     }
+    // FTS5 全文索引（T3-4）：content 表挂 clip_items 行 id，触发器同步增删改；
+    // 已存在则重建一次保证结构新鲜（量级小，秒级）
+    // trigram 分词器支持任意子串（含中文 ≥3 字符）；老 SQLite 无此分词器
+    // 则清掉重建为默认分词（英文词级，短查询本就走 LIKE 不受影响）
+    if conn
+        .execute_batch(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS clip_fts USING fts5(text, content='clip_items', content_rowid='id', tokenize='trigram');",
+        )
+        .is_err()
+    {
+        let _ = conn.execute_batch("DROP TABLE IF EXISTS clip_fts;");
+    }
+    conn.execute_batch(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS clip_fts USING fts5(text, content='clip_items', content_rowid='id');
+         CREATE TRIGGER IF NOT EXISTS clip_fts_ai AFTER INSERT ON clip_items BEGIN
+           INSERT INTO clip_fts(rowid, text) VALUES (new.id, new.text);
+         END;
+         CREATE TRIGGER IF NOT EXISTS clip_fts_ad AFTER DELETE ON clip_items BEGIN
+           INSERT INTO clip_fts(clip_fts, rowid, text) VALUES ('delete', old.id, old.text);
+         END;
+         CREATE TRIGGER IF NOT EXISTS clip_fts_au AFTER UPDATE ON clip_items BEGIN
+           INSERT INTO clip_fts(clip_fts, rowid, text) VALUES ('delete', old.id, old.text);
+           INSERT INTO clip_fts(rowid, text) VALUES (new.id, new.text);
+         END;",
+    )
+    .map_err(|e| format!("初始化 FTS 失败：{e}"))?;
+    conn.execute_batch("INSERT INTO clip_fts(clip_fts) VALUES('rebuild');")
+        .map_err(|e| format!("FTS 重建失败：{e}"))?;
     // 回填：仅 text 列非空且 py 为空的行（新库为空集，秒过）
     let rows: Vec<(i64, Option<String>)> = conn
         .prepare("SELECT id, text FROM clip_items WHERE text IS NOT NULL AND py IS NULL")
@@ -594,11 +622,29 @@ pub fn list_page(
 ) -> rusqlite::Result<ClipHistPage> {
     use base64::Engine as _;
     let q = query.trim();
-    let where_sql = "WHERE (?1 = '' OR preview LIKE '%'||?1||'%'
+    let q_all = q.is_empty();
+    let where_sql = if q_all || q.chars().count() < 3 {
+        // 空查询或短查询（trigram 最小 3 字符）：LIKE 通道（保子词语义）
+        "WHERE (?1 = '' OR preview LIKE '%'||?1||'%'
                        OR (text IS NOT NULL AND text LIKE '%'||?1||'%')
                        OR (py IS NOT NULL AND py LIKE '%'||?1||'%')
                        OR (source IS NOT NULL AND source LIKE '%'||?1||'%'))
-                     AND (?2 = '' OR (?2 = 'fav' AND fav = 1) OR kind = ?2)";
+                     AND (?2 = '' OR (?2 = 'fav' AND fav = 1) OR kind = ?2)"
+            .to_string()
+    } else {
+        // 全文（T3-4）：trigram 任意子串（含中文）；双引号双写转义、单引号
+        // 双写防注入（char::from 构造免转义符）
+        let dq = char::from(34);
+        let sq = char::from(39);
+        let phrase = q.replace(dq, &format!("{dq}{dq}"));
+        let fts_sql = format!("{dq}{phrase}{dq}").replace(sq, "''");
+        format!(
+            "WHERE (id IN (SELECT rowid FROM clip_fts WHERE text MATCH '{fts_sql}')
+                   OR (py IS NOT NULL AND py LIKE '%'||?1||'%')
+                   OR (source IS NOT NULL AND source LIKE '%'||?1||'%'))
+             AND (?2 = '' OR (?2 = 'fav' AND fav = 1) OR kind = ?2)"
+        )
+    };
     let total: i64 = conn.query_row(
         &format!("SELECT COUNT(*) FROM clip_items {where_sql}"),
         rusqlite::params![q, kind],
@@ -1372,6 +1418,103 @@ pub fn get_image_data_url(h: &ClipHistState, id: i64) -> Result<String, String> 
     .ok_or_else(|| "该条目没有原图数据".to_string())
 }
 
+/// 备份条目行（T3-3 导出格式，JSON 序列化；image 为 base64）
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct BackupItem {
+    pub kind: String,
+    pub text: Option<String>,
+    pub html: Option<String>,
+    pub preview: Option<String>,
+    pub image: Option<String>,
+    pub files: Option<String>,
+    pub file_cut: i64,
+    pub size: i64,
+    pub pinned: bool,
+    pub fav: bool,
+    pub created_at: i64,
+    pub source: Option<String>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct Backup {
+    pub app: String,
+    pub version: u32,
+    pub items: Vec<BackupItem>,
+}
+
+/// 导出全部条目为 Backup 结构（T3-3；纯函数供 test 往返）
+pub fn export_backup(conn: &Connection) -> rusqlite::Result<Backup> {
+    use base64::Engine as _;
+    let mut stmt = conn.prepare(
+        "SELECT kind, text, html, preview, image, files, file_cut, size, pinned, fav,
+                created_at, source FROM clip_items ORDER BY id",
+    )?;
+    let items = stmt
+        .query_map([], |r| {
+            Ok(BackupItem {
+                kind: r.get(0)?,
+                text: r.get(1)?,
+                html: r.get(2)?,
+                preview: r.get(3)?,
+                image: r
+                    .get::<_, Option<Vec<u8>>>(4)?
+                    .map(|b| base64::engine::general_purpose::STANDARD.encode(b)),
+                files: r.get(5)?,
+                file_cut: r.get(6)?,
+                size: r.get(7)?,
+                pinned: r.get::<_, i64>(8)? != 0,
+                fav: r.get::<_, i64>(9)? != 0,
+                created_at: r.get(10)?,
+                source: r.get(11)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Backup {
+        app: "x-dir".into(),
+        version: 1,
+        items,
+    })
+}
+
+/// 导入备份（T3-3）：逐条 INSERT（hash 重算；image base64 还原；与现存
+/// 重复的行由调用方接受的插入语义处理——保留双份，用户自行清理）。
+/// 返回导入条数
+pub fn import_backup(conn: &Connection, backup: &Backup) -> rusqlite::Result<usize> {
+    use base64::Engine as _;
+    let mut n = 0usize;
+    for it in &backup.items {
+        let image = it
+            .image
+            .as_ref()
+            .and_then(|b| base64::engine::general_purpose::STANDARD.decode(b).ok());
+        let hash_src = it.text.clone().unwrap_or_default();
+        let hash = sha256_hex(&hash_src);
+        conn.execute(
+            "INSERT INTO clip_items
+               (kind, hash, text, html, preview, image, files, file_cut, py, source, fav,
+                size, pinned, created_at, last_used_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL, ?9, ?10, ?11, ?12, ?13, ?13)",
+            rusqlite::params![
+                it.kind,
+                hash,
+                it.text,
+                it.html,
+                it.preview,
+                image,
+                it.files,
+                it.file_cut,
+                it.source,
+                it.fav as i64,
+                it.size,
+                it.pinned as i64,
+                it.created_at
+            ],
+        )?;
+        n += 1;
+    }
+    Ok(n)
+}
+
 /// 多条文本合并（T1-4）：按调用方给定顺序（列表可见序）取 text/link/path
 /// 三类条目的全文，换行连接；无可合并条目 = None。独立纯函数供 test
 pub fn merge_texts(conn: &Connection, ids: &[i64]) -> Option<String> {
@@ -1650,6 +1793,33 @@ MIIE...
         assert!(!app_excluded("keepass.exe", "explorer.exe"));
         assert!(!app_excluded("", "anything.exe"));
         assert!(!app_excluded("keepass.exe", ""));
+    }
+
+    #[test]
+    fn probe2() {
+        let c = mem_db();
+        ingest(&c, &text("季度审计报告要点"), 1000, None, None).unwrap();
+        ingest(&c, &text("hello world"), 2000, None, None).unwrap();
+        let raw: i64 = c
+            .query_row(
+                "SELECT COUNT(*) FROM clip_items WHERE text LIKE '%'||?1||'%'",
+                ["审计"],
+                |r| r.get(0),
+            )
+            .unwrap();
+        eprintln!("raw 审计={raw}");
+        let v: Vec<(i64, String)> = c
+            .prepare("SELECT id, kind FROM clip_items")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        eprintln!("rows={v:?}");
+        for q in ["sj", "审计", "hello", "zzz"] {
+            let n = list_page(&c, q, "", 0, 50).unwrap().items.len();
+            eprintln!("q={q} n={n}");
+        }
     }
 
     #[test]

@@ -913,6 +913,10 @@ export const api = {
   /** 剪贴板历史：置顶 / 取消置顶（置顶豁免容量与天数清理） */
   cliphistSetPin: (id: number, pinned: boolean) =>
     cmd<void>("cliphist_set_pin", { id, pinned }),
+  /** 剪贴板历史：备份导出到 JSON 文件（返回条数） */
+  cliphistExport: (path: string) => cmd<number>("cliphist_export", { path }),
+  /** 剪贴板历史：备份导入（追加，返回导入条数） */
+  cliphistImport: (path: string) => cmd<number>("cliphist_import", { path }),
   /** 剪贴板历史：收藏/取消收藏（豁免清理、排最前、过滤档「收藏」） */
   cliphistSetFav: (id: number, fav: boolean) => cmd<void>("cliphist_set_fav", { id, fav }),
   /** 剪贴板历史：删除单条 */

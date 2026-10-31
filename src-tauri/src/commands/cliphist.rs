@@ -71,6 +71,48 @@ pub fn cliphist_write_back(
     crate::cliphist::write_back(&app, &state.cliphist, id, paste)
 }
 
+/// 备份导出（T3-3）：全部条目写 JSON 文件（image 转 base64）
+#[tauri::command]
+pub fn cliphist_export(state: State<'_, AppState>, path: String) -> Result<usize, String> {
+    let bak = {
+        let conn = state
+            .cliphist
+            .conn
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        crate::cliphist::export_backup(&conn).map_err(|e| format!("导出读取失败：{e}"))?
+    };
+    let n = bak.items.len();
+    let json = serde_json::to_string_pretty(&bak).map_err(|e| format!("序列化失败：{e}"))?;
+    std::fs::write(&path, json).map_err(|e| format!("写文件失败：{e}"))?;
+    Ok(n)
+}
+
+/// 备份导入（T3-3）：JSON 文件追加导入（保留收藏/置顶/时间戳）
+#[tauri::command]
+pub fn cliphist_import(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<usize, String> {
+    let json = std::fs::read_to_string(&path).map_err(|e| format!("读文件失败：{e}"))?;
+    let bak: crate::cliphist::Backup =
+        serde_json::from_str(&json).map_err(|e| format!("备份文件格式不正确：{e}"))?;
+    if bak.app != "x-dir" {
+        return Err("不是 X-Dir 剪贴板备份文件".into());
+    }
+    let n = {
+        let conn = state
+            .cliphist
+            .conn
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        crate::cliphist::import_backup(&conn, &bak).map_err(|e| format!("导入失败：{e}"))?
+    };
+    let _ = app.emit("cliphist-updated", ());
+    Ok(n)
+}
+
 /// 收藏/取消收藏（T3-2）：豁免清理、排序最前、独立过滤档
 #[tauri::command]
 pub fn cliphist_set_fav(
