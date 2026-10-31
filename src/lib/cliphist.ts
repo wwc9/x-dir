@@ -1,9 +1,9 @@
 // 剪贴板历史浮窗纯函数（§3.7）：相对时间、大小格式化、类型图标与标签。
 // 图标仅导出 lucide 组件引用，渲染一律经 AppIcon（iconRule 审计）。
 
-import { FileText, Files, Folder, Image as ImageIcon } from "lucide-react";
+import { FileText, Files, Folder, FolderTree, Image as ImageIcon, Link } from "lucide-react";
 
-export type ClipKind = "text" | "image" | "files" | "dirs";
+export type ClipKind = "text" | "image" | "files" | "dirs" | "link" | "path";
 
 export interface ClipKindMeta {
   label: string;
@@ -18,6 +18,10 @@ export function clipKindMeta(kind: string): ClipKindMeta {
       return { label: "文件", icon: Files };
     case "dirs":
       return { label: "文件夹", icon: Folder };
+    case "link":
+      return { label: "链接", icon: Link };
+    case "path":
+      return { label: "路径", icon: FolderTree };
     default:
       return { label: "文本", icon: FileText };
   }

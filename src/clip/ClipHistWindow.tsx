@@ -15,6 +15,7 @@ import {
   Pin,
   PinOff,
   Search,
+  Settings as SettingsIcon,
   Square,
   Trash2,
   X,
@@ -32,6 +33,8 @@ const ROW_H = DENSITY.rowH;
 const KIND_TABS: { v: string; l: string }[] = [
   { v: "", l: "全部" },
   { v: "text", l: "文本" },
+  { v: "link", l: "链接" },
+  { v: "path", l: "路径" },
   { v: "image", l: "图片" },
   { v: "files", l: "文件" },
   { v: "dirs", l: "文件夹" },
@@ -276,6 +279,20 @@ export function ClipHistWindow() {
       // IME 组合输入中不接管：Enter=提交候选、Esc=取消组合（截图文字工具
       // 同口径；合成键在中文输入法下 key 呈 "Process"，天然不命中各分支）
       if (e.isComposing || e.keyCode === 229) return;
+      // W/S 备用导航（截图 WASD 惯例同源）：仅搜索框未聚焦时生效，且必须
+      // 判在可打印键兜底之前——否则会被兜底截获进搜索词
+      if (
+        (e.key === "w" || e.key === "W" || e.key === "s" || e.key === "S") &&
+        document.activeElement !== inputRef.current
+      ) {
+        e.preventDefault();
+        const { items: list, sel: i } = stateRef.current;
+        const next =
+          e.key === "s" || e.key === "S" ? Math.min(i + 1, list.length - 1) : Math.max(i - 1, 0);
+        setSel(next);
+        goTo(next);
+        return;
+      }
       // 聚焦兜底：冷启动首次激活时三重试仍可能被 WebView2 激活序列冲掉——
       // 可打印字符落键到 body 时夺回输入焦点，并把该字符补进搜索词（免丢键）
       if (
@@ -361,6 +378,15 @@ export function ClipHistWindow() {
           <AppIcon icon={ClipboardList} size={DENSITY.iconSm} />
           剪贴板
         </span>
+        <button
+          className="np-winbtn"
+          data-tip="打开 X-Dir 设置（浮窗收起）"
+          onClick={() => {
+            void api.cliphistOpenSettings().catch(() => undefined);
+          }}
+        >
+          <AppIcon icon={SettingsIcon} size={DENSITY.iconSm} />
+        </button>
         <button
           className={`np-winbtn ${winPinned ? "is-on" : ""}`}
           data-tip={
@@ -484,7 +510,7 @@ export function ClipHistWindow() {
       <div className="np-clip-foot">
         {flash || (
           <>
-            共 {total} 条
+            <span className="np-clip-count">{total} 条</span>
             <button
               className="np-clip-clear"
               data-tip="清空全部未置顶条目（两击确认）"
@@ -494,16 +520,9 @@ export function ClipHistWindow() {
               {clearArmed ? "确认清空？" : "清空"}
             </button>
             <span className="np-clip-keys">
-              {winPinned ? (
-                <>
-                  <kbd className="np-kbd">Enter</kbd> 复制（常驻中）
-                </>
-              ) : (
-                <>
-                  <kbd className="np-kbd">Enter</kbd> 粘贴
-                  <kbd className="np-kbd">Ctrl+Enter</kbd> 仅复制
-                </>
-              )}
+              {winPinned
+                ? "↑↓/WS 选择 · Enter 复制（常驻中） · Ctrl+P 置顶 · Del 删除 · Esc 关闭"
+                : "↑↓/WS 选择 · Enter 粘贴 · Ctrl+Enter 仅复制 · Ctrl+P 置顶 · Del 删除 · Esc 关闭"}
             </span>
           </>
         )}

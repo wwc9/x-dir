@@ -2,7 +2,7 @@
 
 use std::sync::atomic::Ordering;
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::AppState;
 
@@ -134,4 +134,17 @@ pub fn cliphist_set_pinned(pinned: bool) -> Result<(), String> {
 #[tauri::command]
 pub fn cliphist_set_maximized(app: AppHandle, maximized: bool) -> Result<(), String> {
     crate::cliphist::set_window_maximized(&app, maximized)
+}
+
+/// 顶栏设置钮：唤起主窗并直达设置面板（收浮窗）
+#[tauri::command]
+pub fn cliphist_open_settings(app: AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+    let _ = app.emit_to("main", "cliphist-open-settings", ());
+    crate::cliphist::close_clip_window(&app);
+    Ok(())
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 
 import { onGlobalKeyDown } from "./lib/keyboard";
 import { hotkeySpecs } from "./lib/hotkey";
@@ -57,6 +58,7 @@ export default function App() {
     const offMouseNav = installMouseNav();
     let unsubJobs: (() => void) | undefined;
     let unsubOle: (() => void) | undefined;
+    let unsubSettings: (() => void) | undefined;
     (async () => {
       try {
         await useSettings.getState().load();
@@ -123,6 +125,15 @@ export default function App() {
           unsubJobs = undefined;
           return;
         }
+        // 剪贴板浮窗顶栏「设置」钮 → 唤起主窗直达设置面板（§3.7）
+        const unSettings = await listen("cliphist-open-settings", () => {
+          useUi.getState().openSettings("appearance");
+        });
+        if (disposed) {
+          unSettings();
+        } else {
+          unsubSettings = unSettings;
+        }
         unsubOle = await initOleDnd();
         if (disposed) {
           unsubOle();
@@ -170,6 +181,7 @@ export default function App() {
       offMouseNav();
       unsubJobs?.();
       unsubOle?.();
+      unsubSettings?.();
       window.removeEventListener("keydown", onGlobalKeyDown);
       window.removeEventListener("wheel", onZoomWheel);
       window.removeEventListener("focus", onFocusSyncClipboard);

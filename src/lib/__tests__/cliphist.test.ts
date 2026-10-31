@@ -36,11 +36,13 @@ describe("formatSize", () => {
 });
 
 describe("clipKindMeta", () => {
-  it("四种已知类型与未知回退", () => {
+  it("六种已知类型与未知回退", () => {
     expect(clipKindMeta("text").label).toBe("文本");
     expect(clipKindMeta("image").label).toBe("图片");
     expect(clipKindMeta("files").label).toBe("文件");
     expect(clipKindMeta("dirs").label).toBe("文件夹");
+    expect(clipKindMeta("link").label).toBe("链接");
+    expect(clipKindMeta("path").label).toBe("路径");
     // 未知类型回退文本（后端新增类型时前端不崩）
     expect(clipKindMeta("whatever").label).toBe("文本");
   });

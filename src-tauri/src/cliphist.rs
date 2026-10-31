@@ -236,6 +236,30 @@ pub(crate) fn file_name(path: &str) -> String {
     path.rsplit(['\\', '/']).next().unwrap_or(path).to_string()
 }
 
+/// 单行、无空白、http(s)/ftp/www 开头且长度合理 → 链接
+fn is_url(t: &str) -> bool {
+    let t = t.trim();
+    t.len() <= 2048
+        && !t.contains(char::is_whitespace)
+        && (t.starts_with("http://")
+            || t.starts_with("https://")
+            || t.starts_with("ftp://")
+            || t.starts_with("www."))
+}
+
+/// 盘符（C:\…）或 UNC（\\server\…）样式且磁盘上实际存在 → 路径。
+/// 只认存在的路径，纯文本里长得像路径的句子（"D:\分区说明"）不误判
+fn is_existing_path(t: &str) -> bool {
+    let t = t.trim();
+    let b = t.as_bytes();
+    let drive = b.len() >= 3
+        && b[0].is_ascii_alphabetic()
+        && b[1] == b':'
+        && (b[2] == b'\\' || b[2] == b'/');
+    let unc = t.starts_with(r"\\");
+    (drive || unc) && std::fs::metadata(t).is_ok()
+}
+
 // ── 编解码 ──────────────────────────────────────────────────────────────────
 
 fn encode_png(w: u32, h: u32, rgba: &[u8]) -> Result<Vec<u8>, String> {
@@ -297,8 +321,11 @@ fn ingest(conn: &Connection, content: &ClipContent, now: i64) -> rusqlite::Resul
             (content.search_text(), None, None, Some(json), *cut as i64)
         }
     };
-    // 文件列表细分：全部为目录 → 文件夹类（Explorer 复制目录的常态），
-    // 含任一文件/判定失败归文件类。判失败（网络路径等）不阻塞入库
+    // 条目类型细分（2026-10-31 用户需求"丰富类型判断"）：
+    // - 文件列表：全部为目录 → 文件夹类（Explorer 复制目录的常态），含任一
+    //   文件/判定失败归文件类（判失败不阻塞入库）
+    // - 文本：URL（单行无空白、http(s)/ftp/www 开头）→ 链接；盘符/UNC 样式
+    //   且实际存在 → 路径（文件管理器语境高频）。回写仍按纯文本处理
     let row_kind = match &content {
         ClipContent::Files { paths, .. } => {
             if paths
@@ -308,6 +335,15 @@ fn ingest(conn: &Connection, content: &ClipContent, now: i64) -> rusqlite::Resul
                 "dirs"
             } else {
                 "files"
+            }
+        }
+        ClipContent::Text(t) => {
+            if is_url(t) {
+                "link"
+            } else if is_existing_path(t) {
+                "path"
+            } else {
+                "text"
             }
         }
         _ => content.kind(),
@@ -906,7 +942,7 @@ pub fn write_back(
     *h.self_write.lock().unwrap_or_else(|p| p.into_inner()) =
         Some((item.hash.clone(), Instant::now()));
     match item.kind.as_str() {
-        "text" => crate::clip::set_text(&item.text.unwrap_or_default())?,
+        "text" | "link" | "path" => crate::clip::set_text(&item.text.unwrap_or_default())?,
         "files" | "dirs" => {
             let paths: Vec<String> =
                 serde_json::from_str(&item.files.unwrap_or_default()).unwrap_or_default();
@@ -1035,6 +1071,31 @@ mod tests {
             }
             .hash_hex()
         );
+    }
+
+    #[test]
+    fn ingest_marks_link_and_path_kind() {
+        let c = mem_db();
+        // 链接：http(s)/ftp/www 单行无空白
+        ingest(&c, &text("https://gitee.com/wwc9/x-dir"), 1).unwrap();
+        ingest(&c, &text("www.baidu.com"), 2).unwrap();
+        // 带空格的句子长得像 URL 也不判链接
+        ingest(&c, &text("https://example.com 这是一段说明文字"), 3).unwrap();
+        // 路径：盘符样式且存在（用临时目录保证存在）
+        let base = std::env::temp_dir().join("xdir_cliphist_path");
+        let _ = std::fs::create_dir_all(&base);
+        ingest(&c, &text(&base.to_string_lossy()), 4).unwrap();
+        // 盘符样式但不存在 → 纯文本
+        ingest(&c, &text(r"Q:\肯定不存在的盘\文件.txt"), 5).unwrap();
+        let kinds: Vec<String> = c
+            .prepare("SELECT kind FROM clip_items ORDER BY id")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(kinds, vec!["link", "link", "text", "path", "text"]);
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]

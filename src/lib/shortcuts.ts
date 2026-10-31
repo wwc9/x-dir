@@ -230,7 +230,12 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
         label: "呼出剪贴板历史浮窗（系统级热键，任意界面生效；键位可在设置 → 剪贴板自定义录制）",
         scope: "system",
       },
-      { id: "cliphist-nav", keys: ["↑ / ↓"], label: "浮窗内移动选择", scope: "system" },
+      {
+        id: "cliphist-nav",
+        keys: ["↑ / ↓ / W / S"],
+        label: "浮窗内移动选择（W/S 仅在搜索框未聚焦时生效，避免吞输入）",
+        scope: "system",
+      },
       {
         id: "cliphist-paste",
         keys: ["Enter / Ctrl+Enter"],

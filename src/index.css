@@ -5327,6 +5327,8 @@ mark.np-gsearch-mark {
   align-items: center;
   gap: var(--np-gap);
   min-height: var(--np-ctl-h);
+  /* 搜索框上下各加 4px 呼吸间隔（2026-10-31 用户反馈） */
+  padding-block: var(--np-gap);
   color: var(--np-muted);
 }
 .np-clip-search {
@@ -5340,6 +5342,8 @@ mark.np-gsearch-mark {
    轻量窗不加载 Blueprint，原生 button 复刻同一视觉 */
 .np-clip-seg {
   display: flex;
+  flex-wrap: wrap;
+  row-gap: var(--np-gap);
   gap: var(--np-gutter);
 }
 .np-clip-seg button {
@@ -5397,8 +5401,10 @@ mark.np-gsearch-mark {
 .np-clip-row.is-alt {
   background-color: var(--np-stripe);
 }
+/* 悬停 = 主题蓝淡染（2026-10-31 用户定案，同选中底色；选中态另有 accent
+   文字可区分）。仅换底色，不加减边框/阴影——行高纹丝不动 */
 .np-clip-row:hover {
-  background-color: var(--np-hover);
+  background-color: var(--np-sel);
 }
 .np-clip-row.is-sel {
   background-color: var(--np-sel);
@@ -5523,14 +5529,16 @@ mark.np-gsearch-mark {
   font-size: var(--np-font-sm);
   color: var(--np-muted);
 }
-.np-clip-keys {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--np-gap);
-  margin-left: auto;
+.np-clip-count {
+  flex: none;
+  font-variant-numeric: tabular-nums;
 }
-.np-clip-keys .np-kbd {
-  margin-left: var(--np-gap);
+.np-clip-keys {
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .np-clip-clear {
   display: inline-flex;

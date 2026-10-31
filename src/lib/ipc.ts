@@ -898,6 +898,8 @@ export const api = {
   /** 剪贴板历史：浮窗最大化/还原（撑满所在显示器工作区，Rust 侧手动尺寸方案） */
   cliphistSetMaximized: (maximized: boolean) =>
     cmd<void>("cliphist_set_maximized", { maximized }),
+  /** 剪贴板历史：顶栏设置钮——唤起主窗并直达设置面板（浮窗收起） */
+  cliphistOpenSettings: () => cmd<void>("cliphist_open_settings"),
   /** 截图标注偏好补丁写：Rust 侧白名单键合并（装饰三键 + 滚轮记忆五键
    *  shotStrokeW/shotTextFont/shotStepW/shotMosaicW/shotBlurAlpha），
    *  避免轻量截图页整对象回写覆盖主窗设置 */
