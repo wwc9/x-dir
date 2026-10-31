@@ -22,6 +22,9 @@ const DROPFILES_LEN: usize = 20;
 /// 标准剪贴板格式号：CF_DIB = 8（BITMAPINFOHEADER + 像素）
 #[cfg(windows)]
 const CF_DIB: u32 = 8;
+/// 标准剪贴板格式号：CF_UNICODETEXT = 13（NUL 结尾的 UTF-16）
+#[cfg(windows)]
+const CF_UNICODETEXT: u32 = 13;
 #[cfg(windows)]
 const DROPEFFECT_COPY: u32 = 1;
 #[cfg(windows)]
@@ -85,6 +88,138 @@ pub fn set_image(w: u32, h: u32, rgba: &[u8]) -> Result<(), String> {
         let _ = CloseClipboard();
     }
     Ok(())
+}
+
+/// 解析 CF_DIB 负载 → (宽, 高, RGBA top-down)。支持 32bpp BGRA 与 24bpp BGR
+/// （行 4 字节对齐）、正/负 biHeight（bottom-up / top-down）；BITMAPINFOHEADER
+/// 之外的变长头（V4/V5）按 biSize 跳过；BI_RGB 之外的压缩格式返回 None。
+/// 独立纯函数供 test（与 build_dib 往返互逆）。
+pub fn parse_dib(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    if data.len() < 40 {
+        return None;
+    }
+    let bi_size = u32::from_le_bytes(data[0..4].try_into().ok()?) as usize;
+    if bi_size < 40 || bi_size > data.len() {
+        return None;
+    }
+    let w = i32::from_le_bytes(data[4..8].try_into().ok()?);
+    let h_raw = i32::from_le_bytes(data[8..12].try_into().ok()?);
+    let planes = u16::from_le_bytes(data[12..14].try_into().ok()?);
+    let bpp = u16::from_le_bytes(data[14..16].try_into().ok()?);
+    let compression = u32::from_le_bytes(data[16..20].try_into().ok()?);
+    if w <= 0 || h_raw == 0 || planes != 1 || compression != 0 {
+        return None;
+    }
+    let (w, h) = (w as usize, h_raw.unsigned_abs() as usize);
+    let bottom_up = h_raw > 0;
+    let bytes_pp = match bpp {
+        32 => 4usize,
+        24 => 3,
+        _ => return None,
+    };
+    // DIB 行按 4 字节对齐（32bpp 天然满足，24bpp 行尾可能有 1-3 字节填充）
+    let src_stride = (w * bytes_pp).div_ceil(4) * 4;
+    let pixels = &data[bi_size..];
+    if pixels.len() < src_stride * h {
+        return None;
+    }
+    let mut out = Vec::with_capacity(w * h * 4);
+    for row in 0..h {
+        let src_row = if bottom_up { h - 1 - row } else { row };
+        let line = &pixels[src_row * src_stride..src_row * src_stride + w * bytes_pp];
+        match bytes_pp {
+            4 => {
+                for px in line.as_chunks::<4>().0 {
+                    // BGRA → RGBA
+                    out.extend_from_slice(&[px[2], px[1], px[0], px[3]]);
+                }
+            }
+            _ => {
+                for px in line.as_chunks::<3>().0 {
+                    out.extend_from_slice(&[px[2], px[1], px[0], 255]);
+                }
+            }
+        }
+    }
+    Some((w as u32, h as u32, out))
+}
+
+/// 写入文本（CF_UNICODETEXT：UTF-16 + NUL 结尾）。内存构建前置到打开剪贴板
+/// 之前（同 set_files 纪律）
+#[cfg(windows)]
+pub fn set_text(text: &str) -> Result<(), String> {
+    if text.contains('\0') {
+        return Err("文本包含非法 NUL 字符".into());
+    }
+    let bytes: Vec<u8> = text
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .flat_map(|u| u.to_le_bytes())
+        .collect();
+    if !open_clipboard() {
+        return Err("无法打开系统剪贴板".into());
+    }
+    unsafe {
+        if EmptyClipboard().is_err() {
+            let _ = CloseClipboard();
+            return Err("无法清空系统剪贴板".into());
+        }
+        if !set_block(CF_UNICODETEXT, &bytes) {
+            let _ = CloseClipboard();
+            return Err("写入 CF_UNICODETEXT 失败".into());
+        }
+        let _ = CloseClipboard();
+    }
+    Ok(())
+}
+
+/// 读取指定格式的完整字节块（GlobalLock + GlobalSize 拷出）；无该格式或读取
+/// 失败返回 None。get_text / get_dib 共用
+#[cfg(windows)]
+fn read_block(format: u32) -> Option<Vec<u8>> {
+    if !open_clipboard() {
+        return None;
+    }
+    unsafe {
+        let mut out: Option<Vec<u8>> = None;
+        if IsClipboardFormatAvailable(format).is_ok()
+            && let Ok(h) = GetClipboardData(format)
+        {
+            let gh = HGLOBAL(h.0);
+            let ptr = GlobalLock(gh);
+            if !ptr.is_null() {
+                let size = GlobalSize(gh);
+                out = Some(std::slice::from_raw_parts(ptr.cast(), size).to_vec());
+                let _ = GlobalUnlock(gh);
+            }
+        }
+        let _ = CloseClipboard();
+        out
+    }
+}
+
+/// 读取文本；剪贴板无 CF_UNICODETEXT 或为空串时返回 None
+#[cfg(windows)]
+pub fn get_text() -> Option<String> {
+    let bytes = read_block(CF_UNICODETEXT)?;
+    let units: Vec<u16> = bytes
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| u16::from_le_bytes(*c))
+        .take_while(|&u| u != 0)
+        .collect();
+    if units.is_empty() {
+        return None;
+    }
+    Some(String::from_utf16_lossy(&units))
+}
+
+/// 读取 CF_DIB 原始负载（BITMAPINFOHEADER + 像素）；无位图时 None。
+/// 解码见 parse_dib
+#[cfg(windows)]
+pub fn get_dib() -> Option<Vec<u8>> {
+    read_block(CF_DIB)
 }
 
 /// 构建 CF_HDROP 全局内存负载（宽字符路径 + 双 NUL 结尾）
@@ -305,6 +440,50 @@ mod tests {
         narrow[0..4].copy_from_slice(&(DROPFILES_LEN as u32).to_le_bytes());
         narrow.extend_from_slice(b"C:\\a\0C:\\b\0\0");
         assert_eq!(parse_hdrop(&narrow), vec!["C:\\a", "C:\\b"]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn parse_dib_roundtrip_with_build_dib() {
+        // 3×2 已知像素，覆盖 bottom-up 行序翻转与 R/B 互换
+        let rgba: Vec<u8> = vec![
+            255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, //
+            255, 255, 0, 255, 0, 255, 255, 255, 10, 20, 30, 128,
+        ];
+        let dib = build_dib(3, 2, &rgba);
+        assert_eq!(parse_dib(&dib), Some((3, 2, rgba)));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn parse_dib_handles_variants_and_rejects_garbage() {
+        // top-down（负 biHeight）
+        let rgba = vec![1, 2, 3, 255, 4, 5, 6, 255];
+        let mut dib = build_dib(2, 1, &rgba);
+        dib[8..12].copy_from_slice(&(-1i32).to_le_bytes());
+        assert_eq!(parse_dib(&dib), Some((2, 1, rgba.clone())));
+        // 24bpp + 行尾填充：2 像素 × 3 字节 = 6，对齐到 8
+        let mut b24 = vec![0u8; 40 + 8];
+        b24[0..4].copy_from_slice(&40u32.to_le_bytes());
+        b24[4..8].copy_from_slice(&2i32.to_le_bytes());
+        b24[8..12].copy_from_slice(&1i32.to_le_bytes());
+        b24[12..14].copy_from_slice(&1u16.to_le_bytes());
+        b24[14..16].copy_from_slice(&24u16.to_le_bytes());
+        b24[40..46].copy_from_slice(&[3, 2, 1, 6, 5, 4]); // BGR BGR
+        b24[46..48].copy_from_slice(&[0xEE, 0xEE]); // 填充字节应被忽略
+        assert_eq!(
+            parse_dib(&b24),
+            Some((2, 1, vec![1, 2, 3, 255, 4, 5, 6, 255]))
+        );
+        // 非法输入全家桶
+        assert_eq!(parse_dib(&[]), None);
+        assert_eq!(parse_dib(&[0u8; 39]), None);
+        let mut bad = build_dib(2, 1, &rgba);
+        bad[16..20].copy_from_slice(&5u32.to_le_bytes()); // BI_BITFIELDS 拒绝
+        assert_eq!(parse_dib(&bad), None);
+        let mut trunc = build_dib(2, 1, &rgba);
+        trunc.truncate(45); // 像素不足
+        assert_eq!(parse_dib(&trunc), None);
     }
 
     #[cfg(windows)]

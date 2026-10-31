@@ -90,6 +90,13 @@ base64 = "0.22"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-clipboard-manager = "2"
 
+# 剪贴板历史（2026-10-30，§3.7）：clipboard-rs MIT 只作变化信号源（Windows
+# 内部走 AddClipboardFormatListener 真事件，macOS 轮询 changeCount），内容
+# 读写仍走自有 clip.rs（CF_HDROP DropEffect / CF_DIB 先例）；rusqlite MIT
+# bundled SQLite 负责历史持久化（config/clipboard.db，项目首个数据库）
+clipboard-rs = "0.3"
+rusqlite = { version = "0.32", features = ["bundled"] }
+
 # Windows 专属：关闭 WebView2 浏览器加速键（F5/Ctrl+R 重载、Ctrl+F 查找栏、
 # Ctrl+P 打印、F12 DevTools——全局快捷键由前端 lib/keyboard.ts 全权路由），
 # 编辑类按键（Ctrl+C/V/X/A/Z 等）不受影响；与 wry 同版本保证类型统一

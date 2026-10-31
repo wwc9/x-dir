@@ -1,10 +1,12 @@
 pub mod analyze_cmds;
 pub mod archive_cmds;
 pub mod clipboard;
+pub mod cliphist;
 pub mod config_cmds;
 pub mod drives;
 pub mod fake;
 pub mod files;
+pub mod hotkeys;
 pub mod icons;
 pub mod img_cmds;
 pub mod index;

@@ -1,4 +1,5 @@
 mod clip;
+mod cliphist;
 mod commands;
 mod config;
 mod fs;
@@ -25,6 +26,8 @@ pub struct AppState {
     pub watches: WatchManager,
     /// V2 真实图标/缩略图 LRU 缓存（铁律 2：缩略图上限 200）
     pub icons: Mutex<IconStore>,
+    /// 剪贴板历史（§3.7）：SQLite + 监听控制 + 写回 guard（磁盘库失败降级内存库）
+    pub cliphist: cliphist::ClipHistState,
 }
 
 /// 启动参数（供 --bench 内存基准模式等使用）
@@ -101,6 +104,11 @@ pub fn run() {
                     if let Err(e) = commands::shot::ensure_shot_window(&h) {
                         log::warn!("截图覆盖窗预热失败：{e}");
                     }
+                    // 剪贴板历史浮窗（§3.7）同批预热：常驻停靠屏幕外，热键
+                    // 呼出只是一次原子移动；失败不致命，热键路径会现场补建
+                    if let Err(e) = cliphist::ensure_clip_window(&h) {
+                        log::warn!("剪贴板浮窗预热失败：{e}");
+                    }
                 });
                 // DXGI 复制会话保活预热（感知延迟二期）：哑捕获一帧把设备/
                 // 驱动/首帧合成全部热好，消掉首按 380ms 初始化罚金
@@ -173,6 +181,10 @@ pub fn run() {
             jobs: JobManager::new(),
             watches: WatchManager::new(),
             icons: Mutex::new(IconStore::new()),
+            cliphist: cliphist::ClipHistState::new().unwrap_or_else(|e| {
+                log::error!("剪贴板历史库初始化失败（本次会话降级内存库）：{e}");
+                cliphist::ClipHistState::in_memory()
+            }),
         })
         .invoke_handler(tauri::generate_handler![
             commands::files::list_dir,
@@ -274,7 +286,14 @@ pub fn run() {
             commands::shot::shot_save_raw,
             commands::shot::shot_stage_crop,
             commands::shot::shot_stage_raw,
-            commands::shot::shot_register_hotkey,
+            commands::hotkeys::hotkeys_sync,
+            commands::cliphist::cliphist_configure,
+            commands::cliphist::cliphist_list,
+            commands::cliphist::cliphist_write_back,
+            commands::cliphist::cliphist_set_pin,
+            commands::cliphist::cliphist_delete,
+            commands::cliphist::cliphist_clear,
+            commands::cliphist::cliphist_hide,
             commands::shot_scroll::shot_scroll_begin,
             commands::shot_scroll::shot_scroll_launch,
             commands::shot_scroll::shot_scroll_chunk,

@@ -373,7 +373,7 @@ fn park_shot_window(w: &tauri::WebviewWindow) {
 
 /// snow-shot 同款：禁用 DWM 对该窗的显示/隐藏过渡动画，上屏/停靠零渐隐
 #[cfg(windows)]
-fn disable_dwm_transitions(hwnd: windows::Win32::Foundation::HWND) {
+pub(crate) fn disable_dwm_transitions(hwnd: windows::Win32::Foundation::HWND) {
     use windows::Win32::Graphics::Dwm::{DWMWA_TRANSITIONS_FORCEDISABLED, DwmSetWindowAttribute};
     let disable: i32 = 1;
     unsafe {
@@ -390,7 +390,8 @@ fn disable_dwm_transitions(hwnd: windows::Win32::Foundation::HWND) {
 /// 捕获在后台线程（在 WndProc 里内联跑捕获会冻结整个应用，且 build() 泵消息
 /// 期间排队的 WM_HOTKEY 会重入），主线程只做窗口定位与事件下发。
 /// begin_session 必须在主线程调用（热键 WndProc / shot_begin 派发均满足）。
-fn begin_session(app: &AppHandle) {
+/// （全局热键注册已收拢到 commands/hotkeys.rs 的 hotkeys_sync，2026-10-30）
+pub(crate) fn begin_session(app: &AppHandle) {
     // 捕获/下发进行中：连按忽略
     if SESSION_STARTING.load(Ordering::SeqCst) {
         log::debug!("截图热键触发：上一拍仍在进行，忽略");
@@ -1447,32 +1448,8 @@ pub(crate) fn local_stamp() -> String {
 }
 
 // ── 全局热键 ────────────────────────────────────────────────────────────────
-
-/// 注册/更新截图全局热键（前端启动与设置变更时调用；返回 Err = 键被占用）
-#[tauri::command]
-pub fn shot_register_hotkey(app: AppHandle, enabled: bool, hotkey: String) -> Result<(), String> {
-    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
-    let gs = app.global_shortcut();
-    let _ = gs.unregister_all();
-    if !enabled {
-        return Ok(());
-    }
-    let sc: Shortcut = hotkey
-        .to_lowercase()
-        .parse()
-        .map_err(|_| format!("无法识别快捷键「{hotkey}」"))?;
-    gs.on_shortcut(sc, |app, _sc, event| {
-        if event.state == ShortcutState::Pressed {
-            begin_session(app);
-        }
-    })
-    .map(|()| log::info!("截图热键已注册：{hotkey}"))
-    .map_err(|e| {
-        // App.tsx 启动路径对注册失败静默 catch，这里必须留痕可查
-        log::warn!("截图热键注册失败：{e}");
-        format!("快捷键「{hotkey}」注册失败（可能被其他程序占用）：{e}")
-    })
-}
+// 截图热键的注册已收拢到 commands/hotkeys.rs 的 hotkeys_sync（§3.7，
+// 2026-10-30）：多热键并存需单点全量重建，shot_register_hotkey 退役。
 
 #[cfg(test)]
 mod tests {
