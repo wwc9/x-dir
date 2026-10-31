@@ -9,6 +9,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  Check,
   ClipboardList,
   FolderInput,
   Copy,
@@ -48,6 +49,8 @@ export function ClipHistWindow() {
   const [kind, setKind] = useState("");
   const [sel, setSel] = useState(0);
   const [flash, setFlash] = useState("");
+  /** 多选合并（T1-4）：勾选集合（列表可见序，Enter 合并粘贴） */
+  const [picked, setPicked] = useState<Set<number>>(new Set());
   const [directPaste, setDirectPaste] = useState(true);
   /** 浮窗置顶常驻（会话级）：失焦不自动收窗，Enter 转为仅复制不关窗（连续取用） */
   const [winPinned, setWinPinned] = useState(false);
@@ -63,8 +66,8 @@ export function ClipHistWindow() {
   // 下次刷新要保持选择的条目 id（置顶/删除后选择不跳回首行）
   const keepId = useRef<number | null>(null);
   // 键盘/事件处理器读取的最新态（避免重绑 window 监听、闭包过期）
-  const stateRef = useRef({ items, sel, query, kind, directPaste, winPinned, isMaxed });
-  stateRef.current = { items, sel, query, kind, directPaste, winPinned, isMaxed };
+  const stateRef = useRef({ items, sel, query, kind, directPaste, winPinned, isMaxed, picked });
+  stateRef.current = { items, sel, query, kind, directPaste, winPinned, isMaxed, picked };
 
   const fetchPage = useCallback(
     async (offset: number, append: boolean, keep: number | null) => {
@@ -232,6 +235,42 @@ export function ClipHistWindow() {
     [flashMsg],
   );
 
+  /** 勾选/取消勾选（T1-4） */
+  const togglePick = useCallback((id: number) => {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  /** 合并粘贴（T1-4）：按列表可见序收集勾选 id → Rust 换行连接回写/粘贴 */
+  const mergePaste = useCallback(
+    (ctrl: boolean) => {
+      const { items: list, picked: set, directPaste: dp, winPinned: pinned } = stateRef.current;
+      const ids = list.filter((x) => set.has(x.id)).map((x) => x.id);
+      if (!ids.length) return false;
+      const direct = dp && !ctrl && !pinned;
+      api
+        .cliphistMergePaste(ids, direct)
+        .then((pasted) => {
+          setPicked(new Set());
+          if (pinned) {
+            flashMsg("已合并复制到剪贴板");
+          } else if (direct && !pasted) {
+            flashMsg("已合并复制（未能自动粘贴，请手动 Ctrl+V）");
+          }
+        })
+        .catch((e) => flashMsg(`合并失败：${String(e)}`));
+      return true;
+    },
+    [flashMsg],
+  );
+
   /** 浮窗置顶常驻开关：置位 Rust 侧失焦豁免 + 本页回写语义切换 */
   const togglePinWindow = useCallback(() => {
     const next = !stateRef.current.winPinned;
@@ -338,8 +377,15 @@ export function ClipHistWindow() {
         setQuery((q) => q + e.key);
         return;
       }
-      const { items: list, sel: i, query: q } = stateRef.current;
+      const { items: list, sel: i, query: q, picked: pk } = stateRef.current;
       const cur = list[i];
+      // Space 勾选当前条目（T1-4）：仅搜索框未聚焦时（聚焦时是输入字符），
+      // 判定在可打印键兜底之前
+      if ((e.key === " " || e.code === "Space") && document.activeElement !== inputRef.current) {
+        e.preventDefault();
+        if (cur) togglePick(cur.id);
+        return;
+      }
       switch (e.key) {
         case "ArrowDown":
         case "ArrowUp": {
@@ -351,14 +397,19 @@ export function ClipHistWindow() {
           break;
         }
         case "Enter":
-          if (cur) {
-            e.preventDefault();
+          e.preventDefault();
+          // 勾选集合非空 → 合并粘贴优先（T1-4）
+          if (pk.size > 0) {
+            mergePaste(e.ctrlKey);
+          } else if (cur) {
             pasteItem(cur, e.ctrlKey);
           }
           break;
         case "Escape":
           e.preventDefault();
-          if (q) {
+          if (pk.size > 0) {
+            setPicked(new Set());
+          } else if (q) {
             setQuery("");
             inputRef.current?.focus();
           } else {
@@ -384,7 +435,7 @@ export function ClipHistWindow() {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [pasteItem, pinItem, delItem, goTo]);
+  }, [pasteItem, pinItem, delItem, goTo, togglePick, mergePaste]);
 
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -485,7 +536,7 @@ export function ClipHistWindow() {
                   data-index={vi.index}
                   className={`np-clip-row ${vi.index % 2 === 1 ? "is-alt" : ""} ${
                     vi.index === sel ? "is-sel" : ""
-                  }`}
+                  } ${picked.has(it.id) ? "is-pick" : ""}`}
                   style={{
                     position: "absolute",
                     top: 0,
@@ -493,9 +544,22 @@ export function ClipHistWindow() {
                     width: "100%",
                     transform: `translateY(${vi.start}px)`,
                   }}
-                  onClick={(e) => pasteItem(it, e.ctrlKey)}
+                  onClick={(e) => {
+                    if (e.ctrlKey) {
+                      e.stopPropagation();
+                      togglePick(it.id);
+                    } else {
+                      pasteItem(it, false);
+                    }
+                  }}
                 >
-                  <span className="np-clip-idx">{vi.index + 1}</span>
+                  {picked.has(it.id) ? (
+                    <span className="np-clip-idx np-clip-idxpick" data-tip="已勾选">
+                      <AppIcon icon={Check} size={DENSITY.iconXs} />
+                    </span>
+                  ) : (
+                    <span className="np-clip-idx">{vi.index + 1}</span>
+                  )}
                   {/* 类型图标（2026-10-31 用户终案）：纯灰线性，无底板无角标，
                       类型信息由 meta 文字标签承载 */}
                   <span className="np-clip-kind">
@@ -566,9 +630,11 @@ export function ClipHistWindow() {
                 {clearArmed ? "确认清空？" : "清空"}
               </button>
               <span className="np-clip-keys">
-                {winPinned
-                  ? "↑↓/WS 选择 · Enter 复制（常驻中）"
-                  : "↑↓/WS 选择 · Enter 粘贴 · Ctrl+Enter 仅复制"}
+                {picked.size > 0
+                  ? `已勾选 ${picked.size} 条 · Enter 合并粘贴 · Space 续选 · Esc 取消`
+                  : winPinned
+                    ? "↑↓/WS 选择 · Enter 复制（常驻中） · Space 勾选多条"
+                    : "↑↓/WS 选择 · Enter 粘贴 · Ctrl+Enter 仅复制 · Space 勾选多条"}
               </span>
             </div>
             <div className="np-clip-foot-row">

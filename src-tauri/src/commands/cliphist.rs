@@ -141,6 +141,17 @@ pub fn cliphist_set_maximized(app: AppHandle, maximized: bool) -> Result<(), Str
     crate::cliphist::set_window_maximized(&app, maximized)
 }
 
+/// 多选合并粘贴（T1-4）：ids 按列表可见序传入，换行连接后写回/直接粘贴
+#[tauri::command]
+pub fn cliphist_merge_paste(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    ids: Vec<i64>,
+    paste: bool,
+) -> Result<bool, String> {
+    crate::cliphist::merge_paste(&app, &state.cliphist, &ids, paste)
+}
+
 /// 文件/文件夹条目「粘贴到当前窗格」（T1-2）：回写 CF_HDROP 到系统剪贴板
 /// （带剪切意图原样），唤起主窗并通知其按 Ctrl+V 同款例程粘贴进活动窗格
 #[tauri::command]

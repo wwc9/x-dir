@@ -1208,6 +1208,77 @@ pub fn write_back(
     Ok(paste_and_close(app, h))
 }
 
+/// 多条文本合并（T1-4）：按调用方给定顺序（列表可见序）取 text/link/path
+/// 三类条目的全文，换行连接；无可合并条目 = None。独立纯函数供 test
+pub fn merge_texts(conn: &Connection, ids: &[i64]) -> Option<String> {
+    let mut by_id = std::collections::HashMap::new();
+    if let Ok(mut stmt) =
+        conn.prepare("SELECT id, kind, text FROM clip_items WHERE kind IN ('text','link','path')")
+        && let Ok(rows) = stmt.query_map([], |r| {
+            Ok((r.get::<_, i64>(0)?, r.get::<_, Option<String>>(2)?))
+        })
+    {
+        for row in rows.flatten() {
+            by_id.insert(row.0, row.1);
+        }
+    }
+    let parts: Vec<String> = ids
+        .iter()
+        .filter_map(|id| by_id.get(id).cloned().flatten())
+        .filter(|t| !t.is_empty())
+        .collect();
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(
+            "
+",
+        ))
+    }
+}
+
+/// 合并粘贴执行体（T1-4）：合并 → 写回剪贴板 →（可选）直接粘贴；选中集合
+/// 由前端维护，ids 即列表可见序。返回 pasted（直接粘贴是否成功）
+pub fn merge_paste(
+    app: &AppHandle,
+    h: &ClipHistState,
+    ids: &[i64],
+    paste: bool,
+) -> Result<bool, String> {
+    let merged = {
+        let conn = h.conn.lock().unwrap_or_else(|p| p.into_inner());
+        merge_texts(&conn, ids)
+    }
+    .ok_or("没有可合并的文本条目（仅文本/链接/路径参与）")?;
+    // guard 先于写入登记（合并文本是新内容，正常不会被回环吞掉）
+    *h.self_write.lock().unwrap_or_else(|p| p.into_inner()) =
+        Some((sha256_hex(&merged), Instant::now()));
+    crate::clip::set_text(&merged)?;
+    if !paste {
+        if !CLIPHIST_PINNED.load(Ordering::SeqCst) {
+            close_clip_window(app);
+        }
+        return Ok(true);
+    }
+    #[cfg(windows)]
+    {
+        Ok(paste_and_close(app, h))
+    }
+    #[cfg(not(windows))]
+    {
+        close_clip_window(app);
+        Ok(false)
+    }
+}
+
+fn sha256_hex(t: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(*b"T");
+    h.update(t.as_bytes());
+    h.finalize().iter().map(|b| format!("{b:02x}")).collect()
+}
+
 /// 非 Windows 桩（clip.rs 的系统剪贴板互通仅 Windows 实现）
 #[cfg(not(windows))]
 pub fn write_back(
@@ -1428,6 +1499,51 @@ MIIE...
         assert_eq!(list_page(&c, "审计", "", 0, 50).unwrap().items.len(), 1);
         assert_eq!(list_page(&c, "hello", "", 0, 50).unwrap().items.len(), 1);
         assert_eq!(list_page(&c, "zzz", "", 0, 50).unwrap().items.len(), 0);
+    }
+
+    #[test]
+    fn merge_texts_filters_kinds_and_keeps_order() {
+        let c = mem_db();
+        ingest(&c, &text("第一条"), 1000).unwrap();
+        ingest(
+            &c,
+            &ClipContent::Files {
+                paths: vec![r"C:\b.png".into()],
+                cut: false,
+            },
+            1100,
+        )
+        .unwrap();
+        ingest(
+            &c,
+            &ClipContent::Image {
+                w: 2,
+                h: 2,
+                rgba: vec![0; 16],
+            },
+            1200,
+        )
+        .unwrap();
+        ingest(&c, &text("第二条"), 1300).unwrap();
+        let ids: Vec<i64> = c
+            .prepare("SELECT id FROM clip_items ORDER BY id")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        // 指定倒序 [第二条, 图片, 文件, 第一条]：非文本类被滤除、顺序保持
+        let mut order = ids.clone();
+        order.reverse();
+        assert_eq!(
+            merge_texts(&c, &order).as_deref(),
+            Some(
+                "第二条
+第一条"
+            )
+        );
+        // 仅非文本 id = None
+        assert_eq!(merge_texts(&c, &[ids[1], ids[2]]), None);
     }
 
     #[test]

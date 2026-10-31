@@ -5440,6 +5440,19 @@ mark.np-gsearch-mark {
   height: var(--np-realicon);
   color: var(--np-muted);
 }
+/* 多选勾选态（T1-4）：accent 淡染底 + 序号位换 ✓ 标记 */
+.np-clip-row.is-pick {
+  background-color: var(--np-sel);
+}
+.np-clip-row.is-pick.is-alt {
+  background-color: var(--np-sel);
+}
+.np-clip-idxpick {
+  color: var(--np-accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 .np-clip-thumb {
   height: calc(var(--np-row-h) * 2);
   width: auto;

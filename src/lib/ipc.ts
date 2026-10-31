@@ -917,6 +917,9 @@ export const api = {
     cmd<void>("cliphist_set_maximized", { maximized }),
   /** 剪贴板历史：顶栏设置钮——唤起主窗并直达设置面板（浮窗收起） */
   cliphistOpenSettings: () => cmd<void>("cliphist_open_settings"),
+  /** 剪贴板历史：多选合并粘贴（T1-4；ids 按列表序，仅文本/链接/路径参与） */
+  cliphistMergePaste: (ids: number[], paste: boolean) =>
+    cmd<boolean>("cliphist_merge_paste", { ids, paste }),
   /** 剪贴板历史：文件条目粘贴到主窗当前活动窗格（T1-2，仅 files/dirs 类） */
   cliphistPasteToPane: (id: number) => cmd<void>("cliphist_paste_to_pane", { id }),
   /** 剪贴板历史：浮窗尺寸持久化（边缘拖拽后防抖落盘，Rust 侧钳制） */
