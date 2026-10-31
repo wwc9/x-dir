@@ -243,6 +243,12 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
         scope: "system",
       },
       { id: "cliphist-pin", keys: ["Ctrl+P"], label: "置顶 / 取消置顶（豁免清理）", scope: "system" },
+      {
+        id: "cliphist-multi",
+        keys: ["Space / Ctrl+点击"],
+        label: "勾选条目（多条时 Enter 合并粘贴，Esc 先取消勾选；Space 在搜索框未聚焦时生效）",
+        scope: "system",
+      },
       { id: "cliphist-delete", keys: ["Del"], label: "删除选中条目", scope: "system" },
       {
         id: "cliphist-esc",
