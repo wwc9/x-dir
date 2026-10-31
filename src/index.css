@@ -19,9 +19,9 @@
   --np-accent: #3574f0;
   --np-accent-fg: #ffffff;
   --np-hover: rgba(26, 33, 41, 0.055);
-  /* 列表斑马纹（2026-10-31 剪贴板浮窗）：悬停色一半强度，行间可辨且
-     叠加悬停/选中仍清晰；深色主题同口径 */
-  --np-stripe: rgba(26, 33, 41, 0.03);
+  /* 列表斑马纹（2026-10-31 剪贴板浮窗）：用户定案加深一档（0.03→0.05），
+     仍低于悬停色保持层级；深色主题白墨增量小一档（0.04）防与 surface-2 趋同 */
+  --np-stripe: rgba(26, 33, 41, 0.05);
   --np-sel: rgba(53, 116, 240, 0.12);
   --np-danger: #d1434b;
   --np-danger-fg: #ffffff;
@@ -112,7 +112,7 @@ html.bp6-dark {
   --np-accent: #5c9dff;
   --np-accent-fg: #0d1117;
   --np-hover: rgba(255, 255, 255, 0.055);
-  --np-stripe: rgba(255, 255, 255, 0.03);
+  --np-stripe: rgba(255, 255, 255, 0.04);
   --np-sel: rgba(92, 157, 255, 0.16);
   --np-danger: #f27073;
   --np-danger-fg: #14161a;
