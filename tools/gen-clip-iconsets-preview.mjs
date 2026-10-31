@@ -26,15 +26,15 @@ const svg = (name, size = 14) => {
 const SETS = [
   {
     id: "A",
-    name: "现役基线",
-    desc: "FileText / Link / FolderTree / Image / Files / Folder——文档框为主，当前线上形态",
-    badge: "当前",
+    name: "基线（前形态）",
+    desc: "FileText / Link / FolderTree / Image / Files / Folder——文档框为主，字形定案前的形态",
     icons: { text: "FileText", link: "Link", path: "FolderTree", image: "Image", files: "Files", dirs: "Folder" },
   },
   {
     id: "B",
     name: "内容形态（去文件框）",
     desc: "直接画内容本身：文字行 / 链环 / 路线 / 相机 / 单纸 / 闭夹——更轻、更现代",
+    badge: "已应用",
     icons: { text: "AlignLeft", link: "Link2", path: "Route", image: "Camera", files: "File", dirs: "FolderClosed" },
   },
   {
@@ -51,9 +51,8 @@ const SETS = [
   },
   {
     id: "E",
-    name: "混搭（推荐）",
+    name: "混搭",
     desc: "Aa 字形 / 外链 / 目录树 / 图框 / 文件堆 / 开夹——文本用 Aa 最达意，其余取各家最强",
-    badge: "推荐",
     icons: { text: "Text", link: "ExternalLink", path: "FolderTree", image: "Image", files: "FileStack", dirs: "FolderOpen" },
   },
 ];
@@ -85,7 +84,7 @@ const bigRow = (set) =>
   ).join("\n");
 
 const cards = SETS.map(
-  (set) => `  <div class="card${set.badge === "推荐" ? " recommend" : ""}">
+  (set) => `  <div class="card${set.badge === "已应用" ? " recommend" : ""}">
     <div class="head"><b>${set.id}. ${set.name}</b>${set.badge ? `<span class="pill">${set.badge}</span>` : ""}</div>
     <div class="bigs">
 ${bigRow(set)}

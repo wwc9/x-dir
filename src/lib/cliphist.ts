@@ -1,29 +1,32 @@
 // 剪贴板历史浮窗纯函数（§3.7）：相对时间、大小格式化、类型图标与标签。
 // 图标仅导出 lucide 组件引用，渲染一律经 AppIcon（iconRule 审计）。
 
-import { FileText, Files, Folder, FolderTree, Image as ImageIcon, Link } from "lucide-react";
+import { AlignLeft, Camera, File, FolderClosed, Link2, Route } from "lucide-react";
 
 export type ClipKind = "text" | "image" | "files" | "dirs" | "link" | "path";
 
 export interface ClipKindMeta {
   label: string;
-  icon: typeof FileText;
+  icon: typeof AlignLeft;
 }
 
+/** 字形 = 方案 B「内容形态」（2026-10-31 用户选定，去文件框直接画内容）：
+ * 文本=文字行 链接=链环 路径=路线 图片=相机 文件=单纸 文件夹=闭夹；
+ * 全部候选对照见 design/clip-iconsets-preview.html */
 export function clipKindMeta(kind: string): ClipKindMeta {
   switch (kind) {
     case "image":
-      return { label: "图片", icon: ImageIcon };
+      return { label: "图片", icon: Camera };
     case "files":
-      return { label: "文件", icon: Files };
+      return { label: "文件", icon: File };
     case "dirs":
-      return { label: "文件夹", icon: Folder };
+      return { label: "文件夹", icon: FolderClosed };
     case "link":
-      return { label: "链接", icon: Link };
+      return { label: "链接", icon: Link2 };
     case "path":
-      return { label: "路径", icon: FolderTree };
+      return { label: "路径", icon: Route };
     default:
-      return { label: "文本", icon: FileText };
+      return { label: "文本", icon: AlignLeft };
   }
 }
 
