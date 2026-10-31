@@ -5377,16 +5377,17 @@ mark.np-gsearch-mark {
   min-height: 0;
   overflow-y: auto;
   margin-top: var(--np-gap);
-  padding: 0 var(--np-gap);
+  padding: 0;
 }
-/* 行内距/悬停/选中对齐文件列表 np-row（gap 7px · margin 0 2px · padding 0 8px，
-   sel 淡染底 + accent 文字） */
+/* 行悬停/选中对齐文件列表 np-row 口径（sel 淡染底 + accent 文字）；
+   行内 gap 7px = np-row 同源；margin 0 2px 悬停底缩进 + padding 左右 6px
+   → 内容基线 2+6=8px，与顶栏/搜索框/页脚的 gutter 基线严格对齐 */
 .np-clip-row {
   display: flex;
   align-items: center;
   gap: 7px;
   margin: 0 2px;
-  padding: 3px 8px;
+  padding: 3px 6px;
   /* 预览自适应行数（最多 3 行）：单条兜底行高，多行按内容撑开，
      实际行高由虚拟列表 measureElement 量测 */
   min-height: var(--np-row-h);
@@ -5527,7 +5528,7 @@ mark.np-gsearch-mark {
   display: flex;
   align-items: center;
   gap: var(--np-gap);
-  height: var(--np-row-h);
+  height: var(--np-status-h);
   padding: 0 var(--np-gutter);
   border-top: 1px solid var(--np-hairline);
   font-size: var(--np-font-sm);
@@ -5552,8 +5553,8 @@ mark.np-gsearch-mark {
   background: transparent;
   color: var(--np-muted);
   font-size: var(--np-font-sm);
-  line-height: var(--np-ctl-h);
-  height: var(--np-ctl-h);
+  /* 20px = 行内动作钮同款（gap×5），页脚 24px 高度内上下留 2px */
+  height: calc(var(--np-gap) * 5);
   padding: 0 var(--np-gap);
   border-radius: var(--np-radius);
   cursor: pointer;
@@ -5570,7 +5571,8 @@ mark.np-gsearch-mark {
   gap: var(--np-gap);
   flex: 0 0 auto;
   height: var(--np-nav-h);
-  padding: 0 4px 0 var(--np-gutter);
+  /* 右侧窗口钮距边 6px = 主窗口顶栏口径；左缘 8px = 页面内容基线 */
+  padding: 0 6px 0 var(--np-gutter);
   border-bottom: 1px solid var(--np-hairline);
   user-select: none;
 }
