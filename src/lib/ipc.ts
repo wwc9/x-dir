@@ -462,6 +462,8 @@ export interface ClipHistItem {
   createdAt: number;
   lastUsedAt: number;
   thumb: string | null;
+  /** 来源进程名（T2-2，如 excel.exe；旧条目为 null） */
+  source: string | null;
 }
 
 export interface ClipHistPage {

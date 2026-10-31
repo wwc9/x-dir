@@ -123,6 +123,7 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
            thumb        BLOB,                       -- PNG 缩略 ≤96px（kind=image）
            files        TEXT,                       -- 路径 JSON 数组（kind=files）
            py           TEXT,                       -- 文本拼音首字母（中文搜索，T1-3）
+           source       TEXT,                       -- 来源进程名（T2-2，如 excel.exe）
            file_cut     INTEGER NOT NULL DEFAULT 0, -- Preferred DropEffect = MOVE
            size         INTEGER NOT NULL,
            pinned       INTEGER NOT NULL DEFAULT 0,
@@ -141,6 +142,15 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
     if !has_py {
         conn.execute_batch("ALTER TABLE clip_items ADD COLUMN py TEXT;")
             .map_err(|e| format!("补 py 列失败：{e}"))?;
+    }
+    // 惰性迁移（T2-2 来源应用）：同法补 source 列
+    let has_source = conn
+        .prepare("SELECT 1 FROM pragma_table_info('clip_items') WHERE name = 'source'")
+        .and_then(|mut stmt| stmt.query_row([], |_| Ok(())))
+        .is_ok();
+    if !has_source {
+        conn.execute_batch("ALTER TABLE clip_items ADD COLUMN source TEXT;")
+            .map_err(|e| format!("补 source 列失败：{e}"))?;
     }
     // 回填：仅 text 列非空且 py 为空的行（新库为空集，秒过）
     let rows: Vec<(i64, Option<String>)> = conn
@@ -416,7 +426,12 @@ fn make_thumb(w: u32, h: u32, rgba: &[u8]) -> Option<Vec<u8>> {
 
 /// 入库（去重置顶 = Ditto 行为：相同 hash 已存在则把该条 created_at 提到现在）。
 /// 返回 Ok(true) = 有变化（新增或置顶），Ok(false) = 编码失败跳过
-fn ingest(conn: &Connection, content: &ClipContent, now: i64) -> rusqlite::Result<bool> {
+fn ingest(
+    conn: &Connection,
+    content: &ClipContent,
+    now: i64,
+    source: Option<&str>,
+) -> rusqlite::Result<bool> {
     let hash = content.hash_hex();
     let existing: Option<i64> =
         match conn.query_row("SELECT id FROM clip_items WHERE hash = ?1", [&hash], |r| {
@@ -482,9 +497,9 @@ fn ingest(conn: &Connection, content: &ClipContent, now: i64) -> rusqlite::Resul
     let py = text.as_deref().and_then(crate::fs::search::pinyin_initials);
     conn.execute(
         "INSERT INTO clip_items
-           (kind, hash, text, preview, image, thumb, files, file_cut, py,
+           (kind, hash, text, preview, image, thumb, files, file_cut, py, source,
             size, pinned, created_at, last_used_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?11, ?9, 0, ?10, ?10)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?11, ?12, ?9, 0, ?10, ?10)",
         rusqlite::params![
             row_kind,
             hash,
@@ -496,7 +511,8 @@ fn ingest(conn: &Connection, content: &ClipContent, now: i64) -> rusqlite::Resul
             file_cut,
             content.size() as i64,
             now,
-            py
+            py,
+            source
         ],
     )?;
     Ok(true)
@@ -526,6 +542,7 @@ pub struct ClipHistItemMeta {
     pub id: i64,
     pub kind: String,
     pub preview: String,
+    pub source: Option<String>,
     pub size: u64,
     pub pinned: bool,
     pub created_at: i64,
@@ -553,7 +570,8 @@ pub fn list_page(
     let q = query.trim();
     let where_sql = "WHERE (?1 = '' OR preview LIKE '%'||?1||'%'
                        OR (text IS NOT NULL AND text LIKE '%'||?1||'%')
-                       OR (py IS NOT NULL AND py LIKE '%'||?1||'%'))
+                       OR (py IS NOT NULL AND py LIKE '%'||?1||'%')
+                       OR (source IS NOT NULL AND source LIKE '%'||?1||'%'))
                      AND (?2 = '' OR kind = ?2)";
     let total: i64 = conn.query_row(
         &format!("SELECT COUNT(*) FROM clip_items {where_sql}"),
@@ -561,7 +579,7 @@ pub fn list_page(
         |r| r.get(0),
     )?;
     let mut stmt = conn.prepare(&format!(
-        "SELECT id, kind, preview, size, pinned, created_at, last_used_at, thumb
+        "SELECT id, kind, preview, size, pinned, created_at, last_used_at, thumb, source
          FROM clip_items {where_sql}
          ORDER BY pinned DESC, created_at DESC, id DESC LIMIT ?3 OFFSET ?4"
     ))?;
@@ -572,6 +590,7 @@ pub fn list_page(
                 id: r.get(0)?,
                 kind: r.get(1)?,
                 preview: r.get(2)?,
+                source: r.get(8)?,
                 size: r.get::<_, i64>(3)? as u64,
                 pinned: r.get::<_, i64>(4)? != 0,
                 created_at: r.get(5)?,
@@ -724,7 +743,7 @@ fn handle_clipboard_change(app: &AppHandle) {
     }
     let now = now_ms();
     let conn = h.conn.lock().unwrap_or_else(|p| p.into_inner());
-    let changed = ingest(&conn, &content, now).unwrap_or_else(|e| {
+    let changed = ingest(&conn, &content, now, source_app.as_deref()).unwrap_or_else(|e| {
         log::warn!("剪贴板条目入库失败：{e}");
         false
     });
@@ -1402,16 +1421,16 @@ mod tests {
     fn ingest_marks_link_and_path_kind() {
         let c = mem_db();
         // 链接：http(s)/ftp/www 单行无空白
-        ingest(&c, &text("https://gitee.com/wwc9/x-dir"), 1).unwrap();
-        ingest(&c, &text("www.baidu.com"), 2).unwrap();
+        ingest(&c, &text("https://gitee.com/wwc9/x-dir"), 1, None).unwrap();
+        ingest(&c, &text("www.baidu.com"), 2, None).unwrap();
         // 带空格的句子长得像 URL 也不判链接
-        ingest(&c, &text("https://example.com 这是一段说明文字"), 3).unwrap();
+        ingest(&c, &text("https://example.com 这是一段说明文字"), 3, None).unwrap();
         // 路径：盘符样式且存在（用临时目录保证存在）
         let base = std::env::temp_dir().join("xdir_cliphist_path");
         let _ = std::fs::create_dir_all(&base);
-        ingest(&c, &text(&base.to_string_lossy()), 4).unwrap();
+        ingest(&c, &text(&base.to_string_lossy()), 4, None).unwrap();
         // 盘符样式但不存在 → 纯文本
-        ingest(&c, &text(r"Q:\肯定不存在的盘\文件.txt"), 5).unwrap();
+        ingest(&c, &text(r"Q:\肯定不存在的盘\文件.txt"), 5, None).unwrap();
         let kinds: Vec<String> = c
             .prepare("SELECT kind FROM clip_items ORDER BY id")
             .unwrap()
@@ -1436,6 +1455,7 @@ mod tests {
                 cut: false,
             },
             1,
+            None,
         )
         .unwrap();
         // 目录 + 文件混合 → files
@@ -1451,6 +1471,7 @@ mod tests {
                 cut: false,
             },
             2,
+            None,
         )
         .unwrap();
         let kinds: Vec<String> = c
@@ -1502,8 +1523,8 @@ MIIE...
     #[test]
     fn pinyin_initials_search() {
         let c = mem_db();
-        ingest(&c, &text("季度审计报告要点"), 1000).unwrap();
-        ingest(&c, &text("hello world"), 2000).unwrap();
+        ingest(&c, &text("季度审计报告要点"), 1000, None).unwrap();
+        ingest(&c, &text("hello world"), 2000, None).unwrap();
         // 入库即计算首字母（含汉字才有值）
         let py: Option<String> = c
             .query_row(
@@ -1532,9 +1553,22 @@ MIIE...
     }
 
     #[test]
+    fn source_stored_and_searchable() {
+        let c = mem_db();
+        ingest(&c, &text("报表数据"), 1000, Some("excel.exe")).unwrap();
+        ingest(&c, &text("plain"), 2000, None).unwrap();
+        // 存取：返回给前端
+        let p = list_page(&c, "", "", 0, 50).unwrap();
+        assert_eq!(p.items[1].source.as_deref(), Some("excel.exe"));
+        assert_eq!(p.items[0].source, None);
+        // 搜索命中 source：敲 excel 找到从 Excel 复制的条目
+        assert_eq!(list_page(&c, "excel", "", 0, 50).unwrap().items.len(), 1);
+    }
+
+    #[test]
     fn merge_texts_filters_kinds_and_keeps_order() {
         let c = mem_db();
-        ingest(&c, &text("第一条"), 1000).unwrap();
+        ingest(&c, &text("第一条"), 1000, None).unwrap();
         ingest(
             &c,
             &ClipContent::Files {
@@ -1542,6 +1576,7 @@ MIIE...
                 cut: false,
             },
             1100,
+            None,
         )
         .unwrap();
         ingest(
@@ -1552,9 +1587,10 @@ MIIE...
                 rgba: vec![0; 16],
             },
             1200,
+            None,
         )
         .unwrap();
-        ingest(&c, &text("第二条"), 1300).unwrap();
+        ingest(&c, &text("第二条"), 1300, None).unwrap();
         let ids: Vec<i64> = c
             .prepare("SELECT id FROM clip_items ORDER BY id")
             .unwrap()
@@ -1579,10 +1615,10 @@ MIIE...
     #[test]
     fn ingest_dedup_promotes() {
         let c = mem_db();
-        ingest(&c, &text("hello"), 1000).unwrap();
-        ingest(&c, &text("world"), 2000).unwrap();
+        ingest(&c, &text("hello"), 1000, None).unwrap();
+        ingest(&c, &text("world"), 2000, None).unwrap();
         // 同 hash 二次复制 → 不新增，created_at 置顶
-        ingest(&c, &text("hello"), 3000).unwrap();
+        ingest(&c, &text("hello"), 3000, None).unwrap();
         let n: i64 = c
             .query_row("SELECT COUNT(*) FROM clip_items", [], |r| r.get(0))
             .unwrap();
@@ -1603,7 +1639,7 @@ MIIE...
         let c = mem_db();
         let (w, h) = (2u32, 3u32);
         let rgba = vec![255u8; (w * h * 4) as usize];
-        assert!(ingest(&c, &ClipContent::Image { w, h, rgba }, 1).unwrap());
+        assert!(ingest(&c, &ClipContent::Image { w, h, rgba }, 1, None).unwrap());
         let (img, thumb): (Option<Vec<u8>>, Option<Vec<u8>>) = c
             .query_row("SELECT image, thumb FROM clip_items", [], |r| {
                 Ok((r.get(0)?, r.get(1)?))
@@ -1622,7 +1658,7 @@ MIIE...
     fn cleanup_respects_capacity_days_and_pin() {
         let c = mem_db();
         for i in 0..5 {
-            ingest(&c, &text(&format!("item{i}")), 1000 + i).unwrap();
+            ingest(&c, &text(&format!("item{i}")), 1000 + i, None).unwrap();
         }
         // 容量 3：删掉最旧两条（item0/item1）
         cleanup(&c, 3, 0, 5000).unwrap();
@@ -1658,7 +1694,7 @@ MIIE...
     fn list_page_filters_and_paginates() {
         let c = mem_db();
         for i in 0..7 {
-            ingest(&c, &text(&format!("alpha {i}")), 1000 + i).unwrap();
+            ingest(&c, &text(&format!("alpha {i}")), 1000 + i, None).unwrap();
         }
         ingest(
             &c,
@@ -1667,6 +1703,7 @@ MIIE...
                 cut: false,
             },
             2000,
+            None,
         )
         .unwrap();
         // 全量分页

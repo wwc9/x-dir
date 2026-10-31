@@ -575,7 +575,10 @@ export function ClipHistWindow() {
                   )}
                   {/* 类型图标（2026-10-31 用户终案）：纯灰线性，无底板无角标，
                       类型信息由 meta 文字标签承载 */}
-                  <span className="np-clip-kind">
+                  <span
+                    className="np-clip-kind"
+                    data-tip={it.source ? `来源：${it.source}` : undefined}
+                  >
                     <AppIcon icon={clipKindMeta(it.kind).icon} size={DENSITY.iconSm} />
                   </span>
                   {it.thumb ? (
