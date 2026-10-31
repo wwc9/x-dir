@@ -455,7 +455,7 @@ export const PAGE_SIZE = 500;
 /** 剪贴板历史条目（分页元数据；thumb = 缩略图 dataURL 或 null） */
 export interface ClipHistItem {
   id: number;
-  kind: "text" | "image" | "files";
+  kind: "text" | "image" | "files" | "dirs" | "link" | "path";
   preview: string;
   size: number;
   pinned: boolean;
@@ -917,6 +917,8 @@ export const api = {
     cmd<void>("cliphist_set_maximized", { maximized }),
   /** 剪贴板历史：顶栏设置钮——唤起主窗并直达设置面板（浮窗收起） */
   cliphistOpenSettings: () => cmd<void>("cliphist_open_settings"),
+  /** 剪贴板历史：文件条目粘贴到主窗当前活动窗格（T1-2，仅 files/dirs 类） */
+  cliphistPasteToPane: (id: number) => cmd<void>("cliphist_paste_to_pane", { id }),
   /** 剪贴板历史：浮窗尺寸持久化（边缘拖拽后防抖落盘，Rust 侧钳制） */
   cliphistSaveSize: (width: number, height: number) =>
     cmd<void>("cliphist_save_size", { width, height }),

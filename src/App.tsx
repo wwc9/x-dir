@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 
 import { onGlobalKeyDown } from "./lib/keyboard";
+import { getList } from "./lib/listRegistry";
 import { hotkeySpecs } from "./lib/hotkey";
 import { initOleDnd } from "./lib/oleDispatch";
 import { installMouseNav } from "./lib/mouseNav";
@@ -59,6 +60,7 @@ export default function App() {
     let unsubJobs: (() => void) | undefined;
     let unsubOle: (() => void) | undefined;
     let unsubSettings: (() => void) | undefined;
+    let unsubPastePane: (() => void) | undefined;
     (async () => {
       try {
         await useSettings.getState().load();
@@ -135,10 +137,21 @@ export default function App() {
         const unSettings = await listen("cliphist-open-settings", () => {
           useUi.getState().openSettings("clip");
         });
+        // 浮窗文件条目「粘贴到当前窗格」（T1-2）：Rust 已把 CF_HDROP 写回
+        // 系统剪贴板，这里走 Ctrl+V 同款路由（活动窗格 FileList.onPaste →
+        // doPaste 会先 syncFromSystem 再 transfer）
+        const unPastePane = await listen("cliphist-paste-to-pane", () => {
+          const { tree, activePaneId } = useLayout.getState();
+          if (!tree || !activePaneId) return;
+          const pane = dfsPanes(tree).find((p) => p.id === activePaneId);
+          const tabId = pane?.tabs[pane.activeTab]?.id ?? null;
+          getList(tabId)?.onPaste();
+        });
         if (disposed) {
           unSettings();
         } else {
           unsubSettings = unSettings;
+          unsubPastePane = unPastePane;
         }
         unsubOle = await initOleDnd();
         if (disposed) {
@@ -188,6 +201,7 @@ export default function App() {
       unsubJobs?.();
       unsubOle?.();
       unsubSettings?.();
+      unsubPastePane?.();
       window.removeEventListener("keydown", onGlobalKeyDown);
       window.removeEventListener("wheel", onZoomWheel);
       window.removeEventListener("focus", onFocusSyncClipboard);

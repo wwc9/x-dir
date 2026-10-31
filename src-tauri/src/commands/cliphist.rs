@@ -141,6 +141,26 @@ pub fn cliphist_set_maximized(app: AppHandle, maximized: bool) -> Result<(), Str
     crate::cliphist::set_window_maximized(&app, maximized)
 }
 
+/// 文件/文件夹条目「粘贴到当前窗格」（T1-2）：回写 CF_HDROP 到系统剪贴板
+/// （带剪切意图原样），唤起主窗并通知其按 Ctrl+V 同款例程粘贴进活动窗格
+#[tauri::command]
+pub fn cliphist_paste_to_pane(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: i64,
+) -> Result<(), String> {
+    crate::cliphist::write_back(&app, &state.cliphist, id, false)?;
+    // 与设置直达同款：先收浮窗（不归还焦点），再唤主窗，最后发事件
+    crate::cliphist::park_clip_window(&app);
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+    let _ = app.emit_to("main", "cliphist-paste-to-pane", ());
+    Ok(())
+}
+
 /// 顶栏设置钮：唤起主窗并直达设置面板（收浮窗）。先收浮窗但**不做焦点
 /// 归还**——归还 paste_target 会把随后聚焦的主窗前台抢走，面板开了却
 /// 被压在后面（2026-10-31 用户实测「直达失败」根因）；本进程持有点击

@@ -10,6 +10,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ClipboardList,
+  FolderInput,
   Copy,
   Minus,
   Pin,
@@ -249,6 +250,15 @@ export function ClipHistWindow() {
     setIsMaxed(next);
     void api.cliphistSetMaximized(next).catch(() => undefined);
   }, []);
+
+  /** 文件/文件夹条目直接粘贴到主窗活动窗格（T1-2）：Rust 写回 CF_HDROP
+   *  并唤主窗走 Ctrl+V 同款粘贴（transfer 进活动窗格目录） */
+  const pasteToPane = useCallback(
+    (item: ClipHistItem) => {
+      void api.cliphistPasteToPane(item.id).catch((e) => flashMsg(`粘贴失败：${String(e)}`));
+    },
+    [flashMsg],
+  );
 
   const pinItem = useCallback((item: ClipHistItem) => {
     keepId.current = item.id;
@@ -511,6 +521,17 @@ export function ClipHistWindow() {
                       >
                         <AppIcon icon={it.pinned ? PinOff : Pin} size={DENSITY.iconXs} />
                       </button>
+                      {(it.kind === "files" || it.kind === "dirs") && (
+                        <button
+                          data-tip="粘贴到当前窗格（主窗活动目录）"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            pasteToPane(it);
+                          }}
+                        >
+                          <AppIcon icon={FolderInput} size={DENSITY.iconXs} />
+                        </button>
+                      )}
                       <button
                         className="np-clip-del"
                         data-tip="删除"
