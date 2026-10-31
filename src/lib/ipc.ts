@@ -352,6 +352,8 @@ export interface Settings {
   cliphistCapacity: number;
   /** 保留天数（0 = 永不按时清理；置顶条目豁免清理） */
   cliphistKeepDays: number;
+  /** 排除应用（逗号/分号分隔进程名，T1-1；命中则该应用复制不入库） */
+  cliphistExcludeApps: string;
   /** 浮窗尺寸（边缘拖拽调宽高，2026-10-31；逻辑 px，仅经 cliphist_save_size
    *  白名单补丁落盘，主窗不回写——可选键，旧档无此键用默认） */
   cliphistWinW?: number;
@@ -446,6 +448,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cliphistDirectPaste: true,
   cliphistCapacity: 500,
   cliphistKeepDays: 30,
+  cliphistExcludeApps: "keepass.exe,keepassxc.exe,1password.exe",
 };
 export const PAGE_SIZE = 500;
 
