@@ -500,10 +500,25 @@ fn read_clipboard() -> Option<ClipContent> {
     {
         return Some(ClipContent::Text(t));
     }
-    if let Some(dib) = crate::clip::get_dib()
-        && let Some((w, h, rgba)) = crate::clip::parse_dib(&dib)
-    {
-        return Some(ClipContent::Image { w, h, rgba });
+    if let Some(dib) = crate::clip::get_dib() {
+        return match crate::clip::parse_dib(&dib) {
+            Some((w, h, rgba)) => Some(ClipContent::Image { w, h, rgba }),
+            // 位图在但不认头（非标准 BI_BITFIELDS/RLE 等）：留痕可查，静默
+            // 吞掉会像 2026-10-31 首轮 E2E 那样无从事后定位
+            None => {
+                log::warn!(
+                    "剪贴板位图不入库（不支持的 DIB 变体）：len={} compression={}",
+                    dib.len(),
+                    u32::from_le_bytes(
+                        dib.get(16..20)
+                            .unwrap_or_default()
+                            .try_into()
+                            .unwrap_or([0; 4])
+                    )
+                );
+                None
+            }
+        };
     }
     None
 }
@@ -650,11 +665,27 @@ pub(crate) fn ensure_clip_window(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// 收浮窗：停靠屏幕外（不销毁、不 SW_HIDE），复位开关
+/// 收浮窗：停靠屏幕外（不销毁、不 SW_HIDE），复位开关。停靠的窗口仍持有
+/// 系统焦点——必须把焦点还给呼出前的窗口（paste_target），否则 Esc 关闭后
+/// 键盘输入会落进看不见的窗口里（2026-10-31 E2E 实测）；用户主动点了别的
+/// 窗口时焦点已不在本进程，SetForegroundWindow 会被系统拒绝，无副作用
 pub(crate) fn close_clip_window(app: &AppHandle) {
     CLIPHIST_OPEN.store(false, Ordering::SeqCst);
     if let Some(w) = app.get_webview_window("cliphist") {
         let _ = w.set_position(park_position());
+    }
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::{IsWindow, SetForegroundWindow};
+        let state = app.state::<AppState>();
+        let raw = state.cliphist.paste_target.load(Ordering::SeqCst);
+        if raw != 0 {
+            let hwnd = HWND(raw as *mut std::ffi::c_void);
+            if unsafe { IsWindow(Some(hwnd)) }.as_bool() {
+                let _ = unsafe { SetForegroundWindow(hwnd) };
+            }
+        }
     }
 }
 

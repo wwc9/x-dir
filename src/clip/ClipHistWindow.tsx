@@ -116,13 +116,28 @@ export function ClipHistWindow() {
       unlistenEv = f;
     });
     let unFocus: (() => void) | undefined;
+    const focusSearch = () => {
+      // WebView2 激活序列会在原生焦点落定后把 activeElement 重置为 body：
+      // 单次延迟聚焦在「页面首次被激活」时仍会被冲掉（2026-10-31 E2E 实测），
+      // 120/350/700ms 三重试兜底覆盖激活完成时刻，幂等无害
+      [120, 350, 700].forEach((ms) => {
+        window.setTimeout(() => {
+          if (document.activeElement !== inputRef.current) {
+            inputRef.current?.focus();
+            inputRef.current?.select();
+          }
+        }, ms);
+      });
+    };
+    // DOM focus 兜底：capabilities 修复后 tauri://focus 为主，浏览器焦点事件
+    // 双保险（停靠态窗口常驻可见，部分环境只触发其中之一）
+    window.addEventListener("focus", focusSearch);
     void getCurrentWindow()
       .onFocusChanged(({ payload: focused }) => {
         if (!focused) return;
         keepId.current = null;
         void fetchPage(0, false, null);
-        inputRef.current?.focus();
-        inputRef.current?.select();
+        focusSearch();
       })
       .then((f) => {
         unFocus = f;
@@ -131,6 +146,7 @@ export function ClipHistWindow() {
       offs.forEach((f) => f());
       unlistenEv?.();
       unFocus?.();
+      window.removeEventListener("focus", focusSearch);
       window
         .matchMedia("(prefers-color-scheme: dark)")
         .removeEventListener("change", onScheme);
@@ -199,6 +215,9 @@ export function ClipHistWindow() {
   // 全局键盘（捕获）：浮窗是独立窗口，keydown 直接在 window 上接
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // IME 组合输入中不接管：Enter=提交候选、Esc=取消组合（截图文字工具
+      // 同口径；合成键在中文输入法下 key 呈 "Process"，天然不命中各分支）
+      if (e.isComposing || e.keyCode === 229) return;
       const { items: list, sel: i, query: q } = stateRef.current;
       const cur = list[i];
       switch (e.key) {

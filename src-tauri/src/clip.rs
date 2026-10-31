@@ -92,7 +92,11 @@ pub fn set_image(w: u32, h: u32, rgba: &[u8]) -> Result<(), String> {
 
 /// 解析 CF_DIB 负载 → (宽, 高, RGBA top-down)。支持 32bpp BGRA 与 24bpp BGR
 /// （行 4 字节对齐）、正/负 biHeight（bottom-up / top-down）；BITMAPINFOHEADER
-/// 之外的变长头（V4/V5）按 biSize 跳过；BI_RGB 之外的压缩格式返回 None。
+/// 之外的变长头（V4/V5）按 biSize 跳过。压缩格式：BI_RGB(0) 直接收；32bpp
+/// 的 BI_BITFIELDS(3) 在掩码为标准布局（R=00FF0000/G=0000FF00/B=000000FF，
+/// GDI/OLE 合成 DIB 的常态，2026-10-31 E2E 实测：WinForms SetImage 的合成
+/// DIB 即此格式——40 头 + 12 字节掩码 + 像素）时按 BI_RGB 同语义跳过掩码；
+/// 其余压缩（BI_RLE/BI_JPEG 等）与非标准掩码返回 None。
 /// 独立纯函数供 test（与 build_dib 往返互逆）。
 pub fn parse_dib(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     if data.len() < 40 {
@@ -107,7 +111,33 @@ pub fn parse_dib(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     let planes = u16::from_le_bytes(data[12..14].try_into().ok()?);
     let bpp = u16::from_le_bytes(data[14..16].try_into().ok()?);
     let compression = u32::from_le_bytes(data[16..20].try_into().ok()?);
-    if w <= 0 || h_raw == 0 || planes != 1 || compression != 0 {
+    if w <= 0 || h_raw == 0 || planes != 1 {
+        return None;
+    }
+    // BI_BITFIELDS：BITMAPINFOHEADER(40) 后跟 3 个 DWORD 掩码（V4/V5 头掩码
+    // 在头内，无需另跳）；仅 32bpp + 标准掩码视为与 BI_RGB 同布局
+    let mut pixel_start = bi_size;
+    if compression == 3 {
+        if bpp != 32 {
+            return None;
+        }
+        if bi_size == 40 {
+            if data.len() < bi_size + 12 {
+                return None;
+            }
+            let rd = |i: usize| {
+                u32::from_le_bytes(
+                    data[bi_size + i..bi_size + i + 4]
+                        .try_into()
+                        .expect("长度已前置校验"),
+                )
+            };
+            if (rd(0), rd(4), rd(8)) != (0x00FF_0000, 0x0000_FF00, 0x0000_00FF) {
+                return None;
+            }
+            pixel_start = bi_size + 12;
+        }
+    } else if compression != 0 {
         return None;
     }
     let (w, h) = (w as usize, h_raw.unsigned_abs() as usize);
@@ -119,7 +149,7 @@ pub fn parse_dib(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     };
     // DIB 行按 4 字节对齐（32bpp 天然满足，24bpp 行尾可能有 1-3 字节填充）
     let src_stride = (w * bytes_pp).div_ceil(4) * 4;
-    let pixels = &data[bi_size..];
+    let pixels = &data[pixel_start..];
     if pixels.len() < src_stride * h {
         return None;
     }
@@ -475,11 +505,28 @@ mod tests {
             parse_dib(&b24),
             Some((2, 1, vec![1, 2, 3, 255, 4, 5, 6, 255]))
         );
+        // BI_BITFIELDS(3) 标准掩码（40 头 + 12 掩码 + 像素）：GDI/OLE 合成
+        // DIB 的常态，按 BI_RGB 同语义收（2026-10-31 E2E 实测 WinForms SetImage）
+        let src = build_dib(2, 1, &rgba);
+        let mut bf: Vec<u8> = src[..40].to_vec();
+        bf[16..20].copy_from_slice(&3u32.to_le_bytes());
+        bf.extend_from_slice(&0x00FF_0000u32.to_le_bytes());
+        bf.extend_from_slice(&0x0000_FF00u32.to_le_bytes());
+        bf.extend_from_slice(&0x0000_00FFu32.to_le_bytes());
+        bf.extend_from_slice(&src[40..]);
+        assert_eq!(parse_dib(&bf), Some((2, 1, rgba.clone())));
+        // 非标准掩码（R/B 互换布局）拒绝——不能默默换通道
+        let mut bad_masks = bf.clone();
+        bad_masks[40..44].copy_from_slice(&0x0000_00FFu32.to_le_bytes());
+        bad_masks[44..48].copy_from_slice(&0x00FF_0000u32.to_le_bytes());
+        assert_eq!(parse_dib(&bad_masks), None);
+        // 掩码数组被截断拒绝（40 + 10 < 40 + 12）
+        assert_eq!(parse_dib(&bf[..50]), None);
         // 非法输入全家桶
         assert_eq!(parse_dib(&[]), None);
         assert_eq!(parse_dib(&[0u8; 39]), None);
         let mut bad = build_dib(2, 1, &rgba);
-        bad[16..20].copy_from_slice(&5u32.to_le_bytes()); // BI_BITFIELDS 拒绝
+        bad[16..20].copy_from_slice(&5u32.to_le_bytes()); // BI_JPEG 拒绝
         assert_eq!(parse_dib(&bad), None);
         let mut trunc = build_dib(2, 1, &rgba);
         trunc.truncate(45); // 像素不足
