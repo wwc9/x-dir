@@ -38,9 +38,8 @@ const G = {
 const VARIANTS = [
   {
     id: 1,
-    name: "现状（改造前）",
+    name: "基线（最初形态）",
     desc: "muted 灰线性图标，无底板——对照基线",
-    badge: "当前前",
     cell: (k) => `<span class="kcell bare">${G[k]}</span>`,
   },
   {
@@ -53,7 +52,6 @@ const VARIANTS = [
     id: 3,
     name: "淡染方底 + 语义色图标",
     desc: "类型色 12% 淡染圆角方底 + 同色线图标；徽章感强、彩色但不刺眼",
-    badge: "推荐",
     cell: (k) => `<span class="kcell box tint">${G[k]}</span>`,
   },
   {
@@ -89,7 +87,8 @@ const VARIANTS = [
   {
     id: 9,
     name: "左缘色条 + 灰图标",
-    desc: "行左缘 3px 类型色条（不占图标位）+ 现状灰图标；类型信息靠色条",
+    desc: "行左缘 3px 类型色条（不占图标位）+ 灰图标；类型信息靠色条",
+    badge: "已应用",
     rowCls: "rowbar",
     cell: (k) => `<span class="kcell bare">${G[k]}</span>`,
   },
@@ -132,7 +131,7 @@ const rowsOf = (v) =>
   ).join("\n");
 
 const cards = VARIANTS.map(
-  (v) => `  <div class="card${v.badge === "推荐" ? " recommend" : ""}">
+  (v) => `  <div class="card${v.badge === "已应用" ? " recommend" : ""}">
     <div class="head"><b>${v.id}. ${v.name}</b>${v.badge ? `<span class="pill">${v.badge}</span>` : ""}</div>
     <div class="desc">${v.desc}</div>
     <div class="list">

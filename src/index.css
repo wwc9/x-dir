@@ -5383,6 +5383,8 @@ mark.np-gsearch-mark {
   gap: 7px;
   margin: 0 2px;
   padding: 3px 8px;
+  /* 左缘类型色条（方案 9）：透明占位 3px 保证全部行缩进一致，按类型着色 */
+  border-left: 3px solid var(--np-icon-text);
   /* 预览自适应行数（最多 3 行）：单条兜底行高，多行按内容撑开，
      实际行高由虚拟列表 measureElement 量测 */
   min-height: var(--np-row-h);
@@ -5391,6 +5393,15 @@ mark.np-gsearch-mark {
   user-select: none;
   overflow: hidden;
   color: var(--np-fg);
+}
+.np-clip-row.np-clip-kbar-image {
+  border-left-color: var(--np-icon-image);
+}
+.np-clip-row.np-clip-kbar-files {
+  border-left-color: var(--np-icon-archive);
+}
+.np-clip-row.np-clip-kbar-dirs {
+  border-left-color: var(--np-icon-folder);
 }
 /* 斑马纹：按数据序号奇偶挂类（虚拟列表 nth-child 随滚动翻转会闪烁）；
    置于 hover/is-sel 之前，同权重下悬停/选中后声明覆盖 */
@@ -5419,29 +5430,13 @@ mark.np-gsearch-mark {
 }
 /* 图片条目缩略图 = 3 行文本等高（calc(row-h×2) ≈ 56px，与三行文本行视觉
    等高）；宽度随纵横比自适应、限宽 45% 保住预览文字空间（超宽横幅） */
-/* 类型徽章（2026-10-31 用户需求）：每条目一枚，语义色取 --np-icon-* 色族
-   （文本=灰 / 图片=蓝 / 文件=橙 / 文件夹=金），容器风格 = 淡染方底 + 同色
-   线图标（候选 3，全部风格对照见 design/clip-icons-preview.html） */
+/* 类型图标（2026-10-31 用户定案方案 9：左缘色条 + 灰图标）：类型色由行
+   左缘色条承载（np-clip-kbar-*），图标回归 muted 线性、不带底板；
+   风格全对照见 design/clip-icons-preview.html */
 .np-clip-kind {
-  --k: var(--np-icon-text);
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
   flex: none;
-  width: var(--np-realicon);
-  height: var(--np-realicon);
-  border-radius: var(--np-radius);
-  background: color-mix(in srgb, var(--k) 12%, transparent);
-  color: var(--k);
-}
-.np-clip-kind-image {
-  --k: var(--np-icon-image);
-}
-.np-clip-kind-files {
-  --k: var(--np-icon-archive);
-}
-.np-clip-kind-dirs {
-  --k: var(--np-icon-folder);
+  color: var(--np-muted);
 }
 .np-clip-thumb {
   height: calc(var(--np-row-h) * 2);
