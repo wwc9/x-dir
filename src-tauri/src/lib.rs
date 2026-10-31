@@ -295,6 +295,7 @@ pub fn run() {
             commands::cliphist::cliphist_clear,
             commands::cliphist::cliphist_hide,
             commands::cliphist::cliphist_set_pinned,
+            commands::cliphist::cliphist_set_maximized,
             commands::shot_scroll::shot_scroll_begin,
             commands::shot_scroll::shot_scroll_launch,
             commands::shot_scroll::shot_scroll_chunk,

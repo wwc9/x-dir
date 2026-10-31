@@ -129,3 +129,9 @@ pub fn cliphist_set_pinned(pinned: bool) -> Result<(), String> {
     crate::cliphist::set_window_pinned(pinned);
     Ok(())
 }
+
+/// 浮窗最大化/还原（顶栏窗口钮）：手动撑满所在显示器工作区
+#[tauri::command]
+pub fn cliphist_set_maximized(app: AppHandle, maximized: bool) -> Result<(), String> {
+    crate::cliphist::set_window_maximized(&app, maximized)
+}

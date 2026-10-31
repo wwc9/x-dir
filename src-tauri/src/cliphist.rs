@@ -296,13 +296,28 @@ fn ingest(conn: &Connection, content: &ClipContent, now: i64) -> rusqlite::Resul
             (content.search_text(), None, None, Some(json), *cut as i64)
         }
     };
+    // 文件列表细分：全部为目录 → 文件夹类（Explorer 复制目录的常态），
+    // 含任一文件/判定失败归文件类。判失败（网络路径等）不阻塞入库
+    let row_kind = match &content {
+        ClipContent::Files { paths, .. } => {
+            if paths
+                .iter()
+                .all(|p| std::fs::metadata(p).map(|m| m.is_dir()).unwrap_or(false))
+            {
+                "dirs"
+            } else {
+                "files"
+            }
+        }
+        _ => content.kind(),
+    };
     conn.execute(
         "INSERT INTO clip_items
            (kind, hash, text, preview, image, thumb, files, file_cut,
             size, pinned, created_at, last_used_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, ?10, ?10)",
         rusqlite::params![
-            content.kind(),
+            row_kind,
             hash,
             text,
             content.preview(),
@@ -621,6 +636,66 @@ pub fn set_window_pinned(pinned: bool) {
     CLIPHIST_PINNED.store(pinned, Ordering::SeqCst);
 }
 
+/// 浮窗最大化（2026-10-31 顶栏窗口钮）：手动撑满所在显示器工作区方案，
+/// 不用 tauri maximize——与停靠位（park）的 set_position 互作不可控
+static CLIPHIST_MAXED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// 最大化前的窗口矩形（还原用；关窗即清）
+static CLIPHIST_RESTORE: Mutex<Option<(PhysicalPosition<i32>, u32, u32)>> = Mutex::new(None);
+
+/// 最大化/还原（cliphist_set_maximized 命令入口，幂等）
+pub fn set_window_maximized(app: &AppHandle, maximized: bool) -> Result<(), String> {
+    let Some(w) = app.get_webview_window("cliphist") else {
+        return Ok(());
+    };
+    if maximized {
+        if CLIPHIST_MAXED.load(Ordering::SeqCst) {
+            return Ok(());
+        }
+        #[cfg(windows)]
+        {
+            use windows::Win32::Graphics::Gdi::{
+                GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
+            };
+            let Ok(hwnd) = w.hwnd() else { return Ok(()) };
+            let hmon = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) };
+            let mut mi = MONITORINFO {
+                cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+                ..Default::default()
+            };
+            if !unsafe { GetMonitorInfoW(hmon, &mut mi) }.as_bool() {
+                return Ok(());
+            }
+            // 记录放大前矩形 → 撑满工作区（rcWork 不含任务栏）
+            let (Ok(pos), Ok(size)) = (w.outer_position(), w.outer_size()) else {
+                return Ok(());
+            };
+            *CLIPHIST_RESTORE.lock().unwrap_or_else(|p| p.into_inner()) =
+                Some((pos, size.width, size.height));
+            let r = mi.rcWork;
+            let _ = w.set_position(PhysicalPosition::new(r.left, r.top));
+            let _ = w.set_size(tauri::PhysicalSize::new(
+                (r.right - r.left) as u32,
+                (r.bottom - r.top) as u32,
+            ));
+            CLIPHIST_MAXED.store(true, Ordering::SeqCst);
+        }
+    } else {
+        if !CLIPHIST_MAXED.swap(false, Ordering::SeqCst) {
+            return Ok(());
+        }
+        if let Some((pos, ww, hh)) = CLIPHIST_RESTORE
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take()
+        {
+            let _ = w.set_position(pos);
+            let _ = w.set_size(tauri::PhysicalSize::new(ww, hh));
+        }
+    }
+    Ok(())
+}
+
 /// 停靠位（同 shot：虚拟桌面外，保持合成器在场防闪白，绝不用 hide()）
 fn park_position() -> PhysicalPosition<i32> {
     PhysicalPosition::new(-32700, -32700)
@@ -682,6 +757,12 @@ pub(crate) fn ensure_clip_window(app: &AppHandle) -> Result<(), String> {
 pub(crate) fn close_clip_window(app: &AppHandle) {
     CLIPHIST_OPEN.store(false, Ordering::SeqCst);
     if let Some(w) = app.get_webview_window("cliphist") {
+        // 最大化态关窗：复位默认尺寸（停靠位只挪位置，不还原尺寸——不复位
+        // 的话下次呼出仍是撑满态）
+        if CLIPHIST_MAXED.swap(false, Ordering::SeqCst) {
+            *CLIPHIST_RESTORE.lock().unwrap_or_else(|p| p.into_inner()) = None;
+            let _ = w.set_size(tauri::LogicalSize::new(WIN_W as f64, WIN_H as f64));
+        }
         let _ = w.set_position(park_position());
     }
     #[cfg(windows)]
@@ -825,7 +906,7 @@ pub fn write_back(
         Some((item.hash.clone(), Instant::now()));
     match item.kind.as_str() {
         "text" => crate::clip::set_text(&item.text.unwrap_or_default())?,
-        "files" => {
+        "files" | "dirs" => {
             let paths: Vec<String> =
                 serde_json::from_str(&item.files.unwrap_or_default()).unwrap_or_default();
             crate::clip::set_files(&paths, item.cut != 0)?;
@@ -953,6 +1034,47 @@ mod tests {
             }
             .hash_hex()
         );
+    }
+
+    #[test]
+    fn ingest_marks_dirs_kind() {
+        let c = mem_db();
+        let base = std::env::temp_dir().join("xdir_cliphist_dirs");
+        let _ = std::fs::create_dir_all(&base);
+        // 纯目录列表 → dirs（Explorer 复制文件夹的常态）
+        ingest(
+            &c,
+            &ClipContent::Files {
+                paths: vec![base.to_string_lossy().into_owned()],
+                cut: false,
+            },
+            1,
+        )
+        .unwrap();
+        // 目录 + 文件混合 → files
+        let f = base.join("a.txt");
+        std::fs::write(&f, b"x").unwrap();
+        ingest(
+            &c,
+            &ClipContent::Files {
+                paths: vec![
+                    base.to_string_lossy().into_owned(),
+                    f.to_string_lossy().into_owned(),
+                ],
+                cut: false,
+            },
+            2,
+        )
+        .unwrap();
+        let kinds: Vec<String> = c
+            .prepare("SELECT kind FROM clip_items ORDER BY id")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(kinds, vec!["dirs", "files"]);
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]

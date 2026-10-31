@@ -1,13 +1,24 @@
-// 剪贴板历史浮窗（§3.7，Ditto 式）：搜索框 + 类型段选 + 虚拟列表 + 状态行。
-// 数据过滤/分页全在 Rust 端（铁律 3），列表只渲染可见行（铁律 1，TanStack
-// Virtual）。键盘：↑↓ 选择 / Enter 直接粘贴 / Ctrl+Enter 仅复制 / Ctrl+P
-// 置顶 / Del 删除 / Esc 关闭（有搜索词先清空）。窗口显隐与失焦自动收由
-// Rust 管理；本页经窗口 focus 事件感知「被呼出」→ 刷新列表并聚焦搜索框。
+// 剪贴板历史浮窗（§3.7，Ditto 式）：自绘顶栏（标题 + 置顶/最小化/最大化/
+// 关闭 + 拖动）+ 搜索框 + 类型段选 + 虚拟列表 + 状态行。数据过滤/分页全在
+// Rust 端（铁律 3），列表只渲染可见行（铁律 1，TanStack Virtual 动态行高——
+// 预览自适应最多 3 行）。键盘：↑↓ 选择 / Enter 直接粘贴 / Ctrl+Enter 仅复制
+// / Ctrl+P 置顶 / Del 删除 / Esc 关闭（有搜索词先清空）。窗口显隐与失焦
+// 自动收由 Rust 管理；本页经窗口 focus 事件感知「被呼出」→ 刷新并聚焦。
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Pin, PinOff, Search, Trash2 } from "lucide-react";
+import {
+  ClipboardList,
+  Copy,
+  Minus,
+  Pin,
+  PinOff,
+  Search,
+  Square,
+  Trash2,
+  X,
+} from "lucide-react";
 
 import { api, type ClipHistItem, type Settings } from "../lib/ipc";
 import { clipKindMeta, formatSize, relTime } from "../lib/cliphist";
@@ -23,6 +34,7 @@ const KIND_TABS: { v: string; l: string }[] = [
   { v: "text", l: "文本" },
   { v: "image", l: "图片" },
   { v: "files", l: "文件" },
+  { v: "dirs", l: "文件夹" },
 ];
 
 export function ClipHistWindow() {
@@ -35,6 +47,8 @@ export function ClipHistWindow() {
   const [directPaste, setDirectPaste] = useState(true);
   /** 浮窗置顶常驻（会话级）：失焦不自动收窗，Enter 转为仅复制不关窗（连续取用） */
   const [winPinned, setWinPinned] = useState(false);
+  /** 浮窗最大化（顶栏钮/双击顶栏，Rust 侧手动工作区方案；重开后复位） */
+  const [isMaxed, setIsMaxed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   // 装载协程防乱序：仅最后一次发起的请求可落盘（搜索防抖/翻页竞态）
@@ -45,8 +59,8 @@ export function ClipHistWindow() {
   // 下次刷新要保持选择的条目 id（置顶/删除后选择不跳回首行）
   const keepId = useRef<number | null>(null);
   // 键盘/事件处理器读取的最新态（避免重绑 window 监听、闭包过期）
-  const stateRef = useRef({ items, sel, query, kind, directPaste, winPinned });
-  stateRef.current = { items, sel, query, kind, directPaste, winPinned };
+  const stateRef = useRef({ items, sel, query, kind, directPaste, winPinned, isMaxed });
+  stateRef.current = { items, sel, query, kind, directPaste, winPinned, isMaxed };
 
   const fetchPage = useCallback(
     async (offset: number, append: boolean, keep: number | null) => {
@@ -146,6 +160,8 @@ export function ClipHistWindow() {
       .onFocusChanged(({ payload: focused }) => {
         if (!focused) return;
         keepId.current = null;
+        // 重开（呼出）时 Rust 已复位默认尺寸，最大化图标同步归零
+        setIsMaxed(false);
         void fetchPage(0, false, null);
         focusSearch();
       })
@@ -197,6 +213,18 @@ export function ClipHistWindow() {
     void api.cliphistSetPinned(next).catch(() => undefined);
   }, []);
 
+  /** 顶栏窗口钮：最小化/关闭都为收起（浮窗常驻停靠态、任务栏无入口，系统
+   *  最小化会失联）；最大化 = Rust 手动撑满工作区（规避与停靠位互作） */
+  const hideWindow = useCallback(() => {
+    void api.cliphistHide().catch(() => undefined);
+  }, []);
+
+  const toggleMax = useCallback(() => {
+    const next = !stateRef.current.isMaxed;
+    setIsMaxed(next);
+    void api.cliphistSetMaximized(next).catch(() => undefined);
+  }, []);
+
   const pinItem = useCallback((item: ClipHistItem) => {
     keepId.current = item.id;
     void api.cliphistSetPin(item.id, !item.pinned).catch(() => undefined);
@@ -224,15 +252,23 @@ export function ClipHistWindow() {
     void api.cliphistClear().catch(() => undefined);
   }, [clearArmed]);
 
-  const goTo = useCallback((idx: number) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const top = idx * ROW_H;
-    // 视口边缘外才滚动（半屏跟随），避免每按一次都抖动
-    if (top < el.scrollTop || top + ROW_H > el.scrollTop + el.clientHeight) {
-      el.scrollTo({ top: Math.max(0, top - Math.floor(el.clientHeight / 2)) });
-    }
-  }, []);
+  // 行高动态（预览自适应最多 3 行）：estimateSize 给单行基线，实际由
+  // measureElement 量测；getItemKey 以条目 id 缓存尺寸，刷新不串行高
+  const virtualizer = useVirtualizer({
+    count: items.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_H,
+    overscan: 8,
+    getItemKey: (i) => items[i]?.id ?? i,
+  });
+
+  const goTo = useCallback(
+    (idx: number) => {
+      // 视口内不动（auto），出视口才滚动跟随
+      virtualizer.scrollToIndex(idx, { align: "auto" });
+    },
+    [virtualizer],
+  );
 
   // 全局键盘（捕获）：浮窗是独立窗口，keydown 直接在 window 上接
   useEffect(() => {
@@ -301,13 +337,6 @@ export function ClipHistWindow() {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [pasteItem, pinItem, delItem, goTo]);
 
-  const virtualizer = useVirtualizer({
-    count: items.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_H,
-    overscan: 8,
-  });
-
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el || busy.current || !hasMore.current) return;
@@ -318,6 +347,50 @@ export function ClipHistWindow() {
 
   return (
     <div className="np-clip">
+      {/* 自绘顶栏：拖动区（data-tauri-drag-region，双击 = 最大化/还原）+
+          窗口四钮（置顶常驻/最小化/最大化/关闭，np-winbtn 统一配方） */}
+      <header
+        className="np-cliptb"
+        data-tauri-drag-region
+        onDoubleClick={(e) => {
+          if ((e.target as HTMLElement).closest("button")) return;
+          toggleMax();
+        }}
+      >
+        <span className="np-cliptb-title" data-tauri-drag-region>
+          <AppIcon icon={ClipboardList} size={DENSITY.iconSm} />
+          剪贴板
+        </span>
+        <button
+          className={`np-winbtn ${winPinned ? "is-on" : ""}`}
+          data-tip={
+            winPinned
+              ? "浮窗常驻：开（点击恢复失焦自动关闭）"
+              : "浮窗常驻：关（点击常驻屏幕，失焦不自动关闭，Enter 转为仅复制）"
+          }
+          aria-label="浮窗常驻开关"
+          onClick={togglePinWindow}
+        >
+          <AppIcon icon={winPinned ? PinOff : Pin} size={DENSITY.iconSm} />
+        </button>
+        <button
+          className="np-winbtn"
+          data-tip="最小化（收起浮窗，热键再唤）"
+          onClick={hideWindow}
+        >
+          <AppIcon icon={Minus} size={DENSITY.iconSm} />
+        </button>
+        <button
+          className="np-winbtn"
+          data-tip={isMaxed ? "还原" : "最大化（撑满当前屏幕）"}
+          onClick={toggleMax}
+        >
+          <AppIcon icon={isMaxed ? Copy : Square} size={DENSITY.iconSm} />
+        </button>
+        <button className="np-winbtn np-winbtn-close" data-tip="关闭（收起浮窗）" onClick={hideWindow}>
+          <AppIcon icon={X} size={DENSITY.iconSm} />
+        </button>
+      </header>
       <div className="np-clip-head">
         <div className="np-clip-searchrow">
           <AppIcon icon={Search} size={DENSITY.iconSm} />
@@ -329,18 +402,6 @@ export function ClipHistWindow() {
             placeholder="搜索剪贴板历史（文本与文件路径）"
             onChange={(e) => setQuery(e.target.value)}
           />
-          <button
-            className={`np-clip-pinbtn ${winPinned ? "is-on" : ""}`}
-            data-tip={
-              winPinned
-                ? "浮窗常驻：开（点击恢复失焦自动关闭）"
-                : "浮窗常驻：关（点击常驻屏幕，失焦不自动关闭，Enter 转为仅复制）"
-            }
-            aria-label="浮窗常驻开关"
-            onClick={togglePinWindow}
-          >
-            <AppIcon icon={Pin} size={DENSITY.iconSm} />
-          </button>
         </div>
         <div className="np-clip-seg">
           {KIND_TABS.map((t) => (
@@ -362,17 +423,19 @@ export function ClipHistWindow() {
               return (
                 <div
                   key={it.id}
+                  ref={virtualizer.measureElement}
+                  data-index={vi.index}
                   className={`np-clip-row ${vi.index === sel ? "is-sel" : ""}`}
                   style={{
                     position: "absolute",
                     top: 0,
                     left: 0,
                     width: "100%",
-                    height: ROW_H,
                     transform: `translateY(${vi.start}px)`,
                   }}
                   onClick={(e) => pasteItem(it, e.ctrlKey)}
                 >
+                  <span className="np-clip-idx">{vi.index + 1}</span>
                   {it.thumb ? (
                     <img className="np-clip-thumb" src={it.thumb} alt="" />
                   ) : (
@@ -385,7 +448,8 @@ export function ClipHistWindow() {
                     </span>
                   )}
                   <span className="np-clip-meta">
-                    {relTime(it.createdAt)} · {formatSize(it.size)}
+                    {clipKindMeta(it.kind).label} · {relTime(it.createdAt)} ·{" "}
+                    {formatSize(it.size)}
                   </span>
                   <span className="np-clip-actions">
                     <button

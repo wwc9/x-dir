@@ -895,6 +895,9 @@ export const api = {
   cliphistHide: () => cmd<void>("cliphist_hide"),
   /** 剪贴板历史：浮窗置顶常驻开关（true = 失焦不自动收窗，Esc/热键仍收） */
   cliphistSetPinned: (pinned: boolean) => cmd<void>("cliphist_set_pinned", { pinned }),
+  /** 剪贴板历史：浮窗最大化/还原（撑满所在显示器工作区，Rust 侧手动尺寸方案） */
+  cliphistSetMaximized: (maximized: boolean) =>
+    cmd<void>("cliphist_set_maximized", { maximized }),
   /** 截图标注偏好补丁写：Rust 侧白名单键合并（装饰三键 + 滚轮记忆五键
    *  shotStrokeW/shotTextFont/shotStepW/shotMosaicW/shotBlurAlpha），
    *  避免轻量截图页整对象回写覆盖主窗设置 */
