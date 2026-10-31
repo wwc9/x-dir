@@ -49,3 +49,16 @@ export function formatSize(bytes: number): string {
   if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1048576).toFixed(1)} MB`;
 }
+
+/** 数字取条键判定（T2-3）：Alt+1-9 任意时刻生效；裸 1-9 仅在需回传
+ * hasFocus=false（搜索框未聚焦）时生效（聚焦时是搜索字符）。
+ * 返回 0 基下标；非取条键返回 null */
+export function pickDigit(
+  e: { code: string; altKey: boolean },
+  inputFocused: boolean,
+): number | null {
+  const m = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
+  if (!m) return null;
+  if (inputFocused && !e.altKey) return null;
+  return Number(m[1]) - 1;
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { clipKindMeta, formatSize, relTime } from "../cliphist";
+import { clipKindMeta, formatSize, pickDigit, relTime } from "../cliphist";
 
 describe("relTime", () => {
   const NOW = 1_700_000_000_000;
@@ -45,5 +45,17 @@ describe("clipKindMeta", () => {
     expect(clipKindMeta("path").label).toBe("路径");
     // 未知类型回退文本（后端新增类型时前端不崩）
     expect(clipKindMeta("whatever").label).toBe("文本");
+  });
+});
+
+describe("pickDigit", () => {
+  it("Alt+数字任意时刻；裸数字仅未聚焦；0/其他键不取条", () => {
+    expect(pickDigit({ code: "Digit3", altKey: true }, true)).toBe(2);
+    expect(pickDigit({ code: "Digit3", altKey: true }, false)).toBe(2);
+    expect(pickDigit({ code: "Numpad9", altKey: false }, false)).toBe(8);
+    // 搜索框聚焦时裸数字 = 输入字符，不取条
+    expect(pickDigit({ code: "Digit3", altKey: false }, true)).toBeNull();
+    expect(pickDigit({ code: "Digit0", altKey: true }, false)).toBeNull();
+    expect(pickDigit({ code: "KeyA", altKey: true }, false)).toBeNull();
   });
 });

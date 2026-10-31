@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 
 import { api, type ClipHistItem, type Settings } from "../lib/ipc";
-import { clipKindMeta } from "../lib/cliphist";
+import { clipKindMeta, pickDigit } from "../lib/cliphist";
 import { AppIcon } from "../components/AppIcon";
 import { initTooltip } from "../lib/tooltip";
 import { DENSITY } from "../lib/tokens";
@@ -397,6 +397,17 @@ export function ClipHistWindow() {
         if (cur) togglePick(cur.id);
         return;
       }
+      // 数字取条（T2-3）：Alt+1-9 任意时刻；裸 1-9 未聚焦时——判定同样
+      // 先于可打印键兜底
+      {
+        const pick = pickDigit(e, document.activeElement === inputRef.current);
+        if (pick !== null) {
+          e.preventDefault();
+          const item = list[pick];
+          if (item) pasteItem(item, e.ctrlKey);
+          return;
+        }
+      }
       switch (e.key) {
         case "ArrowDown":
         case "ArrowUp": {
@@ -666,8 +677,8 @@ export function ClipHistWindow() {
                 {picked.size > 0
                   ? `已勾选 ${picked.size} 条 · Enter 合并粘贴 · Space 续选 · Esc 取消`
                   : winPinned
-                    ? "↑↓/WS 选择 · Enter 复制（常驻中） · Space 勾选多条"
-                    : "↑↓/WS 选择 · Enter 粘贴 · Ctrl+Enter 仅复制 · Space 勾选多条"}
+                    ? "↑↓/WS 选择 · Enter 复制（常驻中） · 1-9 取条 · Space 勾选"
+                    : "↑↓/WS 选择 · Enter 粘贴 · 1-9 取条 · Space 勾选"}
               </span>
             </div>
             <div className="np-clip-foot-row">
