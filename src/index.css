@@ -5474,7 +5474,8 @@ mark.np-gsearch-mark {
    + gap）预留，meta 与 actions 列内切换——悬停/选中不再引起预览文字跳宽 */
 .np-clip-right {
   flex: none;
-  width: calc(var(--np-ctl-h) * 2 + var(--np-gap));
+  /* 44px = 2×20px 动作钮 + gap（随动作钮缩号同步，2026-10-31） */
+  width: calc(var(--np-gap) * 11);
   display: flex;
   justify-content: flex-end;
   align-items: center;
@@ -5494,6 +5495,9 @@ mark.np-gsearch-mark {
 .np-clip-row.is-sel .np-clip-meta {
   display: none;
 }
+/* 动作钮 20px（gap×5）：24px 悬停态会把单行行高从 28 撑到 30（悬停/选中
+ * 换显时内容高度跳变，2026-10-31 用户实测反馈）——缩到 20 后单行内容
+ * 最大高度 20+6 padding < 28 最小行高，悬停前后等高 */
 .np-clip-actions button {
   display: inline-flex;
   align-items: center;
@@ -5501,8 +5505,8 @@ mark.np-gsearch-mark {
   border: none;
   background: transparent;
   color: var(--np-muted);
-  width: var(--np-ctl-h);
-  height: var(--np-ctl-h);
+  width: calc(var(--np-gap) * 5);
+  height: calc(var(--np-gap) * 5);
   border-radius: var(--np-radius);
   cursor: pointer;
 }
