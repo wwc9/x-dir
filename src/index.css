@@ -5419,6 +5419,30 @@ mark.np-gsearch-mark {
 }
 /* 图片条目缩略图 = 3 行文本等高（calc(row-h×2) ≈ 56px，与三行文本行视觉
    等高）；宽度随纵横比自适应、限宽 45% 保住预览文字空间（超宽横幅） */
+/* 类型徽章（2026-10-31 用户需求）：每条目一枚，语义色取 --np-icon-* 色族
+   （文本=灰 / 图片=蓝 / 文件=橙 / 文件夹=金），容器风格 = 淡染方底 + 同色
+   线图标（候选 3，全部风格对照见 design/clip-icons-preview.html） */
+.np-clip-kind {
+  --k: var(--np-icon-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--np-realicon);
+  height: var(--np-realicon);
+  border-radius: var(--np-radius);
+  background: color-mix(in srgb, var(--k) 12%, transparent);
+  color: var(--k);
+}
+.np-clip-kind-image {
+  --k: var(--np-icon-image);
+}
+.np-clip-kind-files {
+  --k: var(--np-icon-archive);
+}
+.np-clip-kind-dirs {
+  --k: var(--np-icon-folder);
+}
 .np-clip-thumb {
   height: calc(var(--np-row-h) * 2);
   width: auto;

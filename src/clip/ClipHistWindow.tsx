@@ -438,11 +438,12 @@ export function ClipHistWindow() {
                   onClick={(e) => pasteItem(it, e.ctrlKey)}
                 >
                   <span className="np-clip-idx">{vi.index + 1}</span>
-                  {it.thumb ? (
-                    <img className="np-clip-thumb" src={it.thumb} alt="" />
-                  ) : (
-                    <AppIcon icon={clipKindMeta(it.kind).icon} size={DENSITY.iconMd} />
-                  )}
+                  {/* 类型徽章：每条必有（含图片行，缩略图另列）；风格候选见
+                      design/clip-icons-preview.html，2026-10-31 先应用方案 3 */}
+                  <span className={`np-clip-kind np-clip-kind-${it.kind}`}>
+                    <AppIcon icon={clipKindMeta(it.kind).icon} size={DENSITY.iconSm} />
+                  </span>
+                  {it.thumb ? <img className="np-clip-thumb" src={it.thumb} alt="" /> : null}
                   <span className="np-clip-preview">{it.preview}</span>
                   {it.pinned && (
                     <span className="np-clip-pinmark" data-tip="已置顶">

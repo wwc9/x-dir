@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="">
+<head>
+<meta charset="UTF-8">
+<title>x-dir · 剪贴板类型图标风格候选</title>
+<style>
+  /* 与 index.css 同源取值（--np-* 摘录；改主样式时同步此处） */
+  :root {
+    --surface:#ffffff; --surface2:#f0f2f5; --border:#d6dbe2; --hairline:rgba(16,24,40,.06);
+    --fg:#1a2129; --muted:#8b929c; --sel:rgba(53,116,240,.12); --hover:rgba(26,33,41,.055);
+    --stripe:rgba(26,33,41,.03); --radius:6px;
+    --k-text:#8a93a0; --k-image:#4586f0; --k-files:#e07817; --k-dirs:#d6a01a;
+  }
+  html.dark {
+    --surface:#1b1e23; --surface2:#24282f; --border:#3a414b; --hairline:rgba(255,255,255,.08);
+    --fg:#e8eaed; --muted:#8b929c; --sel:rgba(92,157,255,.16); --hover:rgba(255,255,255,.055);
+    --stripe:rgba(255,255,255,.03);
+    --k-text:#8b929c; --k-image:#4586f0; --k-files:#e07817; --k-dirs:#e5a922;
+  }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--surface2); color:var(--fg); font:13px/1.45 system-ui,"Segoe UI","Microsoft YaHei",sans-serif; padding:28px 34px 40px; }
+  h1 { font-size:17px; }
+  .sub { color:var(--muted); margin:6px 0 4px; }
+  .toggle { margin:10px 0 20px; padding:3px 12px; border:1px solid var(--border); border-radius:999px;
+    background:var(--surface); color:var(--fg); cursor:pointer; font-size:12px; }
+  .grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 12px 10px; position:relative; }
+  .card.recommend { outline:2px solid var(--k-image); }
+  .head { display:flex; align-items:center; gap:8px; font-size:13px; }
+  .pill { font-size:10px; color:#fff; background:var(--k-image); border-radius:999px; padding:1px 8px; }
+  .desc { color:var(--muted); font-size:11px; line-height:1.5; margin:6px 0 10px; min-height:32px; }
+  .list { border:1px solid var(--hairline); border-radius:8px; overflow:hidden; }
+  .row { display:flex; align-items:center; gap:7px; padding:3px 8px; min-height:28px; }
+  .row.alt { background:var(--stripe); }
+  .row.rowbar { border-left:3px solid var(--k); padding-left:5px; }
+  .idx { width:24px; text-align:center; color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
+  .prev { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .meta { color:var(--muted); font-size:11px; white-space:nowrap; }
+  /* 图标格：各风格的容器与着色 */
+  .kcell { flex:none; display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; }
+  .kcell.bare { color:var(--muted); }
+  .kcell.box { border-radius:var(--radius); }
+  .kcell.tint { background:color-mix(in srgb, var(--k) 12%, transparent); color:var(--k); }
+  .kcell.solid { background:var(--k); color:#fff; }
+  .kcell.outline { border:1px solid var(--k); color:var(--k); }
+  .kcell.round { border-radius:999px; }
+  .kcell.filled { color:var(--k); }
+  .kcell.filled svg { fill:var(--k); }
+  .kcell.paletteB { --k:#3c6fb8; background:color-mix(in srgb, #3c6fb8 12%, transparent); }
+  .kcell.dotwrap { position:relative; }
+  .kcell.dotwrap::after { content:""; position:absolute; right:-1px; bottom:-1px; width:6px; height:6px;
+    border-radius:999px; background:var(--k); border:1.5px solid var(--surface); }
+  .thumb { flex:none; width:88px; height:52px; border-radius:var(--radius); background:var(--surface2); position:relative; }
+  .thumb.overlay { position:relative; }
+  .kcell.overlay { position:absolute; left:2px; top:2px; width:14px; height:14px; background:var(--surface); }
+  .kcell.overlay svg { width:10px; height:10px; }
+</style>
+</head>
+<body>
+  <h1>剪贴板条目类型图标 · 风格候选</h1>
+  <div class="sub">四种类型（文本 / 图片 / 文件 / 文件夹）× 12 种风格；类型色取自 --np-icon-* 语义色族（文本=灰 / 图片=蓝 / 文件=橙 / 文件夹=金）。挑好后告诉我编号（容器风格 + 图片行处理）即可应用到浮窗。</div>
+  <button class="toggle" onclick="document.documentElement.classList.toggle('dark')">浅 / 深切换</button>
+  <div class="grid">
+  <div class="card">
+    <div class="head"><b>1. 现状（改造前）</b><span class="pill">当前前</span></div>
+    <div class="desc">muted 灰线性图标，无底板——对照基线</div>
+    <div class="list">
+      <div class="row  " style="--k: var(--k-text)">
+        <span class="idx">1</span>
+        <span class="kcell bare"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg></span>
+        <span class="prev">季度审计报告要点：收入确认与截止性测试样本…</span>
+        <span class="meta">文本 · 刚刚 · 1.2 KB</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-image)">
+        <span class="idx">2</span>
+        <span class="kcell bare"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></span>
+        <span class="prev">835×476 位图</span>
+        <span class="meta">图片 · 3 分钟前 · 225.0 KB</span>
+      </div>
+      <div class="row  " style="--k: var(--k-files)">
+        <span class="idx">3</span>
+        <span class="kcell bare"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-files" aria-hidden="true"><path d="M15 2h-4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"></path><path d="M16.706 2.706A2.4 2.4 0 0 0 15 2v5a1 1 0 0 0 1 1h5a2.4 2.4 0 0 0-.706-1.706z"></path><path d="M5 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 1.732-1"></path></svg></span>
+        <span class="prev">凭证汇总表.xlsx 等 3 项</span>
+        <span class="meta">文件 · 11 分钟前 · 93 B</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-dirs)">
+        <span class="idx">4</span>
+        <span class="kcell bare"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg></span>
+        <span class="prev">2026 年度底稿</span>
+        <span class="meta">文件夹 · 1 小时前 · 51 B</span>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="head"><b>2. 语义色线性</b></div>
+    <div class="desc">仅给图标上类型色，无底板；最轻的彩色方案</div>
+    <div class="list">
+      <div class="row  " style="--k: var(--k-text)">
+        <span class="idx">1</span>
+        <span class="kcell bare" style="color:var(--k)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg></span>
+        <span class="prev">季度审计报告要点：收入确认与截止性测试样本…</span>
+        <span class="meta">文本 · 刚刚 · 1.2 KB</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-image)">
+        <span class="idx">2</span>
+        <span class="kcell bare" style="color:var(--k)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></span>
+        <span class="prev">835×476 位图</span>
+        <span class="meta">图片 · 3 分钟前 · 225.0 KB</span>
+      </div>
+      <div class="row  " style="--k: var(--k-files)">
+        <span class="idx">3</span>
+        <span class="kcell bare" style="color:var(--k)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-files" aria-hidden="true"><path d="M15 2h-4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"></path><path d="M16.706 2.706A2.4 2.4 0 0 0 15 2v5a1 1 0 0 0 1 1h5a2.4 2.4 0 0 0-.706-1.706z"></path><path d="M5 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 1.732-1"></path></svg></span>
+        <span class="prev">凭证汇总表.xlsx 等 3 项</span>
+        <span class="meta">文件 · 11 分钟前 · 93 B</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-dirs)">
+        <span class="idx">4</span>
+        <span class="kcell bare" style="color:var(--k)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg></span>
+        <span class="prev">2026 年度底稿</span>
+        <span class="meta">文件夹 · 1 小时前 · 51 B</span>
+      </div>
+    </div>
+  </div>
+  <div class="card recommend">
+    <div class="head"><b>3. 淡染方底 + 语义色图标</b><span class="pill">推荐</span></div>
+    <div class="desc">类型色 12% 淡染圆角方底 + 同色线图标；徽章感强、彩色但不刺眼</div>
+    <div class="list">
+      <div class="row  " style="--k: var(--k-text)">
+        <span class="idx">1</span>
+        <span class="kcell box tint"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg></span>
+        <span class="prev">季度审计报告要点：收入确认与截止性测试样本…</span>
+        <span class="meta">文本 · 刚刚 · 1.2 KB</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-image)">
+        <span class="idx">2</span>
+        <span class="kcell box tint"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></span>
+        <span class="prev">835×476 位图</span>
+        <span class="meta">图片 · 3 分钟前 · 225.0 KB</span>
+      </div>
+      <div class="row  " style="--k: var(--k-files)">
+        <span class="idx">3</span>
+        <span class="kcell box tint"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-files" aria-hidden="true"><path d="M15 2h-4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"></path><path d="M16.706 2.706A2.4 2.4 0 0 0 15 2v5a1 1 0 0 0 1 1h5a2.4 2.4 0 0 0-.706-1.706z"></path><path d="M5 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 1.732-1"></path></svg></span>
+        <span class="prev">凭证汇总表.xlsx 等 3 项</span>
+        <span class="meta">文件 · 11 分钟前 · 93 B</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-dirs)">
+        <span class="idx">4</span>
+        <span class="kcell box tint"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg></span>
+        <span class="prev">2026 年度底稿</span>
+        <span class="meta">文件夹 · 1 小时前 · 51 B</span>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="head"><b>4. 实心方底 + 白图标</b></div>
+    <div class="desc">类型色实底 + 白线图标（iOS 文件 App 风）；最重、最醒目</div>
+    <div class="list">
+      <div class="row  " style="--k: var(--k-text)">
+        <span class="idx">1</span>
+        <span class="kcell box solid"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg></span>
+        <span class="prev">季度审计报告要点：收入确认与截止性测试样本…</span>
+        <span class="meta">文本 · 刚刚 · 1.2 KB</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-image)">
+        <span class="idx">2</span>
+        <span class="kcell box solid"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></span>
+        <span class="prev">835×476 位图</span>
+        <span class="meta">图片 · 3 分钟前 · 225.0 KB</span>
+      </div>
+      <div class="row  " style="--k: var(--k-files)">
+        <span class="idx">3</span>
+        <span class="kcell box solid"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-files" aria-hidden="true"><path d="M15 2h-4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"></path><path d="M16.706 2.706A2.4 2.4 0 0 0 15 2v5a1 1 0 0 0 1 1h5a2.4 2.4 0 0 0-.706-1.706z"></path><path d="M5 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 1.732-1"></path></svg></span>
+        <span class="prev">凭证汇总表.xlsx 等 3 项</span>
+        <span class="meta">文件 · 11 分钟前 · 93 B</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-dirs)">
+        <span class="idx">4</span>
+        <span class="kcell box solid"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg></span>
+        <span class="prev">2026 年度底稿</span>
+        <span class="meta">文件夹 · 1 小时前 · 51 B</span>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="head"><b>5. 淡染圆底 + 语义色图标</b></div>
+    <div class="desc">同 3 但圆底；更圆润，与 pill 设计语言呼应</div>
+    <div class="list">
+      <div class="row  " style="--k: var(--k-text)">
+        <span class="idx">1</span>
+        <span class="kcell box tint round"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg></span>
+        <span class="prev">季度审计报告要点：收入确认与截止性测试样本…</span>
+        <span class="meta">文本 · 刚刚 · 1.2 KB</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-image)">
+        <span class="idx">2</span>
+        <span class="kcell box tint round"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></span>
+        <span class="prev">835×476 位图</span>
+        <span class="meta">图片 · 3 分钟前 · 225.0 KB</span>
+      </div>
+      <div class="row  " style="--k: var(--k-files)">
+        <span class="idx">3</span>
+        <span class="kcell box tint round"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-files" aria-hidden="true"><path d="M15 2h-4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"></path><path d="M16.706 2.706A2.4 2.4 0 0 0 15 2v5a1 1 0 0 0 1 1h5a2.4 2.4 0 0 0-.706-1.706z"></path><path d="M5 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 1.732-1"></path></svg></span>
+        <span class="prev">凭证汇总表.xlsx 等 3 项</span>
+        <span class="meta">文件 · 11 分钟前 · 93 B</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-dirs)">
+        <span class="idx">4</span>
+        <span class="kcell box tint round"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg></span>
+        <span class="prev">2026 年度底稿</span>
+        <span class="meta">文件夹 · 1 小时前 · 51 B</span>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="head"><b>6. 实心圆底 + 白图标</b></div>
+    <div class="desc">同 4 但圆底；圆点徽章放大版</div>
+    <div class="list">
+      <div class="row  " style="--k: var(--k-text)">
+        <span class="idx">1</span>
+        <span class="kcell box solid round"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg></span>
+        <span class="prev">季度审计报告要点：收入确认与截止性测试样本…</span>
+        <span class="meta">文本 · 刚刚 · 1.2 KB</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-image)">
+        <span class="idx">2</span>
+        <span class="kcell box solid round"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></span>
+        <span class="prev">835×476 位图</span>
+        <span class="meta">图片 · 3 分钟前 · 225.0 KB</span>
+      </div>
+      <div class="row  " style="--k: var(--k-files)">
+        <span class="idx">3</span>
+        <span class="kcell box solid round"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-files" aria-hidden="true"><path d="M15 2h-4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"></path><path d="M16.706 2.706A2.4 2.4 0 0 0 15 2v5a1 1 0 0 0 1 1h5a2.4 2.4 0 0 0-.706-1.706z"></path><path d="M5 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 1.732-1"></path></svg></span>
+        <span class="prev">凭证汇总表.xlsx 等 3 项</span>
+        <span class="meta">文件 · 11 分钟前 · 93 B</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-dirs)">
+        <span class="idx">4</span>
+        <span class="kcell box solid round"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg></span>
+        <span class="prev">2026 年度底稿</span>
+        <span class="meta">文件夹 · 1 小时前 · 51 B</span>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="head"><b>7. 描边方底 + 语义色图标</b></div>
+    <div class="desc">透明底 + 类型色 1px 描边；边界清晰、底色干净</div>
+    <div class="list">
+      <div class="row  " style="--k: var(--k-text)">
+        <span class="idx">1</span>
+        <span class="kcell box outline"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg></span>
+        <span class="prev">季度审计报告要点：收入确认与截止性测试样本…</span>
+        <span class="meta">文本 · 刚刚 · 1.2 KB</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-image)">
+        <span class="idx">2</span>
+        <span class="kcell box outline"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></span>
+        <span class="prev">835×476 位图</span>
+        <span class="meta">图片 · 3 分钟前 · 225.0 KB</span>
+      </div>
+      <div class="row  " style="--k: var(--k-files)">
+        <span class="idx">3</span>
+        <span class="kcell box outline"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-files" aria-hidden="true"><path d="M15 2h-4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"></path><path d="M16.706 2.706A2.4 2.4 0 0 0 15 2v5a1 1 0 0 0 1 1h5a2.4 2.4 0 0 0-.706-1.706z"></path><path d="M5 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 1.732-1"></path></svg></span>
+        <span class="prev">凭证汇总表.xlsx 等 3 项</span>
+        <span class="meta">文件 · 11 分钟前 · 93 B</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-dirs)">
+        <span class="idx">4</span>
+        <span class="kcell box outline"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg></span>
+        <span class="prev">2026 年度底稿</span>
+        <span class="meta">文件夹 · 1 小时前 · 51 B</span>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="head"><b>8. 填充式图标</b></div>
+    <div class="desc">图标整体填充类型色（无底板）；体量介于线性与实底之间</div>
+    <div class="list">
+      <div class="row  " style="--k: var(--k-text)">
+        <span class="idx">1</span>
+        <span class="kcell bare filled"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg></span>
+        <span class="prev">季度审计报告要点：收入确认与截止性测试样本…</span>
+        <span class="meta">文本 · 刚刚 · 1.2 KB</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-image)">
+        <span class="idx">2</span>
+        <span class="kcell bare filled"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></span>
+        <span class="prev">835×476 位图</span>
+        <span class="meta">图片 · 3 分钟前 · 225.0 KB</span>
+      </div>
+      <div class="row  " style="--k: var(--k-files)">
+        <span class="idx">3</span>
+        <span class="kcell bare filled"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-files" aria-hidden="true"><path d="M15 2h-4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"></path><path d="M16.706 2.706A2.4 2.4 0 0 0 15 2v5a1 1 0 0 0 1 1h5a2.4 2.4 0 0 0-.706-1.706z"></path><path d="M5 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 1.732-1"></path></svg></span>
+        <span class="prev">凭证汇总表.xlsx 等 3 项</span>
+        <span class="meta">文件 · 11 分钟前 · 93 B</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-dirs)">
+        <span class="idx">4</span>
+        <span class="kcell bare filled"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg></span>
+        <span class="prev">2026 年度底稿</span>
+        <span class="meta">文件夹 · 1 小时前 · 51 B</span>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="head"><b>9. 左缘色条 + 灰图标</b></div>
+    <div class="desc">行左缘 3px 类型色条（不占图标位）+ 现状灰图标；类型信息靠色条</div>
+    <div class="list">
+      <div class="row  rowbar" style="--k: var(--k-text)">
+        <span class="idx">1</span>
+        <span class="kcell bare"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg></span>
+        <span class="prev">季度审计报告要点：收入确认与截止性测试样本…</span>
+        <span class="meta">文本 · 刚刚 · 1.2 KB</span>
+      </div>
+      <div class="row alt rowbar" style="--k: var(--k-image)">
+        <span class="idx">2</span>
+        <span class="kcell bare"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></span>
+        <span class="prev">835×476 位图</span>
+        <span class="meta">图片 · 3 分钟前 · 225.0 KB</span>
+      </div>
+      <div class="row  rowbar" style="--k: var(--k-files)">
+        <span class="idx">3</span>
+        <span class="kcell bare"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-files" aria-hidden="true"><path d="M15 2h-4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"></path><path d="M16.706 2.706A2.4 2.4 0 0 0 15 2v5a1 1 0 0 0 1 1h5a2.4 2.4 0 0 0-.706-1.706z"></path><path d="M5 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 1.732-1"></path></svg></span>
+        <span class="prev">凭证汇总表.xlsx 等 3 项</span>
+        <span class="meta">文件 · 11 分钟前 · 93 B</span>
+      </div>
+      <div class="row alt rowbar" style="--k: var(--k-dirs)">
+        <span class="idx">4</span>
+        <span class="kcell bare"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg></span>
+        <span class="prev">2026 年度底稿</span>
+        <span class="meta">文件夹 · 1 小时前 · 51 B</span>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="head"><b>10. 灰图标 + 色点角标</b></div>
+    <div class="desc">现状灰图标右下角叠类型色小点；改动最小的一档彩色</div>
+    <div class="list">
+      <div class="row  " style="--k: var(--k-text)">
+        <span class="idx">1</span>
+        <span class="kcell dotwrap"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg></span>
+        <span class="prev">季度审计报告要点：收入确认与截止性测试样本…</span>
+        <span class="meta">文本 · 刚刚 · 1.2 KB</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-image)">
+        <span class="idx">2</span>
+        <span class="kcell dotwrap"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></span>
+        <span class="prev">835×476 位图</span>
+        <span class="meta">图片 · 3 分钟前 · 225.0 KB</span>
+      </div>
+      <div class="row  " style="--k: var(--k-files)">
+        <span class="idx">3</span>
+        <span class="kcell dotwrap"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-files" aria-hidden="true"><path d="M15 2h-4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"></path><path d="M16.706 2.706A2.4 2.4 0 0 0 15 2v5a1 1 0 0 0 1 1h5a2.4 2.4 0 0 0-.706-1.706z"></path><path d="M5 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 1.732-1"></path></svg></span>
+        <span class="prev">凭证汇总表.xlsx 等 3 项</span>
+        <span class="meta">文件 · 11 分钟前 · 93 B</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-dirs)">
+        <span class="idx">4</span>
+        <span class="kcell dotwrap"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg></span>
+        <span class="prev">2026 年度底稿</span>
+        <span class="meta">文件夹 · 1 小时前 · 51 B</span>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="head"><b>11. 换字形对照</b></div>
+    <div class="desc">淡染方底（同 3）+ 替换字形：T 字 / 相机 / 文件堆 / 关闭文件夹</div>
+    <div class="list">
+      <div class="row  " style="--k: var(--k-text)">
+        <span class="idx">1</span>
+        <span class="kcell box tint"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-type" aria-hidden="true"><path d="M12 4v16"></path><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"></path><path d="M9 20h6"></path></svg></span>
+        <span class="prev">季度审计报告要点：收入确认与截止性测试样本…</span>
+        <span class="meta">文本 · 刚刚 · 1.2 KB</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-image)">
+        <span class="idx">2</span>
+        <span class="kcell box tint"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-camera" aria-hidden="true"><path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z"></path><circle cx="12" cy="13" r="3"></circle></svg></span>
+        <span class="prev">835×476 位图</span>
+        <span class="meta">图片 · 3 分钟前 · 225.0 KB</span>
+      </div>
+      <div class="row  " style="--k: var(--k-files)">
+        <span class="idx">3</span>
+        <span class="kcell box tint"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-stack" aria-hidden="true"><path d="M11 21a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1"></path><path d="M16 16a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1"></path><path d="M21 6a2 2 0 0 0-.586-1.414l-2-2A2 2 0 0 0 17 2h-3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1z"></path></svg></span>
+        <span class="prev">凭证汇总表.xlsx 等 3 项</span>
+        <span class="meta">文件 · 11 分钟前 · 93 B</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-dirs)">
+        <span class="idx">4</span>
+        <span class="kcell box tint"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder-closed" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path><path d="M2 10h20"></path></svg></span>
+        <span class="prev">2026 年度底稿</span>
+        <span class="meta">文件夹 · 1 小时前 · 51 B</span>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="head"><b>12. 配色 B：文本也上色</b></div>
+    <div class="desc">同 3 容器，但文本改文档蓝（灰→蓝）；彩色更满 vs 文本类低调</div>
+    <div class="list">
+      <div class="row  " style="--k: var(--k-text)">
+        <span class="idx">1</span>
+        <span class="kcell box tint paletteB"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg></span>
+        <span class="prev">季度审计报告要点：收入确认与截止性测试样本…</span>
+        <span class="meta">文本 · 刚刚 · 1.2 KB</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-image)">
+        <span class="idx">2</span>
+        <span class="kcell box tint"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></span>
+        <span class="prev">835×476 位图</span>
+        <span class="meta">图片 · 3 分钟前 · 225.0 KB</span>
+      </div>
+      <div class="row  " style="--k: var(--k-files)">
+        <span class="idx">3</span>
+        <span class="kcell box tint"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-files" aria-hidden="true"><path d="M15 2h-4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"></path><path d="M16.706 2.706A2.4 2.4 0 0 0 15 2v5a1 1 0 0 0 1 1h5a2.4 2.4 0 0 0-.706-1.706z"></path><path d="M5 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 1.732-1"></path></svg></span>
+        <span class="prev">凭证汇总表.xlsx 等 3 项</span>
+        <span class="meta">文件 · 11 分钟前 · 93 B</span>
+      </div>
+      <div class="row alt " style="--k: var(--k-dirs)">
+        <span class="idx">4</span>
+        <span class="kcell box tint"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg></span>
+        <span class="prev">2026 年度底稿</span>
+        <span class="meta">文件夹 · 1 小时前 · 51 B</span>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <h2 style="margin:34px 0 12px">图片行：徽章与大缩略图的相处方式</h2>
+  <div class="grid">
+    <div class="card"><div class="head"><b>A. 徽章独立列</b><span class="pill">已应用</span></div>
+      <div class="desc">序号后先徽章后缩略图，各占其位；结构最直白，行稍宽</div>
+      <div class="list">
+        <div class="row" style="--k: var(--k-image)">
+          <span class="idx">1</span><span class="kcell box tint"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></span>
+          <span class="thumb"></span><span class="prev">835×476 位图</span><span class="meta">图片 · 刚刚</span>
+        </div>
+      </div>
+    </div>
+    <div class="card"><div class="head"><b>B. 徽章叠缩略图角</b></div>
+      <div class="desc">小徽章叠在缩略图左上角；省一列宽度，徽章略小</div>
+      <div class="list">
+        <div class="row" style="--k: var(--k-image)">
+          <span class="idx">1</span>
+          <span class="thumb"><span class="kcell box tint overlay"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></span></span>
+          <span class="prev">835×476 位图</span><span class="meta">图片 · 刚刚</span>
+        </div>
+      </div>
+    </div>
+    <div class="card"><div class="head"><b>C. 缩略图即类型</b></div>
+      <div class="desc">图片行不放徽章（缩略图本身即类型信息，meta 有文字）；其余类型才有徽章</div>
+      <div class="list">
+        <div class="row" style="--k: var(--k-image)">
+          <span class="idx">1</span>
+          <span class="thumb"></span><span class="prev">835×476 位图</span><span class="meta">图片 · 刚刚</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
