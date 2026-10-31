@@ -5410,8 +5410,10 @@ mark.np-gsearch-mark {
 }
 .np-clip-idx {
   flex: none;
-  /* 24px 容纳 4 位数（容量上限 10000），居中对齐（2026-10-31 用户定案） */
+  /* 24px 容纳 4 位数（容量上限 10000），居中对齐（2026-10-31 用户定案）；
+     与类型图标收紧到 3px（2026-10-31 用户反馈：行 gap 7px - 4px 负边距） */
   width: calc(var(--np-gap) * 6);
+  margin-right: -4px;
   text-align: center;
   font-size: var(--np-font-sm);
   color: var(--np-muted);

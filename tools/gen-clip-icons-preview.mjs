@@ -209,7 +209,7 @@ const html = `<!DOCTYPE html>
   .row { display:flex; align-items:center; gap:7px; padding:3px 8px; min-height:28px; }
   .row.alt { background:var(--stripe); }
   .row.rowbar { border-left:3px solid var(--k); padding-left:5px; }
-  .idx { width:24px; text-align:center; color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
+  .idx { width:24px; text-align:center; color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; margin-right:-4px; }
   .prev { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .meta { color:var(--muted); font-size:11px; white-space:nowrap; }
   /* 图标格：各风格的容器与着色 */
