@@ -225,6 +225,42 @@ PixPin 闭源；electron-screenshots（MIT）深度绑定 Electron API 无法用
   - 不做：翻译 / AI 对话（偏离文件管理器定位且依赖在线服务）；GIF/录屏（xcap
     VideoRecorder 仅出帧，编码选型复杂，远期另议）；取色器、量尺（未在需求内）
 
+### 3.7 剪贴板历史（2026-10-30 定案并实现 P0，Ditto 式）
+
+后台记录复制/剪切的文本·图片·文件，全局热键呼出浮窗搜索回贴——对标 Ditto
+的核心子集，替代独立剪贴板工具（用户 2026-10-30 需求）。
+
+**选型调研结论（2026-10-30）**：无可整体融入的宽松协议成品——Ditto /
+CopyQ = GPL-3.0、PasteBar = CC BY-NC（§8 硬红线全部打回，仅 UX 对标）；
+EcoPaste（Apache-2.0，Tauri 2 同栈）仅作 watcher→guard→ingest→SQLite 的
+分层架构参考。**定案：监听引擎引 clipboard-rs（MIT，Windows 内部走
+AddClipboardFormatListener 真事件），内容读写仍走自有 clip.rs（CF_HDROP
+DropEffect / CF_DIB 性能先例，补文本读写与 parse_dib），持久化引 rusqlite
+（MIT，bundled SQLite = 项目首个数据库，config/clipboard.db WAL）。**
+
+- **监听**：clipboard-rs watcher 只作变化信号（`clip-watcher` 专用线程，
+  代际号管理启停），事件到达后按 文件 > 文本 > 图片 优先级读取；自写回环
+  guard = 内容 hash + 3 秒时间窗一次性消费（写回剪贴板不会被自己再入库）
+- **护栏**：文本 1MiB / 位图 20MB / 文件 500 条超限不入库；容量上限（默认
+  500，钳 50–10000）删最旧非置顶；保留天数（默认 30，0=永不清）；置顶条目
+  豁免全部清理；去重 = sha256 内容指纹命中即 created_at 置顶（Ditto 行为）
+- **浮窗**（label `cliphist`，clipboard.html 轻量入口照 shot.html 模式）：
+  常驻停靠屏幕外预热（防闪白，绝不用 hide），热键 `Ctrl+Shift+V`（可自定义
+  录制，HotkeyRecorder 复用）呼出 = 光标显示器居中上屏 + 聚焦；失焦自动收
+  （停靠回屏外）；虚拟列表（铁律 1）+ Rust 端分页/过滤（铁律 3，50 条/页）
+- **回贴**：Enter = 回写剪贴板 + **直接粘贴**（恢复呼出前前台窗口焦点 +
+  SendInput Ctrl+V，2026-10-30 用户定案；管理员窗口/UAC 恢复失败 → 浮窗
+  保持打开提示「已复制」降级）；Ctrl+Enter = 仅复制；文件条目带剪切意图
+  （Preferred DropEffect）原样回写
+- **全局热键单点化**：`hotkeys_sync` 全量重建全部系统热键（截图 shot-open
+  + 剪贴板 cliphist-toggle，回调按 id 分发），`shot_register_hotkey` 退役
+  （unregister_all 全清语义无法多热键并存）
+- **设置**（设置 → 剪贴板）：`cliphistEnabled`（默认开）/ `cliphistHotkey`
+  / `cliphistDirectPaste`（默认开）/ `cliphistCapacity` / `cliphistKeepDays`
+- **P1 候选**（未排期）：排除应用（密码管理器）、来源应用记录与筛选、FTS5
+  全文搜索、HTML/RTF 多格式、敏感内容跳过（私钥/令牌正则）、文件条目直接
+  落入当前窗格目录（x-dir 联动差异项）、备份导入导出
+
 ### 3.4 V1 明确不做（防范围蔓延）
 
 - 多窗口；拖出窗口到系统（OLE 拖拽源）
@@ -255,6 +291,7 @@ PixPin 闭源；electron-screenshots（MIT）深度绑定 Electron API 无法用
 | WebView2 进程组基础（浏览器进程组） | 90~140MB |
 | 前端 JS 堆（React + Zustand + 可见行 DOM + 各窗格分页窗口） | ≤ 60MB |
 | Rust 常驻（含 10 × 1 万条目录快照缓存，约 4MB/格） | ≤ 60MB |
+| 剪贴板历史（§3.7，2026-10-30） | 常驻浮窗 webview 约 15MB + SQLite 连接（轻量） |
 | 其他（日志缓冲、分配碎片） | ≤ 20MB |
 
 M0 原型必须逐项验证该分解；若 WebView2 基础 > 140MB 或总数超标，触发 §9 切换预案。
@@ -280,6 +317,7 @@ M0 原型必须逐项验证该分解；若 WebView2 基础 > 140MB 或总数超�
 | 虚拟列表 | TanStack Virtual（固定行高模式） |
 | 布局分割 | react-resizable-panels：`PanelGroup`/`Panel` 与 §6.3.1 分割树节点一一对应，只负责尺寸分配与拖动交互；数据源仍是自研 layoutTree.ts 纯函数；**禁用其 autoSaveId 持久化**（持久化走工作区 JSON，§6.9） |
 | Rust 依赖 | serde / serde_json、trash（回收站）、notify（目录监控，V2）、windows（Win32 基础 API；COM 集成留 V2+）、tauri-plugin-opener（默认程序打开）、tauri-plugin-log |
+| 剪贴板历史（§3.7） | clipboard-rs（MIT，监听信号源）+ rusqlite（MIT，bundled SQLite 持久化，项目首个数据库） |
 | 可选 | tauri-specta：由 Rust 类型自动生成 TS 绑定，避免双端手写漂移（建议启用） |
 
 ## 6. 架构与技术设计
@@ -419,6 +457,11 @@ type DriveInfo = { letter: string; label: string;
 | `get_settings` / `save_settings` | `()` / `(json)` | settings.json 读写（§6.9） |
 | `list_workspaces` / `load_workspace` / `save_workspace` / `delete_workspace` | `(name?, tree?)` | 工作区 JSON 文件管理（§6.9） |
 | `watch_dir` / `unwatch_dir` | — | **已实现**（原计划 V2，2026-10-10 提前落地，见 §6.8） |
+| `hotkeys_sync` | `(hotkeys: [{id, hotkey}])` | **2026-10-30 新增（§3.7）**：全部系统级全局热键单点全量重建（截图 shot-open / 剪贴板 cliphist-toggle，回调按 id 分发）；`shot_register_hotkey` 同日退役 |
+| `cliphist_configure` | `(enabled, capacity, keepDays)` | **2026-10-30 新增（§3.7）**：启停监听线程 + 推送容量/天数护栏 |
+| `cliphist_list` | `(query, kind, offset, limit)` | **2026-10-30 新增（§3.7）**：分页查询（过滤/排序在 Rust 端，铁律 3），条目含缩略图 dataURL |
+| `cliphist_write_back` | `(id, paste)` | **2026-10-30 新增（§3.7）**：回写系统剪贴板（hash guard 防回环）+ 使用置顶；paste=true 直接粘贴（失败返回 pasted=false） |
+| `cliphist_set_pin` / `cliphist_delete` / `cliphist_clear` / `cliphist_hide` | `(id, pinned)` / `(id)` / `()` / `()` | **2026-10-30 新增（§3.7）**：置顶（豁免清理）/ 删单条 / 清空未置顶 / 收浮窗 |
 
 ### 6.6 事件清单
 
@@ -428,6 +471,7 @@ type DriveInfo = { letter: string; label: string;
 | `job-done` | `{jobId, ok, cancelled, failed: [{path, message}]}` | 终态必发 |
 | `dir-changed`（V2） | `{path}` | 500ms 防抖聚合，仅作脏标记 |
 | `search-batch`（2026-10-12） | `{reqId, entries: FileEntry[], scanned}` | ~100ms / 单批 256 条封顶，仅遍历通道 |
+| `cliphist-updated`（2026-10-30） | `()` | 入库/置顶/删除/清空后即发；浮窗聚焦中刷新当前页 |
 
 ### 6.7 长任务（复制/移动/删除）协议
 
@@ -451,6 +495,7 @@ exe 旁目录布局（基于 `std::env::current_exe()` 解析）：
 X-Dir.exe
 config/
   settings.json
+  clipboard.db          # 剪贴板历史（§3.7，SQLite WAL，2026-10-30）
   workspaces/          # default.json、"上次会话.json"
 logs/                  # tauri-plugin-log，滚动 5MB × 3
 WebView2/              # WebView2 用户数据目录
@@ -477,11 +522,16 @@ WebView2/              # WebView2 用户数据目录
   "recentSearches": [ "预算表", "凭证" ],
   "nameIndex": { "enabled": false },
   "shotEnabled": true,
-  "shotHotkey": "Ctrl+Alt+A"
+  "shotHotkey": "Ctrl+Alt+A",
+  "cliphistEnabled": true,
+  "cliphistHotkey": "Ctrl+Shift+V",
+  "cliphistDirectPaste": true,
+  "cliphistCapacity": 500,
+  "cliphistKeepDays": 30
 }
 ```
 
-V2 项（2026-10-11，缩略图开关已随图标视图删除 2026-10-13）：真实图标/原生文件操作开关 + 颜色标记与着色规则（色键 = `--np-tag-*` token 六色）。`recentSearches` / `nameIndex` 为 2026-10-12 搜索增强新增（全盘搜索历史上限 20；索引模式默认关闭，不影响 350MB 验收基线）。
+V2 项（2026-10-11，缩略图开关已随图标视图删除 2026-10-13）：真实图标/原生文件操作开关 + 颜色标记与着色规则（色键 = `--np-tag-*` token 六色）。`recentSearches` / `nameIndex` 为 2026-10-12 搜索增强新增（全盘搜索历史上限 20；索引模式默认关闭，不影响 350MB 验收基线）。`cliphist*` 五键为 2026-10-30 剪贴板历史新增（§3.7；历史数据另存 `config/clipboard.db` SQLite，WAL 模式，磁盘库打开失败降级内存库）。
 
 - 工作区文件 = `{ name, tree }`，`tree` 即分割树序列化（Tab 仅存 `path`）
 - 退出时自动写"上次会话"（临时文件 + rename 原子替换）；启动且 `restoreLastSession` 为 true 时恢复
@@ -565,6 +615,7 @@ V2 项（2026-10-11，缩略图开关已随图标视图删除 2026-10-13）：�
 | Ctrl+Z | 撤销上一步操作：回收站删除还原 / 重命名改回 / 应用内移动移回 / 新建移入回收站（2026-10-13 补，lib/undo 栈式 LIFO，上限 50） |
 | Ctrl+Y / Ctrl+Shift+Z | 重做：按原方向再执行刚撤销的操作并压回撤销栈（可往复；新操作入撤销栈即清空重做分支，2026-10-15 补） |
 | Ctrl+Alt+A | 截图（2026-10-24 新增，**系统级**热键 = Rust global-shortcut 路由，不经 onGlobalKeyDown；设置 → 截图可换键位/关闭；键位见上） |
+| Ctrl+Shift+V | 剪贴板历史浮窗（2026-10-30 新增，**系统级**热键，任意界面生效；设置 → 剪贴板可换键位/关闭；浮窗内 ↑↓ 选择 / Enter 直接粘贴 / Ctrl+Enter 仅复制 / Ctrl+P 置顶 / Del 删除 / Esc 关闭，输入即搜索） |
 | Shift+Delete | 永久删除（绕过回收站，强制 danger 确认；2026-10-13 补） |
 | Alt+Enter | 属性（2026-10-13 补） |
 | Shift+F10 / Menu 键 | 键盘呼出选中项右键菜单（2026-10-13 补） |
