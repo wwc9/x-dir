@@ -32,8 +32,9 @@ const WATCH_INTERVAL: Duration = Duration::from_millis(200);
 const TEXT_MAX_BYTES: usize = 1 << 20;
 const IMAGE_MAX_BYTES: usize = 20 << 20;
 const FILES_MAX_COUNT: usize = 500;
-/// 图片条目缩略图长边上限（列表直接随页下发 dataURL）
-const THUMB_EDGE: u32 = 96;
+/// 图片条目缩略图长边上限（列表直接随页下发 dataURL；2026-10-31 提到 128：
+/// 行内以 3 行等高（≈56px）展示，96 档在横图下会被放大发虚）
+const THUMB_EDGE: u32 = 128;
 /// 自写回环 guard 时间窗
 const SELF_WRITE_WINDOW: Duration = Duration::from_secs(3);
 /// 浮窗逻辑尺寸（inner_size 逻辑像素；定位换算物理像素）

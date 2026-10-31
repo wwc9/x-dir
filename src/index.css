@@ -5407,9 +5407,12 @@ mark.np-gsearch-mark {
   color: var(--np-muted);
   font-variant-numeric: tabular-nums;
 }
+/* 图片条目缩略图 = 3 行文本等高（calc(row-h×2) ≈ 56px，与三行文本行视觉
+   等高）；宽度随纵横比自适应、限宽 45% 保住预览文字空间（超宽横幅） */
 .np-clip-thumb {
-  width: var(--np-realicon);
-  height: var(--np-realicon);
+  height: calc(var(--np-row-h) * 2);
+  width: auto;
+  max-width: 45%;
   object-fit: contain;
   border-radius: var(--np-radius);
   background: var(--np-surface-2);
