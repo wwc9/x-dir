@@ -122,6 +122,7 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
            image        BLOB,                       -- PNG 原图（kind=image）
            thumb        BLOB,                       -- PNG 缩略 ≤96px（kind=image）
            files        TEXT,                       -- 路径 JSON 数组（kind=files）
+           py           TEXT,                       -- 文本拼音首字母（中文搜索，T1-3）
            file_cut     INTEGER NOT NULL DEFAULT 0, -- Preferred DropEffect = MOVE
            size         INTEGER NOT NULL,
            pinned       INTEGER NOT NULL DEFAULT 0,
@@ -131,7 +132,39 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
          CREATE INDEX IF NOT EXISTS idx_clip_created ON clip_items(created_at);
          CREATE INDEX IF NOT EXISTS idx_clip_hash    ON clip_items(hash);",
     )
-    .map_err(|e| format!("初始化 clipboard.db 失败：{e}"))
+    .map_err(|e| format!("初始化 clipboard.db 失败：{e}"))?;
+    // 惰性迁移（T1-3 拼音搜索）：旧库无 py 列则补列（建表语句已含，新库勿动）
+    let has_py = conn
+        .prepare("SELECT 1 FROM pragma_table_info('clip_items') WHERE name = 'py'")
+        .and_then(|mut stmt| stmt.query_row([], |_| Ok(())))
+        .is_ok();
+    if !has_py {
+        conn.execute_batch("ALTER TABLE clip_items ADD COLUMN py TEXT;")
+            .map_err(|e| format!("补 py 列失败：{e}"))?;
+    }
+    // 回填：仅 text 列非空且 py 为空的行（新库为空集，秒过）
+    let rows: Vec<(i64, Option<String>)> = conn
+        .prepare("SELECT id, text FROM clip_items WHERE text IS NOT NULL AND py IS NULL")
+        .map_err(|e| format!("回填 py 查询失败：{e}"))?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .map_err(|e| format!("回填 py 迭代失败：{e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("回填 py 读取失败：{e}"))?;
+    for (id, text) in rows {
+        let py = text.as_deref().and_then(crate::fs::search::pinyin_initials);
+        if let Some(p) = py {
+            let _ = conn.execute(
+                "UPDATE clip_items SET py = ?1 WHERE id = ?2",
+                rusqlite::params![p, id],
+            );
+        } else {
+            let _ = conn.execute(
+                "UPDATE clip_items SET py = '' WHERE id = ?2",
+                rusqlite::params![id],
+            );
+        }
+    }
+    Ok(())
 }
 
 // ── 载荷与纯函数 ─────────────────────────────────────────────────────────────
@@ -445,11 +478,13 @@ fn ingest(conn: &Connection, content: &ClipContent, now: i64) -> rusqlite::Resul
         }
         _ => content.kind(),
     };
+    // 拼音首字母（T1-3）：仅含汉字的文本有值，供首字母搜索
+    let py = text.as_deref().and_then(crate::fs::search::pinyin_initials);
     conn.execute(
         "INSERT INTO clip_items
-           (kind, hash, text, preview, image, thumb, files, file_cut,
+           (kind, hash, text, preview, image, thumb, files, file_cut, py,
             size, pinned, created_at, last_used_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, ?10, ?10)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?11, ?9, 0, ?10, ?10)",
         rusqlite::params![
             row_kind,
             hash,
@@ -460,7 +495,8 @@ fn ingest(conn: &Connection, content: &ClipContent, now: i64) -> rusqlite::Resul
             files,
             file_cut,
             content.size() as i64,
-            now
+            now,
+            py
         ],
     )?;
     Ok(true)
@@ -516,7 +552,8 @@ pub fn list_page(
     use base64::Engine as _;
     let q = query.trim();
     let where_sql = "WHERE (?1 = '' OR preview LIKE '%'||?1||'%'
-                       OR (text IS NOT NULL AND text LIKE '%'||?1||'%'))
+                       OR (text IS NOT NULL AND text LIKE '%'||?1||'%')
+                       OR (py IS NOT NULL AND py LIKE '%'||?1||'%'))
                      AND (?2 = '' OR kind = ?2)";
     let total: i64 = conn.query_row(
         &format!("SELECT COUNT(*) FROM clip_items {where_sql}"),
@@ -1367,6 +1404,30 @@ MIIE...
         assert!(!app_excluded("keepass.exe", "explorer.exe"));
         assert!(!app_excluded("", "anything.exe"));
         assert!(!app_excluded("keepass.exe", ""));
+    }
+
+    #[test]
+    fn pinyin_initials_search() {
+        let c = mem_db();
+        ingest(&c, &text("季度审计报告要点"), 1000).unwrap();
+        ingest(&c, &text("hello world"), 2000).unwrap();
+        // 入库即计算首字母（含汉字才有值）
+        let py: Option<String> = c
+            .query_row(
+                "SELECT py FROM clip_items WHERE preview LIKE '%审计%'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(py.as_deref().is_some_and(|p| p.contains("sjbg")));
+        // 首字母命中："sj" 找到「季度审计…」
+        let p = list_page(&c, "sj", "", 0, 50).unwrap();
+        assert_eq!(p.items.len(), 1);
+        assert!(p.items[0].preview.contains("审计"));
+        // 全文与英文查询不受影响
+        assert_eq!(list_page(&c, "审计", "", 0, 50).unwrap().items.len(), 1);
+        assert_eq!(list_page(&c, "hello", "", 0, 50).unwrap().items.len(), 1);
+        assert_eq!(list_page(&c, "zzz", "", 0, 50).unwrap().items.len(), 0);
     }
 
     #[test]
