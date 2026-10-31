@@ -426,6 +426,121 @@ pub fn get_files() -> Option<(Vec<String>, bool)> {
     }
 }
 
+/// CF_HTML 负载构建（T3-1 富文本保真）：剪贴板 "HTML Format" 的头 + 包裹
+/// 片段；头部偏移回填按运行时搜索键位定位（与模板几何解耦），10 位定宽
+/// 十进制。独立纯函数供 test
+pub fn build_cf_html(fragment: &str) -> Vec<u8> {
+    let head: &[u8] = b"Version:0.9\r\nStartHTML:0000000000\r\nEndHTML:0000000000\r\nStartFragment:0000000000\r\nEndFragment:0000000000\r\n";
+    let pre: &[u8] = b"<html><body>\r\n<!--StartFragment-->";
+    let post: &[u8] = b"<!--EndFragment-->\r\n</body></html>";
+    let start_html = head.len();
+    let start_frag = start_html + pre.len();
+    let end_frag = start_frag + fragment.len();
+    let end_html = end_frag + post.len();
+    let mut out = Vec::with_capacity(end_html);
+    out.extend_from_slice(head);
+    out.extend_from_slice(pre);
+    out.extend_from_slice(fragment.as_bytes());
+    out.extend_from_slice(post);
+    // 键位自搜索回填（各占 10 位），避免手数偏移
+    let put = |out: &mut Vec<u8>, key: &[u8], val: usize| {
+        let i = out
+            .windows(key.len())
+            .position(|w| w == key)
+            .expect("头部键位存在")
+            + key.len();
+        let digits = format!("{val:010}");
+        out[i..i + 10].copy_from_slice(digits.as_bytes());
+    };
+    put(&mut out, b"StartHTML:", start_html);
+    put(&mut out, b"EndHTML:", end_html);
+    put(&mut out, b"StartFragment:", start_frag);
+    put(&mut out, b"EndFragment:", end_frag);
+    out
+}
+
+/// 解析 CF_HTML → 片段 HTML（T3-1）：优先 <!--StartFragment-->…<!--EndFragment-->
+/// 区段，缺失标记回落去标签全文。独立纯函数供 test
+pub fn parse_cf_html(data: &[u8]) -> Option<String> {
+    let s = String::from_utf8_lossy(data);
+    let start = s.find("<!--StartFragment-->").map(|i| i + 20);
+    let end = s.find("<!--EndFragment-->");
+    let body = match (start, end) {
+        (Some(a), Some(b)) if b > a => &s[a..b],
+        _ => {
+            // 回落：<body…> 开标签之后到 </body> 之前；再无则整包
+            match s
+                .find("<body")
+                .and_then(|i| s[i..].find('>').map(|j| i + j + 1))
+            {
+                Some(a) => match s.rfind("</body>") {
+                    Some(b) if b > a => &s[a..b],
+                    _ => &s[a..],
+                },
+                None => s.as_ref(),
+            }
+        }
+    };
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+#[cfg(windows)]
+fn html_format() -> u32 {
+    let name = wide("HTML Format");
+    unsafe { RegisterClipboardFormatW(PCWSTR::from_raw(name.as_ptr())) }
+}
+
+/// 读取 "HTML Format"（浏览器/Office 复制的富文本）；无该格式返回 None
+#[cfg(windows)]
+pub fn get_html() -> Option<String> {
+    let fmt = html_format();
+    if fmt == 0 {
+        return None;
+    }
+    let bytes = read_block(fmt)?;
+    parse_cf_html(&bytes)
+}
+
+/// 同时写纯文本 + HTML Format（T3-1 回写保真：Word/富文本编辑器粘贴保留
+/// 格式，纯文本消费者仍读 CF_UNICODETEXT）
+#[cfg(windows)]
+pub fn set_text_and_html(text: &str, html: &str) -> Result<(), String> {
+    if text.contains(' ') {
+        return Err("文本包含非法 NUL 字符".into());
+    }
+    let utf16: Vec<u8> = text
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .flat_map(|u| u.to_le_bytes())
+        .collect();
+    let cf_html = build_cf_html(html);
+    let fmt = html_format();
+    if !open_clipboard() {
+        return Err("无法打开系统剪贴板".into());
+    }
+    unsafe {
+        if EmptyClipboard().is_err() {
+            let _ = CloseClipboard();
+            return Err("无法清空系统剪贴板".into());
+        }
+        if !set_block(CF_UNICODETEXT, &utf16) {
+            let _ = CloseClipboard();
+            return Err("写入 CF_UNICODETEXT 失败".into());
+        }
+        if fmt != 0 {
+            // HTML 格式写失败不致命（降级纯文本）
+            let _ = set_block(fmt, &cf_html);
+        }
+        let _ = CloseClipboard();
+    }
+    Ok(())
+}
+
 /// 清空系统剪贴板（剪切粘贴完成后避免残留移动语义）
 #[cfg(windows)]
 pub fn clear() -> Result<(), String> {
@@ -473,6 +588,32 @@ mod tests {
     }
 
     #[cfg(windows)]
+    #[test]
+    fn cf_html_roundtrip_and_offsets() {
+        let cf = build_cf_html("<b>加粗</b>文本");
+        // 头部四偏移可解析，且由偏移反指的内容正确（无魔数，适配头几何）
+        let s = String::from_utf8_lossy(&cf).into_owned();
+        let num = |key: &str| -> usize {
+            let i = s.find(key).expect(key) + key.len();
+            s[i..i + 10].parse().expect("10 位数字")
+        };
+        let sh = num("StartHTML:");
+        let eh = num("EndHTML:");
+        let sf = num("StartFragment:");
+        let ef = num("EndFragment:");
+        assert!(sh < sf && sf < ef && ef <= eh && eh == cf.len());
+        assert_eq!(&cf[sh..sh + 6], b"<html>");
+        assert_eq!(&cf[sf..ef], "<b>加粗</b>文本".as_bytes());
+        assert_eq!(&cf[eh - 7..eh], b"</html>");
+        // 片段往返
+        assert_eq!(parse_cf_html(&cf).as_deref(), Some("<b>加粗</b>文本"));
+        // 无标记回落
+        assert_eq!(
+            parse_cf_html("<html><body>裸内容</body></html>".as_bytes()).as_deref(),
+            Some("裸内容"),
+        );
+    }
+
     #[test]
     fn parse_dib_roundtrip_with_build_dib() {
         // 3×2 已知像素，覆盖 bottom-up 行序翻转与 R/B 互换

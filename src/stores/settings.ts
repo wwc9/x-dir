@@ -72,6 +72,7 @@ function toPlain(s: SettingsStore): Settings {
     cliphistCapacity: s.cliphistCapacity,
     cliphistKeepDays: s.cliphistKeepDays,
     cliphistExcludeApps: s.cliphistExcludeApps,
+    cliphistRichText: s.cliphistRichText,
     cliphistWinW: s.cliphistWinW,
     cliphistWinH: s.cliphistWinH,
     shotShadowW: s.shotShadowW,

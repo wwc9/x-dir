@@ -354,6 +354,8 @@ export interface Settings {
   cliphistKeepDays: number;
   /** 排除应用（逗号/分号分隔进程名，T1-1；命中则该应用复制不入库） */
   cliphistExcludeApps: string;
+  /** 富文本保真（T3-1）：文本条目附带存 HTML 片段，粘贴回 Word/浏览器保留格式 */
+  cliphistRichText: boolean;
   /** 浮窗尺寸（边缘拖拽调宽高，2026-10-31；逻辑 px，仅经 cliphist_save_size
    *  白名单补丁落盘，主窗不回写——可选键，旧档无此键用默认） */
   cliphistWinW?: number;
@@ -449,6 +451,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cliphistCapacity: 500,
   cliphistKeepDays: 30,
   cliphistExcludeApps: "keepass.exe,keepassxc.exe,1password.exe",
+  cliphistRichText: true,
 };
 export const PAGE_SIZE = 500;
 
@@ -889,12 +892,14 @@ export const api = {
     capacity: number,
     keepDays: number,
     excludeApps?: string,
+    richText?: boolean,
   ) =>
     cmd<void>("cliphist_configure", {
       enabled,
       capacity,
       keepDays,
       excludeApps,
+      richText,
     }),
   /** 剪贴板历史：分页查询（query 空串=全部；kind 空串=全部类型） */
   cliphistList: (query: string, kind: string, offset: number, limit: number) =>

@@ -15,6 +15,7 @@ pub fn cliphist_configure(
     capacity: usize,
     keep_days: i64,
     exclude_apps: Option<String>,
+    rich_text: Option<bool>,
 ) -> Result<(), String> {
     let h = &state.cliphist;
     h.capacity
@@ -23,6 +24,9 @@ pub fn cliphist_configure(
     // 排除应用清单（T1-1）：watcher 逐条比对前台进程名
     if let Some(list) = exclude_apps {
         *h.exclude_apps.lock().unwrap_or_else(|p| p.into_inner()) = list;
+    }
+    if let Some(rich) = rich_text {
+        h.rich_text.store(rich, Ordering::SeqCst);
     }
     #[cfg(windows)]
     {

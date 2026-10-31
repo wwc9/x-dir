@@ -135,16 +135,23 @@ export function SettingsPanel() {
   };
 
   /** 容量/天数护栏变更：落盘并推送后端 */
-  const applyClipLimits = (capacity: number, keepDays: number, excludeApps?: string) => {
+  const applyClipLimits = (
+    capacity: number,
+    keepDays: number,
+    excludeApps?: string,
+    richText?: boolean,
+  ) => {
     if (excludeApps !== undefined) s.update({ cliphistExcludeApps: excludeApps });
+    else if (richText !== undefined) s.update({ cliphistRichText: richText });
     else s.update({ cliphistCapacity: capacity, cliphistKeepDays: keepDays });
     const st = useSettings.getState();
     void api
       .cliphistConfigure(
         st.cliphistEnabled,
-        excludeApps !== undefined ? st.cliphistCapacity : capacity,
-        excludeApps !== undefined ? st.cliphistKeepDays : keepDays,
+        excludeApps !== undefined || richText !== undefined ? st.cliphistCapacity : capacity,
+        excludeApps !== undefined || richText !== undefined ? st.cliphistKeepDays : keepDays,
         excludeApps ?? st.cliphistExcludeApps,
+        richText ?? st.cliphistRichText,
       )
       .catch(() => undefined);
   };
@@ -390,6 +397,17 @@ export function SettingsPanel() {
                 spellCheck={false}
                 onChange={(e) =>
                   applyClipLimits(s.cliphistCapacity, s.cliphistKeepDays, e.target.value)
+                }
+              />
+            </SetRow>
+            <SetRow
+              label={t("富文本保真")}
+              desc="记录文本条目的 HTML 格式，粘贴回 Word/浏览器/邮件保留加粗与颜色（纯文本粘贴不受影响）"
+            >
+              <Switch
+                checked={s.cliphistRichText}
+                onChange={(e) =>
+                  applyClipLimits(s.cliphistCapacity, s.cliphistKeepDays, undefined, e.currentTarget.checked)
                 }
               />
             </SetRow>

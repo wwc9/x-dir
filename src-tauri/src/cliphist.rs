@@ -72,6 +72,8 @@ pub struct ClipHistState {
     self_write: Mutex<Option<(String, Instant)>>,
     /// 排除应用清单（逗号/分号分隔进程名，T1-1；configure 推送）
     pub exclude_apps: Mutex<String>,
+    /// 富文本保真开关（T3-1；开启时文本条目附带存 HTML 片段）
+    pub rich_text: std::sync::atomic::AtomicBool,
     /// 直接粘贴目标窗口（HWND 原始值，0 = 无；浮窗 show 前抓取的前台窗口）
     paste_target: AtomicIsize,
 }
@@ -105,6 +107,7 @@ impl ClipHistState {
             keep_days: AtomicI64::new(30),
             self_write: Mutex::new(None),
             exclude_apps: Mutex::new(String::new()),
+            rich_text: std::sync::atomic::AtomicBool::new(true),
             paste_target: AtomicIsize::new(0),
         }
     }
@@ -124,6 +127,7 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
            files        TEXT,                       -- 路径 JSON 数组（kind=files）
            py           TEXT,                       -- 文本拼音首字母（中文搜索，T1-3）
            source       TEXT,                       -- 来源进程名（T2-2，如 excel.exe）
+           html         TEXT,                       -- 富文本 HTML 片段（T3-1，富文本开关开启时）
            file_cut     INTEGER NOT NULL DEFAULT 0, -- Preferred DropEffect = MOVE
            size         INTEGER NOT NULL,
            pinned       INTEGER NOT NULL DEFAULT 0,
@@ -151,6 +155,15 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
     if !has_source {
         conn.execute_batch("ALTER TABLE clip_items ADD COLUMN source TEXT;")
             .map_err(|e| format!("补 source 列失败：{e}"))?;
+    }
+    // 惰性迁移（T3-1 富文本）：同法补 html 列
+    let has_html = conn
+        .prepare("SELECT 1 FROM pragma_table_info('clip_items') WHERE name = 'html'")
+        .and_then(|mut stmt| stmt.query_row([], |_| Ok(())))
+        .is_ok();
+    if !has_html {
+        conn.execute_batch("ALTER TABLE clip_items ADD COLUMN html TEXT;")
+            .map_err(|e| format!("补 html 列失败：{e}"))?;
     }
     // 回填：仅 text 列非空且 py 为空的行（新库为空集，秒过）
     let rows: Vec<(i64, Option<String>)> = conn
@@ -431,6 +444,7 @@ fn ingest(
     content: &ClipContent,
     now: i64,
     source: Option<&str>,
+    html: Option<&str>,
 ) -> rusqlite::Result<bool> {
     let hash = content.hash_hex();
     let existing: Option<i64> =
@@ -497,9 +511,9 @@ fn ingest(
     let py = text.as_deref().and_then(crate::fs::search::pinyin_initials);
     conn.execute(
         "INSERT INTO clip_items
-           (kind, hash, text, preview, image, thumb, files, file_cut, py, source,
+           (kind, hash, text, preview, image, thumb, files, file_cut, py, source, html,
             size, pinned, created_at, last_used_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?11, ?12, ?9, 0, ?10, ?10)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?11, ?12, ?13, ?9, 0, ?10, ?10)",
         rusqlite::params![
             row_kind,
             hash,
@@ -512,7 +526,8 @@ fn ingest(
             content.size() as i64,
             now,
             py,
-            source
+            source,
+            html.filter(|h| h.len() <= 2_000_000)
         ],
     )?;
     Ok(true)
@@ -615,6 +630,7 @@ struct StoredItem {
     kind: String,
     hash: String,
     text: Option<String>,
+    html: Option<String>,
     image: Option<Vec<u8>>,
     files: Option<String>,
     cut: i64,
@@ -622,16 +638,17 @@ struct StoredItem {
 
 fn load_item(conn: &Connection, id: i64) -> Option<StoredItem> {
     conn.query_row(
-        "SELECT kind, hash, text, image, files, file_cut FROM clip_items WHERE id = ?1",
+        "SELECT kind, hash, text, html, image, files, file_cut FROM clip_items WHERE id = ?1",
         [id],
         |r| {
             Ok(StoredItem {
                 kind: r.get(0)?,
                 hash: r.get(1)?,
                 text: r.get(2)?,
-                image: r.get(3)?,
-                files: r.get(4)?,
-                cut: r.get(5)?,
+                html: r.get(3)?,
+                image: r.get(4)?,
+                files: r.get(5)?,
+                cut: r.get(6)?,
             })
         },
     )
@@ -741,9 +758,23 @@ fn handle_clipboard_change(app: &AppHandle) {
         );
         return;
     }
+    // 富文本（T3-1）：文本类且开关开启时附带 HTML Format（Word/浏览器源）
+    let html_frag = if h.rich_text.load(Ordering::SeqCst) && matches!(content, ClipContent::Text(_))
+    {
+        crate::clip::get_html()
+    } else {
+        None
+    };
     let now = now_ms();
     let conn = h.conn.lock().unwrap_or_else(|p| p.into_inner());
-    let changed = ingest(&conn, &content, now, source_app.as_deref()).unwrap_or_else(|e| {
+    let changed = ingest(
+        &conn,
+        &content,
+        now,
+        source_app.as_deref(),
+        html_frag.as_deref(),
+    )
+    .unwrap_or_else(|e| {
         log::warn!("剪贴板条目入库失败：{e}");
         false
     });
@@ -1193,7 +1224,15 @@ pub fn write_back(
     *h.self_write.lock().unwrap_or_else(|p| p.into_inner()) =
         Some((item.hash.clone(), Instant::now()));
     match item.kind.as_str() {
-        "text" | "link" | "path" => crate::clip::set_text(&item.text.unwrap_or_default())?,
+        "text" | "link" | "path" => {
+            let t = item.text.clone().unwrap_or_default();
+            // 富文本保真回写（T3-1）：有 HTML 片段时双格式（CF_UNICODETEXT +
+            // HTML Format），富文本目标保留格式、纯文本目标仍读文本
+            match item.html.as_deref().filter(|h| !h.is_empty()) {
+                Some(h) => crate::clip::set_text_and_html(&t, h)?,
+                None => crate::clip::set_text(&t)?,
+            }
+        }
         "files" | "dirs" => {
             let paths: Vec<String> =
                 serde_json::from_str(&item.files.unwrap_or_default()).unwrap_or_default();
@@ -1493,16 +1532,23 @@ mod tests {
     fn ingest_marks_link_and_path_kind() {
         let c = mem_db();
         // 链接：http(s)/ftp/www 单行无空白
-        ingest(&c, &text("https://gitee.com/wwc9/x-dir"), 1, None).unwrap();
-        ingest(&c, &text("www.baidu.com"), 2, None).unwrap();
+        ingest(&c, &text("https://gitee.com/wwc9/x-dir"), 1, None, None).unwrap();
+        ingest(&c, &text("www.baidu.com"), 2, None, None).unwrap();
         // 带空格的句子长得像 URL 也不判链接
-        ingest(&c, &text("https://example.com 这是一段说明文字"), 3, None).unwrap();
+        ingest(
+            &c,
+            &text("https://example.com 这是一段说明文字"),
+            3,
+            None,
+            None,
+        )
+        .unwrap();
         // 路径：盘符样式且存在（用临时目录保证存在）
         let base = std::env::temp_dir().join("xdir_cliphist_path");
         let _ = std::fs::create_dir_all(&base);
-        ingest(&c, &text(&base.to_string_lossy()), 4, None).unwrap();
+        ingest(&c, &text(&base.to_string_lossy()), 4, None, None).unwrap();
         // 盘符样式但不存在 → 纯文本
-        ingest(&c, &text(r"Q:\肯定不存在的盘\文件.txt"), 5, None).unwrap();
+        ingest(&c, &text(r"Q:\肯定不存在的盘\文件.txt"), 5, None, None).unwrap();
         let kinds: Vec<String> = c
             .prepare("SELECT kind FROM clip_items ORDER BY id")
             .unwrap()
@@ -1528,6 +1574,7 @@ mod tests {
             },
             1,
             None,
+            None,
         )
         .unwrap();
         // 目录 + 文件混合 → files
@@ -1543,6 +1590,7 @@ mod tests {
                 cut: false,
             },
             2,
+            None,
             None,
         )
         .unwrap();
@@ -1595,8 +1643,8 @@ MIIE...
     #[test]
     fn pinyin_initials_search() {
         let c = mem_db();
-        ingest(&c, &text("季度审计报告要点"), 1000, None).unwrap();
-        ingest(&c, &text("hello world"), 2000, None).unwrap();
+        ingest(&c, &text("季度审计报告要点"), 1000, None, None).unwrap();
+        ingest(&c, &text("hello world"), 2000, None, None).unwrap();
         // 入库即计算首字母（含汉字才有值）
         let py: Option<String> = c
             .query_row(
@@ -1627,8 +1675,8 @@ MIIE...
     #[test]
     fn source_stored_and_searchable() {
         let c = mem_db();
-        ingest(&c, &text("报表数据"), 1000, Some("excel.exe")).unwrap();
-        ingest(&c, &text("plain"), 2000, None).unwrap();
+        ingest(&c, &text("报表数据"), 1000, Some("excel.exe"), None).unwrap();
+        ingest(&c, &text("plain"), 2000, None, None).unwrap();
         // 存取：返回给前端
         let p = list_page(&c, "", "", 0, 50).unwrap();
         assert_eq!(p.items[1].source.as_deref(), Some("excel.exe"));
@@ -1640,7 +1688,7 @@ MIIE...
     #[test]
     fn merge_texts_filters_kinds_and_keeps_order() {
         let c = mem_db();
-        ingest(&c, &text("第一条"), 1000, None).unwrap();
+        ingest(&c, &text("第一条"), 1000, None, None).unwrap();
         ingest(
             &c,
             &ClipContent::Files {
@@ -1648,6 +1696,7 @@ MIIE...
                 cut: false,
             },
             1100,
+            None,
             None,
         )
         .unwrap();
@@ -1660,9 +1709,10 @@ MIIE...
             },
             1200,
             None,
+            None,
         )
         .unwrap();
-        ingest(&c, &text("第二条"), 1300, None).unwrap();
+        ingest(&c, &text("第二条"), 1300, None, None).unwrap();
         let ids: Vec<i64> = c
             .prepare("SELECT id FROM clip_items ORDER BY id")
             .unwrap()
@@ -1687,10 +1737,10 @@ MIIE...
     #[test]
     fn ingest_dedup_promotes() {
         let c = mem_db();
-        ingest(&c, &text("hello"), 1000, None).unwrap();
-        ingest(&c, &text("world"), 2000, None).unwrap();
+        ingest(&c, &text("hello"), 1000, None, None).unwrap();
+        ingest(&c, &text("world"), 2000, None, None).unwrap();
         // 同 hash 二次复制 → 不新增，created_at 置顶
-        ingest(&c, &text("hello"), 3000, None).unwrap();
+        ingest(&c, &text("hello"), 3000, None, None).unwrap();
         let n: i64 = c
             .query_row("SELECT COUNT(*) FROM clip_items", [], |r| r.get(0))
             .unwrap();
@@ -1711,7 +1761,7 @@ MIIE...
         let c = mem_db();
         let (w, h) = (2u32, 3u32);
         let rgba = vec![255u8; (w * h * 4) as usize];
-        assert!(ingest(&c, &ClipContent::Image { w, h, rgba }, 1, None).unwrap());
+        assert!(ingest(&c, &ClipContent::Image { w, h, rgba }, 1, None, None).unwrap());
         let (img, thumb): (Option<Vec<u8>>, Option<Vec<u8>>) = c
             .query_row("SELECT image, thumb FROM clip_items", [], |r| {
                 Ok((r.get(0)?, r.get(1)?))
@@ -1730,7 +1780,7 @@ MIIE...
     fn cleanup_respects_capacity_days_and_pin() {
         let c = mem_db();
         for i in 0..5 {
-            ingest(&c, &text(&format!("item{i}")), 1000 + i, None).unwrap();
+            ingest(&c, &text(&format!("item{i}")), 1000 + i, None, None).unwrap();
         }
         // 容量 3：删掉最旧两条（item0/item1）
         cleanup(&c, 3, 0, 5000).unwrap();
@@ -1766,7 +1816,7 @@ MIIE...
     fn list_page_filters_and_paginates() {
         let c = mem_db();
         for i in 0..7 {
-            ingest(&c, &text(&format!("alpha {i}")), 1000 + i, None).unwrap();
+            ingest(&c, &text(&format!("alpha {i}")), 1000 + i, None, None).unwrap();
         }
         ingest(
             &c,
@@ -1775,6 +1825,7 @@ MIIE...
                 cut: false,
             },
             2000,
+            None,
             None,
         )
         .unwrap();

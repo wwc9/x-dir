@@ -78,6 +78,7 @@ export default function App() {
             st.cliphistCapacity,
             st.cliphistKeepDays,
             st.cliphistExcludeApps,
+            st.cliphistRichText,
           )
           .catch(() => undefined);
 
