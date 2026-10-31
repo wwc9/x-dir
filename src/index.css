@@ -19,6 +19,9 @@
   --np-accent: #3574f0;
   --np-accent-fg: #ffffff;
   --np-hover: rgba(26, 33, 41, 0.055);
+  /* 列表斑马纹（2026-10-31 剪贴板浮窗）：悬停色一半强度，行间可辨且
+     叠加悬停/选中仍清晰；深色主题同口径 */
+  --np-stripe: rgba(26, 33, 41, 0.03);
   --np-sel: rgba(53, 116, 240, 0.12);
   --np-danger: #d1434b;
   --np-danger-fg: #ffffff;
@@ -109,6 +112,7 @@ html.bp6-dark {
   --np-accent: #5c9dff;
   --np-accent-fg: #0d1117;
   --np-hover: rgba(255, 255, 255, 0.055);
+  --np-stripe: rgba(255, 255, 255, 0.03);
   --np-sel: rgba(92, 157, 255, 0.16);
   --np-danger: #f27073;
   --np-danger-fg: #14161a;
@@ -5388,6 +5392,11 @@ mark.np-gsearch-mark {
   overflow: hidden;
   color: var(--np-fg);
 }
+/* 斑马纹：按数据序号奇偶挂类（虚拟列表 nth-child 随滚动翻转会闪烁）；
+   置于 hover/is-sel 之前，同权重下悬停/选中后声明覆盖 */
+.np-clip-row.is-alt {
+  background-color: var(--np-stripe);
+}
 .np-clip-row:hover {
   background-color: var(--np-hover);
 }
@@ -5401,8 +5410,9 @@ mark.np-gsearch-mark {
 }
 .np-clip-idx {
   flex: none;
-  width: var(--np-icon-md);
-  text-align: right;
+  /* 24px 容纳 4 位数（容量上限 10000），居中对齐（2026-10-31 用户定案） */
+  width: calc(var(--np-gap) * 6);
+  text-align: center;
   font-size: var(--np-font-sm);
   color: var(--np-muted);
   font-variant-numeric: tabular-nums;

@@ -425,7 +425,9 @@ export function ClipHistWindow() {
                   key={it.id}
                   ref={virtualizer.measureElement}
                   data-index={vi.index}
-                  className={`np-clip-row ${vi.index === sel ? "is-sel" : ""}`}
+                  className={`np-clip-row ${vi.index % 2 === 1 ? "is-alt" : ""} ${
+                    vi.index === sel ? "is-sel" : ""
+                  }`}
                   style={{
                     position: "absolute",
                     top: 0,
