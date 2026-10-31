@@ -450,27 +450,30 @@ export function ClipHistWindow() {
                       <AppIcon icon={Pin} size={DENSITY.iconXs} />
                     </span>
                   )}
-                  <span className="np-clip-meta">{clipKindMeta(it.kind).label}</span>
-                  <span className="np-clip-actions">
-                    <button
-                      data-tip={it.pinned ? "取消置顶" : "置顶（豁免清理）"}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        pinItem(it);
-                      }}
-                    >
-                      <AppIcon icon={it.pinned ? PinOff : Pin} size={DENSITY.iconXs} />
-                    </button>
-                    <button
-                      className="np-clip-del"
-                      data-tip="删除"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        delItem(it);
-                      }}
-                    >
-                      <AppIcon icon={Trash2} size={DENSITY.iconXs} />
-                    </button>
+                  {/* 右侧固定宽操作列：meta 与悬停动作钮列内切换（不跳宽） */}
+                  <span className="np-clip-right">
+                    <span className="np-clip-meta">{clipKindMeta(it.kind).label}</span>
+                    <span className="np-clip-actions">
+                      <button
+                        data-tip={it.pinned ? "取消置顶" : "置顶（豁免清理）"}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          pinItem(it);
+                        }}
+                      >
+                        <AppIcon icon={it.pinned ? PinOff : Pin} size={DENSITY.iconXs} />
+                      </button>
+                      <button
+                        className="np-clip-del"
+                        data-tip="删除"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          delItem(it);
+                        }}
+                      >
+                        <AppIcon icon={Trash2} size={DENSITY.iconXs} />
+                      </button>
+                    </span>
                   </span>
                 </div>
               );

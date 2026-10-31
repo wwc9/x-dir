@@ -5460,10 +5460,18 @@ mark.np-gsearch-mark {
   color: var(--np-accent);
 }
 .np-clip-meta {
-  flex: none;
   font-size: var(--np-font-sm);
   color: var(--np-muted);
   font-variant-numeric: tabular-nums;
+}
+/* 右侧固定宽操作列（2026-10-31 用户反馈）：宽度按悬停态动作钮组（2×ctl-h
+   + gap）预留，meta 与 actions 列内切换——悬停/选中不再引起预览文字跳宽 */
+.np-clip-right {
+  flex: none;
+  width: calc(var(--np-ctl-h) * 2 + var(--np-gap));
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
 }
 /* 行内动作（置顶/删除）：悬停或选中行常显（键盘 ↑↓ 浏览时可见），常驻位
    与 meta 互换（meta 隐藏避免挤压省略号） */
