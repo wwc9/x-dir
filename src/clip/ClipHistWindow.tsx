@@ -178,7 +178,14 @@ export function ClipHistWindow() {
         keepId.current = null;
         // 重开（呼出）时 Rust 已复位默认尺寸，最大化图标同步归零
         setIsMaxed(false);
-        void fetchPage(0, false, null);
+        // 每次呼出清空搜索词（2026-10-31 用户定案）：有词时清空即触发
+        // [query] 防抖效应按空词重拉；无词时直接刷新（stateRef 同 tick
+        // 未更新，立即 fetchPage 会带上旧词）
+        if (stateRef.current.query) {
+          setQuery("");
+        } else {
+          void fetchPage(0, false, null);
+        }
         focusSearch();
       })
       .then((f) => {
