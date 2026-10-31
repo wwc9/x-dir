@@ -125,9 +125,10 @@ export default function App() {
           unsubJobs = undefined;
           return;
         }
-        // 剪贴板浮窗顶栏「设置」钮 → 唤起主窗直达设置面板（§3.7）
+        // 剪贴板浮窗顶栏「设置」钮 → 唤起主窗直达设置「剪贴板」页（§3.7，
+        // 2026-10-31 用户定案：直达来源功能对应的分类页）
         const unSettings = await listen("cliphist-open-settings", () => {
-          useUi.getState().openSettings("appearance");
+          useUi.getState().openSettings("clip");
         });
         if (disposed) {
           unSettings();
