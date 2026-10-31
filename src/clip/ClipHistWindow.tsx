@@ -49,6 +49,8 @@ export function ClipHistWindow() {
   const [kind, setKind] = useState("");
   const [sel, setSel] = useState(0);
   const [flash, setFlash] = useState("");
+  /** 图片放大预览（T2-1）：原图 dataURL；非空时全窗覆盖层展示 */
+  const [viewImg, setViewImg] = useState<string | null>(null);
   /** 多选合并（T1-4）：勾选集合（列表可见序，Enter 合并粘贴） */
   const [picked, setPicked] = useState<Set<number>>(new Set());
   const [directPaste, setDirectPaste] = useState(true);
@@ -66,8 +68,8 @@ export function ClipHistWindow() {
   // 下次刷新要保持选择的条目 id（置顶/删除后选择不跳回首行）
   const keepId = useRef<number | null>(null);
   // 键盘/事件处理器读取的最新态（避免重绑 window 监听、闭包过期）
-  const stateRef = useRef({ items, sel, query, kind, directPaste, winPinned, isMaxed, picked });
-  stateRef.current = { items, sel, query, kind, directPaste, winPinned, isMaxed, picked };
+  const stateRef = useRef({ items, sel, query, kind, directPaste, winPinned, isMaxed, picked, viewImg });
+  stateRef.current = { items, sel, query, kind, directPaste, winPinned, isMaxed, picked, viewImg };
 
   const fetchPage = useCallback(
     async (offset: number, append: boolean, keep: number | null) => {
@@ -234,6 +236,15 @@ export function ClipHistWindow() {
     },
     [flashMsg],
   );
+
+  /** 打开图片放大预览（T2-1） */
+  const openPreview = useCallback((item: ClipHistItem) => {
+    if (!item.thumb) return;
+    void api
+      .cliphistGetImage(item.id)
+      .then(setViewImg)
+      .catch(() => setViewImg(item.thumb)); // 原图缺失回落缩略
+  }, []);
 
   /** 勾选/取消勾选（T1-4） */
   const togglePick = useCallback((id: number) => {
@@ -407,7 +418,9 @@ export function ClipHistWindow() {
           break;
         case "Escape":
           e.preventDefault();
-          if (pk.size > 0) {
+          if (stateRef.current.viewImg) {
+            setViewImg(null);
+          } else if (pk.size > 0) {
             setPicked(new Set());
           } else if (q) {
             setQuery("");
@@ -565,7 +578,18 @@ export function ClipHistWindow() {
                   <span className="np-clip-kind">
                     <AppIcon icon={clipKindMeta(it.kind).icon} size={DENSITY.iconSm} />
                   </span>
-                  {it.thumb ? <img className="np-clip-thumb" src={it.thumb} alt="" /> : null}
+                  {it.thumb ? (
+                    <img
+                      className="np-clip-thumb"
+                      src={it.thumb}
+                      alt=""
+                      data-tip="点击放大预览"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openPreview(it);
+                      }}
+                    />
+                  ) : null}
                   <span className="np-clip-preview">{it.preview}</span>
                   {it.pinned && (
                     <span className="np-clip-pinmark" data-tip="已置顶">
@@ -614,6 +638,12 @@ export function ClipHistWindow() {
           </div>
         )}
       </div>
+      {viewImg && (
+        <div className="np-clip-viewer" onClick={() => setViewImg(null)}>
+          <img src={viewImg} alt="" />
+          <span className="np-clip-viewer-tip">点击任意处或按 Esc 关闭</span>
+        </div>
+      )}
       <div className="np-clip-foot">
         {flash ? (
           <span className="np-clip-flash">{flash}</span>

@@ -141,6 +141,12 @@ pub fn cliphist_set_maximized(app: AppHandle, maximized: bool) -> Result<(), Str
     crate::cliphist::set_window_maximized(&app, maximized)
 }
 
+/// 图片条目放大预览（T2-1）：原图 dataURL
+#[tauri::command]
+pub fn cliphist_get_image(state: State<'_, AppState>, id: i64) -> Result<String, String> {
+    crate::cliphist::get_image_data_url(&state.cliphist, id)
+}
+
 /// 多选合并粘贴（T1-4）：ids 按列表可见序传入，换行连接后写回/直接粘贴
 #[tauri::command]
 pub fn cliphist_merge_paste(

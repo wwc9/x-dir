@@ -1208,6 +1208,28 @@ pub fn write_back(
     Ok(paste_and_close(app, h))
 }
 
+/// PNG 字节 → data URL（T2-1 图片放大预览用）。独立纯函数供 test
+pub fn png_data_url(bytes: &[u8]) -> String {
+    use base64::Engine as _;
+    format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    )
+}
+
+/// 取图片条目原图 dataURL（T2-1 预览放大）
+pub fn get_image_data_url(h: &ClipHistState, id: i64) -> Result<String, String> {
+    let conn = h.conn.lock().unwrap_or_else(|p| p.into_inner());
+    conn.query_row(
+        "SELECT image FROM clip_items WHERE id = ?1 AND kind = 'image'",
+        [id],
+        |r| r.get::<_, Option<Vec<u8>>>(0),
+    )
+    .map_err(|_| "图片条目不存在".to_string())?
+    .map(|b| png_data_url(&b))
+    .ok_or_else(|| "该条目没有原图数据".to_string())
+}
+
 /// 多条文本合并（T1-4）：按调用方给定顺序（列表可见序）取 text/link/path
 /// 三类条目的全文，换行连接；无可合并条目 = None。独立纯函数供 test
 pub fn merge_texts(conn: &Connection, ids: &[i64]) -> Option<String> {
@@ -1499,6 +1521,14 @@ MIIE...
         assert_eq!(list_page(&c, "审计", "", 0, 50).unwrap().items.len(), 1);
         assert_eq!(list_page(&c, "hello", "", 0, 50).unwrap().items.len(), 1);
         assert_eq!(list_page(&c, "zzz", "", 0, 50).unwrap().items.len(), 0);
+    }
+
+    #[test]
+    fn png_data_url_format() {
+        let url = png_data_url(&[1, 2, 3]);
+        assert!(url.starts_with("data:image/png;base64,"));
+        // base64(1,2,3) = AQID
+        assert!(url.ends_with("AQID"));
     }
 
     #[test]

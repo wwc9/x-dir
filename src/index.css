@@ -5440,6 +5440,33 @@ mark.np-gsearch-mark {
   height: var(--np-realicon);
   color: var(--np-muted);
 }
+/* 图片放大预览覆盖层（T2-1）：全窗覆盖、点击/Esc 关闭 */
+.np-clip-viewer {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--np-overlay);
+  cursor: zoom-out;
+}
+.np-clip-viewer img {
+  max-width: calc(100% - var(--np-gutter) * 3);
+  max-height: calc(100% - var(--np-gutter) * 5);
+  object-fit: contain;
+  border-radius: var(--np-radius);
+  box-shadow: var(--np-shadow);
+}
+.np-clip-viewer-tip {
+  position: absolute;
+  bottom: var(--np-gutter);
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
 /* 多选勾选态（T1-4）：accent 淡染底 + 序号位换 ✓ 标记 */
 .np-clip-row.is-pick {
   background-color: var(--np-sel);
