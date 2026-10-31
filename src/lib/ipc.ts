@@ -352,6 +352,10 @@ export interface Settings {
   cliphistCapacity: number;
   /** 保留天数（0 = 永不按时清理；置顶条目豁免清理） */
   cliphistKeepDays: number;
+  /** 浮窗尺寸（边缘拖拽调宽高，2026-10-31；逻辑 px，仅经 cliphist_save_size
+   *  白名单补丁落盘，主窗不回写——可选键，旧档无此键用默认） */
+  cliphistWinW?: number;
+  cliphistWinH?: number;
 }
 
 /** 自定义右键命令：占位符 %f=全部选中路径（逐个引号包裹） %n=首项文件名 %d=所在目录；
@@ -900,6 +904,9 @@ export const api = {
     cmd<void>("cliphist_set_maximized", { maximized }),
   /** 剪贴板历史：顶栏设置钮——唤起主窗并直达设置面板（浮窗收起） */
   cliphistOpenSettings: () => cmd<void>("cliphist_open_settings"),
+  /** 剪贴板历史：浮窗尺寸持久化（边缘拖拽后防抖落盘，Rust 侧钳制） */
+  cliphistSaveSize: (width: number, height: number) =>
+    cmd<void>("cliphist_save_size", { width, height }),
   /** 截图标注偏好补丁写：Rust 侧白名单键合并（装饰三键 + 滚轮记忆五键
    *  shotStrokeW/shotTextFont/shotStepW/shotMosaicW/shotBlurAlpha），
    *  避免轻量截图页整对象回写覆盖主窗设置 */

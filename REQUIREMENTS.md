@@ -253,7 +253,9 @@ DropEffect / CF_DIB 性能先例，补文本读写与 parse_dib），持久化�
 - **回贴**：Enter = 回写剪贴板 + **直接粘贴**（恢复呼出前前台窗口焦点 +
   SendInput Ctrl+V，2026-10-30 用户定案；管理员窗口/UAC 恢复失败 → 浮窗
   保持打开提示「已复制」降级）；Ctrl+Enter = 仅复制；文件条目带剪切意图
-  （Preferred DropEffect）原样回写
+  （Preferred DropEffect）原样回写；**浮窗尺寸可拖边调整并持久化**（2026-10-31：
+  settings.json cliphistWinW/H 逻辑 px，钳 360–1200×300–1500）；底栏两行完整
+  快捷键清单
 - **全局热键单点化**：`hotkeys_sync` 全量重建全部系统热键（截图 shot-open
   + 剪贴板 cliphist-toggle，回调按 id 分发），`shot_register_hotkey` 退役
   （unregister_all 全清语义无法多热键并存）

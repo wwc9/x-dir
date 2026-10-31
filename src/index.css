@@ -5524,15 +5524,28 @@ mark.np-gsearch-mark {
   padding: var(--np-gutter) var(--np-gutter) 10px;
   text-align: center;
 }
+/* 底栏两行（2026-10-31 用户定案）：上行 计数+清空+主操作键，下行 其余键，
+   快捷键清单完整展示；flash 回执跨两行居中 */
 .np-clip-foot {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  border-top: 1px solid var(--np-hairline);
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-clip-foot-row {
   display: flex;
   align-items: center;
   gap: var(--np-gap);
   height: var(--np-status-h);
   padding: 0 var(--np-gutter);
-  border-top: 1px solid var(--np-hairline);
-  font-size: var(--np-font-sm);
-  color: var(--np-muted);
+}
+.np-clip-flash {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(var(--np-status-h) * 2);
 }
 .np-clip-count {
   flex: none;

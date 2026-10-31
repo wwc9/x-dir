@@ -715,6 +715,8 @@ pub fn set_window_maximized(app: &AppHandle, maximized: bool) -> Result<(), Stri
                 (r.right - r.left) as u32,
                 (r.bottom - r.top) as u32,
             ));
+            // 撑满态锁边缘拖拽（拖边只会得到怪异中间尺寸）
+            let _ = w.set_resizable(false);
             CLIPHIST_MAXED.store(true, Ordering::SeqCst);
         }
     } else {
@@ -729,8 +731,29 @@ pub fn set_window_maximized(app: &AppHandle, maximized: bool) -> Result<(), Stri
             let _ = w.set_position(pos);
             let _ = w.set_size(tauri::PhysicalSize::new(ww, hh));
         }
+        let _ = w.set_resizable(true);
     }
     Ok(())
+}
+
+/// 浮窗尺寸下限（逻辑 px）：类型分段/搜索框最低可用宽度；上限防拖出天际
+const WIN_MIN_W: f64 = 360.0;
+const WIN_MIN_H: f64 = 300.0;
+const WIN_MAX_W: f64 = 1200.0;
+const WIN_MAX_H: f64 = 1500.0;
+
+/// 读回持久化的浮窗尺寸（settings.json cliphistWinW/H，逻辑 px；缺省/越界
+/// 回默认 460×540）——边缘拖拽调宽高后跨会话保持（2026-10-31）
+fn persisted_win_size() -> (f64, f64) {
+    let read = |k: &str| -> Option<f64> {
+        std::fs::read_to_string(crate::config::config_root().join("settings.json"))
+            .ok()
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+            .and_then(|v| v.get(k).and_then(|x| x.as_f64()))
+    };
+    let w = read("cliphistWinW").unwrap_or(WIN_W as f64);
+    let h = read("cliphistWinH").unwrap_or(WIN_H as f64);
+    (w.clamp(WIN_MIN_W, WIN_MAX_W), h.clamp(WIN_MIN_H, WIN_MAX_H))
 }
 
 /// 停靠位（同 shot：虚拟桌面外，保持合成器在场防闪白，绝不用 hide()）
@@ -745,6 +768,7 @@ pub(crate) fn ensure_clip_window(app: &AppHandle) -> Result<(), String> {
         return Ok(());
     }
     let boot = serde_json::json!({ "window": "cliphist" });
+    let (win_w, win_h) = persisted_win_size();
     let win = tauri::WebviewWindowBuilder::new(
         app,
         "cliphist",
@@ -752,9 +776,12 @@ pub(crate) fn ensure_clip_window(app: &AppHandle) -> Result<(), String> {
     )
     .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
     .title("X-Dir 剪贴板")
-    .inner_size(WIN_W as f64, WIN_H as f64)
+    .inner_size(win_w, win_h)
     .decorations(false)
-    .resizable(false)
+    // 边缘拖拽调宽高（2026-10-31 用户需求）：页面 resize 防抖持久化到
+    // settings.json（cliphistWinW/H），建窗读回；最大化态临时锁
+    .resizable(true)
+    .min_inner_size(WIN_MIN_W, WIN_MIN_H)
     .maximizable(false)
     .minimizable(false)
     .skip_taskbar(true)
@@ -820,6 +847,7 @@ pub(crate) fn park_clip_window(app: &AppHandle) {
         if CLIPHIST_MAXED.swap(false, Ordering::SeqCst) {
             *CLIPHIST_RESTORE.lock().unwrap_or_else(|p| p.into_inner()) = None;
             let _ = w.set_size(tauri::LogicalSize::new(WIN_W as f64, WIN_H as f64));
+            let _ = w.set_resizable(true);
         }
         let _ = w.set_position(park_position());
     }
@@ -857,10 +885,9 @@ pub fn toggle_clip_window(app: &AppHandle) {
             && let Some(mon) =
                 crate::commands::shot::monitor_at(cur.x.round() as i32, cur.y.round() as i32)
         {
-            let (pw, ph) = (
-                (WIN_W as f32 * mon.scale) as i32,
-                (WIN_H as f32 * mon.scale) as i32,
-            );
+            // 实际窗口尺寸（用户可拖边调整，不再恒为默认值）
+            let sz = w.inner_size().unwrap_or_default();
+            let (pw, ph) = (sz.width as i32, sz.height as i32);
             let x = mon.x + (mon.w as i32 - pw).max(0) / 2;
             let y = mon.y + (mon.h as i32 - ph).max(0) * 2 / 5;
             let _ = w.set_position(PhysicalPosition::new(x, y));

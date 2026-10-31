@@ -151,6 +151,19 @@ export function ClipHistWindow() {
     // DOM focus 兜底：capabilities 修复后 tauri://focus 为主，浏览器焦点事件
     // 双保险（停靠态窗口常驻可见，部分环境只触发其中之一）
     window.addEventListener("focus", focusSearch);
+    // 边缘拖拽调宽高 → 防抖 600ms 持久化（最大化态为工作区尺寸，不落盘）；
+    // 建窗时 Rust 读回 cliphistWinW/H（2026-10-31）
+    let saveSizeT: number | undefined;
+    const onWinResize = () => {
+      window.clearTimeout(saveSizeT);
+      saveSizeT = window.setTimeout(() => {
+        if (stateRef.current.isMaxed) return;
+        void api
+          .cliphistSaveSize(window.innerWidth, window.innerHeight)
+          .catch(() => undefined);
+      }, 600);
+    };
+    window.addEventListener("resize", onWinResize);
     // 焦点自卫（2026-10-31 终案）：冷启动首次激活时 WebView2 激活序列可能在
     // 事件 + 三重试之后仍重置 activeElement——低频守卫接管，本页持有焦点且
     // 焦点悬在 body（未被按钮等接住）时归还搜索框；停靠态 hasFocus=false 自空转
@@ -177,6 +190,8 @@ export function ClipHistWindow() {
       unFocus?.();
       window.clearInterval(focusGuard);
       window.removeEventListener("focus", focusSearch);
+      window.removeEventListener("resize", onWinResize);
+      window.clearTimeout(saveSizeT);
       window
         .matchMedia("(prefers-color-scheme: dark)")
         .removeEventListener("change", onScheme);
@@ -508,22 +523,29 @@ export function ClipHistWindow() {
         )}
       </div>
       <div className="np-clip-foot">
-        {flash || (
+        {flash ? (
+          <span className="np-clip-flash">{flash}</span>
+        ) : (
           <>
-            <span className="np-clip-count">{total} 条</span>
-            <button
-              className="np-clip-clear"
-              data-tip="清空全部未置顶条目（两击确认）"
-              onClick={onClear}
-            >
-              <AppIcon icon={Trash2} size={DENSITY.iconXs} />
-              {clearArmed ? "确认清空？" : "清空"}
-            </button>
-            <span className="np-clip-keys">
-              {winPinned
-                ? "↑↓/WS 选择 · Enter 复制（常驻中） · Ctrl+P 置顶 · Del 删除 · Esc 关闭"
-                : "↑↓/WS 选择 · Enter 粘贴 · Ctrl+Enter 仅复制 · Ctrl+P 置顶 · Del 删除 · Esc 关闭"}
-            </span>
+            <div className="np-clip-foot-row">
+              <span className="np-clip-count">{total} 条</span>
+              <button
+                className="np-clip-clear"
+                data-tip="清空全部未置顶条目（两击确认）"
+                onClick={onClear}
+              >
+                <AppIcon icon={Trash2} size={DENSITY.iconXs} />
+                {clearArmed ? "确认清空？" : "清空"}
+              </button>
+              <span className="np-clip-keys">
+                {winPinned
+                  ? "↑↓/WS 选择 · Enter 复制（常驻中）"
+                  : "↑↓/WS 选择 · Enter 粘贴 · Ctrl+Enter 仅复制"}
+              </span>
+            </div>
+            <div className="np-clip-foot-row">
+              <span className="np-clip-keys">Ctrl+P 置顶 · Del 删除 · Esc 关闭</span>
+            </div>
           </>
         )}
       </div>

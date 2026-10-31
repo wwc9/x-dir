@@ -58,6 +58,33 @@ pub fn shot_save_prefs(prefs: Value) -> Result<(), String> {
         .and_then(|s| std::fs::write(p, s).map_err(|e| e.to_string()))
 }
 
+/// 剪贴板浮窗尺寸持久化（§3.7，2026-10-31 边缘拖拽调宽高）：白名单补丁
+/// cliphistWinW/H（逻辑 px），与 shot_save_prefs 同法 RMW——浮窗页拿不到
+/// 主窗完整设置对象，防覆盖
+#[tauri::command]
+pub fn cliphist_save_size(width: f64, height: f64) -> Result<(), String> {
+    let p = config_root().join("settings.json");
+    let mut v: Value = std::fs::read_to_string(&p)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or(Value::Null);
+    if !v.is_object() {
+        v = serde_json::json!({});
+    }
+    let obj = v.as_object_mut().ok_or("settings.json 结构异常")?;
+    obj.insert(
+        "cliphistWinW".into(),
+        Value::from(width.round().clamp(360.0, 1200.0)),
+    );
+    obj.insert(
+        "cliphistWinH".into(),
+        Value::from(height.round().clamp(300.0, 1500.0)),
+    );
+    serde_json::to_string_pretty(&v)
+        .map_err(|e| e.to_string())
+        .and_then(|s| std::fs::write(p, s).map_err(|e| e.to_string()))
+}
+
 #[tauri::command]
 pub fn save_settings(json: Value) -> Result<(), String> {
     let p = config_root().join("settings.json");
