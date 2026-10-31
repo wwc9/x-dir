@@ -12,6 +12,7 @@ import {
   Check,
   ClipboardList,
   ScanText,
+  Star,
   FolderInput,
   Copy,
   Minus,
@@ -35,6 +36,7 @@ const ROW_H = DENSITY.rowH;
 
 const KIND_TABS: { v: string; l: string }[] = [
   { v: "", l: "全部" },
+  { v: "fav", l: "收藏" },
   { v: "text", l: "文本" },
   { v: "link", l: "链接" },
   { v: "path", l: "路径" },
@@ -321,6 +323,10 @@ export function ClipHistWindow() {
     },
     [flashMsg],
   );
+
+  const favItem = useCallback((item: ClipHistItem) => {
+    void api.cliphistSetFav(item.id, !item.fav).catch(() => undefined);
+  }, []);
 
   const pinItem = useCallback((item: ClipHistItem) => {
     keepId.current = item.id;
@@ -617,6 +623,11 @@ export function ClipHistWindow() {
                     />
                   ) : null}
                   <span className="np-clip-preview">{it.preview}</span>
+                  {it.fav && (
+                    <span className="np-clip-favmark" data-tip="已收藏">
+                      <AppIcon icon={Star} size={DENSITY.iconXs} />
+                    </span>
+                  )}
                   {it.pinned && (
                     <span className="np-clip-pinmark" data-tip="已置顶">
                       <AppIcon icon={Pin} size={DENSITY.iconXs} />
@@ -626,6 +637,15 @@ export function ClipHistWindow() {
                   <span className="np-clip-right">
                     <span className="np-clip-meta">{clipKindMeta(it.kind).label}</span>
                     <span className="np-clip-actions">
+                      <button
+                        data-tip={it.fav ? "取消收藏" : "收藏（永久保留，排最前）"}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          favItem(it);
+                        }}
+                      >
+                        <AppIcon icon={Star} size={DENSITY.iconXs} />
+                      </button>
                       <button
                         data-tip={it.pinned ? "取消置顶" : "置顶（豁免清理）"}
                         onClick={(e) => {

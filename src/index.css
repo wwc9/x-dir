@@ -5501,6 +5501,11 @@ mark.np-gsearch-mark {
   -webkit-line-clamp: 3;
 }
 /* 置顶标记 = accent Pin 图标（颜色由类承载，AppIcon 继承不传 colorVar） */
+.np-clip-favmark {
+  display: inline-flex;
+  flex: none;
+  color: var(--np-accent);
+}
 .np-clip-pinmark {
   display: inline-flex;
   flex: none;
@@ -5515,8 +5520,8 @@ mark.np-gsearch-mark {
    + gap）预留，meta 与 actions 列内切换——悬停/选中不再引起预览文字跳宽 */
 .np-clip-right {
   flex: none;
-  /* 44px = 2×20px 动作钮 + gap（随动作钮缩号同步，2026-10-31） */
-  width: calc(var(--np-gap) * 11);
+  /* 92px = 4×20px 动作钮（OCR/粘贴到窗格/收藏·置顶·删除按需出现）+ 3×gap */
+  width: calc(var(--np-gap) * 23);
   display: flex;
   justify-content: flex-end;
   align-items: center;
