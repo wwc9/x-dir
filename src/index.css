@@ -538,7 +538,8 @@ input:where(:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
 .np-set-rules-empty,
 .np-list-empty,
 .np-pv-none,
-.np-menued-empty {
+.np-menued-empty,
+.np-clip-empty {
   font-size: var(--np-font-sm);
   color: var(--np-muted);
 }
@@ -5294,18 +5295,21 @@ mark.np-gsearch-mark {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   剪贴板历史浮窗（§3.7，2026-10-30）：独立面板窗（clipboard.html 轻量
-   入口），共用 token 体系；列表行高 --np-row-h（虚拟滚动），行内动作按钮
-   仅悬停显现，选中行 = surface 底 + accent 左缘（激活=3px accent 实线的
-   浮层口径）。
+   剪贴板历史浮窗（§3.7，2026-10-30；2026-10-31 统一规范对齐）：独立
+   面板窗（clipboard.html 轻量入口），视觉对齐弹层统一规范（§4.7）——
+   surface 卡 + border ring（Popover 同脸）、列表行/选中/悬停对齐文件列表
+   np-row 口径（sel 淡染底 + accent 文字）、类型分段复用 np-seg 配方
+   （描边勾选 chip：sel 底 + accent 描边 + 600 + ✓ 前缀）；置顶条目排前，
+   行内动作按钮（置顶/删除）悬停与选中行常显。
    ══════════════════════════════════════════════════════════════ */
 .np-clip {
   display: flex;
   flex-direction: column;
   height: 100vh;
   background: var(--np-surface);
-  border: 1px solid var(--np-border);
   border-radius: var(--np-radius-lg);
+  /* ring 描边随圆角走（Popover 卡同脸），不用 border 免占布局 */
+  box-shadow: 0 0 0 1px var(--np-border);
   overflow: hidden;
 }
 .np-clip-head {
@@ -5328,29 +5332,37 @@ mark.np-gsearch-mark {
   padding: 0 var(--np-gap);
   font-size: var(--np-font-ui);
 }
+/* 类型分段 = np-seg 配方平移（描边勾选 chip，2026-10-24 方案 A）；
+   轻量窗不加载 Blueprint，原生 button 复刻同一视觉 */
 .np-clip-seg {
   display: flex;
-  gap: var(--np-gap);
+  gap: var(--np-gutter);
 }
 .np-clip-seg button {
-  border: none;
-  background: transparent;
-  color: var(--np-muted);
-  font-size: var(--np-font-sm);
-  line-height: var(--np-ctl-h);
-  height: var(--np-ctl-h);
-  padding: 0 var(--np-gutter);
+  min-height: var(--np-ctl-h);
+  padding: 1px var(--np-gutter);
+  border: 1px solid var(--np-border);
   border-radius: var(--np-radius-pill);
+  background: transparent;
+  font-size: var(--np-font-ui);
+  font-weight: 400;
+  color: var(--np-muted);
   cursor: pointer;
 }
 .np-clip-seg button:hover {
-  background: var(--np-surface-2);
+  background-color: var(--np-hover);
   color: var(--np-fg);
 }
 .np-clip-seg button.is-on {
-  background: var(--np-surface-2);
-  color: var(--np-fg);
-  box-shadow: var(--np-ring);
+  background-color: var(--np-sel);
+  border-color: var(--np-accent);
+  color: var(--np-accent);
+  font-weight: 600;
+}
+.np-clip-seg button.is-on::before {
+  content: "✓";
+  font-size: var(--np-font-sm);
+  margin-right: var(--np-gap);
 }
 .np-clip-list {
   flex: 1;
@@ -5359,29 +5371,38 @@ mark.np-gsearch-mark {
   margin-top: var(--np-gap);
   padding: 0 var(--np-gap);
 }
+/* 行内距/悬停/选中对齐文件列表 np-row（gap 7px · margin 0 2px · padding 0 8px，
+   sel 淡染底 + accent 文字） */
 .np-clip-row {
   display: flex;
   align-items: center;
-  gap: var(--np-gap);
+  gap: 7px;
+  margin: 0 2px;
+  padding: 0 8px;
   height: var(--np-row-h);
-  padding: 0 var(--np-gap);
   border-radius: var(--np-radius);
-  cursor: pointer;
+  cursor: default;
+  user-select: none;
+  overflow: hidden;
   color: var(--np-fg);
 }
 .np-clip-row:hover {
-  background: var(--np-surface-2);
+  background-color: var(--np-hover);
 }
 .np-clip-row.is-sel {
-  background: var(--np-surface-2);
-  box-shadow: inset 3px 0 0 var(--np-accent);
+  background-color: var(--np-sel);
+  color: var(--np-accent);
+}
+.np-clip-row.is-sel .np-clip-meta {
+  color: var(--np-accent);
+  opacity: 0.85;
 }
 .np-clip-thumb {
-  width: var(--np-row-h);
-  height: calc(var(--np-row-h) - 6px);
+  width: var(--np-realicon);
+  height: var(--np-realicon);
   object-fit: contain;
   border-radius: var(--np-radius);
-  background: var(--np-surface);
+  background: var(--np-surface-2);
   flex: none;
 }
 .np-clip-preview {
@@ -5392,12 +5413,11 @@ mark.np-gsearch-mark {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 置顶标记 = accent Pin 图标（颜色由类承载，AppIcon 继承不传 colorVar） */
 .np-clip-pinmark {
+  display: inline-flex;
   flex: none;
-  width: var(--np-gap);
-  height: var(--np-gap);
-  border-radius: var(--np-radius-pill);
-  background: var(--np-accent);
+  color: var(--np-accent);
 }
 .np-clip-meta {
   flex: none;
@@ -5405,15 +5425,19 @@ mark.np-gsearch-mark {
   color: var(--np-muted);
   font-variant-numeric: tabular-nums;
 }
+/* 行内动作（置顶/删除）：悬停或选中行常显（键盘 ↑↓ 浏览时可见），常驻位
+   与 meta 互换（meta 隐藏避免挤压省略号） */
 .np-clip-actions {
   display: none;
   flex: none;
   gap: var(--np-gap);
 }
-.np-clip-row:hover .np-clip-actions {
+.np-clip-row:hover .np-clip-actions,
+.np-clip-row.is-sel .np-clip-actions {
   display: inline-flex;
 }
-.np-clip-row:hover .np-clip-meta {
+.np-clip-row:hover .np-clip-meta,
+.np-clip-row.is-sel .np-clip-meta {
   display: none;
 }
 .np-clip-actions button {
@@ -5429,13 +5453,16 @@ mark.np-gsearch-mark {
   cursor: pointer;
 }
 .np-clip-actions button:hover {
-  background: var(--np-surface);
+  background: var(--np-hover);
   color: var(--np-fg);
 }
+/* 删除类动作 hover = danger（§4.5 三档口径） */
+.np-clip-actions button.np-clip-del:hover {
+  background: var(--np-hover);
+  color: var(--np-danger);
+}
 .np-clip-empty {
-  padding: var(--np-gutter);
-  font-size: var(--np-font-ui);
-  color: var(--np-muted);
+  padding: var(--np-gutter) var(--np-gutter) 10px;
   text-align: center;
 }
 .np-clip-foot {
@@ -5472,6 +5499,6 @@ mark.np-gsearch-mark {
   cursor: pointer;
 }
 .np-clip-clear:hover {
-  background: var(--np-surface-2);
+  background: var(--np-hover);
   color: var(--np-fg);
 }

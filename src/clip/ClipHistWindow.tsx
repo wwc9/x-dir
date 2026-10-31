@@ -132,6 +132,14 @@ export function ClipHistWindow() {
     // DOM focus 兜底：capabilities 修复后 tauri://focus 为主，浏览器焦点事件
     // 双保险（停靠态窗口常驻可见，部分环境只触发其中之一）
     window.addEventListener("focus", focusSearch);
+    // 焦点自卫（2026-10-31 终案）：冷启动首次激活时 WebView2 激活序列可能在
+    // 事件 + 三重试之后仍重置 activeElement——低频守卫接管，本页持有焦点且
+    // 焦点悬在 body（未被按钮等接住）时归还搜索框；停靠态 hasFocus=false 自空转
+    const focusGuard = window.setInterval(() => {
+      if (document.hasFocus() && document.activeElement === document.body) {
+        inputRef.current?.focus();
+      }
+    }, 400);
     void getCurrentWindow()
       .onFocusChanged(({ payload: focused }) => {
         if (!focused) return;
@@ -146,6 +154,7 @@ export function ClipHistWindow() {
       offs.forEach((f) => f());
       unlistenEv?.();
       unFocus?.();
+      window.clearInterval(focusGuard);
       window.removeEventListener("focus", focusSearch);
       window
         .matchMedia("(prefers-color-scheme: dark)")
@@ -218,6 +227,19 @@ export function ClipHistWindow() {
       // IME 组合输入中不接管：Enter=提交候选、Esc=取消组合（截图文字工具
       // 同口径；合成键在中文输入法下 key 呈 "Process"，天然不命中各分支）
       if (e.isComposing || e.keyCode === 229) return;
+      // 聚焦兜底：冷启动首次激活时三重试仍可能被 WebView2 激活序列冲掉——
+      // 可打印字符落键到 body 时夺回输入焦点，并把该字符补进搜索词（免丢键）
+      if (
+        e.key.length === 1 &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !e.metaKey &&
+        document.activeElement !== inputRef.current
+      ) {
+        inputRef.current?.focus();
+        setQuery((q) => q + e.key);
+        return;
+      }
       const { items: list, sel: i, query: q } = stateRef.current;
       const cur = list[i];
       switch (e.key) {
@@ -332,7 +354,11 @@ export function ClipHistWindow() {
                     <AppIcon icon={clipKindMeta(it.kind).icon} size={DENSITY.iconMd} />
                   )}
                   <span className="np-clip-preview">{it.preview}</span>
-                  {it.pinned && <span className="np-clip-pinmark" data-tip="已置顶" />}
+                  {it.pinned && (
+                    <span className="np-clip-pinmark" data-tip="已置顶">
+                      <AppIcon icon={Pin} size={DENSITY.iconXs} />
+                    </span>
+                  )}
                   <span className="np-clip-meta">
                     {relTime(it.createdAt)} · {formatSize(it.size)}
                   </span>
@@ -347,6 +373,7 @@ export function ClipHistWindow() {
                       <AppIcon icon={it.pinned ? PinOff : Pin} size={DENSITY.iconXs} />
                     </button>
                     <button
+                      className="np-clip-del"
                       data-tip="删除"
                       onClick={(e) => {
                         e.stopPropagation();

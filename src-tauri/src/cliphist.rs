@@ -377,7 +377,7 @@ pub fn list_page(
     let mut stmt = conn.prepare(&format!(
         "SELECT id, kind, preview, size, pinned, created_at, last_used_at, thumb
          FROM clip_items {where_sql}
-         ORDER BY created_at DESC, id DESC LIMIT ?3 OFFSET ?4"
+         ORDER BY pinned DESC, created_at DESC, id DESC LIMIT ?3 OFFSET ?4"
     ))?;
     let items = stmt
         .query_map(rusqlite::params![q, kind, limit, offset], |r| {
@@ -1053,5 +1053,15 @@ mod tests {
         let pk = list_page(&c, "", "files", 0, 50).unwrap();
         assert_eq!(pk.items.len(), 1);
         assert!(pk.items[0].thumb.is_none());
+        // 置顶排前（2026-10-31）：pin 住最旧的 alpha 3 → 跳到列表首位
+        c.execute(
+            "UPDATE clip_items SET pinned = 1 WHERE preview = 'alpha 3'",
+            [],
+        )
+        .unwrap();
+        let pp = list_page(&c, "", "", 0, 50).unwrap();
+        assert_eq!(pp.items[0].preview, "alpha 3");
+        assert!(pp.items[0].pinned);
+        assert_eq!(pp.items[1].preview, "b.png");
     }
 }
