@@ -425,9 +425,9 @@ export function ClipHistWindow() {
                   key={it.id}
                   ref={virtualizer.measureElement}
                   data-index={vi.index}
-                  className={`np-clip-row np-clip-kbar-${it.kind} ${
-                    vi.index % 2 === 1 ? "is-alt" : ""
-                  } ${vi.index === sel ? "is-sel" : ""}`}
+                  className={`np-clip-row ${vi.index % 2 === 1 ? "is-alt" : ""} ${
+                    vi.index === sel ? "is-sel" : ""
+                  }`}
                   style={{
                     position: "absolute",
                     top: 0,
@@ -438,10 +438,9 @@ export function ClipHistWindow() {
                   onClick={(e) => pasteItem(it, e.ctrlKey)}
                 >
                   <span className="np-clip-idx">{vi.index + 1}</span>
-                  {/* 类型图标（方案 9，2026-10-31 用户定案）：灰线性图标，
-                      类型色由行左缘色条 np-clip-kbar-* 承载；
-                      全部风格对照见 design/clip-icons-preview.html */}
-                  <span className="np-clip-kind">
+                  {/* 类型图标（方案 10，2026-10-31 用户改选）：灰线性图标 +
+                      右下角类型色点角标；全部风格对照见 design/clip-icons-preview.html */}
+                  <span className={`np-clip-kind np-clip-kind-${it.kind}`}>
                     <AppIcon icon={clipKindMeta(it.kind).icon} size={DENSITY.iconSm} />
                   </span>
                   {it.thumb ? <img className="np-clip-thumb" src={it.thumb} alt="" /> : null}

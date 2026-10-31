@@ -88,14 +88,14 @@ const VARIANTS = [
     id: 9,
     name: "左缘色条 + 灰图标",
     desc: "行左缘 3px 类型色条（不占图标位）+ 灰图标；类型信息靠色条",
-    badge: "已应用",
     rowCls: "rowbar",
     cell: (k) => `<span class="kcell bare">${G[k]}</span>`,
   },
   {
     id: 10,
     name: "灰图标 + 色点角标",
-    desc: "现状灰图标右下角叠类型色小点；改动最小的一档彩色",
+    desc: "灰图标右下角叠类型色小点（带表面色描边圈）；改动最小的一档彩色",
+    badge: "已应用",
     cell: (k) => `<span class="kcell dotwrap">${G[k]}</span>`,
   },
   {
