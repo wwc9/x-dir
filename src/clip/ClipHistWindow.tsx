@@ -33,6 +33,8 @@ export function ClipHistWindow() {
   const [sel, setSel] = useState(0);
   const [flash, setFlash] = useState("");
   const [directPaste, setDirectPaste] = useState(true);
+  /** 浮窗置顶常驻（会话级）：失焦不自动收窗，Enter 转为仅复制不关窗（连续取用） */
+  const [winPinned, setWinPinned] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   // 装载协程防乱序：仅最后一次发起的请求可落盘（搜索防抖/翻页竞态）
@@ -43,8 +45,8 @@ export function ClipHistWindow() {
   // 下次刷新要保持选择的条目 id（置顶/删除后选择不跳回首行）
   const keepId = useRef<number | null>(null);
   // 键盘/事件处理器读取的最新态（避免重绑 window 监听、闭包过期）
-  const stateRef = useRef({ items, sel, query, kind, directPaste });
-  stateRef.current = { items, sel, query, kind, directPaste };
+  const stateRef = useRef({ items, sel, query, kind, directPaste, winPinned });
+  stateRef.current = { items, sel, query, kind, directPaste, winPinned };
 
   const fetchPage = useCallback(
     async (offset: number, append: boolean, keep: number | null) => {
@@ -167,15 +169,19 @@ export function ClipHistWindow() {
     window.setTimeout(() => setFlash(""), 2500);
   }, []);
 
-  /** 写回：direct = 直接粘贴（Ctrl 修饰或设置关闭 = 仅复制）。粘贴失败时
-   *  Rust 保持浮窗打开，此处提示降级 */
+  /** 写回：direct = 直接粘贴（Ctrl 修饰、设置关闭或浮窗常驻 = 仅复制）。
+   *  常驻态下目标窗口已随交互漂移、自动粘贴语义不再可靠，且关窗违背常驻
+   *  初衷——一律仅复制 + 页脚回执，用户手动 Ctrl+V（Rust 侧同判不关窗） */
   const pasteItem = useCallback(
     (item: ClipHistItem, ctrl: boolean) => {
-      const direct = stateRef.current.directPaste && !ctrl;
+      const { directPaste: dp, winPinned: pinned } = stateRef.current;
+      const direct = dp && !ctrl && !pinned;
       api
         .cliphistWriteBack(item.id, direct)
         .then((pasted) => {
-          if (direct && !pasted) {
+          if (pinned) {
+            flashMsg("已复制到剪贴板");
+          } else if (direct && !pasted) {
             flashMsg("已复制到剪贴板（未能自动粘贴，请手动 Ctrl+V）");
           }
         })
@@ -183,6 +189,13 @@ export function ClipHistWindow() {
     },
     [flashMsg],
   );
+
+  /** 浮窗置顶常驻开关：置位 Rust 侧失焦豁免 + 本页回写语义切换 */
+  const togglePinWindow = useCallback(() => {
+    const next = !stateRef.current.winPinned;
+    setWinPinned(next);
+    void api.cliphistSetPinned(next).catch(() => undefined);
+  }, []);
 
   const pinItem = useCallback((item: ClipHistItem) => {
     keepId.current = item.id;
@@ -316,6 +329,18 @@ export function ClipHistWindow() {
             placeholder="搜索剪贴板历史（文本与文件路径）"
             onChange={(e) => setQuery(e.target.value)}
           />
+          <button
+            className={`np-clip-pinbtn ${winPinned ? "is-on" : ""}`}
+            data-tip={
+              winPinned
+                ? "浮窗常驻：开（点击恢复失焦自动关闭）"
+                : "浮窗常驻：关（点击常驻屏幕，失焦不自动关闭，Enter 转为仅复制）"
+            }
+            aria-label="浮窗常驻开关"
+            onClick={togglePinWindow}
+          >
+            <AppIcon icon={Pin} size={DENSITY.iconSm} />
+          </button>
         </div>
         <div className="np-clip-seg">
           {KIND_TABS.map((t) => (
@@ -402,8 +427,16 @@ export function ClipHistWindow() {
               {clearArmed ? "确认清空？" : "清空"}
             </button>
             <span className="np-clip-keys">
-              <kbd className="np-kbd">Enter</kbd> 粘贴
-              <kbd className="np-kbd">Ctrl+Enter</kbd> 仅复制
+              {winPinned ? (
+                <>
+                  <kbd className="np-kbd">Enter</kbd> 复制（常驻中）
+                </>
+              ) : (
+                <>
+                  <kbd className="np-kbd">Enter</kbd> 粘贴
+                  <kbd className="np-kbd">Ctrl+Enter</kbd> 仅复制
+                </>
+              )}
             </span>
           </>
         )}

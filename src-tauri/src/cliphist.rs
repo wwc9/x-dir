@@ -611,6 +611,16 @@ pub fn stop_watcher(app: &AppHandle) {
 /// 浮窗是否在屏（true = 已上屏聚焦；停靠位不算）
 static CLIPHIST_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// 浮窗常驻（置顶钮，2026-10-31）：true = 失焦不自动收窗（浮窗本就
+/// always_on_top，常驻语义 = 钉在屏幕上连续取用；Esc/热键/显式动作仍收）。
+/// 会话级状态，不持久化——与贴图的临时性同口径
+static CLIPHIST_PINNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// 常驻开关（cliphist_set_pinned 命令入口）
+pub fn set_window_pinned(pinned: bool) {
+    CLIPHIST_PINNED.store(pinned, Ordering::SeqCst);
+}
+
 /// 停靠位（同 shot：虚拟桌面外，保持合成器在场防闪白，绝不用 hide()）
 fn park_position() -> PhysicalPosition<i32> {
     PhysicalPosition::new(-32700, -32700)
@@ -649,11 +659,11 @@ pub(crate) fn ensure_clip_window(app: &AppHandle) -> Result<(), String> {
     }
     let _ = win.set_position(park_position());
     let _ = win.show();
-    // 失焦自动收（Ditto 惯例）；Destroyed 复位开关
+    // 失焦自动收（Ditto 惯例；置顶常驻时豁免）；Destroyed 复位开关
     let app2 = app.clone();
     win.on_window_event(move |e| match e {
         tauri::WindowEvent::Focused(false) => {
-            if CLIPHIST_OPEN.load(Ordering::SeqCst) {
+            if CLIPHIST_OPEN.load(Ordering::SeqCst) && !CLIPHIST_PINNED.load(Ordering::SeqCst) {
                 close_clip_window(&app2);
             }
         }
@@ -839,7 +849,10 @@ pub fn write_back(
         );
     }
     if !paste {
-        close_clip_window(app);
+        // 置顶常驻态不关窗（连续取用多条）；直接粘贴路径仅在非常驻态请求
+        if !CLIPHIST_PINNED.load(Ordering::SeqCst) {
+            close_clip_window(app);
+        }
         return Ok(true);
     }
     Ok(paste_and_close(app, h))

@@ -5502,3 +5502,26 @@ mark.np-gsearch-mark {
   background: var(--np-hover);
   color: var(--np-fg);
 }
+/* 浮窗置顶常驻钮（搜索行右端）：开态 = accent（§4.5 激活档），hover 同行内动作 */
+.np-clip-pinbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border: none;
+  background: transparent;
+  color: var(--np-muted);
+  width: var(--np-ctl-h);
+  height: var(--np-ctl-h);
+  border-radius: var(--np-radius);
+  cursor: pointer;
+}
+.np-clip-pinbtn:hover {
+  background: var(--np-hover);
+  color: var(--np-fg);
+}
+.np-clip-pinbtn.is-on,
+.np-clip-pinbtn.is-on:hover {
+  background: var(--np-sel);
+  color: var(--np-accent);
+}

@@ -893,6 +893,8 @@ export const api = {
   cliphistClear: () => cmd<void>("cliphist_clear"),
   /** 剪贴板历史：收浮窗（Esc / 选中条目后；失焦自动收由 Rust 窗口事件处理） */
   cliphistHide: () => cmd<void>("cliphist_hide"),
+  /** 剪贴板历史：浮窗置顶常驻开关（true = 失焦不自动收窗，Esc/热键仍收） */
+  cliphistSetPinned: (pinned: boolean) => cmd<void>("cliphist_set_pinned", { pinned }),
   /** 截图标注偏好补丁写：Rust 侧白名单键合并（装饰三键 + 滚轮记忆五键
    *  shotStrokeW/shotTextFont/shotStepW/shotMosaicW/shotBlurAlpha），
    *  避免轻量截图页整对象回写覆盖主窗设置 */

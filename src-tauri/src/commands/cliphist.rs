@@ -122,3 +122,10 @@ pub fn cliphist_hide(app: AppHandle) -> Result<(), String> {
     crate::cliphist::close_clip_window(&app);
     Ok(())
 }
+
+/// 浮窗置顶常驻开关（置顶钮）：true = 失焦不自动收窗（Esc/热键仍收）
+#[tauri::command]
+pub fn cliphist_set_pinned(pinned: bool) -> Result<(), String> {
+    crate::cliphist::set_window_pinned(pinned);
+    Ok(())
+}
