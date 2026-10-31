@@ -71,6 +71,30 @@ pub fn cliphist_write_back(
     crate::cliphist::write_back(&app, &state.cliphist, id, paste)
 }
 
+/// 收藏/取消收藏（T3-2）：豁免清理、排序最前、独立过滤档
+#[tauri::command]
+pub fn cliphist_set_fav(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: i64,
+    fav: bool,
+) -> Result<(), String> {
+    {
+        let conn = state
+            .cliphist
+            .conn
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        conn.execute(
+            "UPDATE clip_items SET fav = ?1 WHERE id = ?2",
+            rusqlite::params![fav as i64, id],
+        )
+        .map_err(|e| format!("收藏失败：{e}"))?;
+    }
+    let _ = app.emit("cliphist-updated", ());
+    Ok(())
+}
+
 #[tauri::command]
 pub fn cliphist_set_pin(
     app: AppHandle,
@@ -118,7 +142,7 @@ pub fn cliphist_clear(app: AppHandle, state: State<'_, AppState>) -> Result<(), 
             .conn
             .lock()
             .unwrap_or_else(|p| p.into_inner());
-        conn.execute("DELETE FROM clip_items WHERE pinned = 0", [])
+        conn.execute("DELETE FROM clip_items WHERE pinned = 0 AND fav = 0", [])
             .map_err(|e| format!("清空失败：{e}"))?;
     }
     let _ = app.emit("cliphist-updated", ());

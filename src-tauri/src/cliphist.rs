@@ -128,6 +128,7 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
            py           TEXT,                       -- 文本拼音首字母（中文搜索，T1-3）
            source       TEXT,                       -- 来源进程名（T2-2，如 excel.exe）
            html         TEXT,                       -- 富文本 HTML 片段（T3-1，富文本开关开启时）
+           fav          INTEGER NOT NULL DEFAULT 0, -- 收藏（T3-2，豁免清理、排最前）
            file_cut     INTEGER NOT NULL DEFAULT 0, -- Preferred DropEffect = MOVE
            size         INTEGER NOT NULL,
            pinned       INTEGER NOT NULL DEFAULT 0,
@@ -164,6 +165,15 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
     if !has_html {
         conn.execute_batch("ALTER TABLE clip_items ADD COLUMN html TEXT;")
             .map_err(|e| format!("补 html 列失败：{e}"))?;
+    }
+    // 惰性迁移（T3-2 收藏）：同法补 fav 列
+    let has_fav = conn
+        .prepare("SELECT 1 FROM pragma_table_info('clip_items') WHERE name = 'fav'")
+        .and_then(|mut stmt| stmt.query_row([], |_| Ok(())))
+        .is_ok();
+    if !has_fav {
+        conn.execute_batch("ALTER TABLE clip_items ADD COLUMN fav INTEGER NOT NULL DEFAULT 0;")
+            .map_err(|e| format!("补 fav 列失败：{e}"))?;
     }
     // 回填：仅 text 列非空且 py 为空的行（新库为空集，秒过）
     let rows: Vec<(i64, Option<String>)> = conn
@@ -536,14 +546,14 @@ fn ingest(
 /// 清理（pinned 豁免）：容量超限删最旧；保留天数到期删（keep_days=0 不限）
 fn cleanup(conn: &Connection, capacity: usize, keep_days: i64, now: i64) -> rusqlite::Result<()> {
     conn.execute(
-        "DELETE FROM clip_items WHERE pinned = 0 AND id NOT IN (
+        "DELETE FROM clip_items WHERE pinned = 0 AND fav = 0 AND id NOT IN (
            SELECT id FROM clip_items ORDER BY created_at DESC, id DESC LIMIT ?1)",
         rusqlite::params![capacity as i64],
     )?;
     if keep_days > 0 {
         let cutoff = now - keep_days * 86_400_000;
         conn.execute(
-            "DELETE FROM clip_items WHERE pinned = 0 AND created_at < ?1",
+            "DELETE FROM clip_items WHERE pinned = 0 AND fav = 0 AND created_at < ?1",
             rusqlite::params![cutoff],
         )?;
     }
@@ -560,6 +570,7 @@ pub struct ClipHistItemMeta {
     pub source: Option<String>,
     pub size: u64,
     pub pinned: bool,
+    pub fav: bool,
     pub created_at: i64,
     pub last_used_at: i64,
     pub thumb: Option<String>,
@@ -587,16 +598,16 @@ pub fn list_page(
                        OR (text IS NOT NULL AND text LIKE '%'||?1||'%')
                        OR (py IS NOT NULL AND py LIKE '%'||?1||'%')
                        OR (source IS NOT NULL AND source LIKE '%'||?1||'%'))
-                     AND (?2 = '' OR kind = ?2)";
+                     AND (?2 = '' OR (?2 = 'fav' AND fav = 1) OR kind = ?2)";
     let total: i64 = conn.query_row(
         &format!("SELECT COUNT(*) FROM clip_items {where_sql}"),
         rusqlite::params![q, kind],
         |r| r.get(0),
     )?;
     let mut stmt = conn.prepare(&format!(
-        "SELECT id, kind, preview, size, pinned, created_at, last_used_at, thumb, source
+        "SELECT id, kind, preview, size, pinned, created_at, last_used_at, thumb, source, fav
          FROM clip_items {where_sql}
-         ORDER BY pinned DESC, created_at DESC, id DESC LIMIT ?3 OFFSET ?4"
+         ORDER BY fav DESC, pinned DESC, created_at DESC, id DESC LIMIT ?3 OFFSET ?4"
     ))?;
     let items = stmt
         .query_map(rusqlite::params![q, kind, limit, offset], |r| {
@@ -608,6 +619,7 @@ pub fn list_page(
                 source: r.get(8)?,
                 size: r.get::<_, i64>(3)? as u64,
                 pinned: r.get::<_, i64>(4)? != 0,
+                fav: r.get::<_, i64>(9)? != 0,
                 created_at: r.get(5)?,
                 last_used_at: r.get(6)?,
                 thumb: thumb.map(|b| {
@@ -1683,6 +1695,33 @@ MIIE...
         assert_eq!(p.items[0].source, None);
         // 搜索命中 source：敲 excel 找到从 Excel 复制的条目
         assert_eq!(list_page(&c, "excel", "", 0, 50).unwrap().items.len(), 1);
+    }
+
+    #[test]
+    fn favorite_exempts_cleanup_and_filters() {
+        let c = mem_db();
+        for i in 0..3 {
+            ingest(&c, &text(&format!("f{i}")), 1000 + i, None, None).unwrap();
+        }
+        // 收藏 f0（最旧）：容量 1 也不删它；f1 被清
+        c.execute("UPDATE clip_items SET fav = 1 WHERE preview = 'f0'", [])
+            .unwrap();
+        cleanup(&c, 1, 0, 5000).unwrap();
+        let left: Vec<String> = c
+            .prepare("SELECT preview FROM clip_items ORDER BY created_at")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(left, vec!["f0", "f2"]);
+        // 过滤档 'fav'：只列收藏
+        let p = list_page(&c, "", "fav", 0, 50).unwrap();
+        assert_eq!(p.items.len(), 1);
+        assert!(p.items[0].fav);
+        // 排序：fav 最前
+        let all = list_page(&c, "", "", 0, 50).unwrap();
+        assert_eq!(all.items[0].preview, "f0");
     }
 
     #[test]

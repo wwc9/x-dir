@@ -462,6 +462,8 @@ export interface ClipHistItem {
   preview: string;
   size: number;
   pinned: boolean;
+  /** 收藏（T3-2：豁免清理、排最前、独立过滤档） */
+  fav: boolean;
   createdAt: number;
   lastUsedAt: number;
   thumb: string | null;
@@ -911,6 +913,8 @@ export const api = {
   /** 剪贴板历史：置顶 / 取消置顶（置顶豁免容量与天数清理） */
   cliphistSetPin: (id: number, pinned: boolean) =>
     cmd<void>("cliphist_set_pin", { id, pinned }),
+  /** 剪贴板历史：收藏/取消收藏（豁免清理、排最前、过滤档「收藏」） */
+  cliphistSetFav: (id: number, fav: boolean) => cmd<void>("cliphist_set_fav", { id, fav }),
   /** 剪贴板历史：删除单条 */
   cliphistDelete: (id: number) => cmd<void>("cliphist_delete", { id }),
   /** 剪贴板历史：清空全部未置顶条目 */
