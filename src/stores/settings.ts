@@ -71,6 +71,7 @@ function toPlain(s: SettingsStore): Settings {
     cliphistDirectPaste: s.cliphistDirectPaste,
     cliphistCapacity: s.cliphistCapacity,
     cliphistKeepDays: s.cliphistKeepDays,
+    cliphistExcludeApps: s.cliphistExcludeApps,
     cliphistWinW: s.cliphistWinW,
     cliphistWinH: s.cliphistWinH,
     shotShadowW: s.shotShadowW,

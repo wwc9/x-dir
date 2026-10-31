@@ -14,11 +14,16 @@ pub fn cliphist_configure(
     enabled: bool,
     capacity: usize,
     keep_days: i64,
+    exclude_apps: Option<String>,
 ) -> Result<(), String> {
     let h = &state.cliphist;
     h.capacity
         .store(capacity.clamp(50, 10_000), Ordering::SeqCst);
     h.keep_days.store(keep_days.max(0), Ordering::SeqCst);
+    // 排除应用清单（T1-1）：watcher 逐条比对前台进程名
+    if let Some(list) = exclude_apps {
+        *h.exclude_apps.lock().unwrap_or_else(|p| p.into_inner()) = list;
+    }
     #[cfg(windows)]
     {
         if enabled {

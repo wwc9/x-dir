@@ -135,11 +135,18 @@ export function SettingsPanel() {
   };
 
   /** 容量/天数护栏变更：落盘并推送后端 */
-  const applyClipLimits = (capacity: number, keepDays: number) => {
-    s.update({ cliphistCapacity: capacity, cliphistKeepDays: keepDays });
-    void api.cliphistConfigure(useSettings.getState().cliphistEnabled, capacity, keepDays).catch(
-      () => undefined,
-    );
+  const applyClipLimits = (capacity: number, keepDays: number, excludeApps?: string) => {
+    if (excludeApps !== undefined) s.update({ cliphistExcludeApps: excludeApps });
+    else s.update({ cliphistCapacity: capacity, cliphistKeepDays: keepDays });
+    const st = useSettings.getState();
+    void api
+      .cliphistConfigure(
+        st.cliphistEnabled,
+        excludeApps !== undefined ? st.cliphistCapacity : capacity,
+        excludeApps !== undefined ? st.cliphistKeepDays : keepDays,
+        excludeApps ?? st.cliphistExcludeApps,
+      )
+      .catch(() => undefined);
   };
 
   return (
@@ -370,6 +377,20 @@ export function SettingsPanel() {
                   label: `${v} 条`,
                 }))}
                 onChange={(v) => applyClipLimits(v, s.cliphistKeepDays)}
+              />
+            </SetRow>
+            <SetRow
+              label={t("排除应用")}
+              desc="这些程序复制的内容不入库（进程名，逗号分隔，写 excel 或 excel.exe 均可）"
+            >
+              <input
+                className="np-set-quickadd-input"
+                style={{ width: "240px" }}
+                value={s.cliphistExcludeApps}
+                spellCheck={false}
+                onChange={(e) =>
+                  applyClipLimits(s.cliphistCapacity, s.cliphistKeepDays, e.target.value)
+                }
               />
             </SetRow>
             <SetRow label={t("保留天数")} desc="到期自动清理（置顶条目豁免）">

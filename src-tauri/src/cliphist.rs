@@ -70,6 +70,8 @@ pub struct ClipHistState {
     pub keep_days: AtomicI64,
     /// 自写回环 guard：最近一次写回的 (hash, 时刻)
     self_write: Mutex<Option<(String, Instant)>>,
+    /// 排除应用清单（逗号/分号分隔进程名，T1-1；configure 推送）
+    pub exclude_apps: Mutex<String>,
     /// 直接粘贴目标窗口（HWND 原始值，0 = 无；浮窗 show 前抓取的前台窗口）
     paste_target: AtomicIsize,
 }
@@ -102,6 +104,7 @@ impl ClipHistState {
             capacity: AtomicUsize::new(500),
             keep_days: AtomicI64::new(30),
             self_write: Mutex::new(None),
+            exclude_apps: Mutex::new(String::new()),
             paste_target: AtomicIsize::new(0),
         }
     }
@@ -229,6 +232,100 @@ impl ClipContent {
             }
         }
     }
+}
+
+/// 敏感内容跳过（2026-10-31 T1-1）：高置信凭据模式才拦（误拦正常文本比漏拦
+/// 更伤日常）——PEM 私钥块 / AWS AccessKey / JWT / GitHub·Slack·Google 令牌。
+/// 手写匹配器（regex 不在依赖内，模式皆前缀+字符集计数，成本忽略不计）
+pub fn is_sensitive(t: &str) -> bool {
+    // PEM 私钥块（BEGIN…PRIVATE KEY----- 两段同时在場即判）
+    if t.contains("-----BEGIN") && t.contains("PRIVATE KEY-----") {
+        return true;
+    }
+    /// 前缀后跟 ≥min_tail 个 pred 字符即命中
+    fn token(t: &str, prefix: &str, min_tail: usize, pred: fn(char) -> bool) -> bool {
+        let mut from = 0;
+        while let Some(i) = t[from..].find(prefix) {
+            let tail = t[from + i + prefix.len()..]
+                .chars()
+                .take_while(|&c| pred(c))
+                .count();
+            if tail >= min_tail {
+                return true;
+            }
+            from += i + prefix.len();
+        }
+        false
+    }
+    const ALNUM: fn(char) -> bool = |c| c.is_ascii_alphanumeric();
+    const B64URL: fn(char) -> bool = |c| c.is_ascii_alphanumeric() || c == '_' || c == '-';
+    // AWS AccessKey：AKIA + 16 位大写字母数字
+    if token(t, "AKIA", 16, |c| {
+        c.is_ascii_uppercase() || c.is_ascii_digit()
+    }) {
+        return true;
+    }
+    // GitHub / Slack / Google 令牌
+    for pfx in ["ghp_", "gho_", "ghu_", "ghs_", "ghr_"] {
+        if token(t, pfx, 30, ALNUM) {
+            return true;
+        }
+    }
+    for pfx in ["xoxb-", "xoxa-", "xoxp-", "xoxr-", "xoxs-"] {
+        if token(t, pfx, 10, |c| ALNUM(c) || c == '-') {
+            return true;
+        }
+    }
+    if token(t, "AIza", 31, B64URL) {
+        return true;
+    }
+    // JWT：eyJ 开头三段 base64url 以 . 相连（首段 ≥10，末段 ≥10）
+    let bytes = t.as_bytes();
+    let mut i = 0;
+    while let Some(j) = t[i..].find("eyJ") {
+        let start = i + j;
+        let mut k = start + 3;
+        let mut segs = 0usize;
+        let mut ok = true;
+        while segs < 3 {
+            let len = t[k..].chars().take_while(|&c| B64URL(c)).count();
+            if segs < 2 && len < 10 {
+                ok = false;
+                break;
+            }
+            if segs == 2 {
+                if len < 10 {
+                    ok = false;
+                }
+                break;
+            }
+            k += len;
+            if bytes.get(k) != Some(&b'.') {
+                ok = false;
+                break;
+            }
+            k += 1;
+            segs += 1;
+        }
+        if ok {
+            return true;
+        }
+        i = start + 3;
+    }
+    false
+}
+
+/// 排除应用匹配（2026-10-31 T1-1）：清单逗号/分号分隔，双方去 .exe 后缀与
+/// 大小写比对（用户写 "excel" 或 "excel.exe" 都命中 EXCEL.EXE）
+pub fn app_excluded(list: &str, proc: &str) -> bool {
+    let norm = |s: &str| s.trim().trim_end_matches(".exe").to_ascii_lowercase();
+    let target = norm(proc);
+    if target.is_empty() {
+        return false;
+    }
+    list.split([',', ';', '，', '；'])
+        .map(norm)
+        .any(|e| !e.is_empty() && e == target)
 }
 
 /// 路径末段（兼容 / 与 \）
@@ -499,13 +596,76 @@ impl clipboard_rs::ClipboardHandler for ClipChangeHandler {
     }
 }
 
+/// 前台进程名（小写 exe 名，如 "excel.exe"）——剪贴板变化时前台即来源应用
+#[cfg(windows)]
+fn frontmost_app_name() -> Option<String> {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    use windows::core::PWSTR;
+    let hwnd = unsafe { GetForegroundWindow() };
+    if hwnd.is_invalid() {
+        return None;
+    }
+    let mut pid = 0u32;
+    unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+    if pid == 0 {
+        return None;
+    }
+    let Ok(handle) = (unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }) else {
+        return None;
+    };
+    let mut buf = [0u16; 512];
+    let mut len = buf.len() as u32;
+    let r = unsafe {
+        windows::Win32::System::Threading::QueryFullProcessImageNameW(
+            handle,
+            windows::Win32::System::Threading::PROCESS_NAME_FORMAT(0),
+            PWSTR(buf.as_mut_ptr()),
+            &mut len,
+        )
+    };
+    let _ = unsafe { CloseHandle(handle) };
+    if r.is_err() || len == 0 || len as usize > buf.len() {
+        return None;
+    }
+    let full = String::from_utf16_lossy(&buf[..len as usize]);
+    let name = full.rsplit(['\\', '/']).next().unwrap_or(&full);
+    if name.is_empty() {
+        None
+    } else {
+        Some(name.to_ascii_lowercase())
+    }
+}
+
 #[cfg(windows)]
 fn handle_clipboard_change(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let h = &state.cliphist;
+    // 来源应用（变化时前台即来源）：排除清单命中 → 整条不入库（T1-1）
+    let source_app = frontmost_app_name();
+    if let Some(proc) = &source_app
+        && app_excluded(
+            h.exclude_apps
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .as_str(),
+            proc,
+        )
+    {
+        log::debug!("剪贴板条目来自排除应用 {proc}，跳过");
+        return;
+    }
     let Some(content) = read_clipboard() else {
         return;
     };
-    let state = app.state::<AppState>();
-    let h = &state.cliphist;
+    // 敏感凭据跳过（高置信模式，T1-1）
+    if let ClipContent::Text(t) = &content
+        && is_sensitive(t)
+    {
+        log::info!("剪贴板文本命中敏感凭据模式，跳过入库");
+        return;
+    }
     // 自写回环 guard：hash 命中且在时间窗内 → 跳过（一次性消费）
     let hash = content.hash_hex();
     {
@@ -1172,6 +1332,41 @@ mod tests {
             .unwrap();
         assert_eq!(kinds, vec!["dirs", "files"]);
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn sensitive_patterns_hit_and_benign_pass() {
+        // 命中：PEM / AWS / JWT / GitHub / Slack / Google
+        assert!(is_sensitive(
+            "-----BEGIN RSA PRIVATE KEY-----
+MIIE...
+-----END-----"
+        ));
+        assert!(is_sensitive("AKIAIOSFODNN7EXAMPLE"));
+        assert!(is_sensitive(
+            "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4"
+        ));
+        assert!(is_sensitive(
+            "token ghp_16C7e42F292c6912E7710c838347Ae178B4a"
+        ));
+        assert!(is_sensitive("xoxb-1234567890abcdefAB"));
+        assert!(is_sensitive(
+            "key = AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7"
+        ));
+        // 放行：日常文本（含长得像但长度/结构不符的）
+        assert!(!is_sensitive("会议要点：AKIA 是亚马逊的缩写"));
+        assert!(!is_sensitive("普通文本，没有任何凭据 eyJ 短段"));
+        assert!(!is_sensitive("https://github.com/wwc9/x-dir"));
+    }
+
+    #[test]
+    fn app_excluded_matches_names() {
+        assert!(app_excluded("keepass.exe, 1password.exe", "KeePass.exe"));
+        assert!(app_excluded("keepass;EXCEL", "excel.exe"));
+        assert!(app_excluded("微信", "微信.exe"));
+        assert!(!app_excluded("keepass.exe", "explorer.exe"));
+        assert!(!app_excluded("", "anything.exe"));
+        assert!(!app_excluded("keepass.exe", ""));
     }
 
     #[test]

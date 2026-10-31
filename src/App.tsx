@@ -71,7 +71,12 @@ export default function App() {
           .catch(() => undefined);
         // 剪贴板历史监听（§3.7）：启停 + 护栏推送
         void api
-          .cliphistConfigure(st.cliphistEnabled, st.cliphistCapacity, st.cliphistKeepDays)
+          .cliphistConfigure(
+            st.cliphistEnabled,
+            st.cliphistCapacity,
+            st.cliphistKeepDays,
+            st.cliphistExcludeApps,
+          )
           .catch(() => undefined);
 
         const args = await api.getLaunchArgs().catch<string[]>(() => []);

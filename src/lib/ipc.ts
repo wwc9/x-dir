@@ -879,8 +879,18 @@ export const api = {
    *  其 unregister_all 全清语义无法与第二个热键并存 */
   hotkeysSync: (hotkeys: HotkeySpec[]) => cmd<void>("hotkeys_sync", { hotkeys }),
   /** 剪贴板历史（§3.7）：启停监听 + 推送容量/天数护栏（启动与设置变更时调用） */
-  cliphistConfigure: (enabled: boolean, capacity: number, keepDays: number) =>
-    cmd<void>("cliphist_configure", { enabled, capacity, keepDays }),
+  cliphistConfigure: (
+    enabled: boolean,
+    capacity: number,
+    keepDays: number,
+    excludeApps?: string,
+  ) =>
+    cmd<void>("cliphist_configure", {
+      enabled,
+      capacity,
+      keepDays,
+      excludeApps,
+    }),
   /** 剪贴板历史：分页查询（query 空串=全部；kind 空串=全部类型） */
   cliphistList: (query: string, kind: string, offset: number, limit: number) =>
     cmd<ClipHistPage>("cliphist_list", { query, kind, offset, limit }),
