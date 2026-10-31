@@ -136,15 +136,18 @@ pub fn cliphist_set_maximized(app: AppHandle, maximized: bool) -> Result<(), Str
     crate::cliphist::set_window_maximized(&app, maximized)
 }
 
-/// 顶栏设置钮：唤起主窗并直达设置面板（收浮窗）
+/// 顶栏设置钮：唤起主窗并直达设置面板（收浮窗）。先收浮窗但**不做焦点
+/// 归还**——归还 paste_target 会把随后聚焦的主窗前台抢走，面板开了却
+/// 被压在后面（2026-10-31 用户实测「直达失败」根因）；本进程持有点击
+/// 输入权，最后一步聚焦主窗必成
 #[tauri::command]
 pub fn cliphist_open_settings(app: AppHandle) -> Result<(), String> {
+    crate::cliphist::park_clip_window(&app);
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();
     }
     let _ = app.emit_to("main", "cliphist-open-settings", ());
-    crate::cliphist::close_clip_window(&app);
     Ok(())
 }

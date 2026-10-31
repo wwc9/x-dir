@@ -792,16 +792,8 @@ pub(crate) fn ensure_clip_window(app: &AppHandle) -> Result<(), String> {
 /// 键盘输入会落进看不见的窗口里（2026-10-31 E2E 实测）；用户主动点了别的
 /// 窗口时焦点已不在本进程，SetForegroundWindow 会被系统拒绝，无副作用
 pub(crate) fn close_clip_window(app: &AppHandle) {
-    CLIPHIST_OPEN.store(false, Ordering::SeqCst);
-    if let Some(w) = app.get_webview_window("cliphist") {
-        // 最大化态关窗：复位默认尺寸（停靠位只挪位置，不还原尺寸——不复位
-        // 的话下次呼出仍是撑满态）
-        if CLIPHIST_MAXED.swap(false, Ordering::SeqCst) {
-            *CLIPHIST_RESTORE.lock().unwrap_or_else(|p| p.into_inner()) = None;
-            let _ = w.set_size(tauri::LogicalSize::new(WIN_W as f64, WIN_H as f64));
-        }
-        let _ = w.set_position(park_position());
-    }
+    park_clip_window(app);
+    // 焦点归还呼出前窗口
     #[cfg(windows)]
     {
         use windows::Win32::Foundation::HWND;
@@ -814,6 +806,22 @@ pub(crate) fn close_clip_window(app: &AppHandle) {
                 let _ = unsafe { SetForegroundWindow(hwnd) };
             }
         }
+    }
+}
+
+/// 仅收浮窗（停靠 + 状态复位），不做焦点归还——供「跳主窗」类路径使用：
+/// 若先归还 paste_target，会抢在主窗聚焦之后把前台夺走，设置面板开了
+/// 却压在别的窗口后面（2026-10-31 用户实测「直达失败」根因）
+pub(crate) fn park_clip_window(app: &AppHandle) {
+    CLIPHIST_OPEN.store(false, Ordering::SeqCst);
+    if let Some(w) = app.get_webview_window("cliphist") {
+        // 最大化态关窗：复位默认尺寸（停靠位只挪位置，不还原尺寸——不复位
+        // 的话下次呼出仍是撑满态）
+        if CLIPHIST_MAXED.swap(false, Ordering::SeqCst) {
+            *CLIPHIST_RESTORE.lock().unwrap_or_else(|p| p.into_inner()) = None;
+            let _ = w.set_size(tauri::LogicalSize::new(WIN_W as f64, WIN_H as f64));
+        }
+        let _ = w.set_position(park_position());
     }
 }
 
