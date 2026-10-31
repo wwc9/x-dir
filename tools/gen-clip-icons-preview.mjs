@@ -38,8 +38,9 @@ const G = {
 const VARIANTS = [
   {
     id: 1,
-    name: "基线（最初形态）",
-    desc: "muted 灰线性图标，无底板——对照基线",
+    name: "基线（终案）",
+    desc: "muted 灰线性图标，无底板、无角标——试用方案 3/9/10 后回归本形态",
+    badge: "已应用",
     cell: (k) => `<span class="kcell bare">${G[k]}</span>`,
   },
   {
@@ -95,7 +96,6 @@ const VARIANTS = [
     id: 10,
     name: "灰图标 + 色点角标",
     desc: "灰图标右下角叠类型色小点（带表面色描边圈）；改动最小的一档彩色",
-    badge: "已应用",
     cell: (k) => `<span class="kcell dotwrap">${G[k]}</span>`,
   },
   {

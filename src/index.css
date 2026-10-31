@@ -5419,12 +5419,10 @@ mark.np-gsearch-mark {
 }
 /* 图片条目缩略图 = 3 行文本等高（calc(row-h×2) ≈ 56px，与三行文本行视觉
    等高）；宽度随纵横比自适应、限宽 45% 保住预览文字空间（超宽横幅） */
-/* 类型图标（2026-10-31 用户定案方案 10：灰图标 + 类型色点角标）：
-   图标 muted 线性，右下角叠类型色小点（--k 按 kind 取 --np-icon-* 色族，
-   点带 surface 描边圈防与图标笔画粘连）；风格对照见 design/clip-icons-preview.html */
+/* 类型图标（2026-10-31 用户终案：纯灰线性，无底板无角标——方案 10 色点
+   试用后撤）：类型信息由 meta 文字标签承载；风格对照留档
+   design/clip-icons-preview.html */
 .np-clip-kind {
-  --k: var(--np-icon-text);
-  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -5432,26 +5430,6 @@ mark.np-gsearch-mark {
   width: var(--np-realicon);
   height: var(--np-realicon);
   color: var(--np-muted);
-}
-.np-clip-kind::after {
-  content: "";
-  position: absolute;
-  right: -1px;
-  bottom: -1px;
-  width: var(--np-gap);
-  height: var(--np-gap);
-  border-radius: var(--np-radius-pill);
-  background: var(--k);
-  border: 1px solid var(--np-surface);
-}
-.np-clip-kind-image {
-  --k: var(--np-icon-image);
-}
-.np-clip-kind-files {
-  --k: var(--np-icon-archive);
-}
-.np-clip-kind-dirs {
-  --k: var(--np-icon-folder);
 }
 .np-clip-thumb {
   height: calc(var(--np-row-h) * 2);

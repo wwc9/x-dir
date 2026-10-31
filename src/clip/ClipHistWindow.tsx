@@ -438,9 +438,9 @@ export function ClipHistWindow() {
                   onClick={(e) => pasteItem(it, e.ctrlKey)}
                 >
                   <span className="np-clip-idx">{vi.index + 1}</span>
-                  {/* 类型图标（方案 10，2026-10-31 用户改选）：灰线性图标 +
-                      右下角类型色点角标；全部风格对照见 design/clip-icons-preview.html */}
-                  <span className={`np-clip-kind np-clip-kind-${it.kind}`}>
+                  {/* 类型图标（2026-10-31 用户终案）：纯灰线性，无底板无角标，
+                      类型信息由 meta 文字标签承载 */}
+                  <span className="np-clip-kind">
                     <AppIcon icon={clipKindMeta(it.kind).icon} size={DENSITY.iconSm} />
                   </span>
                   {it.thumb ? <img className="np-clip-thumb" src={it.thumb} alt="" /> : null}
