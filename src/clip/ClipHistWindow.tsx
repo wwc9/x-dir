@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 
 import { api, type ClipHistItem, type Settings } from "../lib/ipc";
-import { clipKindMeta, formatSize, relTime } from "../lib/cliphist";
+import { clipKindMeta } from "../lib/cliphist";
 import { AppIcon } from "../components/AppIcon";
 import { initTooltip } from "../lib/tooltip";
 import { DENSITY } from "../lib/tokens";
@@ -450,10 +450,7 @@ export function ClipHistWindow() {
                       <AppIcon icon={Pin} size={DENSITY.iconXs} />
                     </span>
                   )}
-                  <span className="np-clip-meta">
-                    {clipKindMeta(it.kind).label} · {relTime(it.createdAt)} ·{" "}
-                    {formatSize(it.size)}
-                  </span>
+                  <span className="np-clip-meta">{clipKindMeta(it.kind).label}</span>
                   <span className="np-clip-actions">
                     <button
                       data-tip={it.pinned ? "取消置顶" : "置顶（豁免清理）"}
