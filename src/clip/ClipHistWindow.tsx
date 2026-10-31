@@ -11,6 +11,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Check,
   ClipboardList,
+  ScanText,
   FolderInput,
   Copy,
   Minus,
@@ -233,6 +234,17 @@ export function ClipHistWindow() {
           }
         })
         .catch((e) => flashMsg(`复制失败：${String(e)}`));
+    },
+    [flashMsg],
+  );
+
+  /** 图片条目 OCR 取字（T2-4）：识别文本写回剪贴板（自然入库成新文本条目） */
+  const ocrItem = useCallback(
+    (item: ClipHistItem) => {
+      void api
+        .cliphistOcr(item.id)
+        .then((t) => flashMsg(`已识别并复制：${t.slice(0, 40)}${t.length > 40 ? "…" : ""}`))
+        .catch((e) => flashMsg(`OCR 失败：${String(e)}`));
     },
     [flashMsg],
   );
@@ -623,7 +635,18 @@ export function ClipHistWindow() {
                       >
                         <AppIcon icon={it.pinned ? PinOff : Pin} size={DENSITY.iconXs} />
                       </button>
-                      {(it.kind === "files" || it.kind === "dirs") && (
+                      {it.kind === "image" && (
+                      <button
+                        data-tip="OCR 取字（识别文字进剪贴板）"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          ocrItem(it);
+                        }}
+                      >
+                        <AppIcon icon={ScanText} size={DENSITY.iconXs} />
+                      </button>
+                    )}
+                    {(it.kind === "files" || it.kind === "dirs") && (
                         <button
                           data-tip="粘贴到当前窗格（主窗活动目录）"
                           onClick={(e) => {

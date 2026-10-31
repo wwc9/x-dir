@@ -301,6 +301,7 @@ pub fn run() {
             commands::cliphist::cliphist_paste_to_pane,
             commands::cliphist::cliphist_merge_paste,
             commands::cliphist::cliphist_get_image,
+            commands::cliphist::cliphist_ocr,
             commands::shot_scroll::shot_scroll_begin,
             commands::shot_scroll::shot_scroll_launch,
             commands::shot_scroll::shot_scroll_chunk,

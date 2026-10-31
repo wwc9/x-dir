@@ -1236,6 +1236,78 @@ pub fn png_data_url(bytes: &[u8]) -> String {
     )
 }
 
+/// 图片 OCR 取字（T2-4）：Windows.Media.Ocr（系统组件零新依赖，中文系统
+/// 即中文引擎）→ 识别文本写回剪贴板（不设自写 guard——识别结果作为新文本
+/// 条目自然入库，可搜索可再粘贴）。返回识别文本供前端回执
+pub fn ocr_clip_image(h: &ClipHistState, id: i64) -> Result<String, String> {
+    let png = {
+        let conn = h.conn.lock().unwrap_or_else(|p| p.into_inner());
+        conn.query_row(
+            "SELECT image FROM clip_items WHERE id = ?1 AND kind = 'image'",
+            [id],
+            |r| r.get::<_, Option<Vec<u8>>>(0),
+        )
+        .map_err(|_| "图片条目不存在".to_string())?
+        .ok_or("该条目没有原图数据")?
+    };
+    let img = image::load_from_memory_with_format(&png, image::ImageFormat::Png)
+        .map_err(|e| format!("图片解码失败：{e}"))?;
+    let rgba = img.into_rgba8();
+    let (w, hh) = rgba.dimensions();
+    #[cfg(windows)]
+    {
+        use windows::Graphics::Imaging::{BitmapPixelFormat, SoftwareBitmap};
+        use windows::Media::Ocr::OcrEngine;
+        use windows::Storage::Streams::Buffer;
+        let buf = Buffer::Create(rgba.len() as u32).map_err(|e| format!("缓冲创建失败：{e}"))?;
+        {
+            use windows::Storage::Streams::IDataWriter;
+            use windows::core::Interface;
+            let writer: IDataWriter = buf
+                .cast()
+                .map_err(|e| format!("DataWriter 获取失败：{e}"))?;
+            let _ = writer.WriteBytes(&rgba);
+            let flush = writer
+                .FlushAsync()
+                .map_err(|e| format!("FlushAsync 失败：{e}"))?;
+            let _ = tauri::async_runtime::block_on(std::future::IntoFuture::into_future(flush));
+            writer
+                .DetachBuffer()
+                .map_err(|e| format!("DetachBuffer 失败：{e}"))?;
+        }
+        let sb = SoftwareBitmap::CreateCopyFromBuffer(
+            &buf,
+            BitmapPixelFormat::Rgba8,
+            w as i32,
+            hh as i32,
+        )
+        .map_err(|e| format!("位图构建失败：{e}"))?;
+        let engine = OcrEngine::TryCreateFromUserProfileLanguages()
+            .map_err(|_| "系统无可用的 OCR 引擎（设置 → 语言 添加中文/英文语言包）".to_string())?;
+        let recognize = engine
+            .RecognizeAsync(&sb)
+            .map_err(|e| format!("OCR 启动失败：{e}"))?;
+        let result =
+            tauri::async_runtime::block_on(std::future::IntoFuture::into_future(recognize))
+                .map_err(|e| format!("OCR 识别失败：{e}"))?;
+        let text = result
+            .Text()
+            .map_err(|e| format!("取识别文本失败：{e}"))?
+            .to_string();
+        let text = text.trim().to_string();
+        if text.is_empty() {
+            return Err("未识别出文字".into());
+        }
+        crate::clip::set_text(&text)?;
+        Ok(text)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (w, hh);
+        Err("OCR 仅 Windows 支持".into())
+    }
+}
+
 /// 取图片条目原图 dataURL（T2-1 预览放大）
 pub fn get_image_data_url(h: &ClipHistState, id: i64) -> Result<String, String> {
     let conn = h.conn.lock().unwrap_or_else(|p| p.into_inner());

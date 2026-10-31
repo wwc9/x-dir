@@ -30,7 +30,7 @@ log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 windows-core = "0.62"
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_Security", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_Com", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Ole", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_UI_Shell_Common", "Win32_System_SystemServices", "Win32_System_Com_StructuredStorage", "Win32_System_IO", "Win32_System_SystemInformation", "Win32_System_Threading"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_Security", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_Com", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Ole", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_UI_Shell_Common", "Win32_System_SystemServices", "Win32_System_Com_StructuredStorage", "Win32_System_IO", "Win32_System_SystemInformation", "Win32_System_Threading", "Media_Ocr", "Graphics_Imaging", "Storage_Streams", "System_Threading"] }
 # 全盘索引的 mmap 只读查询（MIT）
 memmap2 = "0.9"
 trash = "5.2.9"
@@ -95,6 +95,8 @@ tauri-plugin-clipboard-manager = "2"
 # 读写仍走自有 clip.rs（CF_HDROP DropEffect / CF_DIB 先例）；rusqlite MIT
 # bundled SQLite 负责历史持久化（config/clipboard.db，项目首个数据库）
 clipboard-rs = "0.3"
+# windows 0.62 的异步类型在独立 windows-future crate（OCR block_on 用）
+windows-future = "0.3"
 rusqlite = { version = "0.32", features = ["bundled"] }
 
 # Windows 专属：关闭 WebView2 浏览器加速键（F5/Ctrl+R 重载、Ctrl+F 查找栏、
