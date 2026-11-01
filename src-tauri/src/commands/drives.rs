@@ -39,12 +39,20 @@ pub struct DriveInfo {
     pub free_bytes: u64,
 }
 
+/// 盘符清单 + 每盘卷信息。spawn_blocking：逐盘 GetVolumeInformationW，
+/// 冷光驱/断连的网络盘单次可达百毫秒级（2026-11-01 移出主线程）
 #[tauri::command]
-pub fn get_drives() -> Vec<DriveInfo> {
-    logical_roots()
+pub async fn get_drives() -> Result<Vec<DriveInfo>, AppError> {
+    tauri::async_runtime::spawn_blocking(logical_roots_and_info)
+        .await
+        .map_err(|e| AppError::new("E_IO", format!("盘符枚举线程失败：{e}")))?
+}
+
+fn logical_roots_and_info() -> Result<Vec<DriveInfo>, AppError> {
+    Ok(logical_roots()
         .into_iter()
         .filter_map(|root| drive_info(&root))
-        .collect()
+        .collect())
 }
 
 /// 所有逻辑盘根（如 C:\），解析失败的一段直接跳过

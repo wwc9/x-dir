@@ -42,16 +42,47 @@ pub fn ext_of(name: &str) -> &str {
     }
 }
 
-/// 自然排序：与资源管理器一致（StrCmpLogicalW，按数字值比较、大小写不敏感）
+/// 名字编码为 UTF-16+NUL 写入栈缓冲，返回含 NUL 的前缀切片；名字超出
+/// 缓冲容量（>510 单元；NTFS 文件名上限 255 字符恒走不到）返回 Err 由
+/// 调用方回落堆分配
+#[cfg(windows)]
+fn utf16_z<'a>(s: &str, buf: &'a mut [u16; 512]) -> Result<&'a [u16], ()> {
+    let mut n = 0usize;
+    for u in s.encode_utf16() {
+        if n + 1 >= buf.len() {
+            return Err(());
+        }
+        buf[n] = u;
+        n += 1;
+    }
+    buf[n] = 0;
+    Ok(&buf[..n + 1])
+}
+
+/// 自然排序：与资源管理器一致（StrCmpLogicalW，按数字值比较、大小写不敏感）。
+/// 比较器在全量排序中被调用 N·logN 次，旧实现每次比较堆分配两个 Vec<u16>
+/// ——10 万条目录一次翻页 ≈ 340 万次分配（2026-11-01 改栈缓冲，超长名回落堆）
 pub fn natural_cmp(a: &str, b: &str) -> Ordering {
     #[cfg(windows)]
     {
         use windows::Win32::UI::Shell::StrCmpLogicalW;
         use windows::core::PCWSTR;
-        let wa: Vec<u16> = a.encode_utf16().chain(std::iter::once(0)).collect();
-        let wb: Vec<u16> = b.encode_utf16().chain(std::iter::once(0)).collect();
-        unsafe { StrCmpLogicalW(PCWSTR::from_raw(wa.as_ptr()), PCWSTR::from_raw(wb.as_ptr())) }
-            .cmp(&0)
+        let mut ba = [0u16; 512];
+        let mut bb = [0u16; 512];
+        match (utf16_z(a, &mut ba), utf16_z(b, &mut bb)) {
+            (Ok(wa), Ok(wb)) => unsafe {
+                StrCmpLogicalW(PCWSTR::from_raw(wa.as_ptr()), PCWSTR::from_raw(wb.as_ptr()))
+            }
+            .cmp(&0),
+            _ => {
+                let wa: Vec<u16> = a.encode_utf16().chain(std::iter::once(0)).collect();
+                let wb: Vec<u16> = b.encode_utf16().chain(std::iter::once(0)).collect();
+                unsafe {
+                    StrCmpLogicalW(PCWSTR::from_raw(wa.as_ptr()), PCWSTR::from_raw(wb.as_ptr()))
+                }
+                .cmp(&0)
+            }
+        }
     }
     #[cfg(not(windows))]
     {
@@ -59,7 +90,9 @@ pub fn natural_cmp(a: &str, b: &str) -> Ordering {
     }
 }
 
-/// 文件夹恒在前，再按 key 排序（§7.5）
+/// 文件夹恒在前，再按 key 排序（§7.5）。Size/Mtime 平局追加名称自然序
+/// 兜底——总序确定（同一快照多次分页结果一致），也允许上层用
+/// sort_unstable（2026-11-01：原平局返回 Equal 依赖稳定排序维持扫描序）
 pub fn cmp_entries(a: &FileEntry, b: &FileEntry, sort: &SortSpec) -> Ordering {
     if a.is_dir != b.is_dir {
         return if a.is_dir {
@@ -70,8 +103,14 @@ pub fn cmp_entries(a: &FileEntry, b: &FileEntry, sort: &SortSpec) -> Ordering {
     }
     let ord = match sort.key {
         SortKey::Name => natural_cmp(&a.name, &b.name),
-        SortKey::Size => a.size.cmp(&b.size),
-        SortKey::Mtime => a.mtime_ms.cmp(&b.mtime_ms),
+        SortKey::Size => a
+            .size
+            .cmp(&b.size)
+            .then_with(|| natural_cmp(&a.name, &b.name)),
+        SortKey::Mtime => a
+            .mtime_ms
+            .cmp(&b.mtime_ms)
+            .then_with(|| natural_cmp(&a.name, &b.name)),
         SortKey::Type => ext_of(&a.name)
             .to_lowercase()
             .cmp(&ext_of(&b.name).to_lowercase())
@@ -121,7 +160,7 @@ pub fn build_page(
     {
         view.retain(|e| e.is_dir || exts.iter().any(|x| x.eq_ignore_ascii_case(ext_of(&e.name))));
     }
-    view.sort_by(|a, b| cmp_entries(a, b, sort));
+    view.sort_unstable_by(|a, b| cmp_entries(a, b, sort));
     let total = view.len();
     let start = offset.min(total);
     let end = offset.saturating_add(limit).min(total);

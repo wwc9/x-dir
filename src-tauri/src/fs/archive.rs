@@ -1,12 +1,17 @@
 //! 压缩包解压（zip / 7z）：每个包解到 `<dest>/<包名>/` 子目录（多包互不覆盖、
-//! 不散落）。zip 逐条目落盘（进度按字节、支持取消、拒绝 zip-slip 穿越条目）；
-//! 7z 走 sevenz-rust 整包解压（进度按包计）。
+//! 不散落）。zip / 7z 均逐条目落盘（进度按字节、支持取消、拒绝 zip-slip 穿越
+//! 条目、解压总量硬闸防高压缩比炸弹）。
 
+use std::io::{Read, Write as _};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::path::{file_name_of, join_name, parent_of, split_ext, to_extended};
 use crate::jobs::pick::available_name;
 use crate::jobs::{FailItem, JobProgress};
+
+/// 解压总量上限（zip/7z 共用）：恶意高压缩比包可谎报条目尺寸，按实际解出
+/// 字节硬闸，超限中止防填满磁盘（2026-11-01 安全加固）
+const EXTRACT_TOTAL_MAX: u64 = 10 << 30;
 
 fn is_cancelled(c: &AtomicBool) -> bool {
     c.load(Ordering::SeqCst)
@@ -44,7 +49,7 @@ pub(crate) fn run_extract(
         let r = if lower.ends_with(".zip") {
             extract_zip(src, &out_dir, cancel, prog)
         } else if lower.ends_with(".7z") {
-            extract_7z(src, &out_dir)
+            extract_7z(src, &out_dir, cancel, prog)
         } else {
             Err("不支持的压缩格式（仅 zip / 7z）".to_string())
         };
@@ -69,6 +74,7 @@ fn extract_zip(
     let f = std::fs::File::open(to_extended(src)).map_err(|e| format!("打开失败：{e}"))?;
     let mut ar = zip::ZipArchive::new(f).map_err(|e| format!("zip 解析失败：{e}"))?;
     std::fs::create_dir_all(to_extended(out_dir)).map_err(|e| format!("创建目录失败：{e}"))?;
+    let mut total: u64 = 0;
     for i in 0..ar.len() {
         if is_cancelled(cancel) {
             return Ok(());
@@ -89,17 +95,85 @@ fn extract_zip(
             std::fs::create_dir_all(to_extended(&par)).map_err(|e| e.to_string())?;
         }
         let mut out = std::fs::File::create(to_extended(&target)).map_err(|e| e.to_string())?;
-        std::io::copy(&mut entry, &mut out).map_err(|e| format!("{}：{e}", rel))?;
-        prog.done_bytes += entry.size();
+        // 解压总量硬闸：条目可谎报尺寸，按实际拷贝字节计（take 到限额即截断，
+        // 拷满 = 超限，中止整包）
+        let limit = EXTRACT_TOTAL_MAX - total;
+        let copied = std::io::copy(&mut (&mut entry).take(limit), &mut out)
+            .map_err(|e| format!("{rel}：{e}"))?;
+        if copied >= limit {
+            return Err(format!(
+                "解压总量超出上限（{} GiB）",
+                EXTRACT_TOTAL_MAX >> 30
+            ));
+        }
+        total += copied;
+        prog.done_bytes += copied;
     }
     Ok(())
 }
 
-/// 7z：sevenz-rust 整包解压（crate 内部处理目录结构与条目名）
-fn extract_7z(src: &str, out_dir: &str) -> Result<(), String> {
+/// 7z：逐条目落盘（与 zip 同一净化与限额口径）。绝不整包 `decompress_file`：
+/// sevenz-rust 0.6 的默认落盘是裸 `dest.join(entry.name())`，`..\` 或绝对路径
+/// 条目可写到 out_dir 之外任意位置（zip-slip，2026-11-01 审查修复——此前只有
+/// zip 路径做了净化，文档却宣称两者都防）。
+/// 取消以 Err 中止（0.6.1 的 folder 循环忽略回调 Ok(false)，无法温和停止），
+/// 闭包标志位区分「取消」与「真失败」，出口翻译回静默取消
+fn extract_7z(
+    src: &str,
+    out_dir: &str,
+    cancel: &AtomicBool,
+    prog: &mut JobProgress,
+) -> Result<(), String> {
     std::fs::create_dir_all(to_extended(out_dir)).map_err(|e| format!("创建目录失败：{e}"))?;
-    sevenz_rust::decompress_file(to_extended(src), to_extended(out_dir))
-        .map_err(|e| format!("7z 解压失败：{e}"))
+    let mut r = sevenz_rust::SevenZReader::open(to_extended(src), sevenz_rust::Password::empty())
+        .map_err(|e| format!("7z 解析失败：{e}"))?;
+    let mut total: u64 = 0;
+    let mut cancelled_out = false;
+    let mut buf = [0u8; 64 * 1024];
+    let result = r
+        .for_each_entries(|entry, reader| {
+            if is_cancelled(cancel) {
+                cancelled_out = true;
+                return Err(sevenz_rust::Error::other("cancelled"));
+            }
+            // 与 zip 同源的净化：穿越/非法条目跳过不中断
+            let Some(rel) = safe_entry_rel(entry.name()) else {
+                return Ok(true);
+            };
+            let target = join_name(out_dir, &rel);
+            if entry.is_directory() {
+                std::fs::create_dir_all(to_extended(&target))?;
+                return Ok(true);
+            }
+            if let Some(par) = parent_of(&target) {
+                std::fs::create_dir_all(to_extended(&par))?;
+            }
+            let mut out = std::io::BufWriter::new(std::fs::File::create(to_extended(&target))?);
+            loop {
+                let n = reader.read(&mut buf)?;
+                if n == 0 {
+                    break;
+                }
+                out.write_all(&buf[..n])?;
+                total += n as u64;
+                if total > EXTRACT_TOTAL_MAX {
+                    return Err(sevenz_rust::Error::other(format!(
+                        "解压总量超出上限（{} GiB）",
+                        EXTRACT_TOTAL_MAX >> 30
+                    )));
+                }
+                prog.done_bytes += n as u64;
+            }
+            out.flush()?;
+            Ok(true)
+        })
+        .map_err(|e| e.to_string());
+    match result {
+        Ok(()) => Ok(()),
+        // 取消 = 静默返回（与 zip 路径同语义，已落盘条目保留）
+        Err(_) if cancelled_out => Ok(()),
+        Err(msg) => Err(format!("7z 解压失败：{msg}")),
+    }
 }
 
 #[cfg(test)]
@@ -207,5 +281,54 @@ mod tests {
         let cancel = AtomicBool::new(true);
         run_extract(&[src], &dir, &cancel, &mut p, &mut failed);
         assert!(failed.is_empty());
+    }
+
+    /// sevenz writer 造一个含正常条目 + 穿越条目的包（7z zip-slip 回归，
+    /// 2026-11-01：旧实现整包 decompress_file 裸 join 条目名）
+    #[cfg(not(target_arch = "wasm32"))]
+    fn write_probe_7z(path: &std::path::Path, payload: &std::path::Path) {
+        let mut w = sevenz_rust::SevenZWriter::create(path).unwrap();
+        let entry = sevenz_rust::SevenZArchiveEntry::from_path(payload, "a.txt".to_string());
+        w.push_archive_entry(entry, Some(std::fs::File::open(payload).unwrap()))
+            .unwrap();
+        let evil = sevenz_rust::SevenZArchiveEntry::from_path(payload, "../evil.txt".to_string());
+        w.push_archive_entry(evil, Some(std::fs::File::open(payload).unwrap()))
+            .unwrap();
+        w.finish().unwrap();
+    }
+
+    #[test]
+    fn extract_7z_lays_entries_and_skips_evil() {
+        let dir = tempdir();
+        let mk = join_name(&dir, "mk");
+        std::fs::create_dir_all(to_extended(&mk)).unwrap();
+        let payload = join_name(&mk, "payload.txt");
+        std::fs::write(to_extended(&payload), b"seven").unwrap();
+        let sz = join_name(&dir, "t.7z");
+        write_probe_7z(&to_extended(&sz), &to_extended(&payload));
+        let out = join_name(&dir, "t");
+        let mut p = prog();
+        extract_7z(&sz, &out, &AtomicBool::new(false), &mut p).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(to_extended(&join_name(&out, "a.txt"))).unwrap(),
+            "seven"
+        );
+        // 穿越条目既不落在包目录内，也不逃逸到 dest_root
+        assert!(!path_exists(&join_name(&out, "evil.txt")));
+        assert!(!path_exists(&join_name(&dir, "evil.txt")));
+    }
+
+    #[test]
+    fn extract_7z_cancel_is_silent() {
+        let dir = tempdir();
+        let mk = join_name(&dir, "mk");
+        std::fs::create_dir_all(to_extended(&mk)).unwrap();
+        let payload = join_name(&mk, "payload.txt");
+        std::fs::write(to_extended(&payload), b"seven").unwrap();
+        let sz = join_name(&dir, "t.7z");
+        write_probe_7z(&to_extended(&sz), &to_extended(&payload));
+        let out = join_name(&dir, "t");
+        let mut p = prog();
+        extract_7z(&sz, &out, &AtomicBool::new(true), &mut p).unwrap();
     }
 }

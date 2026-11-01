@@ -18,7 +18,10 @@ pub fn watch_dir(app: AppHandle, state: State<'_, AppState>, path: String) -> Re
         .watches
         .watch(&path, move |p| {
             let st = app2.state::<AppState>();
-            st.cache.lock().unwrap().invalidate(p);
+            st.cache
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .invalidate(p);
             let _ = app2.emit("dir-changed", json!({ "path": p }));
         })
         .map_err(|e| AppError::new("E_IO", e))

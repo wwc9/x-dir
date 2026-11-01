@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 
+
 import { api, DEFAULT_SETTINGS, THIS_PC, type Settings } from "../lib/ipc";
 import { clampGsPreviewW, sanitizeColWidths, sanitizeGsColWidths } from "../lib/columns";
 import { fileNameOf } from "../lib/path";
@@ -28,8 +29,11 @@ interface SettingsStore extends Settings {
   clearShelf(): void;
 }
 
-function toPlain(s: SettingsStore): Settings {
-  return {
+/** settings.json 落盘防抖定时器：连续 update（recentFolders 随每次导航触发）
+ *  只落最后一次；页面卸载前冲刷，窗口期内退出不丢末次改动 */
+let saveTimer: number | undefined;
+
+function toPlain(s: SettingsStore): Settings {  return {
     theme: s.theme,
     lang: s.lang,
     terminal: s.terminal,
@@ -337,7 +341,13 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     if (!get().loaded) return;
     if (p.theme) applyTheme(p.theme);
     if (p.uiZoom !== undefined) applyZoom(p.uiZoom);
-    api.saveSettings(toPlain(get())).catch(() => undefined);
+    // 落盘合并 800ms 防抖（2026-11-01 审查修复）：recentFolders 随每次目录
+    // 导航 update——旧实现逐次全量序列化 settings.json（含菜单/工具栏布局
+    // 可达上百 KB）+ 整店订阅组件（SettingsPanel）逐次重渲染；UI 态仍即时
+    window.clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(() => {
+      api.saveSettings(toPlain(get())).catch(() => undefined);
+    }, 800);
   },
 
   addFavorite(path, name) {
@@ -376,3 +386,14 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     get().update({ staging: [] });
   },
 }));
+
+// 卸载前冲刷未落盘的防抖批量（同截图偏好 flushPrefs 口径）：防抖窗内关窗
+// 不丢末次改动（recentFolders 等）。window 守卫 = vitest 的 node 环境无 window
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", () => {
+    if (saveTimer === undefined) return;
+    window.clearTimeout(saveTimer);
+    saveTimer = undefined;
+    api.saveSettings(toPlain(useSettings.getState())).catch(() => undefined);
+  });
+}

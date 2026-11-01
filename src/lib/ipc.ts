@@ -254,7 +254,22 @@ export interface ConflictInfo {
 /** Rust AppError 镜像（src-tauri/src/commands/files.rs）：全部命令的错误通道。
  *  invoke reject 时 Tauri 抛出的就是该对象（不再是字符串），展示时请自行格式化 */
 export interface AppError {
-  code: "E_NOT_FOUND" | "E_PERM" | "E_EXISTS" | "E_INVALID_NAME" | "E_IO" | "E_UNKNOWN" | "E_UNSUPPORTED";
+  code:
+    | "E_NOT_FOUND"
+    | "E_PERM"
+    | "E_EXISTS"
+    | "E_INVALID_NAME"
+    | "E_IO"
+    | "E_UNKNOWN"
+    | "E_UNSUPPORTED"
+    // Rust 侧其余产出点（2026-11-01 审查补齐）：回收站还原（jobs_cmds）
+    | "E_TRASH"
+    // PDF 任务（pdf_cmds）
+    | "E_PDF"
+    // 索引模式取消（index）
+    | "E_CANCELLED"
+    // 分析类任务的失败通道（analyze_cmds）
+    | "E_JOB_FAILED";
   message: string;
 }
 
@@ -532,6 +547,9 @@ export const api = {
       limit: o.limit,
       force: o.force ?? false,
       nameFilter: o.nameFilter,
+      // 接线 ext_filter（2026-11-01：类型里声明却不下发，调用方传了会被
+      // 静默丢弃——后端自始支持，Rust 端空表 = 不过滤）
+      extFilter: o.extFilter,
     }),
   listDirs: (path: string, showHidden = false) =>
     cmd<string[]>("list_dirs", { path, showHidden }),

@@ -262,10 +262,14 @@ export function Pane({ pane }: { pane: PaneNode }) {
   const [, bumpRegistered] = useState(0);
   useEffect(() => bumpRegistered((x) => x + 1), []);
 
+  // ⚠ Hooks of Rules：以下两个 Hook 必须先于 `if (!tab) return null` 执行
+  // （2026-11-01 审查修复：曾排在 early return 之后——tab 短暂为空再恢复时
+  // Hook 数不一致，React 直接抛错白屏；项目未引入 ESLint，无护栏兜底）
+  const searchType = usePanes((st) => (tab ? st.tabs[tab.id]?.searchType ?? "all" : "all"));
+  const t = useT();
+
   if (!tab) return null;
   const tabId = tab.id;
-  // 搜索类型（搜索浮层的类型选择；组合 ext: 词随查询下发，关闭搜索后保留）
-  const searchType = usePanes((st) => st.tabs[tabId]?.searchType ?? "all");
   /** 当前窗格选中条目（FileEntry）：工具栏菜单功能的执行与条件判定上下文 */
   const getSelItems = (): FileEntry[] => {
     const sel = ui?.selected ?? [];
@@ -423,7 +427,6 @@ export function Pane({ pane }: { pane: PaneNode }) {
     if (nav) ro.observe(nav);
     return () => ro.disconnect();
   }, [searching]);
-  const t = useT();
   const toolTitle = (key: string) => {
     switch (key) {
       case "up":

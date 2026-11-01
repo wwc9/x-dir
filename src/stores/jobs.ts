@@ -158,15 +158,26 @@ export const useJobs = create<JobsStore>()((set, get) => ({
           .pushReceipt("ok", `${JOB_LABELS[info.mode] ?? "任务"}完成`);
       }
       // 极快完成的任务：done 事件可能先于 invoke 返回的 jobId（register 尚未执行）。
-      // 短暂暂存，等 register 落地后补一次受影响目录刷新
+      // 暂存等待 register；超时仍未等到（高负载下 invoke 可远超原 120ms 窗口）
+      // 则按任务已终态收尾——直接从列表清除并刷新受影响目录，杜绝僵尸条目
+      //（2026-11-01 审查修复：旧 120ms 定时器只做 bumpAffected，register 更
+      // 晚到达时 lateDone 已被删，任务挂进列表后永远等不到第二次 job-done）
       if (!info) {
         lateDone.set(d.jobId, d);
         window.setTimeout(() => {
           const late = lateDone.get(d.jobId);
+          if (!late) return; // register 已先行收尾
           lateDone.delete(d.jobId);
-          const reg = late && get().jobs[d.jobId];
-          if (reg) bumpAffectedOf(reg);
-        }, 120);
+          const reg = get().jobs[d.jobId];
+          if (!reg) return; // register 从未到达（无从知道受影响目录）——留待后端无补
+          bumpAffectedOf(reg);
+          set((s) => ({
+            jobs: Object.fromEntries(
+              Object.entries(s.jobs).filter(([id]) => Number(id) !== d.jobId),
+            ),
+            order: s.order.filter((id) => id !== d.jobId),
+          }));
+        }, 1000);
         return;
       }
       bumpAffectedOf(info);

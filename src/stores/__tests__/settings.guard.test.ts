@@ -32,6 +32,13 @@ vi.mock("@tauri-apps/api/window", () => ({
 vi.stubGlobal("window", {
   ...globalThis.window,
   matchMedia: () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }),
+  // 落盘 800ms 防抖（2026-11-01）的同步桩：setTimeout 立即执行回调，
+  // 测试里 update 后 saveSettings 即刻可断言；clearTimeout 空操作
+  setTimeout: (fn: () => void, _ms?: number) => {
+    fn();
+    return 0;
+  },
+  clearTimeout: () => undefined,
 });
 vi.stubGlobal("document", {
   ...globalThis.document,

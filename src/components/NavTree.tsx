@@ -98,14 +98,26 @@ export function NavTree() {
     overscan: DENSITY.overscan,
   });
 
-  // 真实文件图标开启时，为可见节点请求真实图标（未命中前回退 Lucide）
+  // 真实文件图标开启时，为**可见虚拟窗口**节点请求真实图标（未命中前回退
+  // Lucide）。铁律 2：旧实现请求整棵扁平树——深层展开一次排进数千路径，
+  // 大树图标会卡在批量上限内出不来（2026-11-01 审查修复，对齐 FileList 的
+  // 可见窗口口径）。winKey = 可见窗口首尾下标（原始值依赖）：滚动移窗/树
+  // 结构变化时重算，图标 store 的 LRU/负缓存保证滚出滚入可回补
+  const visItems = virt.getVirtualItems();
+  const winKey = visItems.length
+    ? `${visItems[0].index}-${visItems[visItems.length - 1].index}`
+    : "";
   useEffect(() => {
-    if (!realIcons || flat.length === 0) return;
-    const paths = flat
-      .filter((n) => n.kind !== "pc")
-      .map((n) => n.path);
+    if (!realIcons || !winKey) return;
+    const [a, b] = winKey.split("-").map(Number);
+    const paths: string[] = [];
+    for (let i = a; i <= b; i++) {
+      const n = flat[i];
+      if (n && n.kind !== "pc") paths.push(n.path);
+    }
     if (paths.length) useIcons.getState().requestIcons(paths, true);
-  }, [flat, realIcons]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [winKey, flat, realIcons]);
 
   // 定位联动：目标节点进入扁平列表后滚动到可见区（子目录懒加载完成后自动补滚）
   useEffect(() => {

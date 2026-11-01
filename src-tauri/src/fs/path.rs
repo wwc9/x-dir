@@ -91,6 +91,32 @@ pub fn is_same_volume(a: &str, b: &str) -> bool {
     la.is_some() && la == lb
 }
 
+/// 目录联接/junction 判定（自 2026-11-01 审查起为全库共享工具）：reparse
+/// 目录的 read_dir/metadata（跟随式）会进入目标，自引用联接（用户目录的
+/// `Application Data`）即无限递归栈溢出——递归遍历/复制引擎入递归前必须过此闸。
+/// 注意必须按**原始属性**判定：std 的 `Metadata::is_dir()` 对 reparse 目录恒为
+/// false（symlink 语义），旧实现 `md.is_dir() && REPARSE` 在 junction 上永不
+/// 成立——复制引擎的联接防护因此形同虚设（实测定位，2026-11-01 修复）
+pub fn is_reparse_dir(path: &str) -> bool {
+    match std::fs::symlink_metadata(to_extended(path)) {
+        Ok(md) => {
+            #[cfg(windows)]
+            {
+                use std::os::windows::fs::MetadataExt;
+                const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+                const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+                let a = md.file_attributes();
+                a & FILE_ATTRIBUTE_REPARSE_POINT != 0 && a & FILE_ATTRIBUTE_DIRECTORY != 0
+            }
+            #[cfg(not(windows))]
+            {
+                md.file_type().is_symlink()
+            }
+        }
+        Err(_) => false,
+    }
+}
+
 /// 同名判定：大小写折叠比较（§6.11，对齐 NTFS 折叠语义，覆盖大小写敏感卷）
 pub fn same_name_ci(a: &str, b: &str) -> bool {
     a.to_uppercase() == b.to_uppercase()
@@ -107,6 +133,36 @@ pub fn split_ext(name: &str) -> (&str, &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// junction 实物回归（2026-11-01）：std 语义下 symlink_metadata 的
+    /// is_dir() 对 reparse 目录恒 false，旧实现 `md.is_dir() && REPARSE`
+    /// 在真实联接上永不成立——复制引擎的联接环防护因此整体失效（实测
+    /// 定位）；必须按原始属性判
+    #[cfg(windows)]
+    #[test]
+    fn is_reparse_dir_detects_real_junction() {
+        let tmp = std::env::temp_dir().join(format!("xdir-rp-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let link = tmp.join("loop");
+        let ok = std::process::Command::new("cmd")
+            .args(["/c", "mklink", "/J"])
+            .arg(&link)
+            .arg(&tmp)
+            .output()
+            .is_ok_and(|o| o.status.success());
+        if ok {
+            assert!(
+                is_reparse_dir(link.to_str().unwrap()),
+                "junction 必须被识别为 reparse 目录"
+            );
+        }
+        // 普通目录/文件恒 false
+        assert!(!is_reparse_dir(tmp.to_str().unwrap()));
+        std::fs::write(tmp.join("f.txt"), b"x").unwrap();
+        assert!(!is_reparse_dir(tmp.join("f.txt").to_str().unwrap()));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 
     #[test]
     fn valid_names() {

@@ -701,7 +701,10 @@ pub(crate) fn run_page_select(
     em.progress(prog);
 }
 
-/// 旋转：全部页 /Rotate 在原值基础上加 degrees（原地保存，可反向旋转还原）
+/// 旋转：全部页 /Rotate 在原值基础上加 degrees（原地保存，可反向旋转还原）。
+/// 原地保存走临时文件 + 原子改名（2026-11-01 审查修复：lopdf 的 save 以
+/// truncate+write 打开目标，直写原文件时保存中途失败（磁盘满/中断）即损坏
+/// 用户原件；模块内其他操作全部旁写，唯 rotate 是唯一原地路径）
 pub(crate) fn run_rotate(
     path: &str,
     degrees: i64,
@@ -712,11 +715,12 @@ pub(crate) fn run_rotate(
 ) {
     prog.total_files = 1;
     prog.current_path = path.to_string();
+    let tmp = format!("{}\\{}.rotating.tmp", parent_dir(path), stem_of(path));
     let result = (|| -> Result<(), String> {
         let mut doc = Document::load(to_extended(path)).map_err(|e| e.to_string())?;
         for id in pages_in_order(&doc) {
             if is_cancelled(cancel) {
-                return Ok(()); // 取消：不写盘
+                return Ok(()); // 取消：不写盘（tmp 未产生即无清理）
             }
             if let Ok(Object::Dictionary(d)) = doc.get_object_mut(id) {
                 let cur = match d.get(b"Rotate") {
@@ -726,10 +730,12 @@ pub(crate) fn run_rotate(
                 d.set("Rotate", Object::Integer((cur + degrees).rem_euclid(360)));
             }
         }
-        doc.save(to_extended(path))
-            .map(|_| ())
-            .map_err(|e| e.to_string())
+        doc.save(to_extended(&tmp)).map_err(|e| e.to_string())?;
+        std::fs::rename(to_extended(&tmp), to_extended(path)).map_err(|e| e.to_string())
     })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(to_extended(&tmp));
+    }
     if let Err(e) = result {
         failed.push(FailItem {
             path: path.to_string(),

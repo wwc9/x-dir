@@ -13,7 +13,9 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::fs::entry::path_exists;
-use crate::fs::path::{file_name_of, is_same_volume, join_name, parent_of, to_extended};
+use crate::fs::path::{
+    file_name_of, is_reparse_dir, is_same_volume, join_name, parent_of, to_extended,
+};
 
 #[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -276,487 +278,517 @@ impl JobManager {
         let slot = self.slot.clone();
         let cancels = Arc::clone(&self.cancels);
         let pauses = Arc::clone(&self.pauses);
+        let app_h = app.clone();
+        let cancels_h = Arc::clone(&cancels);
+        let pauses_h = Arc::clone(&pauses);
         std::thread::spawn(move || {
-            // 排队态先行上报：等全局串行槽期间，前端任务卡显示「排队中」
-            let _ = app.emit(
-                "job-progress",
-                &JobProgress {
+            // panic 兜底（2026-11-01）：任务体任何 panic（含 dest.expect）原会让
+            // job-done 永不发出——任务卡永久滞留、cancels/pauses 表项泄漏；
+            // catch_unwind 后补发失败回执收场（panic 详情已由全局 hook 落日志）
+            let body = std::panic::AssertUnwindSafe(move || {
+                // 排队态先行上报：等全局串行槽期间，前端任务卡显示「排队中」
+                let _ = app.emit(
+                    "job-progress",
+                    &JobProgress {
+                        job_id: id,
+                        phase: "queued",
+                        total_files: 0,
+                        done_files: 0,
+                        total_bytes: 0,
+                        done_bytes: 0,
+                        current_path: String::new(),
+                    },
+                );
+                // 排队等待可取消（2026-10-22 修复）：此前直接 slot.lock() 阻塞——
+                // 全局槽被长任务/暂停任务占用时，排队中的任务连取消旗标都读不到
+                //（要等拿到槽才开始读），任务卡永远停在「排队中」且取消无效。
+                // 改为 80ms 轮询：排队期间取消 = 直接以 job-done(cancelled) 收尾
+                //（无 dirty_dirs，缓存无需失效），前端移除任务卡
+                let _guard = loop {
+                    if cancel.load(Ordering::SeqCst) {
+                        let _ = app.emit(
+                            "job-done",
+                            &JobDone {
+                                job_id: id,
+                                ok: true,
+                                cancelled: true,
+                                failed: vec![],
+                            },
+                        );
+                        cancels.lock().unwrap().remove(&id);
+                        pauses.lock().unwrap().remove(&id);
+                        return;
+                    }
+                    match slot.try_lock() {
+                        Ok(g) => break g,
+                        Err(_) => std::thread::sleep(std::time::Duration::from_millis(80)),
+                    }
+                };
+                // 暂停旗标装配进线程本地（仅 Copy/Move；批处理类瞬态任务不响应暂停）
+                if matches!(kind, JobKind::Copy | JobKind::Move) {
+                    JOB_PAUSED.with(|p| *p.borrow_mut() = Some(Arc::clone(&paused)));
+                    JOB_CANCEL.with(|c| *c.borrow_mut() = Some(Arc::clone(&cancel)));
+                }
+                let mut em = EmitterState::new(app.clone());
+                let mut prog = JobProgress {
                     job_id: id,
-                    phase: "queued",
+                    phase: "running",
                     total_files: 0,
                     done_files: 0,
                     total_bytes: 0,
                     done_bytes: 0,
                     current_path: String::new(),
-                },
-            );
-            // 排队等待可取消（2026-10-22 修复）：此前直接 slot.lock() 阻塞——
-            // 全局槽被长任务/暂停任务占用时，排队中的任务连取消旗标都读不到
-            //（要等拿到槽才开始读），任务卡永远停在「排队中」且取消无效。
-            // 改为 80ms 轮询：排队期间取消 = 直接以 job-done(cancelled) 收尾
-            //（无 dirty_dirs，缓存无需失效），前端移除任务卡
-            let _guard = loop {
-                if cancel.load(Ordering::SeqCst) {
-                    let _ = app.emit(
-                        "job-done",
-                        &JobDone {
-                            job_id: id,
-                            ok: true,
-                            cancelled: true,
-                            failed: vec![],
-                        },
-                    );
-                    cancels.lock().unwrap().remove(&id);
-                    pauses.lock().unwrap().remove(&id);
-                    return;
-                }
-                match slot.try_lock() {
-                    Ok(g) => break g,
-                    Err(_) => std::thread::sleep(std::time::Duration::from_millis(80)),
-                }
-            };
-            // 暂停旗标装配进线程本地（仅 Copy/Move；批处理类瞬态任务不响应暂停）
-            if matches!(kind, JobKind::Copy | JobKind::Move) {
-                JOB_PAUSED.with(|p| *p.borrow_mut() = Some(Arc::clone(&paused)));
-                JOB_CANCEL.with(|c| *c.borrow_mut() = Some(Arc::clone(&cancel)));
-            }
-            let mut em = EmitterState::new(app.clone());
-            let mut prog = JobProgress {
-                job_id: id,
-                phase: "running",
-                total_files: 0,
-                done_files: 0,
-                total_bytes: 0,
-                done_bytes: 0,
-                current_path: String::new(),
-            };
-            let mut failed: Vec<FailItem> = Vec::new();
-            let mut dirty_dirs: Vec<String> = Vec::new();
-            match &kind {
-                JobKind::Delete { permanent } => {
-                    for p in &sources {
-                        if let Some(par) = parent_of(p) {
-                            dirty_dirs.push(par);
+                };
+                let mut failed: Vec<FailItem> = Vec::new();
+                let mut dirty_dirs: Vec<String> = Vec::new();
+                match &kind {
+                    JobKind::Delete { permanent } => {
+                        for p in &sources {
+                            if let Some(par) = parent_of(p) {
+                                dirty_dirs.push(par);
+                            }
                         }
-                    }
-                    run_delete(
-                        &sources,
-                        *permanent,
-                        &cancel,
-                        &mut prog,
-                        &mut em,
-                        &mut failed,
-                    );
-                }
-                JobKind::Copy | JobKind::Move => {
-                    let dest = dest.expect("copy/move require dest");
-                    dirty_dirs.push(dest.clone());
-                    for s in &sources {
-                        if let Some(par) = parent_of(s) {
-                            dirty_dirs.push(par);
-                        }
-                    }
-                    // V2 原生引擎：进度/冲突由系统 UI 承担；失败回退内置引擎（§3.2/§9）。
-                    // Perform 有"部分完成"语义：报错但源已全部消失 = 实际已完成，
-                    // 只把仍存在的源交给回退，避免对已移走的源二次搬移报假失败。
-                    let mut todo: Vec<String> = sources.to_vec();
-                    let mut native_done = false;
-                    if native {
-                        if crate::native_ops::transfer(
-                            matches!(kind, JobKind::Move),
+                        run_delete(
                             &sources,
-                            &dest,
-                        )
-                        .is_ok()
-                        {
-                            native_done = true;
-                        } else {
-                            todo.retain(|s| path_exists(s));
-                            native_done = todo.is_empty();
-                        }
-                    }
-                    if native_done {
-                        prog.total_files = sources.len() as u64;
-                        prog.done_files = prog.total_files;
-                        em.progress(&prog);
-                    } else {
-                        run_transfer(
-                            matches!(kind, JobKind::Move),
-                            &todo,
-                            &dest,
-                            policy,
+                            *permanent,
                             &cancel,
                             &mut prog,
                             &mut em,
                             &mut failed,
                         );
                     }
-                }
-                JobKind::PdfMerge { output } => {
-                    if let Some(par) = parent_of(output) {
-                        dirty_dirs.push(par);
-                    }
-                    for s in &sources {
-                        if let Some(par) = parent_of(s) {
-                            dirty_dirs.push(par);
-                        }
-                    }
-                    crate::pdf::run_merge(
-                        &sources,
-                        output,
-                        &cancel,
-                        &mut prog,
-                        &mut em,
-                        &mut failed,
-                    );
-                }
-                JobKind::PdfMergeEx {
-                    merge_by_folder,
-                    auto_blank,
-                    blank_first,
-                    output,
-                } => {
-                    // 分组模式的输出写在各组目录（= 选中文件夹自身）内
-                    if let Some(par) = parent_of(output) {
-                        dirty_dirs.push(par);
-                    }
-                    for s in &sources {
-                        if std::path::Path::new(s).is_dir() {
-                            dirty_dirs.push(s.clone());
-                        }
-                        if let Some(par) = parent_of(s) {
-                            dirty_dirs.push(par);
-                        }
-                    }
-                    let opts = crate::pdf::MergeExOpts {
-                        merge_by_folder: *merge_by_folder,
-                        auto_blank: *auto_blank,
-                        blank_first: *blank_first,
-                        fallback_output: output.as_str(),
-                    };
-                    crate::pdf::run_merge_ex(
-                        &sources,
-                        &opts,
-                        &cancel,
-                        &mut prog,
-                        &mut em,
-                        &mut failed,
-                    );
-                }
-                JobKind::PdfSplit { out_dir } => {
-                    if let Some(par) = parent_of(out_dir) {
-                        dirty_dirs.push(par);
-                    }
-                    if let Some(first) = sources.first() {
-                        crate::pdf::run_split(
-                            first,
-                            out_dir,
-                            &cancel,
-                            &mut prog,
-                            &mut em,
-                            &mut failed,
-                        );
-                    }
-                }
-                JobKind::PdfWatermark { opts } => {
-                    for s in &sources {
-                        if let Some(par) = parent_of(s) {
-                            dirty_dirs.push(par);
-                        }
-                    }
-                    crate::pdf::run_watermark(
-                        &sources,
-                        opts,
-                        &cancel,
-                        &mut prog,
-                        &mut em,
-                        &mut failed,
-                    );
-                }
-                JobKind::PdfExtractPages { spec, output }
-                | JobKind::PdfRemovePages { spec, output } => {
-                    if let Some(par) = parent_of(output) {
-                        dirty_dirs.push(par);
-                    }
-                    for s in &sources {
-                        if let Some(par) = parent_of(s) {
-                            dirty_dirs.push(par);
-                        }
-                    }
-                    let invert = matches!(kind, JobKind::PdfRemovePages { .. });
-                    if let Some(first) = sources.first() {
-                        crate::pdf::run_page_select(
-                            first,
-                            spec,
-                            output,
-                            invert,
-                            &cancel,
-                            &mut prog,
-                            &mut em,
-                            &mut failed,
-                        );
-                    }
-                }
-                JobKind::PdfRotate { degrees } => {
-                    for s in &sources {
-                        if let Some(par) = parent_of(s) {
-                            dirty_dirs.push(par);
-                        }
-                    }
-                    if let Some(first) = sources.first() {
-                        crate::pdf::run_rotate(
-                            first,
-                            *degrees,
-                            &cancel,
-                            &mut prog,
-                            &mut em,
-                            &mut failed,
-                        );
-                    }
-                }
-                JobKind::PdfCompress => {
-                    for s in &sources {
-                        if let Some(par) = parent_of(s) {
-                            dirty_dirs.push(par);
-                        }
-                    }
-                    crate::pdf::run_compress(&sources, &cancel, &mut prog, &mut em, &mut failed);
-                }
-                JobKind::ImagesToPdf { output } => {
-                    if let Some(par) = parent_of(output) {
-                        dirty_dirs.push(par);
-                    }
-                    for s in &sources {
-                        if let Some(par) = parent_of(s) {
-                            dirty_dirs.push(par);
-                        }
-                    }
-                    crate::pdf::run_images_to_pdf(
-                        &sources,
-                        output,
-                        &cancel,
-                        &mut prog,
-                        &mut em,
-                        &mut failed,
-                    );
-                }
-                JobKind::OfficeToPdf | JobKind::CleanOfficeMeta | JobKind::OfficeToText => {
-                    for s in &sources {
-                        if let Some(par) = parent_of(s) {
-                            dirty_dirs.push(par);
-                        }
-                    }
-                    match &kind {
-                        JobKind::OfficeToPdf => crate::office::run_office_to_pdf(
-                            &sources,
-                            &cancel,
-                            &mut prog,
-                            &mut em,
-                            &mut failed,
-                        ),
-                        JobKind::CleanOfficeMeta => crate::office::run_clean_meta(
-                            &sources,
-                            &cancel,
-                            &mut prog,
-                            &mut em,
-                            &mut failed,
-                        ),
-                        _ => crate::office::run_extract_text(
-                            &sources,
-                            &cancel,
-                            &mut prog,
-                            &mut em,
-                            &mut failed,
-                        ),
-                    }
-                }
-                JobKind::ConvertEncoding { target } => {
-                    for s in &sources {
-                        if let Some(par) = parent_of(s) {
-                            dirty_dirs.push(par);
-                        }
-                    }
-                    crate::fs::textops::run_convert_encoding(
-                        &sources,
-                        *target,
-                        &cancel,
-                        &mut prog,
-                        &mut em,
-                        &mut failed,
-                    );
-                }
-                JobKind::MergeCsv { output } | JobKind::MergeTexts { output } => {
-                    if let Some(par) = parent_of(output) {
-                        dirty_dirs.push(par);
-                    }
-                    for s in &sources {
-                        if let Some(par) = parent_of(s) {
-                            dirty_dirs.push(par);
-                        }
-                    }
-                    let plain = matches!(kind, JobKind::MergeTexts { .. });
-                    crate::fs::textops::merge_documents(
-                        &sources,
-                        output,
-                        plain,
-                        &cancel,
-                        &mut prog,
-                        &mut em,
-                        &mut failed,
-                    );
-                }
-                JobKind::ZipFiles { output } => {
-                    if let Some(par) = parent_of(output) {
-                        dirty_dirs.push(par);
-                    }
-                    for s in &sources {
-                        if let Some(par) = parent_of(s) {
-                            dirty_dirs.push(par);
-                        }
-                    }
-                    crate::fs::textops::run_zip(
-                        &sources,
-                        output,
-                        &cancel,
-                        &mut prog,
-                        &mut em,
-                        &mut failed,
-                    );
-                }
-                JobKind::MergeXlsx { mode, output } => {
-                    if let Some(par) = parent_of(output) {
-                        dirty_dirs.push(par);
-                    }
-                    for s in &sources {
-                        if let Some(par) = parent_of(s) {
-                            dirty_dirs.push(par);
-                        }
-                    }
-                    crate::fs::xlsx::merge_xlsx(
-                        &sources,
-                        output,
-                        *mode,
-                        &cancel,
-                        &mut prog,
-                        &mut em,
-                        &mut failed,
-                    );
-                }
-                JobKind::Extract => {
-                    if let Some(dest) = &dest {
+                    JobKind::Copy | JobKind::Move => {
+                        let dest = dest.expect("copy/move require dest");
                         dirty_dirs.push(dest.clone());
                         for s in &sources {
                             if let Some(par) = parent_of(s) {
                                 dirty_dirs.push(par);
                             }
                         }
-                        crate::fs::archive::run_extract(
+                        // V2 原生引擎：进度/冲突由系统 UI 承担；失败回退内置引擎（§3.2/§9）。
+                        // Perform 有"部分完成"语义：报错但源已全部消失 = 实际已完成，
+                        // 只把仍存在的源交给回退，避免对已移走的源二次搬移报假失败。
+                        let mut todo: Vec<String> = sources.to_vec();
+                        let mut native_done = false;
+                        if native {
+                            if crate::native_ops::transfer(
+                                matches!(kind, JobKind::Move),
+                                &sources,
+                                &dest,
+                            )
+                            .is_ok()
+                            {
+                                native_done = true;
+                            } else {
+                                todo.retain(|s| path_exists(s));
+                                native_done = todo.is_empty();
+                            }
+                        }
+                        if native_done {
+                            prog.total_files = sources.len() as u64;
+                            prog.done_files = prog.total_files;
+                            em.progress(&prog);
+                        } else {
+                            run_transfer(
+                                matches!(kind, JobKind::Move),
+                                &todo,
+                                &dest,
+                                policy,
+                                &cancel,
+                                &mut prog,
+                                &mut em,
+                                &mut failed,
+                            );
+                        }
+                    }
+                    JobKind::PdfMerge { output } => {
+                        if let Some(par) = parent_of(output) {
+                            dirty_dirs.push(par);
+                        }
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        crate::pdf::run_merge(
                             &sources,
-                            dest,
+                            output,
                             &cancel,
                             &mut prog,
+                            &mut em,
+                            &mut failed,
+                        );
+                    }
+                    JobKind::PdfMergeEx {
+                        merge_by_folder,
+                        auto_blank,
+                        blank_first,
+                        output,
+                    } => {
+                        // 分组模式的输出写在各组目录（= 选中文件夹自身）内
+                        if let Some(par) = parent_of(output) {
+                            dirty_dirs.push(par);
+                        }
+                        for s in &sources {
+                            if std::path::Path::new(s).is_dir() {
+                                dirty_dirs.push(s.clone());
+                            }
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        let opts = crate::pdf::MergeExOpts {
+                            merge_by_folder: *merge_by_folder,
+                            auto_blank: *auto_blank,
+                            blank_first: *blank_first,
+                            fallback_output: output.as_str(),
+                        };
+                        crate::pdf::run_merge_ex(
+                            &sources,
+                            &opts,
+                            &cancel,
+                            &mut prog,
+                            &mut em,
+                            &mut failed,
+                        );
+                    }
+                    JobKind::PdfSplit { out_dir } => {
+                        if let Some(par) = parent_of(out_dir) {
+                            dirty_dirs.push(par);
+                        }
+                        if let Some(first) = sources.first() {
+                            crate::pdf::run_split(
+                                first,
+                                out_dir,
+                                &cancel,
+                                &mut prog,
+                                &mut em,
+                                &mut failed,
+                            );
+                        }
+                    }
+                    JobKind::PdfWatermark { opts } => {
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        crate::pdf::run_watermark(
+                            &sources,
+                            opts,
+                            &cancel,
+                            &mut prog,
+                            &mut em,
+                            &mut failed,
+                        );
+                    }
+                    JobKind::PdfExtractPages { spec, output }
+                    | JobKind::PdfRemovePages { spec, output } => {
+                        if let Some(par) = parent_of(output) {
+                            dirty_dirs.push(par);
+                        }
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        let invert = matches!(kind, JobKind::PdfRemovePages { .. });
+                        if let Some(first) = sources.first() {
+                            crate::pdf::run_page_select(
+                                first,
+                                spec,
+                                output,
+                                invert,
+                                &cancel,
+                                &mut prog,
+                                &mut em,
+                                &mut failed,
+                            );
+                        }
+                    }
+                    JobKind::PdfRotate { degrees } => {
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        if let Some(first) = sources.first() {
+                            crate::pdf::run_rotate(
+                                first,
+                                *degrees,
+                                &cancel,
+                                &mut prog,
+                                &mut em,
+                                &mut failed,
+                            );
+                        }
+                    }
+                    JobKind::PdfCompress => {
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        crate::pdf::run_compress(
+                            &sources,
+                            &cancel,
+                            &mut prog,
+                            &mut em,
+                            &mut failed,
+                        );
+                    }
+                    JobKind::ImagesToPdf { output } => {
+                        if let Some(par) = parent_of(output) {
+                            dirty_dirs.push(par);
+                        }
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        crate::pdf::run_images_to_pdf(
+                            &sources,
+                            output,
+                            &cancel,
+                            &mut prog,
+                            &mut em,
+                            &mut failed,
+                        );
+                    }
+                    JobKind::OfficeToPdf | JobKind::CleanOfficeMeta | JobKind::OfficeToText => {
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        match &kind {
+                            JobKind::OfficeToPdf => crate::office::run_office_to_pdf(
+                                &sources,
+                                &cancel,
+                                &mut prog,
+                                &mut em,
+                                &mut failed,
+                            ),
+                            JobKind::CleanOfficeMeta => crate::office::run_clean_meta(
+                                &sources,
+                                &cancel,
+                                &mut prog,
+                                &mut em,
+                                &mut failed,
+                            ),
+                            _ => crate::office::run_extract_text(
+                                &sources,
+                                &cancel,
+                                &mut prog,
+                                &mut em,
+                                &mut failed,
+                            ),
+                        }
+                    }
+                    JobKind::ConvertEncoding { target } => {
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        crate::fs::textops::run_convert_encoding(
+                            &sources,
+                            *target,
+                            &cancel,
+                            &mut prog,
+                            &mut em,
+                            &mut failed,
+                        );
+                    }
+                    JobKind::MergeCsv { output } | JobKind::MergeTexts { output } => {
+                        if let Some(par) = parent_of(output) {
+                            dirty_dirs.push(par);
+                        }
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        let plain = matches!(kind, JobKind::MergeTexts { .. });
+                        crate::fs::textops::merge_documents(
+                            &sources,
+                            output,
+                            plain,
+                            &cancel,
+                            &mut prog,
+                            &mut em,
+                            &mut failed,
+                        );
+                    }
+                    JobKind::ZipFiles { output } => {
+                        if let Some(par) = parent_of(output) {
+                            dirty_dirs.push(par);
+                        }
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        crate::fs::textops::run_zip(
+                            &sources,
+                            output,
+                            &cancel,
+                            &mut prog,
+                            &mut em,
+                            &mut failed,
+                        );
+                    }
+                    JobKind::MergeXlsx { mode, output } => {
+                        if let Some(par) = parent_of(output) {
+                            dirty_dirs.push(par);
+                        }
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        crate::fs::xlsx::merge_xlsx(
+                            &sources,
+                            output,
+                            *mode,
+                            &cancel,
+                            &mut prog,
+                            &mut em,
+                            &mut failed,
+                        );
+                    }
+                    JobKind::Extract => {
+                        if let Some(dest) = &dest {
+                            dirty_dirs.push(dest.clone());
+                            for s in &sources {
+                                if let Some(par) = parent_of(s) {
+                                    dirty_dirs.push(par);
+                                }
+                            }
+                            crate::fs::archive::run_extract(
+                                &sources,
+                                dest,
+                                &cancel,
+                                &mut prog,
+                                &mut failed,
+                            );
+                        }
+                    }
+                    JobKind::ImgCompress { opts } => {
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        crate::img::run_compress(
+                            &sources,
+                            opts,
+                            &cancel,
+                            &mut prog,
+                            &mut em,
+                            &mut failed,
+                        );
+                    }
+                    JobKind::ImgWatermark { opts } => {
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        crate::img::run_watermark(
+                            &sources,
+                            opts,
+                            &cancel,
+                            &mut prog,
+                            &mut em,
+                            &mut failed,
+                        );
+                    }
+                    JobKind::ImgConvert { opts } => {
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        crate::img::run_convert(
+                            &sources,
+                            opts,
+                            &cancel,
+                            &mut prog,
+                            &mut em,
+                            &mut failed,
+                        );
+                    }
+                    JobKind::ImgResize { opts } => {
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        crate::img::run_resize(
+                            &sources,
+                            opts,
+                            &cancel,
+                            &mut prog,
+                            &mut em,
+                            &mut failed,
+                        );
+                    }
+                    JobKind::ImgMontage { opts } => {
+                        if let Some(first) = sources.first()
+                            && let Some(par) = parent_of(first)
+                        {
+                            dirty_dirs.push(par);
+                        }
+                        if let Some(par) = parent_of(&opts.output) {
+                            dirty_dirs.push(par);
+                        }
+                        crate::img::run_montage(
+                            &sources,
+                            opts,
+                            &cancel,
+                            &mut prog,
+                            &mut em,
                             &mut failed,
                         );
                     }
                 }
-                JobKind::ImgCompress { opts } => {
-                    for s in &sources {
-                        if let Some(par) = parent_of(s) {
-                            dirty_dirs.push(par);
-                        }
-                    }
-                    crate::img::run_compress(
-                        &sources,
-                        opts,
-                        &cancel,
-                        &mut prog,
-                        &mut em,
-                        &mut failed,
-                    );
+                let cancelled = cancel.load(Ordering::SeqCst);
+                let _ = app.emit(
+                    "job-done",
+                    &JobDone {
+                        job_id: id,
+                        ok: failed.is_empty(),
+                        cancelled,
+                        failed,
+                    },
+                );
+                // 后端快照同步失效，前端收到 job-done 后重拉当前页（§6.7）
+                let state = app.state::<crate::AppState>();
+                let mut cache = state.cache.lock().unwrap_or_else(|p| p.into_inner());
+                for d in dirty_dirs {
+                    cache.invalidate(d.trim_end_matches('\\'));
                 }
-                JobKind::ImgWatermark { opts } => {
-                    for s in &sources {
-                        if let Some(par) = parent_of(s) {
-                            dirty_dirs.push(par);
-                        }
-                    }
-                    crate::img::run_watermark(
-                        &sources,
-                        opts,
-                        &cancel,
-                        &mut prog,
-                        &mut em,
-                        &mut failed,
-                    );
-                }
-                JobKind::ImgConvert { opts } => {
-                    for s in &sources {
-                        if let Some(par) = parent_of(s) {
-                            dirty_dirs.push(par);
-                        }
-                    }
-                    crate::img::run_convert(
-                        &sources,
-                        opts,
-                        &cancel,
-                        &mut prog,
-                        &mut em,
-                        &mut failed,
-                    );
-                }
-                JobKind::ImgResize { opts } => {
-                    for s in &sources {
-                        if let Some(par) = parent_of(s) {
-                            dirty_dirs.push(par);
-                        }
-                    }
-                    crate::img::run_resize(
-                        &sources,
-                        opts,
-                        &cancel,
-                        &mut prog,
-                        &mut em,
-                        &mut failed,
-                    );
-                }
-                JobKind::ImgMontage { opts } => {
-                    if let Some(first) = sources.first()
-                        && let Some(par) = parent_of(first)
-                    {
-                        dirty_dirs.push(par);
-                    }
-                    if let Some(par) = parent_of(&opts.output) {
-                        dirty_dirs.push(par);
-                    }
-                    crate::img::run_montage(
-                        &sources,
-                        opts,
-                        &cancel,
-                        &mut prog,
-                        &mut em,
-                        &mut failed,
-                    );
-                }
+                drop(cache);
+                cancels.lock().unwrap().remove(&id);
+                pauses.lock().unwrap().remove(&id);
+            });
+            if std::panic::catch_unwind(body).is_err() {
+                let _ = app_h.emit(
+                    "job-done",
+                    &JobDone {
+                        job_id: id,
+                        ok: false,
+                        cancelled: false,
+                        failed: vec![FailItem {
+                            path: String::new(),
+                            message: "任务内部错误（panic，详见日志）".into(),
+                        }],
+                    },
+                );
+                cancels_h.lock().unwrap().remove(&id);
+                pauses_h.lock().unwrap().remove(&id);
             }
-            let cancelled = cancel.load(Ordering::SeqCst);
-            let _ = app.emit(
-                "job-done",
-                &JobDone {
-                    job_id: id,
-                    ok: failed.is_empty(),
-                    cancelled,
-                    failed,
-                },
-            );
-            // 后端快照同步失效，前端收到 job-done 后重拉当前页（§6.7）
-            let state = app.state::<crate::AppState>();
-            let mut cache = state.cache.lock().unwrap();
-            for d in dirty_dirs {
-                cache.invalidate(d.trim_end_matches('\\'));
-            }
-            drop(cache);
-            cancels.lock().unwrap().remove(&id);
-            pauses.lock().unwrap().remove(&id);
         });
         id
     }
@@ -802,25 +834,31 @@ fn push_fail(failed: &mut Vec<FailItem>, path: &str, e: &io::Error) {
     });
 }
 
-/// 是否为目录联接/符号链接目录（reparse point）：复制引擎不深入——
-/// 联接可指回祖先目录形成环，递归复制/统计会组合爆炸（对照 fs/search.rs 的遍历跳过）。
-/// 处置：记为跳过失败项，move 因此不会删源，用户能感知有内容未搬。
-fn is_reparse_dir(path: &str) -> bool {
-    match std::fs::symlink_metadata(to_extended(path)) {
-        Ok(md) => {
-            #[cfg(windows)]
-            {
-                use std::os::windows::fs::MetadataExt;
-                const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
-                md.is_dir() && md.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-            }
-            #[cfg(not(windows))]
-            {
-                md.file_type().is_symlink()
-            }
-        }
-        Err(_) => false,
+// reparse 判定本体在 fs::path::is_reparse_dir（共享工具）：复制引擎不深入——
+// 联接可指回祖先目录形成环，递归复制/统计会组合爆炸；处置 = 记为跳过
+// 失败项，move 因此不会删源，用户能感知有内容未搬。
+
+/// 目标带只读属性时清除（rename 覆盖前的重试；Explorer 同款行为）。
+/// 返回 true = 已清除（值得重试），false = 原本无只读位或清除失败。
+/// Windows 专属语义（readonly 位）；Unix 无对应概念，恒 false
+#[cfg(windows)]
+#[allow(clippy::permissions_set_readonly_false)] // Windows readonly 位语义，非 Unix 权限位
+fn clear_readonly_if_set(path: &str) -> bool {
+    let p = to_extended(path);
+    let Ok(md) = std::fs::metadata(&p) else {
+        return false;
+    };
+    let mut perm = md.permissions();
+    if !perm.readonly() {
+        return false;
     }
+    perm.set_readonly(false);
+    std::fs::set_permissions(&p, perm).is_ok()
+}
+
+#[cfg(not(windows))]
+fn clear_readonly_if_set(_path: &str) -> bool {
+    false
 }
 
 /// 预统计文件数与字节（复制进度需要总量；目录算 0 字节）；联接目录不深入
@@ -850,6 +888,10 @@ fn delete_one(p: &str, permanent: bool) -> Result<(), String> {
     let extended = to_extended(p);
     let ext = Path::new(&extended);
     if permanent {
+        // Windows 删除只读项必须先清 FILE_ATTRIBUTE_READONLY（Explorer 同款）：
+        // remove_file 对只读文件必报 ACCESS_DENIED；remove_dir_all 遇只读子项
+        // 会先删掉其余内容再报错（部分删除 + 失败，2026-11-01 审查修复）
+        clear_readonly_tree(ext);
         let r = if ext.is_dir() {
             std::fs::remove_dir_all(ext)
         } else {
@@ -860,6 +902,32 @@ fn delete_one(p: &str, permanent: bool) -> Result<(), String> {
         trash::delete(ext).map_err(|e| e.to_string())
     }
 }
+
+/// best-effort 清除树内全部只读属性（删除/覆盖前）。跳过 reparse 目录——
+/// 联接不属本树内容且会引出环。失败静默：后续删除自会报出真实原因
+#[cfg(windows)]
+#[allow(clippy::permissions_set_readonly_false)] // Windows readonly 位语义，非 Unix 权限位
+fn clear_readonly_tree(root: &Path) {
+    let Ok(md) = std::fs::symlink_metadata(root) else {
+        return;
+    };
+    let mut perm = md.permissions();
+    if perm.readonly() {
+        perm.set_readonly(false);
+        let _ = std::fs::set_permissions(root, perm);
+    }
+    if !md.is_dir() || md.file_type().is_symlink() {
+        return;
+    }
+    if let Ok(rd) = std::fs::read_dir(root) {
+        for e in rd.flatten() {
+            clear_readonly_tree(&e.path());
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn clear_readonly_tree(_root: &Path) {}
 
 fn run_delete(
     paths: &[String],
@@ -988,18 +1056,31 @@ fn copy_or_move_path(
         // 目录复制 / 跨卷移动 / 同卷覆盖合并：递归复制
         copy_dir(src, target, policy, cancel, prog, em, failed);
         if is_move && failed.len() == fail_before && !is_cancelled(cancel) {
-            let _ = std::fs::remove_dir_all(to_extended(src));
+            // 删源失败必须报出（2026-11-01：曾被 let _ = 吞掉——用户以为移动
+            // 完成，实际源残留，无从感知）
+            if let Err(e) = std::fs::remove_dir_all(to_extended(src)) {
+                push_fail(failed, src, &e);
+            }
         }
         return;
     }
 
     // 文件
     if is_move && is_same_volume(src, target) {
-        if path_exists(target) {
-            let _ = std::fs::remove_file(to_extended(target)); // Overwrite；其余策略已在 resolve 处理
-        }
-        // 同卷移动 = rename：拖放事务未释放源句柄时会报共享冲突，短重试消解
-        match with_sharing_retry(|| std::fs::rename(to_extended(src), to_extended(target))) {
+        // Overwrite = rename 原子替换（std::fs::rename 在 Windows 带
+        // MOVEFILE_REPLACE_EXISTING）。绝不「先删目标再改名」——删除成功而
+        // rename 失败（源被杀软/拖放事务占用超出重试窗）时目标已丢、源未动
+        // = 用户原有文件凭空消失（2026-11-01 审查修复）。目标带只读属性时
+        // rename 会被拒，清属性后重试一次（Explorer 同款行为）
+        let renamed = with_sharing_retry(|| std::fs::rename(to_extended(src), to_extended(target)))
+            .or_else(|first| {
+                if clear_readonly_if_set(target) {
+                    with_sharing_retry(|| std::fs::rename(to_extended(src), to_extended(target)))
+                } else {
+                    Err(first)
+                }
+            });
+        match renamed {
             Ok(()) => prog.done_files += 1,
             Err(e) => push_fail(failed, src, &e),
         }

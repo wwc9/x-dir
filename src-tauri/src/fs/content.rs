@@ -183,8 +183,15 @@ pub fn search_content(
         return out;
     }
     if root_path.is_file() {
+        // 单文件根同样过 2MB 护栏（2026-11-01 审查修复：目录遍历路径有
+        // MAX_FILE_BYTES 闸，单文件分支曾绕过——scan_file 的 read_to_end
+        // 无界读取大文件即内存尖峰）
         out.scanned = 1;
-        if let Some(m) = scan_file(root_path, terms_lower, &mut out) {
+        if root_path
+            .metadata()
+            .is_ok_and(|m| m.len() <= MAX_FILE_BYTES)
+            && let Some(m) = scan_file(root_path, terms_lower, &mut out)
+        {
             out.matches.push(m);
         }
         out.elapsed_ms = started.elapsed().as_millis() as u64;
@@ -266,6 +273,59 @@ mod tests {
         assert!(looks_binary(&[b'a', 0, b'b']));
         assert!(!looks_binary(b"plain text file"));
         assert!(!looks_binary(&[]));
+    }
+
+    /// 建 junction（无需管理员）；环境不允许则返回 None（测试跳过）
+    #[cfg(windows)]
+    fn try_mk_junction(link: &Path, target: &Path) -> bool {
+        std::process::Command::new("cmd")
+            .args(["/c", "mklink", "/J"])
+            .arg(link)
+            .arg(target)
+            .output()
+            .is_ok_and(|o| o.status.success())
+    }
+
+    #[test]
+    fn single_file_root_respects_size_cap() {
+        let dir = std::env::temp_dir().join(format!("xdir-content-cap-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let big = dir.join("big.txt");
+        fs::write(&big, vec![b'x'; MAX_FILE_BYTES as usize + 1]).unwrap();
+        let cancel = Arc::new(AtomicBool::new(false));
+        // 超护栏：扫描计数照记，但不读不匹配（2026-11-01 修复前 read_to_end
+        // 整读入内存）
+        let r = search_content(big.to_str().unwrap(), &terms(&["x"]), None, &cancel);
+        assert_eq!(r.scanned, 1);
+        assert!(r.matches.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn junction_dirs_not_traversed() {
+        // 行为锁定：std 语义下 junction 的 file_type().is_dir() = false（落入
+        // 文件分支、open 失败静默跳过），read_dir 虽会跟随联接但本遍历永不
+        // 递归进去——自引用联接（Application Data 同款拓扑）不得产生重复
+        // 命中或死循环（2026-11-01 审查实证）
+        let dir = std::env::temp_dir().join(format!("xdir-content-junc-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("d")).unwrap();
+        fs::write(dir.join("d/inner.txt"), b"needle here").unwrap();
+        #[cfg(windows)]
+        {
+            // 自引用联接（Application Data 同款拓扑）：修复前 read_dir 跟随
+            // 进环重复扫描
+            if !try_mk_junction(&dir.join("loop"), &dir) {
+                let _ = fs::remove_dir_all(&dir);
+                return; // 环境不允许建联接：跳过
+            }
+        }
+        let cancel = Arc::new(AtomicBool::new(false));
+        let r = search_content(dir.to_str().unwrap(), &terms(&["needle"]), None, &cancel);
+        assert_eq!(r.matches.len(), 1, "环内文件只命中一次");
+        assert!(r.matches[0].path.ends_with("inner.txt"));
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

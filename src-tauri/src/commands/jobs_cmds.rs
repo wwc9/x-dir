@@ -2,7 +2,7 @@
 //! native = V2 IFileOperation 原生引擎（进度/冲突交给系统 UI，§3.2）。
 
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use super::files::AppError;
 use crate::AppState;
@@ -35,59 +35,69 @@ fn check_dest(dest_dir: &str) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub fn copy_items(
+pub async fn copy_items(
     app: AppHandle,
-    state: State<'_, AppState>,
     sources: Vec<String>,
     dest_dir: String,
     policy: String,
     native: Option<bool>,
 ) -> Result<JobId, AppError> {
-    check_dest(&dest_dir)?;
-    reject_missing(&sources).map_or(Ok(()), Err)?;
-    for s in &sources {
-        if dest_inside_source(s, &dest_dir) {
-            return Err(AppError::new("E_UNKNOWN", "不能把项目复制到它自身内部"));
+    // 预检在 blocking 线程：reject_missing 逐源 path_exists，网络路径单次
+    // 可达秒级（2026-11-01：同步命令在主线程跑会冻住全部窗口）
+    tauri::async_runtime::spawn_blocking(move || {
+        check_dest(&dest_dir)?;
+        reject_missing(&sources).map_or(Ok(()), Err)?;
+        for s in &sources {
+            if dest_inside_source(s, &dest_dir) {
+                return Err(AppError::new("E_UNKNOWN", "不能把项目复制到它自身内部"));
+            }
         }
-    }
-    Ok(JobId {
-        job_id: state.jobs.enqueue(
-            JobKind::Copy,
-            sources,
-            Some(dest_dir),
-            Policy::parse(&policy),
-            native.unwrap_or(false),
-            app,
-        ),
+        let st = app.state::<AppState>();
+        Ok(JobId {
+            job_id: st.jobs.enqueue(
+                JobKind::Copy,
+                sources,
+                Some(dest_dir),
+                Policy::parse(&policy),
+                native.unwrap_or(false),
+                app.clone(),
+            ),
+        })
     })
+    .await
+    .map_err(|e| AppError::new("E_IO", format!("入队线程失败：{e}")))?
 }
 
 #[tauri::command]
-pub fn move_items(
+pub async fn move_items(
     app: AppHandle,
-    state: State<'_, AppState>,
     sources: Vec<String>,
     dest_dir: String,
     policy: String,
     native: Option<bool>,
 ) -> Result<JobId, AppError> {
-    check_dest(&dest_dir)?;
-    reject_missing(&sources).map_or(Ok(()), Err)?;
-    for s in &sources {
-        if dest_inside_source(s, &dest_dir) {
-            return Err(AppError::new("E_UNKNOWN", "不能把目录移动到它自身内部"));
+    tauri::async_runtime::spawn_blocking(move || {
+        check_dest(&dest_dir)?;
+        reject_missing(&sources).map_or(Ok(()), Err)?;
+        for s in &sources {
+            if dest_inside_source(s, &dest_dir) {
+                return Err(AppError::new("E_UNKNOWN", "不能把目录移动到它自身内部"));
+            }
         }
-    }
-    Ok(JobId {
-        job_id: state.jobs.enqueue(
-            JobKind::Move,
-            sources,
-            Some(dest_dir),
-            Policy::parse(&policy),
-            native.unwrap_or(false),
-            app,
-        ),
+        let st = app.state::<AppState>();
+        Ok(JobId {
+            job_id: st.jobs.enqueue(
+                JobKind::Move,
+                sources,
+                Some(dest_dir),
+                Policy::parse(&policy),
+                native.unwrap_or(false),
+                app.clone(),
+            ),
+        })
     })
+    .await
+    .map_err(|e| AppError::new("E_IO", format!("入队线程失败：{e}")))?
 }
 
 /// 目标目录是否位于源路径内部或就是源本身（防把父目录移动/复制进子目录）。
@@ -105,24 +115,28 @@ fn dest_inside_source(src: &str, dest_dir: &str) -> bool {
 }
 
 #[tauri::command]
-pub fn delete_items(
+pub async fn delete_items(
     app: AppHandle,
-    state: State<'_, AppState>,
     paths: Vec<String>,
     // false = 移入回收站；true = 永久删除（Shift+Del，前端强制 danger 确认）
     permanent: bool,
 ) -> Result<JobId, AppError> {
-    reject_missing(&paths).map_or(Ok(()), Err)?;
-    Ok(JobId {
-        job_id: state.jobs.enqueue(
-            JobKind::Delete { permanent },
-            paths,
-            None,
-            Policy::Skip,
-            false,
-            app,
-        ),
+    tauri::async_runtime::spawn_blocking(move || {
+        reject_missing(&paths).map_or(Ok(()), Err)?;
+        let st = app.state::<AppState>();
+        Ok(JobId {
+            job_id: st.jobs.enqueue(
+                JobKind::Delete { permanent },
+                paths,
+                None,
+                Policy::Skip,
+                false,
+                app.clone(),
+            ),
+        })
     })
+    .await
+    .map_err(|e| AppError::new("E_IO", format!("入队线程失败：{e}")))?
 }
 
 #[tauri::command]
@@ -176,22 +190,29 @@ fn partition_matches(want: &[String], item_paths: &[String]) -> (Vec<usize>, usi
     (hits, missing)
 }
 
-/// Ctrl+Z 撤销"删除到回收站"：按原始路径匹配回收站条目并还原
+/// Ctrl+Z 撤销"删除到回收站"：按原始路径匹配回收站条目并还原。
+/// spawn_blocking：trash::list 走 Shell COM 枚举整个回收站，大回收站
+/// 数百 ms 起步（2026-11-01：同步命令在主线程跑会冻住全部窗口）
 #[tauri::command]
-pub fn restore_trash(paths: Vec<String>) -> Result<RestoreResult, AppError> {
-    let items = trash::os_limited::list().map_err(|e| AppError::new("E_TRASH", e.to_string()))?;
-    let item_paths: Vec<String> = items
-        .iter()
-        .map(|it| it.original_path().to_string_lossy().to_string())
-        .collect();
-    let (hits, missing) = partition_matches(&paths, &item_paths);
-    let restored = hits.len();
-    let matched: Vec<_> = hits.into_iter().map(|i| items[i].clone()).collect();
-    if !matched.is_empty() {
-        trash::os_limited::restore_all(matched)
-            .map_err(|e| AppError::new("E_TRASH", e.to_string()))?;
-    }
-    Ok(RestoreResult { restored, missing })
+pub async fn restore_trash(paths: Vec<String>) -> Result<RestoreResult, AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let items =
+            trash::os_limited::list().map_err(|e| AppError::new("E_TRASH", e.to_string()))?;
+        let item_paths: Vec<String> = items
+            .iter()
+            .map(|it| it.original_path().to_string_lossy().to_string())
+            .collect();
+        let (hits, missing) = partition_matches(&paths, &item_paths);
+        let restored = hits.len();
+        let matched: Vec<_> = hits.into_iter().map(|i| items[i].clone()).collect();
+        if !matched.is_empty() {
+            trash::os_limited::restore_all(matched)
+                .map_err(|e| AppError::new("E_TRASH", e.to_string()))?;
+        }
+        Ok(RestoreResult { restored, missing })
+    })
+    .await
+    .map_err(|e| AppError::new("E_TRASH", format!("还原线程失败：{e}")))?
 }
 
 #[cfg(test)]

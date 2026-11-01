@@ -16,7 +16,10 @@ const MAX_HASH_FILES: usize = 20_000;
 /// 返回的重复组上限（按可节省字节降序截断）
 const MAX_GROUPS: usize = 500;
 
-fn walk_files(dir: &str, out: &mut Vec<String>, cap: usize) {
+/// 递归收集文件 (路径, 体积)。用 DirEntry 自带元数据（Windows 上直接来自
+/// FindData，零额外系统调用）——按路径 std::fs::metadata 每次都要开句柄，
+/// 20 万文件 = 多 20 万次 IO（2026-11-01 审查修复 N+1）
+fn walk_files(dir: &str, out: &mut Vec<(String, u64)>, cap: usize) {
     if out.len() >= cap {
         return;
     }
@@ -31,11 +34,12 @@ fn walk_files(dir: &str, out: &mut Vec<String>, cap: usize) {
         if ft.is_symlink() {
             continue;
         }
-        let p = entry.path().to_string_lossy().into_owned();
         if ft.is_dir() {
+            let p = entry.path().to_string_lossy().into_owned();
             walk_files(&p, out, cap);
-        } else {
-            out.push(p);
+        } else if let Ok(m) = entry.metadata() {
+            let p = entry.path().to_string_lossy().into_owned();
+            out.push((p, m.len()));
         }
     }
 }
@@ -68,11 +72,9 @@ pub fn find_duplicates(root: &str) -> Vec<DupGroup> {
     let mut files = Vec::new();
     walk_files(root, &mut files, MAX_FILES);
     let mut by_size: HashMap<u64, Vec<String>> = HashMap::new();
-    for p in files {
-        if let Ok(m) = std::fs::metadata(&p)
-            && m.len() > 0
-        {
-            by_size.entry(m.len()).or_default().push(p);
+    for (p, size) in files {
+        if size > 0 {
+            by_size.entry(size).or_default().push(p);
         }
     }
     let mut by_hash: HashMap<(u64, String), Vec<String>> = HashMap::new();
@@ -132,11 +134,7 @@ pub fn dir_sizes(dir: &str) -> Vec<DirSizeEntry> {
         if ft.is_dir() {
             let mut files = Vec::new();
             walk_files(&p, &mut files, MAX_FILES);
-            let size = files
-                .iter()
-                .filter_map(|f| std::fs::metadata(f).ok())
-                .map(|m| m.len())
-                .sum();
+            let size = files.iter().map(|(_, s)| s).sum();
             out.push(DirSizeEntry {
                 name: file_name_of(&p),
                 path: p,
@@ -144,7 +142,7 @@ pub fn dir_sizes(dir: &str) -> Vec<DirSizeEntry> {
                 size,
                 files: files.len() as u64,
             });
-        } else if let Ok(m) = std::fs::metadata(&p) {
+        } else if let Ok(m) = entry.metadata() {
             out.push(DirSizeEntry {
                 name: file_name_of(&p),
                 path: p,
@@ -193,7 +191,7 @@ pub fn scan_empty(root: &str) -> EmptyScan {
             if ft.is_dir() {
                 out.scanned += 1;
                 walk(&p, root, out);
-            } else if let Ok(m) = std::fs::metadata(&p) {
+            } else if let Ok(m) = entry.metadata() {
                 out.scanned += 1;
                 if m.len() == 0 {
                     out.empty_files.push(p);
@@ -235,15 +233,6 @@ pub struct CompareResult {
     pub same: u64,
 }
 
-fn mtime_ms(p: &Path) -> u64 {
-    std::fs::metadata(p)
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
-
 fn collect_rel(root: &str, map: &mut HashMap<String, RelItem>) {
     fn walk(dir: &str, rel_prefix: &str, map: &mut HashMap<String, RelItem>) {
         if map.len() >= MAX_FILES {
@@ -275,14 +264,21 @@ fn collect_rel(root: &str, map: &mut HashMap<String, RelItem>) {
                     },
                 );
                 walk(&p, &rel, map);
-            } else if let Ok(m) = std::fs::metadata(&p) {
+            } else if let Ok(m) = entry.metadata() {
+                // DirEntry 元数据一次拿 len + mtime（旧实现按路径开两次句柄）
+                let mt = m
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
                 map.insert(
                     rel.clone(),
                     RelItem {
                         rel,
                         is_dir: false,
                         size: m.len(),
-                        mtime_ms: mtime_ms(Path::new(&p)),
+                        mtime_ms: mt,
                     },
                 );
             }

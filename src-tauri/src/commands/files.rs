@@ -6,6 +6,8 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+use tauri::Manager;
+
 use crate::AppState;
 use crate::fs::entry::{name_exists_ci, path_exists};
 use crate::fs::path::{
@@ -45,7 +47,7 @@ impl From<io::Error> for AppError {
 #[tauri::command]
 #[allow(clippy::too_many_arguments)] // 参数表 = §6.5 IPC 契约，双端同步不宜拆
 pub async fn list_dir(
-    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
     path: String,
     sort: Option<SortSpec>,
     ext_filter: Option<Vec<String>>,
@@ -61,9 +63,26 @@ pub async fn list_dir(
     });
     let exts = ext_filter.filter(|v| !v.is_empty());
     let query = name_filter.filter(|s| !s.trim().is_empty());
-    let mut cache = state.cache.lock().unwrap();
-    cache
-        .with_entries(&path, force.unwrap_or(false), |entries| {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        // 两阶段（2026-11-01 审查修复）：缺快照时**锁外**扫描——旧实现整目录
+        // 扫描在全局缓存锁内进行，冷/网络目录扫数秒期间所有窗格的列目录、
+        // watcher 失效、任务收尾失效全部排队等锁；且旧命令虽 async 却直接在
+        // runtime worker 上跑阻塞 IO，占死一个 tokio 线程
+        let need = {
+            let c = state.cache.lock().unwrap_or_else(|p| p.into_inner());
+            c.needs_scan(&path, force.unwrap_or(false))
+        };
+        if need {
+            let entries = crate::fs::entry::scan_dir(&path)?;
+            state
+                .cache
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .insert(&path, entries);
+        }
+        let mut cache = state.cache.lock().unwrap_or_else(|p| p.into_inner());
+        Ok(cache.with_entries(&path, |entries| {
             build_page(
                 entries,
                 &sort,
@@ -73,8 +92,10 @@ pub async fn list_dir(
                 offset,
                 limit,
             )
-        })
-        .map_err(AppError::from)
+        }))
+    })
+    .await
+    .map_err(|e| AppError::new("E_IO", format!("列目录线程失败：{e}")))?
 }
 
 #[derive(Serialize)]
@@ -86,51 +107,76 @@ pub struct ConflictInfo {
 }
 
 /// 导航树：列出子目录名（自然排序；复用 list_dir 的目录缓存，无额外 IO）。
-/// async：冷目录首扫是全量 IO，不能跑在主线程。
+/// 与 list_dir 同款两阶段锁外扫描 + spawn_blocking（冷目录首扫不锁全局、
+/// 不占主线程也不占 tokio worker）
 #[tauri::command]
 pub async fn list_dirs(
-    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
     path: String,
     show_hidden: Option<bool>,
 ) -> Result<Vec<String>, AppError> {
     let show_hidden = show_hidden.unwrap_or(false);
-    let mut cache = state.cache.lock().unwrap();
-    cache
-        .with_entries(&path, false, |entries| {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let need = {
+            let c = state.cache.lock().unwrap_or_else(|p| p.into_inner());
+            c.needs_scan(&path, false)
+        };
+        if need {
+            let entries = crate::fs::entry::scan_dir(&path)?;
+            state
+                .cache
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .insert(&path, entries);
+        }
+        let mut cache = state.cache.lock().unwrap_or_else(|p| p.into_inner());
+        Ok(cache.with_entries(&path, |entries| {
             crate::fs::sort::dir_names(entries, show_hidden)
-        })
-        .map_err(AppError::from)
+        }))
+    })
+    .await
+    .map_err(|e| AppError::new("E_IO", format!("列目录线程失败：{e}")))?
 }
 
 /// 粘贴/拖放前的冲突预检（§6.7）。大小写折叠判定（§6.11）：
 /// 一次读目录建立折叠名索引，同时覆盖 NTFS 与大小写敏感卷（Dev Drive 等）。
-/// async：粘贴目标可能是上万条的目录，整目录枚举不能跑在主线程。
+/// spawn_blocking：粘贴目标可能是上万条的目录，整目录枚举不能占住
+/// tokio worker（2026-11-01：旧注释自称 async 不占主线程，但 async 命令
+/// 直接在 runtime worker 上做阻塞 IO 同样拖慢全部并发 IPC）
 #[tauri::command]
-pub async fn check_conflicts(sources: Vec<String>, dest_dir: String) -> Vec<ConflictInfo> {
-    let mut existing: HashMap<String, (bool, u64)> = HashMap::new();
-    if let Ok(rd) = fs::read_dir(to_extended(&dest_dir)) {
-        for entry in rd.flatten() {
-            let Ok(meta) = entry.metadata() else { continue };
-            let name = entry.file_name().to_string_lossy().to_uppercase();
-            existing.insert(
-                name,
-                (meta.is_dir(), if meta.is_dir() { 0 } else { meta.len() }),
-            );
+pub async fn check_conflicts(
+    sources: Vec<String>,
+    dest_dir: String,
+) -> Result<Vec<ConflictInfo>, AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut existing: HashMap<String, (bool, u64)> = HashMap::new();
+        if let Ok(rd) = fs::read_dir(to_extended(&dest_dir)) {
+            for entry in rd.flatten() {
+                let Ok(meta) = entry.metadata() else { continue };
+                let name = entry.file_name().to_string_lossy().to_uppercase();
+                existing.insert(
+                    name,
+                    (meta.is_dir(), if meta.is_dir() { 0 } else { meta.len() }),
+                );
+            }
         }
-    }
-    sources
-        .iter()
-        .filter_map(|s| {
-            let name = file_name_of(s);
-            existing
-                .get(&name.to_uppercase())
-                .map(|(is_dir, size)| ConflictInfo {
-                    source_name: name,
-                    existing_is_dir: *is_dir,
-                    existing_size: *size,
-                })
-        })
-        .collect()
+        Ok(sources
+            .iter()
+            .filter_map(|s| {
+                let name = file_name_of(s);
+                existing
+                    .get(&name.to_uppercase())
+                    .map(|(is_dir, size)| ConflictInfo {
+                        source_name: name,
+                        existing_is_dir: *is_dir,
+                        existing_size: *size,
+                    })
+            })
+            .collect())
+    })
+    .await
+    .map_err(|e| AppError::new("E_IO", format!("冲突预检线程失败：{e}")))?
 }
 
 #[tauri::command]
@@ -197,9 +243,22 @@ pub struct CreateDirsResult {
 
 /// 批量新建文件夹：逐个创建。与磁盘已有项重名自动 (2)（与冲突"保留两者"
 /// 同一套 available_name）；名单内重名（大小写不敏感）与非法名逐条报错不中断。
-/// 轻量同步命令（mkdir 毫秒级），不入任务引擎；上限 500。
+/// 轻量命令不入任务引擎；上限 500。spawn_blocking：available_name 逐项
+/// 探测磁盘，网络父目录下数百次探测可拖到秒级（2026-11-01 移出主线程）
 #[tauri::command]
-pub fn create_dirs(parent_dir: String, names: Vec<String>) -> Result<CreateDirsResult, AppError> {
+pub async fn create_dirs(
+    parent_dir: String,
+    names: Vec<String>,
+) -> Result<CreateDirsResult, AppError> {
+    tauri::async_runtime::spawn_blocking(move || create_dirs_blocking(parent_dir, names))
+        .await
+        .map_err(|e| AppError::new("E_IO", format!("批量创建线程失败：{e}")))?
+}
+
+fn create_dirs_blocking(
+    parent_dir: String,
+    names: Vec<String>,
+) -> Result<CreateDirsResult, AppError> {
     if names.is_empty() {
         return Err(AppError::new("E_INVALID_NAME", "名单为空"));
     }
@@ -273,7 +332,7 @@ mod tests {
     fn create_dirs_dedups_and_sideloads_existing() {
         let dir = tempdir();
         std::fs::create_dir_all(join_name(&dir, "已有")).unwrap();
-        let r = create_dirs(
+        let r = create_dirs_blocking(
             dir.clone(),
             vec![
                 "甲".into(),
@@ -308,7 +367,7 @@ mod tests {
     #[test]
     fn create_dirs_rejects_empty_and_missing_parent() {
         let dir = tempdir();
-        assert!(create_dirs(dir.clone(), vec![]).is_err());
-        assert!(create_dirs(join_name(&dir, "不存在"), vec!["a".into()]).is_err());
+        assert!(create_dirs_blocking(dir.clone(), vec![]).is_err());
+        assert!(create_dirs_blocking(join_name(&dir, "不存在"), vec!["a".into()]).is_err());
     }
 }

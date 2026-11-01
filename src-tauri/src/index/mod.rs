@@ -345,6 +345,22 @@ pub fn try_search_dir_indexed(
     })
 }
 
+/// 文件 SHA-256（守护副本完整性校验用）
+fn sha256_file(p: &std::path::Path) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    let mut f = std::fs::File::open(p).map_err(|e| format!("打开 {} 失败：{e}", p.display()))?;
+    let mut h = Sha256::new();
+    let mut buf = vec![0u8; 1 << 20];
+    loop {
+        let n = std::io::Read::read(&mut f, &mut buf).map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        h.update(&buf[..n]);
+    }
+    Ok(format!("{:x}", h.finalize()))
+}
+
 /// UAC 拉起提权守护进程（ShellExecuteExW runas；用户取消 UAC → Err）
 pub fn launch_elevated_daemon() -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
@@ -359,6 +375,17 @@ pub fn launch_elevated_daemon() -> Result<(), String> {
     let daemon_exe = dir.join("x-dir-daemon.exe");
     if std::fs::copy(&exe, &daemon_exe).is_err() && !daemon_exe.exists() {
         return Err("无法准备守护进程副本（config/index/x-dir-daemon.exe）".into());
+    }
+    // 副本完整性校验（2026-11-01 安全加固）：副本落点在用户可写目录而拉起
+    // 走 runas 提权——同用户恶意进程可在复制后/复用旧副本时替换之以骗取
+    // 一次管理员执行。哈希比对不一致即拒绝提权（复制 → 比对 → 拉起之间的
+    // 窗口已压缩到一瞬；彻底消除需计划任务/服务承载，见发布前议题）
+    if sha256_file(&exe)? != sha256_file(&daemon_exe)? {
+        return Err(
+            "守护副本与当前程序不一致（可能被替换或上次复制中断），已拒绝提权拉起；\
+             删除 config/index/x-dir-daemon.exe 后重试"
+                .into(),
+        );
     }
     let params_str = format!("--index-daemon \"{}\"", cfg.to_string_lossy());
     let file: Vec<u16> = daemon_exe

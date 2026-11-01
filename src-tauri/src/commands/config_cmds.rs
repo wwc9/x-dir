@@ -99,10 +99,53 @@ fn cliphist_save_size_blocking(width: f64, height: f64) -> Result<(), String> {
         .and_then(|s| std::fs::write(p, s).map_err(|e| e.to_string()))
 }
 
+/// 由轻量窗口补丁命令直写 settings.json 的键（shot_save_prefs 八键 +
+/// cliphist_save_size 两键）。save_settings 落盘时**保留磁盘值**——主窗
+/// store 启动时加载、此后不再重读，整对象覆盖会把这些键回滚到启动时的旧值
+/// （2026-11-01 审查修复：截图滚轮调节 → 主窗任意设置变更，调节即被回滚）
+const PATCH_OWNED_KEYS: &[&str] = &[
+    "shotShadowW",
+    "shotBorderW",
+    "shotBorderColor",
+    "shotStrokeW",
+    "shotTextFont",
+    "shotStepW",
+    "shotMosaicW",
+    "shotBlurAlpha",
+    "cliphistWinW",
+    "cliphistWinH",
+];
+
 #[tauri::command]
-pub fn save_settings(json: Value) -> Result<(), String> {
+pub async fn save_settings(json: Value) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || save_settings_blocking(json))
+        .await
+        .map_err(|e| format!("保存线程失败：{e}"))?
+}
+
+fn save_settings_blocking(json: Value) -> Result<(), String> {
     let p = config_root().join("settings.json");
-    serde_json::to_string_pretty(&json)
+    // 合并落盘：以磁盘现档为底、incoming 覆盖，补丁键回填磁盘值
+    let disk: Value = std::fs::read_to_string(&p)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+    let mut merged = disk.clone();
+    if let (Some(m), Some(n)) = (merged.as_object_mut(), json.as_object()) {
+        for (k, v) in n {
+            m.insert(k.clone(), v.clone());
+        }
+    } else {
+        merged = json;
+    }
+    if let Some(m) = merged.as_object_mut() {
+        for k in PATCH_OWNED_KEYS {
+            if let Some(v) = disk.get(k) {
+                m.insert((*k).to_string(), v.clone());
+            }
+        }
+    }
+    serde_json::to_string_pretty(&merged)
         .map_err(|e| e.to_string())
         .and_then(|s| std::fs::write(p, s).map_err(|e| e.to_string()))
 }

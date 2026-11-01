@@ -159,11 +159,19 @@ fn validate_output(output: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-/// 保存文本文件（导出文件清单等轻量写出；UTF-8 BOM，Excel 友好）
+/// 保存文本文件（导出文件清单等轻量写出；UTF-8 BOM，Excel 友好）。
+/// 整路径逐段校验（2026-11-01 安全加固）：旧实现只查末段文件名，`..` 可
+/// 留在目录段——IPC 裸调可写任意已存在目录（UI 正常路径无害，纵深防御）
 #[tauri::command]
 pub fn save_text_file(path: String, content: String) -> Result<(), AppError> {
-    if !is_valid_name(&crate::fs::path::file_name_of(&path)) {
+    let name = crate::fs::path::file_name_of(&path);
+    if !is_valid_name(&name) {
         return Err(AppError::new("E_INVALID_NAME", "文件名无效"));
+    }
+    for seg in path.split('\\') {
+        if seg == ".." {
+            return Err(AppError::new("E_INVALID_NAME", "路径不允许包含 .."));
+        }
     }
     let Some(parent) = parent_of(&path) else {
         return Err(AppError::new("E_INVALID_NAME", "缺少所在目录"));
@@ -176,9 +184,6 @@ pub fn save_text_file(path: String, content: String) -> Result<(), AppError> {
     }
     let mut bytes = vec![0xEF, 0xBB, 0xBF];
     bytes.extend_from_slice(content.as_bytes());
-    std::fs::write(
-        to_extended(&join_name(&parent, &crate::fs::path::file_name_of(&path))),
-        bytes,
-    )?;
+    std::fs::write(to_extended(&join_name(&parent, &name)), bytes)?;
     Ok(())
 }

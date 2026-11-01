@@ -269,7 +269,7 @@ pub fn start(paths: &[String], app: AppHandle) -> Result<String, String> {
             log::info!("OLE start_drag 完成: effect={r} hr=0x{:08X}", hr.0 as u32);
             // 源父目录快照失效（可见窗格由 watcher 兜底刷新）
             let state = app2.state::<crate::AppState>();
-            let mut cache = state.cache.lock().unwrap();
+            let mut cache = state.cache.lock().unwrap_or_else(|p| p.into_inner());
             for p in &paths {
                 if let Some(par) = crate::fs::path::parent_of(p) {
                     cache.invalidate(par.trim_end_matches('\u{5c}'));

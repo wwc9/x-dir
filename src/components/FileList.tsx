@@ -410,7 +410,12 @@ export function FileList({
   useEffect(() => {
     const un = listen<SearchBatchEvent>("search-batch", (ev) => {
       setSearchRes((prev) => {
-        const next = applyBatch(prev ?? EMPTY_STREAM, ev.payload, searchReqRef.current);
+        const base = prev ?? EMPTY_STREAM;
+        const next = applyBatch(base, ev.payload, searchReqRef.current);
+        // reqId 不匹配（别的窗格在搜索）时 applyBatch 原样返回——必须保持
+        // 引用不变返回 prev（null 同理保持 null），否则非搜索窗格逐批次
+        // 全列表重拍平（2026-11-01 审查修复：无条件包新对象破坏了 reqId 短路）
+        if (next === base) return prev;
         return {
           entries: next.entries,
           truncated: next.truncated,
@@ -480,7 +485,9 @@ export function FileList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, search, searching, isThisPc, refreshTick, searchType]);
 
-  // 可用空间（窗格状态条）
+  // 可用空间（窗格状态条）。闭包捕获请求时的 path，响应到达时与当前路径
+  // 比对——快速导航下旧盘的慢响应不得覆盖新盘读数（2026-11-01 审查修复：
+  // 列表/搜索主链路都有 loadGen 守卫，唯这里漏了）
   useEffect(() => {
     if (isThisPc) {
       setFree(null);
@@ -491,18 +498,20 @@ export function FileList({
       setFree(c);
       return;
     }
+    const want = path;
     api
-      .getVolume(path)
+      .getVolume(want)
       .then((v) => {
         if (freeCache.size >= FREE_CACHE_MAX) {
           const oldest = freeCache.keys().next().value;
           if (oldest !== undefined) freeCache.delete(oldest);
         }
-        freeCache.set(path, v.freeBytes);
-        setFree(v.freeBytes);
+        freeCache.set(want, v.freeBytes);
+        if (want === usePanes.getState().currentPathOf(tabId)) setFree(v.freeBytes);
       })
       .catch(() => undefined);
-  }, [path, isThisPc]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path, isThisPc, tabId]);
 
   // 目录监控：仅可见窗格挂 watcher，生命周期随路径（§6.8，铁律 3）
   useEffect(() => {

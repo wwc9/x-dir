@@ -45,11 +45,16 @@ function flush() {
   api
     .getFileIcons(batch)
     .then((map) => {
-      // 无产出的路径进负缓存；集合超限时清空重试（新文件/临时失败可恢复）
+      // 无产出的路径进负缓存；集合超限时清空重试（新文件/临时失败可恢复）。
+      // 只拉黑真 miss——把取到图标的路径也加进去会与 ICONS_MAX 淘汰联动成
+      // 死局：路径被 LRU 淘汰出 icons 后仍在 missed 里，schedule 永久跳过
+      // 它，滚过大目录再滚回时图标整会话空白（2026-11-01 审查修复）
       const missesNow: string[] = [];
       for (const p of batch) {
-        if (!(p in map)) missesNow.push(p);
-        missed.add(p);
+        if (!(p in map)) {
+          missesNow.push(p);
+          missed.add(p);
+        }
       }
       if (missed.size > MISS_MAX) missed.clear();
       // miss 复活：负缓存出队重试（有界），冷启动瞬时提取失败自愈——
@@ -79,7 +84,15 @@ function flush() {
       }
       useIcons.setState({ icons: merged, exts });
     })
-    .catch(() => undefined);
+    .catch(() => undefined)
+    .finally(() => {
+      // 批次超限续排（2026-11-01）：单次只发 BATCH_MAX 条且不再自排程，
+      // 大目录首屏余量要等下一次无关请求才被捎带——大树图标会停在头 48 个
+      if (pending.size) {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(flush, FLUSH_MS);
+      }
+    });
 }
 
 function schedule(paths: string[], immediate = false) {

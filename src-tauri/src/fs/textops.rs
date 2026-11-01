@@ -2,7 +2,7 @@
 //! 文本合并、压缩为 zip。解码复用预览的探测管线（BOM → UTF-8 → GB18030）。
 //! 全部经任务引擎执行：逐文件进度 + 取消检查；输出一律旁写不覆盖。
 
-use std::io::{Cursor, Seek, Write};
+use std::io::{Seek, Write};
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 
@@ -223,6 +223,19 @@ fn add_path_to_zip<W: Write + Seek>(
             return;
         }
     };
+    // 目录联接/junction 静默不入包（2026-11-01）：std 的 is_dir() 对 reparse
+    // 目录恒 false（symlink 语义），会掉到下方文件分支白报一条 open 失败；
+    // 按原始属性识别跳过——联接无法被 zip 表达，用户目录压缩场景多为系统噪声
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+        const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+        let attrs = meta.file_attributes();
+        if attrs & FILE_ATTRIBUTE_REPARSE_POINT != 0 && attrs & FILE_ATTRIBUTE_DIRECTORY != 0 {
+            return;
+        }
+    }
     if meta.is_dir() {
         let dir_arc = format!("{arc_name}/");
         if let Err(e) = out.add_directory(dir_arc.clone(), SimpleFileOptions::default()) {
@@ -279,7 +292,10 @@ fn add_path_to_zip<W: Write + Seek>(
     }
 }
 
-/// 压缩为 zip：文件 = 平铺条目，文件夹 = 含顶层目录递归打包；输出 output（已存在覆盖）
+/// 压缩为 zip：文件 = 平铺条目，文件夹 = 含顶层目录递归打包；输出 output
+/// （已存在覆盖）。流式写盘（2026-11-01 审查修复：旧实现整包在内存构建，
+/// 压缩数 GB 目录即 OOM）——先写 `<output>.tmp`，成功后原子改名覆盖；
+/// 取消/失败清掉半成品，既有输出不受影响（与旧内存方案的用户可见语义一致）
 pub(crate) fn run_zip(
     paths: &[String],
     output: &str,
@@ -289,11 +305,22 @@ pub(crate) fn run_zip(
     failed: &mut Vec<FailItem>,
 ) {
     prog.total_files = paths.len() as u64;
-    let mut buf = Cursor::new(Vec::new());
-    let mut out = zip::ZipWriter::new(&mut buf);
+    let tmp = format!("{output}.tmp");
+    let file = match std::fs::File::create(to_extended(&tmp)) {
+        Ok(f) => f,
+        Err(e) => {
+            failed.push(FailItem {
+                path: output.to_string(),
+                message: e.to_string(),
+            });
+            return;
+        }
+    };
+    let mut out = zip::ZipWriter::new(std::io::BufWriter::new(file));
     let mut done = 0u64;
     for p in paths {
         if is_cancelled(cancel) {
+            let _ = std::fs::remove_file(to_extended(&tmp));
             return;
         }
         prog.current_path = p.clone();
@@ -306,19 +333,22 @@ pub(crate) fn run_zip(
             path: output.to_string(),
             message: e.to_string(),
         });
+        let _ = std::fs::remove_file(to_extended(&tmp));
         return;
     }
-    if let Err(e) = std::fs::write(to_extended(output), buf.into_inner()) {
+    if let Err(e) = std::fs::rename(to_extended(&tmp), to_extended(output)) {
         failed.push(FailItem {
             path: output.to_string(),
             message: e.to_string(),
         });
+        let _ = std::fs::remove_file(to_extended(&tmp));
     }
 }
 
 /// 读取 zip 成员名清单（测试用）
 #[cfg(test)]
 fn zip_names(data: &[u8]) -> Vec<String> {
+    use std::io::Cursor;
     use zip::ZipArchive;
     let mut arc = ZipArchive::new(Cursor::new(data)).unwrap();
     (0..arc.len())
@@ -329,6 +359,43 @@ fn zip_names(data: &[u8]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn zip_skips_junction_loop() {
+        // 行为锁定：junction 不入包且不产生失败项（std 语义下其 is_dir()=false
+        // 会掉进文件分支白报 open 失败；联接无法被 zip 表达，静默跳过）
+        let tmp = std::env::temp_dir().join(format!("xdir-zip-junc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(tmp.join("d")).unwrap();
+        std::fs::write(tmp.join("d/inner.txt"), b"hello").unwrap();
+        #[cfg(windows)]
+        {
+            // 自引用联接（用户目录 Application Data 同款拓扑）
+            let ok = std::process::Command::new("cmd")
+                .args(["/c", "mklink", "/J"])
+                .arg(tmp.join("loop"))
+                .arg(&tmp)
+                .output()
+                .is_ok_and(|o| o.status.success());
+            if !ok {
+                let _ = std::fs::remove_dir_all(&tmp);
+                return; // 环境不允许建联接：跳过
+            }
+        }
+        let mut buf = Cursor::new(Vec::new());
+        let mut out = zip::ZipWriter::new(&mut buf);
+        let mut n = 0;
+        let mut failed = Vec::new();
+        add_path_to_zip(&mut out, tmp.to_str().unwrap(), "root", &mut n, &mut failed);
+        out.finish().unwrap();
+        assert!(failed.is_empty());
+        let names = zip_names(&buf.into_inner());
+        // 联接不入包，真实内容完整
+        assert!(!names.iter().any(|s| s.contains("loop")));
+        assert!(names.iter().any(|s| s.contains("inner.txt")));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 
     #[test]
     fn enc_target_roundtrip_gbk_and_bom() {
