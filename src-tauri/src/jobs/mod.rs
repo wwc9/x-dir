@@ -897,10 +897,104 @@ fn delete_one(p: &str, permanent: bool) -> Result<(), String> {
         } else {
             std::fs::remove_file(ext)
         };
-        r.map_err(|e| e.to_string())
+        r.map_err(explain_permanent_failure)
     } else {
-        trash::delete(ext).map_err(|e| e.to_string())
+        trash::delete(ext).map_err(|e| explain_trash_failure(p, &e))
     }
+}
+
+// ---- 删除失败的友好归因 -------------------------------------------------
+// trash 的 Windows 实现（IFileOperation）对占用/权限类失败只回
+// Unknown { "Some operations were aborted" }，Display 即英文调试串，
+// 用户无从下手（2026-11-01 复现锁定）。归因两步走：先看 trash 变体的
+// 确定性错误；再用 DELETE 权限探测还原真实原因——探测 = 以删除权限
+// 开句柄，系统拒绝时 Win32 码即真实堵点（32/33 占用、5 拒绝访问、2/3 已消失）。
+
+/// trash 变体自带明确语义的错误（跨平台）
+fn explain_trash_variant(e: &trash::Error) -> Option<String> {
+    match e {
+        trash::Error::TargetedRoot => Some("不能删除驱动器根目录".into()),
+        trash::Error::CouldNotAccess { .. } => {
+            Some("无法访问该项（可能已被移动或删除，或无权限）".into())
+        }
+        trash::Error::CanonicalizePath { .. } => {
+            Some("路径无法解析（可能包含非法字符或已不存在）".into())
+        }
+        _ => None,
+    }
+}
+
+/// Win32 码 → 删除失败原因（DELETE 探测与永久删除的 io 错误共用）
+#[cfg(windows)]
+fn explain_win32_code(code: u32) -> Option<&'static str> {
+    match code {
+        32 | 33 => Some("正被其他程序占用（例如已在 Word/WPS 中打开），请关闭后重试"),
+        5 => Some("没有删除权限（拒绝访问），请检查权限或以管理员身份重试"),
+        2 | 3 => Some("该项已被移动或删除，请刷新列表"),
+        _ => None,
+    }
+}
+
+/// 以 DELETE 权限开句柄探测删除失败的真实原因（只读探测，不改文件）。
+/// 文件/目录通用（目录需 FILE_FLAG_BACKUP_SEMANTICS）；返回 None = 探测不出，
+/// 交由调用方回退原始错误
+#[cfg(windows)]
+fn probe_delete_reason(raw_path: &str) -> Option<String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::Storage::FileSystem::{
+        CreateFileW, DELETE, FILE_FLAG_BACKUP_SEMANTICS, FILE_SHARE_DELETE, FILE_SHARE_READ,
+        FILE_SHARE_WRITE, OPEN_EXISTING,
+    };
+    use windows::core::PCWSTR;
+    let extended = to_extended(raw_path);
+    let wide: Vec<u16> = extended.as_os_str().encode_wide().chain(Some(0)).collect();
+    let handle = unsafe {
+        CreateFileW(
+            PCWSTR(wide.as_ptr()),
+            DELETE.0,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            None,
+            OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS,
+            None,
+        )
+    };
+    match handle {
+        Ok(h) => {
+            unsafe {
+                let _ = CloseHandle(h);
+            }
+            None // 句柄能开 = 系统允许删，失败另有原因
+        }
+        Err(e) => {
+            // CreateFileW 的错误 HRESULT 形如 0x8007XXXX（FACILITY_WIN32），
+            // 低 16 位即真实 Win32 错误码
+            let code = (e.code().0 as u32) & 0xFFFF;
+            explain_win32_code(code).map(str::to_string)
+        }
+    }
+}
+
+/// 移入回收站失败 → 用户可读原因：变体语义 → DELETE 探测 → 原始错误兜底
+fn explain_trash_failure(raw_path: &str, e: &trash::Error) -> String {
+    if let Some(msg) = explain_trash_variant(e) {
+        return msg;
+    }
+    #[cfg(windows)]
+    if let Some(msg) = probe_delete_reason(raw_path) {
+        return msg;
+    }
+    format!("无法移入回收站：{e}")
+}
+
+/// 永久删除失败 → 同源归因（io 错误自带 Win32 码，无需再探测）
+fn explain_permanent_failure(e: io::Error) -> String {
+    #[cfg(windows)]
+    if let Some(msg) = e.raw_os_error().and_then(|c| explain_win32_code(c as u32)) {
+        return msg.into();
+    }
+    format!("无法删除：{e}")
 }
 
 /// best-effort 清除树内全部只读属性（删除/覆盖前）。跳过 reparse 目录——
@@ -1323,6 +1417,69 @@ mod tests {
         let r = with_sharing_retry(|| std::fs::remove_file(to_extended(&path)));
         assert!(r.is_ok());
         assert!(!path_exists(&path));
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn trash_variant_errors_explained_in_plain_words() {
+        let root = explain_trash_variant(&trash::Error::TargetedRoot).unwrap();
+        assert!(root.contains("根目录"), "actual: {root}");
+        let access =
+            explain_trash_variant(&trash::Error::CouldNotAccess { target: "x".into() }).unwrap();
+        assert!(access.contains("无法访问"), "actual: {access}");
+    }
+
+    #[test]
+    fn permanent_failure_maps_access_denied_and_keeps_raw_fallback() {
+        let denied = explain_permanent_failure(io::Error::from_raw_os_error(5));
+        assert!(denied.contains("权限"), "actual: {denied}");
+        let fallback = explain_permanent_failure(io::Error::other("boom"));
+        assert!(fallback.contains("boom"), "actual: {fallback}");
+    }
+
+    /// IFileOperation 对占用只回无信息的 aborted（2026-11-01 复现），
+    /// 锁定场景必须靠 DELETE 探测归因为「正被其他程序占用」
+    #[cfg(windows)]
+    #[test]
+    fn trash_failure_on_locked_file_blames_occupation() {
+        use std::os::windows::ffi::OsStrExt;
+        use windows::Win32::Foundation::{CloseHandle, GENERIC_READ};
+        use windows::Win32::Storage::FileSystem::{
+            CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, OPEN_EXISTING,
+        };
+        use windows::core::PCWSTR;
+        let tmp = std::env::temp_dir().join(format!("xdir-lockprobe-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let f = tmp.join("locked.doc");
+        std::fs::write(&f, "x").unwrap();
+        let path = f.to_str().unwrap().to_string();
+        let wide: Vec<u16> = f.as_os_str().encode_wide().chain(Some(0)).collect();
+        // Word 同款锁法：只允许他人读（拒绝对它写/删）
+        let h = unsafe {
+            CreateFileW(
+                PCWSTR(wide.as_ptr()),
+                GENERIC_READ.0,
+                FILE_SHARE_READ,
+                None,
+                OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL,
+                None,
+            )
+        }
+        .unwrap();
+        let aborted = || trash::Error::Unknown {
+            description: "Some operations were aborted".into(),
+        };
+        let msg = explain_trash_failure(&path, &aborted());
+        assert!(msg.contains("占用"), "actual: {msg}");
+        unsafe {
+            let _ = CloseHandle(h);
+        }
+        // 解锁后探测不再命中，回退含原始错误的兜底文案
+        assert!(probe_delete_reason(&path).is_none());
+        let fallback = explain_trash_failure(&path, &aborted());
+        assert!(fallback.contains("无法移入回收站"), "actual: {fallback}");
+        std::fs::remove_file(&f).unwrap();
         std::fs::remove_dir_all(&tmp).unwrap();
     }
 }
