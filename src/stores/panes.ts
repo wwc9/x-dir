@@ -21,6 +21,9 @@ export interface TabUi {
   search: string | null;
   /** 窗格搜索的类型选择（"all"/"files"/"dirs"/常用类型预设 key；组合 ext: 词随查询下发） */
   searchType: string;
+  /** 窗格搜索是否穿透子文件夹（2026-11-01）：false 仅当前目录（默认）、true 递归。
+   *  搜索行为偏好，跨导航粘性（不随换目录重置，区别于 searchType） */
+  searchDeep: boolean;
   /** 视图内过滤（Ctrl+E）：非 null = 过滤态（值为过滤词，Rust 端 nameFilter）。
    *  与递归搜索（search）互斥展示：搜索浮层打开期间过滤条隐藏 */
   filter: string | null;
@@ -89,6 +92,7 @@ interface PanesStore {
   setError(tabId: string, error: string | null): void;
   setSearch(tabId: string, query: string | null): void;
   setSearchType(tabId: string, t: string): void;
+  setSearchDeep(tabId: string, deep: boolean): void;
   /** 视图内过滤（Ctrl+E）：null = 关闭；空串 = 过滤条开着待输入 */
   setFilter(tabId: string, query: string | null): void;
   bumpRefresh(tabId: string): void;
@@ -135,6 +139,7 @@ export const usePanes = create<PanesStore>()((set, get) => ({
           error: null,
           search: null,
         searchType: "all",
+          searchDeep: false,
           filter: null,
           selMemory: {},
         },
@@ -234,6 +239,12 @@ export const usePanes = create<PanesStore>()((set, get) => ({
     const cur = get().tabs[tabId];
     if (cur?.searchType === t) return;
     set((s) => ({ tabs: patch(s.tabs, tabId, { searchType: t }) }));
+  },
+
+  setSearchDeep(tabId, deep) {
+    const cur = get().tabs[tabId];
+    if (cur?.searchDeep === deep) return;
+    set((s) => ({ tabs: patch(s.tabs, tabId, { searchDeep: deep }) }));
   },
 
 

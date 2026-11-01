@@ -596,11 +596,22 @@ describe("首字母跳转（type-ahead）", () => {
       h.getSnapshot.mockReturnValue({ entries, selected: [] });
       fire({ key: "a" });
       expect(h.revealEntry).toHaveBeenLastCalledWith("C:\\dir\\a.txt");
-      // 输入缓冲与命中经 useUi.typeAhead 回显（列表角落定位 pill）
-      expect(useUi.getState().typeAhead).toEqual({ buf: "a", hit: "a.txt" });
+      // 输入缓冲与命中经 useUi.typeAhead 回显（列表角落定位 pill）；匹配集
+      // 多于 1 个时带序位统计（a* 共 2 项，命中第 1 项）
+      expect(useUi.getState().typeAhead).toEqual({
+        buf: "a",
+        hit: "a.txt",
+        pos: 1,
+        total: 2,
+      });
       fire({ key: "b" });
       expect(h.revealEntry).toHaveBeenLastCalledWith("C:\\dir\\ab.txt");
-      expect(useUi.getState().typeAhead).toEqual({ buf: "ab", hit: "ab.txt" });
+      expect(useUi.getState().typeAhead).toEqual({
+        buf: "ab",
+        hit: "ab.txt",
+        pos: 1,
+        total: 1,
+      });
       // 停顿超时：缓冲清空，单字符重新匹配
       vi.advanceTimersByTime(1100);
       expect(useUi.getState().typeAhead).toBeNull();

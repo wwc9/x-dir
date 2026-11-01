@@ -594,6 +594,8 @@ export const api = {
     maxResults?: number;
     typeFilter?: SearchTypeFilter;
     reqId?: number;
+    /** 是否递归穿透子文件夹；默认 false 仅当前目录（2026-11-01 搜索浮层开关） */
+    deep?: boolean;
   }) =>
     cmd<SearchResult>("search_dir", {
       path: o.path,
@@ -601,6 +603,7 @@ export const api = {
       maxResults: o.maxResults,
       typeFilter: o.typeFilter,
       reqId: o.reqId,
+      deep: o.deep,
     }),
   /** roots 省略 = 全部固定盘；索引模式可用时自动走索引通道（毫秒级） */
   searchAll: (o: {

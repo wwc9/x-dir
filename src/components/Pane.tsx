@@ -13,6 +13,7 @@ import {
   PopoverNext,
   Menu,
   MenuItem,
+  Switch,
 } from "@blueprintjs/core";
 
 import { api, THIS_PC, type FileEntry, type MenuEntry, type ViewMode } from "../lib/ipc";
@@ -266,6 +267,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
   // （2026-11-01 审查修复：曾排在 early return 之后——tab 短暂为空再恢复时
   // Hook 数不一致，React 直接抛错白屏；项目未引入 ESLint，无护栏兜底）
   const searchType = usePanes((st) => (tab ? st.tabs[tab.id]?.searchType ?? "all" : "all"));
+  const searchDeep = usePanes((st) => tab && st.tabs[tab.id]?.searchDeep === true);
   const t = useT();
 
   if (!tab) return null;
@@ -833,7 +835,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
                 autoFocus
                 leftElement={ic(Search)}
                 value={ui?.search ?? ""}
-                placeholder={t("递归搜索…")}
+                placeholder={searchDeep ? t("递归搜索…") : t("搜索当前目录…")}
                 onChange={(e) => usePanes.getState().setSearch(tabId, e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Escape") usePanes.getState().setSearch(tabId, null);
@@ -847,6 +849,19 @@ export function Pane({ pane }: { pane: PaneNode }) {
                 popoverClassName="np-search-type-pop"
                 onChange={(v) => usePanes.getState().setSearchType(tabId, v)}
               />
+              {/* 穿透子文件夹开关（2026-11-01）：默认关 = 仅搜当前目录；跨导航粘性 */}
+              <Switch
+                checked={searchDeep}
+                onChange={(e) =>
+                  usePanes.getState().setSearchDeep(tabId, e.currentTarget.checked)
+                }
+              />
+              <span
+                className="np-search-deep-label"
+                data-tip={t("开启后递归穿透子文件夹搜索；关闭仅搜当前目录")}
+              >
+                {t("子文件夹")}
+              </span>
             </div>
           </div>
         )}

@@ -609,7 +609,9 @@ pub fn search_all(
     }
 }
 
-/// 深度优先遍历（迭代栈），收集匹配项；文件夹在前、名称自然排序
+/// 遍历收集匹配项（迭代栈），文件夹在前、名称自然排序。
+/// deep=true 深度优先递归；false 仅扫 root 直接子项（窗格搜索浅搜模式，
+/// 2026-11-01：默认不穿透子文件夹，开关在搜索浮层）
 pub fn search_tree(
     root: &str,
     query: &Query,
@@ -617,6 +619,7 @@ pub fn search_tree(
     max_results: usize,
     cancel: &AtomicBool,
     mut sink: Option<&mut BatchSink<'_>>,
+    deep: bool,
 ) -> SearchResult {
     let start = Instant::now();
     let mut out: Vec<FileEntry> = Vec::new();
@@ -667,7 +670,7 @@ pub fn search_tree(
                     }
                 }
             }
-            if is_dir {
+            if is_dir && deep {
                 stack.push_back(path);
             }
         }
@@ -975,7 +978,7 @@ mod tests {
 
         let cancel = no_cancel();
         let q = Query::parse("zebra");
-        let r = search_tree(&root, &q, TypeFilter::All, 100, &cancel, None);
+        let r = search_tree(&root, &q, TypeFilter::All, 100, &cancel, None, true);
         assert_eq!(r.entries.len(), 2);
         assert!(
             r.entries
@@ -986,32 +989,59 @@ mod tests {
 
         // 通配符
         let q = Query::parse("*-ZEBRA*");
-        let r = search_tree(&root, &q, TypeFilter::All, 100, &cancel, None);
+        let r = search_tree(&root, &q, TypeFilter::All, 100, &cancel, None, true);
         assert_eq!(r.entries.len(), 2);
 
         // 路径词（含 \ 归入路径匹配）：sub 目录下的 zebra
         let q = Query::parse("zebra \\sub");
-        let r = search_tree(&root, &q, TypeFilter::All, 100, &cancel, None);
+        let r = search_tree(&root, &q, TypeFilter::All, 100, &cancel, None, true);
         assert_eq!(r.entries.len(), 1);
         assert!(r.entries[0].path.contains("sub"));
 
         // 只搜文件夹
         let q = Query::parse("");
-        let dirs = search_tree(&root, &q, TypeFilter::Dirs, 100, &cancel, None);
+        let dirs = search_tree(&root, &q, TypeFilter::Dirs, 100, &cancel, None, true);
         assert!(dirs.entries.iter().all(|e| e.is_dir));
         assert_eq!(dirs.entries.len(), 2); // sub、deep
 
         // 空查询 = 全部命中 → 截断
-        let capped = search_tree(&root, &q, TypeFilter::All, 2, &cancel, None);
+        let capped = search_tree(&root, &q, TypeFilter::All, 2, &cancel, None, true);
         assert_eq!(capped.entries.len(), 2);
         assert!(capped.truncated);
 
         // 预置取消标志：扫描立即返回
         let slot = register_search(9903);
         cancel_search(9903);
-        let r = search_tree(&root, &q, TypeFilter::All, 100, &slot, None);
+        let r = search_tree(&root, &q, TypeFilter::All, 100, &slot, None, true);
         unregister_search(9903, &slot);
         assert!(r.entries.is_empty());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn search_shallow_scans_root_only() {
+        let root = tempdir("shallow");
+        std::fs::create_dir_all(std::path::Path::new(&root).join("sub\\deep")).unwrap();
+        std::fs::write(std::path::Path::new(&root).join("alpha-zebra.txt"), "x").unwrap();
+        std::fs::write(std::path::Path::new(&root).join("sub\\beta-zebra.md"), "x").unwrap();
+        std::fs::write(
+            std::path::Path::new(&root).join("sub\\deep\\gamma-zebra.txt"),
+            "x",
+        )
+        .unwrap();
+
+        let cancel = no_cancel();
+        // 浅搜只扫 root 直接子项：子目录里的命中不出现
+        let q = Query::parse("zebra");
+        let r = search_tree(&root, &q, TypeFilter::All, 100, &cancel, None, false);
+        assert_eq!(r.entries.len(), 1);
+        assert_eq!(r.entries[0].name, "alpha-zebra.txt");
+
+        // 空查询浅搜：仅 root 直接子项可命中（sub 目录本身）
+        let q = Query::parse("");
+        let r = search_tree(&root, &q, TypeFilter::Dirs, 100, &cancel, None, false);
+        assert_eq!(r.entries.len(), 1);
+        assert_eq!(r.entries[0].name, "sub");
         std::fs::remove_dir_all(&root).unwrap();
     }
 
@@ -1033,7 +1063,15 @@ mod tests {
         let mut sink = BatchSink::new(&emit);
         let cancel = no_cancel();
         let q = Query::parse("batch");
-        let r = search_tree(&root, &q, TypeFilter::All, 100, &cancel, Some(&mut sink));
+        let r = search_tree(
+            &root,
+            &q,
+            TypeFilter::All,
+            100,
+            &cancel,
+            Some(&mut sink),
+            true,
+        );
         assert_eq!(r.entries.len(), 10);
         // 终态 flush 后批次总数 = 结果数
         assert_eq!(total.load(Ordering::Relaxed), 10);

@@ -1565,6 +1565,14 @@ body.np-col-resizing .np-menued-grip::after {
   flex: none;
   width: 88px;
 }
+/* 穿透子文件夹开关（2026-11-01）：开关 + 右侧文字标签，与类型选择同排尾端 */
+.np-search-row .np-search-deep-label {
+  flex: none;
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+  cursor: default;
+  user-select: none;
+}
 
 /* V2 地址栏自动补全下拉（锚在导航栏下方；与菜单/Popover 同款 surface 卡片） */
 .np-sugg {

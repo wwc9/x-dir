@@ -25,7 +25,9 @@ pub struct SearchBatch {
     pub scanned: usize,
 }
 
-/// 当前目录递归搜索：多词 AND / 通配符 / 路径词 / 类型过滤 / 拼音（语义见 fs::matcher）
+/// 目录搜索：多词 AND / 通配符 / 路径词 / 类型过滤 / 拼音（语义见 fs::matcher）。
+/// deep=true 递归穿透子文件夹；false（默认）仅扫直接子项——窗格搜索浅搜模式
+/// （2026-11-01），单目录毫秒级且不需要全卷索引通道（索引无目录范围限定）
 #[tauri::command]
 pub async fn search_dir(
     app: tauri::AppHandle,
@@ -34,7 +36,9 @@ pub async fn search_dir(
     max_results: Option<usize>,
     type_filter: Option<String>,
     req_id: Option<u64>,
+    deep: Option<bool>,
 ) -> Result<SearchResult, AppError> {
+    let deep = deep.unwrap_or(false);
     if !path_exists(&path) {
         return Err(AppError::new("E_NOT_FOUND", format!("目录不存在：{path}")));
     }
@@ -55,15 +59,20 @@ pub async fn search_dir(
 
     // 索引通道：root 所在盘有新鲜索引时毫秒级返回；不可用/命中溢出静默回退遍历。
     // 整卷 mmap 扫描可达数百 ms，必须放 spawn_blocking——直接跑会占死一个
-    // async worker，连续输入时并发放大拖慢全部 IPC 响应
-    let idx_root = path.clone();
-    let idx_query = parsed.clone();
-    let idx_cancel = cancel.clone();
-    let indexed = tauri::async_runtime::spawn_blocking(move || {
-        crate::index::try_search_dir_indexed(&idx_root, &idx_query, tf, max, &idx_cancel)
-    })
-    .await
-    .unwrap_or(None);
+    // async worker，连续输入时并发放大拖慢全部 IPC 响应。
+    // 浅搜不走索引：索引按整卷组织，无"仅此目录直接子项"的范围语义
+    let indexed = if deep {
+        let idx_root = path.clone();
+        let idx_query = parsed.clone();
+        let idx_cancel = cancel.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            crate::index::try_search_dir_indexed(&idx_root, &idx_query, tf, max, &idx_cancel)
+        })
+        .await
+        .unwrap_or(None)
+    } else {
+        None
+    };
     if let Some(result) = indexed {
         unregister_search(req_id, &cancel);
         return Ok(result);
@@ -82,7 +91,7 @@ pub async fn search_dir(
     };
     let out = tauri::async_runtime::spawn_blocking(move || {
         let mut sink = BatchSink::new(&emitter);
-        search_tree(&path, &parsed, tf, max, &cancel_in, Some(&mut sink))
+        search_tree(&path, &parsed, tf, max, &cancel_in, Some(&mut sink), deep)
     })
     .await
     .map_err(|e| AppError::new("E_UNKNOWN", e.to_string()));

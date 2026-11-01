@@ -8,12 +8,12 @@ import { THIS_PC } from "./ipc";
 import { getList } from "./listRegistry";
 import { zoomStep } from "./zoom";
 import { DENSITY } from "./tokens";
-import { pickTypeAhead } from "./typeAhead";
 import { useUndo } from "./undo";
 import { useLayout } from "../stores/layout";
 import { closePaneConfirmed, useUi } from "../stores/ui";
 import { useSettings } from "../stores/settings";
 import { pickStartIndex, usePreview } from "../stores/preview";
+import { typeAheadStep } from "./typeAhead";
 import { api } from "./ipc";
 
 type Dir = "up" | "down" | "left" | "right";
@@ -208,23 +208,26 @@ export function onGlobalKeyDown(e: KeyboardEvent): void {
     const snap = list.getSnapshot();
     if (snap.entries.length) {
       if (taTimer !== undefined) clearTimeout(taTimer);
-      taBuf += k.toLowerCase();
+      const prevBuf = taBuf;
+      taBuf = prevBuf + k.toLowerCase();
       taTimer = window.setTimeout(typeAheadReset, DENSITY.typeAheadMs);
       const curIdx = snap.entries.findIndex(
         (en) => en.path === snap.selected[snap.selected.length - 1],
       );
-      let idx = pickTypeAhead(snap.entries, taBuf, curIdx);
-      if (idx === null && taBuf.length > 1) {
-        // 整缓冲无命中：回退为仅本次按键再试（"ab" 打错退回单字符继续跳）
-        taBuf = k.toLowerCase();
-        idx = pickTypeAhead(snap.entries, taBuf, curIdx);
+      // 匹配策略全在纯函数内（前缀/*包含/重复字母循环，TC 语义；配单测）
+      const r = typeAheadStep(snap.entries, prevBuf, k, curIdx);
+      if (r) {
+        taBuf = r.buf;
+        list.revealEntry(snap.entries[r.idx].path);
       }
-      if (idx !== null) list.revealEntry(snap.entries[idx].path);
       useUi
         .getState()
         .setTypeAhead({
-          buf: taBuf,
-          hit: idx !== null ? snap.entries[idx].name : null,
+          // 无命中显示完整输入缓冲；命中显示生效匹配针 + 序位/总数
+          buf: r?.disp ?? taBuf,
+          hit: r ? snap.entries[r.idx].name : null,
+          pos: r?.pos,
+          total: r?.total,
         });
       e.preventDefault();
       return;

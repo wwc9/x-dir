@@ -110,6 +110,10 @@ export interface TypeAheadState {
   buf: string;
   /** 当前命中条目名（无命中为 null） */
   hit: string | null;
+  /** 命中在匹配集中的序位（1 起，重复首字母循环时回显 "x/y"） */
+  pos?: number;
+  /** 匹配集总数 */
+  total?: number;
 }
 
 interface UiStore {

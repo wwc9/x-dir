@@ -451,6 +451,8 @@ export function FileList({
 
   // 搜索类型（搜索浮层的类型选择；all/files/dirs 直发 typeFilter，预设组合 ext: 词）
   const searchType = usePanes((s) => s.tabs[tabId]?.searchType ?? "all");
+  // 穿透子文件夹（2026-11-01）：默认关 = 仅当前目录；跨导航粘性
+  const searchDeep = usePanes((s) => s.tabs[tabId]?.searchDeep === true);
 
   useEffect(() => {
     if (!searching || isThisPc) {
@@ -474,7 +476,7 @@ export function FileList({
       searchReqRef.current = reqId;
       setSearchRes({ entries: [], truncated: false, scanned: 0, elapsedMs: 0, engine: "scan" });
       api
-        .searchDir({ path, query: composed, typeFilter, reqId })
+        .searchDir({ path, query: composed, typeFilter, reqId, deep: searchDeep })
         .then((r) => {
           if (stale || searchReqRef.current !== reqId) return;
           searchReqRef.current = null;
@@ -496,7 +498,7 @@ export function FileList({
       cancelSearchReq();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, search, searching, isThisPc, refreshTick, searchType]);
+  }, [path, search, searching, isThisPc, refreshTick, searchType, searchDeep]);
 
   // 可用空间（窗格状态条）。闭包捕获请求时的 path，响应到达时与当前路径
   // 比对——快速导航下旧盘的慢响应不得覆盖新盘读数（2026-11-01 审查修复：
@@ -563,8 +565,10 @@ export function FileList({
   const rowCount = Math.ceil(count / perRow);
 
   // 详情视图自然宽（lib/columns 纯函数）：各列定宽互不影响，超出容器即横向滚动。
-  // 内容层与表头共用该 minWidth；仅当真正放不下时 .np-rows 才开横向滚动
-  const colGroup: ColGroup = isThisPc ? "thispc" : searchActive ? "search" : "normal";
+  // 内容层与表头共用该 minWidth；仅当真正放不下时 .np-rows 才开横向滚动。
+  // 浅搜结果全部在当前目录（位置列恒 "."，无意义）→ 用常规列组（2026-11-01）
+  const searchCols = searchActive && searchDeep;
+  const colGroup: ColGroup = isThisPc ? "thispc" : searchCols ? "search" : "normal";
   const contentW = viewMode === "details" ? detailsContentWidth(width, colw, colGroup) : 0;
   const innerMinW = viewMode === "details" ? Math.max(width, contentW) : undefined;
 
@@ -1471,7 +1475,7 @@ export function FileList({
                 {t("可用空间")}<ColGrip col="size" ctl={paneCtl} />
               </span>
             </>
-          ) : searchActive ? (
+          ) : searchCols ? (
             <>
               <span className="np-col-name">
                 {t("名称")}<ColGrip col="name" ctl={paneCtl} />
@@ -1664,7 +1668,7 @@ export function FileList({
                           exts={extMap}
                         />
                         <span className="np-name">{nameEl}</span>
-                        {searchActive ? (
+                        {searchCols ? (
                           <>
                             <span className="np-cell-muted np-col-loc">
                               {relDirOf(entry)}
@@ -1736,11 +1740,17 @@ export function FileList({
         )}
       </div>
 
-      {/* 首字母跳转回显（type-ahead）：输入缓冲 + 命中条目，悬于状态条右上角；
-          Esc/停顿超时即消失（lib/keyboard 维护 useUi.typeAhead） */}
+      {/* 首字母跳转回显（type-ahead）：输入缓冲 + 序位/总数 + 命中条目，悬于状态
+          条右上角；Esc/停顿超时即消失（lib/keyboard 维护 useUi.typeAhead）。匹配集
+          唯一时省略 x/y 免噪 */}
       {active && !searching && typeAhead && (
         <div className="np-typeahead">
           <span className="np-typeahead-buf">{typeAhead.buf}</span>
+          {typeAhead.hit && (typeAhead.total ?? 0) > 1 && (
+            <span className="np-typeahead-buf">
+              {typeAhead.pos}/{typeAhead.total}
+            </span>
+          )}
           {typeAhead.hit && <span className="np-ellipsis">{typeAhead.hit}</span>}
         </div>
       )}
@@ -1757,6 +1767,8 @@ export function FileList({
           </span>
           {searchActive
             ? `搜索 “${search}” · ${count.toLocaleString()} 项${
+                searchDeep ? "" : t(" · 当前目录")
+              }${
                 searchRes?.elapsedMs ? ` · ${formatElapsed(searchRes.elapsedMs)}` : ""
               }${
                 searchRes?.engine === "index"
