@@ -194,6 +194,25 @@ export function translateShape(s: Shape, dx: number, dy: number): Shape {
   return { ...s, x: s.x + dx, y: s.y + dy };
 }
 
+/** 笔迹轨迹的物理跨度（包围盒宽高较大者；空轨迹 = 0）：把双击/手抖产生的
+ *  1-2px 抖动笔画判为无效草稿（不落形）。进会话默认矩形后双击选区 = 复制
+ *  对笔族也生效的配套——否则笔工具下双击会先落下微残点再复制带走
+ *  （2026-10-30） */
+export function strokeExtent(pts: { x: number; y: number }[] | undefined): number {
+  if (!pts?.length) return 0;
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  for (const p of pts) {
+    if (p.x < x0) x0 = p.x;
+    if (p.x > x1) x1 = p.x;
+    if (p.y < y0) y0 = p.y;
+    if (p.y > y1) y1 = p.y;
+  }
+  return Math.max(x1 - x0, y1 - y0);
+}
+
 /** 快捷键清单贴选区外围定位（2026-10-30 用户定案：贴选区四周外围展示，
  *  弃屏角方案）：右 → 左 → 上 → 下取第一个放得下的边；下方为末选且
  *  左对齐选区（工具栏居中停靠选区下方，错开）。坐标全 CSS 像素（选区

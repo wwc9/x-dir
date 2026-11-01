@@ -22,6 +22,7 @@ import {
   resizeSel,
   selHandles,
   adjustShapeProp,
+  strokeExtent,
   shapeAt,
   shapeBounds,
   stepBadgeColor,
@@ -586,5 +587,28 @@ describe("adjustShapeProp", () => {
   it("马赛克：±1 钳 2~20，HUD 报格宽", () => {
     const m: Shape = { type: "mosaic", x: 0, y: 0, w: 9, h: 9, color: "#fff", width: 4 };
     expect(adjustShapeProp(m, 1)?.label).toBe("马赛克 15px 格");
+  });
+});
+
+describe("strokeExtent 笔迹跨度（双击误触残点门槛）", () => {
+  it("空轨迹与单击为 0", () => {
+    expect(strokeExtent(undefined)).toBe(0);
+    expect(strokeExtent([])).toBe(0);
+    expect(strokeExtent([{ x: 5, y: 5 }])).toBe(0);
+  });
+
+  it("宽高取较大者（含负向延伸）", () => {
+    expect(strokeExtent([{ x: 0, y: 0 }, { x: 0, y: 7 }])).toBe(7);
+    expect(strokeExtent([{ x: 10, y: 10 }, { x: 4, y: 8 }])).toBe(6);
+  });
+
+  it("1-2px 抖动笔画（双击误触形态）低于门槛", () => {
+    const jitter = [
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+      { x: 0.5, y: 1.5 },
+      { x: 1.2, y: 0.3 },
+    ];
+    expect(strokeExtent(jitter)).toBeLessThan(2);
   });
 });

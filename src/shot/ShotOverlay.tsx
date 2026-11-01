@@ -3,6 +3,9 @@
 // WASD·方向键平移）+ 标注（矩形/椭圆/箭头〔点击弹面板选头部×线型〕/画笔·
 // 马克笔〔一钮弹面板选笔型〕/文字/序号标记〔点按即落，同一截图自动递增〕）
 // + 马赛克/模糊 + 复制/保存/贴图。
+// 进会话默认矩形工具（2026-10-30 用户定案）：选区确认后立即可画，免先点
+// 工具栏一步；双击选区 = 复制对全部绘制工具生效（文字/序号单击有专属动作
+// 除外），笔迹草稿加 ≥2px 跨度门槛防双击误触残点。
 // 全链路物理像素坐标（×boot.scale 与 CSS 像素换算），与定格截图逐像素对齐。
 // 定格帧经 shot_frame IPC 二进制直传 RGBA 原始字节，putImageData 直绘上屏
 // （2026-10-27 感知延迟二期：无 BMP 落盘/asset 读回/浏览器解码三跳）。
@@ -65,6 +68,7 @@ import {
   resizeSel,
   shapeAt,
   shapeBounds,
+  strokeExtent,
   keysSide,
   translateShape,
   type ShotTool,
@@ -395,7 +399,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const [sel, setSel] = useState<Sel | null>(() =>
     hitWindow(boot.windows, boot.cx, boot.cy),
   );
-  const [tool, setTool] = useState<ShotTool>("select");
+  /** 进会话默认矩形工具（2026-10-30 用户定案）：选区确认后立即可画标注，
+   *  免去先点工具栏一步（Snipaste/PixPin 惯例）；移动选区走 WASD/方向键
+   *  或切回选择工具 */
+  const [tool, setTool] = useState<ShotTool>("rect");
   /** 画笔/马克笔合并为一钮（2026-10-30 二次定案）：点击按钮 = 激活笔族并
    *  立即弹出 pen 面板选择笔型（图标固定 Pencil 不随笔型切换）；从其他
    *  工具切入 = 恢复上次笔型 */
@@ -1544,7 +1551,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       }
       const meaningful =
         d.type === "pen" || d.type === "marker"
-          ? (d.pts?.length ?? 0) > 1
+          ? (d.pts?.length ?? 0) > 1 && strokeExtent(d.pts) >= 2
           : Math.abs(d.w) > 3 || Math.abs(d.h) > 3;
       if (meaningful) {
         if (d.type !== "pen" && d.type !== "marker" && d.type !== "arrow") {
@@ -2060,7 +2067,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           reEditText(hov);
           return;
         }
-        if (sel && tool === "select") void finish("copy");
+        // 进会话默认矩形后双击复制对全部绘制工具生效（绘制类单击只是空草稿
+        // 不落形，双击安全）；文字（单击进编辑）与序号（单击即落徽标）例外
+        if (sel && tool !== "text" && tool !== "step") void finish("copy");
       }}
       onContextMenu={(e) => e.preventDefault()}
     >
