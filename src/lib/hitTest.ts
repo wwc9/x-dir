@@ -65,3 +65,11 @@ export function dropGuard(sources: string[], destDir: string): DropGuard {
   }
   return "none";
 }
+
+/** 拖放落点行 → 投放目录（2026-11-01：文件夹行落点语义，REQUIREMENTS §7.4）：
+ *  行显式标记为文件夹（data-dir）且带路径 = 拖入该文件夹（「此电脑」盘符行
+ *  同理直达盘根）；文件行 / 空白 = null，调用方回落窗格当前目录。
+ *  dataset 取自 FileList 行元素（DOM 读取在 oleDispatch.ts / FileList） */
+export function rowDropDest(dataset: { path?: string; dir?: string }): string | null {
+  return dataset.dir && dataset.path ? dataset.path : null;
+}

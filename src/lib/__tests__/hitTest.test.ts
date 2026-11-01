@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { allSourcesInside, dropGuard, hitPane, rectsIntersect, type PaneRects } from "../hitTest";
+import {
+  allSourcesInside,
+  dropGuard,
+  hitPane,
+  rectsIntersect,
+  rowDropDest,
+  type PaneRects,
+} from "../hitTest";
 
 const rect = (l: number, t: number, r: number, b: number) => ({ left: l, top: t, right: r, bottom: b });
 
@@ -53,6 +60,19 @@ describe("allSourcesInside（同目录守护）", () => {
   });
 });
 
+describe("rowDropDest（落点行 → 投放目录）", () => {
+  it("文件夹行 = 该行路径（拖入该文件夹）", () => {
+    expect(rowDropDest({ path: "C:\\a\\旧", dir: "1" })).toBe("C:\\a\\旧");
+    expect(rowDropDest({ path: "D:\\", dir: "1" })).toBe("D:\\"); // 此电脑盘符行 = 盘根
+  });
+
+  it("文件行 / 缺标记 / 缺路径 = null（回落窗格当前目录）", () => {
+    expect(rowDropDest({ path: "C:\\a\\b.txt" })).toBeNull();
+    expect(rowDropDest({ dir: "1" })).toBeNull();
+    expect(rowDropDest({})).toBeNull();
+  });
+});
+
 describe("rectsIntersect（框选矩形相交）", () => {
   it("重叠相交，四向任意方向", () => {
     const a = rect(10, 10, 50, 30);
@@ -72,6 +92,7 @@ describe("rectsIntersect（框选矩形相交）", () => {
     expect(rectsIntersect(rect(0, 0, 10, 10), rect(20, 20, 30, 30))).toBe(false);
   });
 });
+
 describe("dropGuard（拖放自落守护）", () => {
   it("源就是目标目录 → self（拖到显示源目录的窗格）", () => {
     expect(dropGuard(["E:\\a"], "E:\\a")).toBe("self");

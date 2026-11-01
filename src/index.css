@@ -2129,6 +2129,12 @@ body.np-col-resizing * {
   color: var(--np-accent);
   opacity: 0.85;
 }
+/* OLE 拖放悬停的文件夹行（落点 = 拖入该文件夹，REQUIREMENTS §7.4）：
+   accent 细描边 + 淡染。置于 hover/is-sel 之后声明，同权重下覆盖底色 */
+.np-row.is-drop {
+  background-color: color-mix(in srgb, var(--np-accent) 16%, transparent);
+  box-shadow: color-mix(in srgb, var(--np-accent) 70%, transparent) 0 0 0 1px inset;
+}
 /* 详情列宽：实际值由 stores/columns 经根节点 --np-colw-* 变量下发（表头拖拽可调），
    var 回退值 = 历史默认宽。省略/隐藏规则必须挂在 .np-rows 下（仅行内单元格）——
    若命中表头按钮，overflow:hidden 会把骑在列缝上的拖拽把手裁掉。

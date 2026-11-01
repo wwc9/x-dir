@@ -1,12 +1,13 @@
 // V3 OLE 拖拽的前端分发：拖出 = api.startDrag（Rust DoDragDrop）；
 // 拖入/窗内落点 = Tauri onDragDropEvent（WebView2 拖放目标携带完整路径），
 // 命中判定优先 DOM elementFromPoint（免换算误差），回退 lib/hitTest.ts 纯函数
-// （单测覆盖）。
+// （单测覆盖）。落点压在列表的文件夹行上（行带 data-path/data-dir，判定 =
+// hitTest.rowDropDest）= 投放到该文件夹，其余列表区落点 = 窗格当前目录。
 
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 
 import { THIS_PC } from "./ipc";
-import { allSourcesInside, dropGuard, hitPane, type PaneRects } from "./hitTest";
+import { allSourcesInside, dropGuard, hitPane, rowDropDest, type PaneRects } from "./hitTest";
 import { SHELF_MAX } from "./shelf";
 import { dfsPanes, type LayoutNode } from "./layoutTree";
 import { transfer } from "./operations";
@@ -88,7 +89,6 @@ async function handleDrop(paths: string[], cssX: number, cssY: number) {
     ? dfsPanes(layout.tree as LayoutNode).find((x) => x.id === hit.paneId)
     : null;
   const tab = pane?.tabs[pane.activeTab];
-  const destPath = tab?.path ?? THIS_PC;
 
   // 落到标签条 = 在该窗格新标签打开（仅单个文件夹，§7.4 语义）
   if (hit.onTabbar) {
@@ -99,6 +99,13 @@ async function handleDrop(paths: string[], cssX: number, cssY: number) {
     }
     return;
   }
+  // 落点行是文件夹（FileList 行带 data-dir/data-path）= 拖入该文件夹
+  // （2026-11-01：「此电脑」页盘符行同理直达盘根；此前落点只解析到窗格
+  // 当前目录，拖回源目录被同目录守护吞掉，表现为"拖不进文件夹"）
+  const row = document
+    .elementFromPoint(cssX, cssY)
+    ?.closest<HTMLElement>(".np-row[data-dir]");
+  const destPath = rowDropDest(row?.dataset ?? {}) ?? tab?.path ?? THIS_PC;
   // "此电脑"是虚拟页，不能接收放置——明确告知，避免看起来像拖放失效
   if (destPath === THIS_PC || !pane) {
     useUi.getState().toast("「此电脑」页不能放置文件，请拖到打开了文件夹的窗格", "error");

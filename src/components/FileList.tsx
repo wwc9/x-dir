@@ -19,7 +19,7 @@ import { extOf, fileIcon, typeName } from "../lib/fileIcons";
 import { DENSITY } from "../lib/tokens";
 import { isValidName, joinPath, parentPath } from "../lib/path";
 import { useUndo } from "../lib/undo";
-import { rectsIntersect } from "../lib/hitTest";
+import { rectsIntersect, rowDropDest } from "../lib/hitTest";
 import { registerList } from "../lib/listRegistry";
 import { useDnd } from "../stores/dnd";
 import {
@@ -286,11 +286,24 @@ export function FileList({
     width: number;
     height: number;
   } | null>(null);
-  // V3 OLE 拖拽落点高亮：Rust DragOver 推送的 CSS 点落在本列表矩形内
-  const dropHover = !!dndPoint && (() => {
-    const r = scrollRef.current?.getBoundingClientRect();
-    return !!r && dndPoint.x >= r.left && dndPoint.x < r.right && dndPoint.y >= r.top && dndPoint.y < r.bottom;
+  // V3 OLE 拖拽落点高亮：Rust DragOver 推送的 CSS 点落在本列表矩形内。
+  // 点压在本列表的文件夹行上 = 投放目标改为该文件夹（§7.4）：行级 is-drop
+  // 高亮取代整表高亮；rowDropDest 判定见 lib/hitTest（单测锁定）
+  const dropRowPath = (() => {
+    if (!dndPoint) return null;
+    const row = document
+      .elementFromPoint(dndPoint.x, dndPoint.y)
+      ?.closest<HTMLElement>(".np-row[data-dir]");
+    if (!row || !scrollRef.current?.contains(row)) return null;
+    return rowDropDest(row.dataset);
   })();
+  const dropHover =
+    !!dndPoint &&
+    !dropRowPath &&
+    (() => {
+      const r = scrollRef.current?.getBoundingClientRect();
+      return !!r && dndPoint.x >= r.left && dndPoint.x < r.right && dndPoint.y >= r.top && dndPoint.y < r.bottom;
+    })();
   const fetched = useRef(new Set<number>());
   const forceRef = useRef(false);
 
@@ -671,14 +684,46 @@ export function FileList({
     usePanes.getState().setSelected(tabId, paths, anchorPath);
   }
 
+  /** 行按下（详情/图标视图共用）：中键 = 文件夹新标签打开；右键 = 已选中保持
+   *  多选、未选中先单选；左键 = 未选项/带 Ctrl·Shift 立即改选，已选项裸按不动
+   *  选中（多选整体可拖），收敛与否交给 armRowDrag 的「待定单击」裁决 */
+  function rowMouseDown(e: React.MouseEvent, entry: FileEntry) {
+    if (e.button === 1) {
+      // 中键 = 文件夹在新标签打开（浏览器/Explorer 惯例；preventDefault 顺带
+      // 拦掉中键自动滚动）
+      e.preventDefault();
+      if (entry.isDir) useLayout.getState().newTab(paneId, entry.path);
+      return;
+    }
+    if (e.button === 2) {
+      // 右键（2026-10-22 修复）：已选中项保持多选不动（此前走 clickSelect，
+      // 多选被替换成单项）
+      const uiNow = usePanes.getState().tabs[tabId];
+      if (uiNow && !uiNow.selected.includes(entry.path)) clickSelect(e, entry);
+      return;
+    }
+    const uiNow = usePanes.getState().tabs[tabId];
+    const inSel = !!uiNow?.selected.includes(entry.path);
+    if (!inSel || e.ctrlKey || e.shiftKey) clickSelect(e, entry);
+    armRowDrag(e, entry);
+  }
+
   /** V3 原生拖拽：左键按下位移 ≥5px 触发 OLE DoDragDrop（拖出窗口/窗格间同管线）。
-   *  路径在触发时刻解析：拖已选集合或该行。 */
+   *  路径在触发时刻解析：拖已选集合或该行。Explorer 惯例（2026-11-01 修复多选
+   *  拖动丢选中）：裸按在已选项上 = 「待定单击」——mousedown 不改选中，成拖则
+   *  整组带走，原地松开（未成拖）才收敛为单选。 */
   function armRowDrag(e: React.MouseEvent, entry: FileEntry) {
     if (e.button !== 0) return;
     const startX = e.clientX;
     const startY = e.clientY;
+    const pendingClick =
+      !e.ctrlKey &&
+      !e.shiftKey &&
+      !!usePanes.getState().tabs[tabId]?.selected.includes(entry.path);
+    let started = false;
     const onMove = (ev: MouseEvent) => {
       if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5) return;
+      started = true;
       cleanup();
       const now = usePanes.getState().tabs[tabId];
       const sel = now?.selected ?? [];
@@ -690,7 +735,10 @@ export function FileList({
         })
         .catch((err) => useUi.getState().toast(String(err), "error"));
     };
-    const onUp = () => cleanup();
+    const onUp = () => {
+      cleanup();
+      if (!started && pendingClick) clickSelect(e, entry);
+    };
     const cleanup = () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
@@ -1598,29 +1646,13 @@ export function FileList({
                       <div
                         key={col}
                         data-idx={idx}
-                        className={`np-row ${sel ? "is-sel" : ""}`}
+                        data-path={entry.path}
+                        data-dir={entry.isDir ? "1" : undefined}
+                        className={`np-row ${sel ? "is-sel" : ""} ${
+                          entry.path === dropRowPath ? "is-drop" : ""
+                        }`}
                         style={{ width: "100%" }}
-                        onMouseDown={(e) => {
-                          // 中键 = 文件夹在新标签打开（浏览器/Explorer 惯例；
-                          // preventDefault 顺带拦掉中键自动滚动）
-                          if (e.button === 1) {
-                            e.preventDefault();
-                            if (entry.isDir) useLayout.getState().newTab(paneId, entry.path);
-                            return;
-                          }
-                          if (e.button === 2) {
-                            // 右键（2026-10-22 修复）：已选中项保持多选不动
-                            //（此前详情视图右键也走 clickSelect，多选被替换成
-                            // 单项——列表视图同款修复见列表行分支）
-                            const uiNow = usePanes.getState().tabs[tabId];
-                            if (uiNow && !uiNow.selected.includes(entry.path)) {
-                              clickSelect(e, entry);
-                            }
-                            return;
-                          }
-                          clickSelect(e, entry);
-                          armRowDrag(e, entry);
-                        }}
+                        onMouseDown={(e) => rowMouseDown(e, entry)}
                         onDoubleClick={() => openEntry(entry)}
                         onContextMenu={(e) => openRowMenu(e, entry)}
                       >
@@ -1677,26 +1709,13 @@ export function FileList({
                     <div
                       key={col}
                       data-idx={idx}
-                      className={`np-row ${sel ? "is-sel" : ""}`}
+                      data-path={entry.path}
+                      data-dir={entry.isDir ? "1" : undefined}
+                      className={`np-row ${sel ? "is-sel" : ""} ${
+                        entry.path === dropRowPath ? "is-drop" : ""
+                      }`}
                       style={{ width: cellW, flex: "0 0 auto" }}
-                      onMouseDown={(e) => {
-                        if (e.button === 1) {
-                          e.preventDefault();
-                          if (entry.isDir) useLayout.getState().newTab(paneId, entry.path);
-                          return;
-                        }
-                        if (e.button === 2) {
-                          // 右键（2026-10-22 修复）：已选中项保持多选不动——此前右键
-                          // 也走 clickSelect，把多选替换成单项，菜单里合并就"丢选中"
-                          const uiNow = usePanes.getState().tabs[tabId];
-                          if (uiNow && !uiNow.selected.includes(entry.path)) {
-                            clickSelect(e, entry);
-                          }
-                          return;
-                        }
-                        clickSelect(e, entry);
-                        armRowDrag(e, entry);
-                      }}
+                      onMouseDown={(e) => rowMouseDown(e, entry)}
                       onDoubleClick={() => openEntry(entry)}
                       onContextMenu={(e) => openRowMenu(e, entry)}
                     >
