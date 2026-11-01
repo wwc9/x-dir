@@ -70,6 +70,11 @@ export function ClipHistWindow() {
   const hasMore = useRef(false);
   // 下次刷新要保持选择的条目 id（置顶/删除后选择不跳回首行）
   const keepId = useRef<number | null>(null);
+  // 数据武装门闸（2026-11-01 启动速度优化）：本窗由 Rust 在启动预热期常驻
+  // 停靠屏幕外，挂载即拉整页 50 条（含缩略图 base64，MB 级 IPC + DB 查询）
+  // 纯属浪费——用户真正呼出时 focus 路径本来就会重拉。首次获得焦点才放行
+  // 数据通道；focus 事件极端丢失时由 400ms 焦点自卫兜底武装
+  const armed = useRef(false);
   // 键盘/事件处理器读取的最新态（避免重绑 window 监听、闭包过期）
   const stateRef = useRef({ items, sel, query, kind, directPaste, winPinned, isMaxed, picked, viewImg });
   stateRef.current = { items, sel, query, kind, directPaste, winPinned, isMaxed, picked, viewImg };
@@ -103,8 +108,10 @@ export function ClipHistWindow() {
     [],
   );
 
-  /** 搜索词/类型变更（120ms 防抖）与初次挂载都走这里 */
+  /** 搜索词/类型变更（120ms 防抖）：仅在数据通道武装后（首次聚焦）生效，
+   *  停靠态挂载不触发首拉 */
   useEffect(() => {
+    if (!armed.current) return;
     const t = window.setTimeout(() => void fetchPage(0, false, null), 120);
     return () => window.clearTimeout(t);
   }, [query, kind, fetchPage]);
@@ -175,15 +182,23 @@ export function ClipHistWindow() {
     window.addEventListener("resize", onWinResize);
     // 焦点自卫（2026-10-31 终案）：冷启动首次激活时 WebView2 激活序列可能在
     // 事件 + 三重试之后仍重置 activeElement——低频守卫接管，本页持有焦点且
-    // 焦点悬在 body（未被按钮等接住）时归还搜索框；停靠态 hasFocus=false 自空转
+    // 焦点悬在 body（未被按钮等接住）时归还搜索框；停靠态 hasFocus=false 自空转。
+    // 顺带兜底武装数据通道（focus 事件先于监听注册到达的极端时序）
     const focusGuard = window.setInterval(() => {
-      if (document.hasFocus() && document.activeElement === document.body) {
-        inputRef.current?.focus();
+      if (document.hasFocus()) {
+        if (!armed.current) {
+          armed.current = true;
+          void fetchPage(0, false, null);
+        }
+        if (document.activeElement === document.body) {
+          inputRef.current?.focus();
+        }
       }
     }, 400);
     void getCurrentWindow()
       .onFocusChanged(({ payload: focused }) => {
         if (!focused) return;
+        armed.current = true;
         keepId.current = null;
         // 重开（呼出）时 Rust 已复位默认尺寸，最大化图标同步归零
         setIsMaxed(false);
@@ -379,6 +394,8 @@ export function ClipHistWindow() {
       // IME 组合输入中不接管：Enter=提交候选、Esc=取消组合（截图文字工具
       // 同口径；合成键在中文输入法下 key 呈 "Process"，天然不命中各分支）
       if (e.isComposing || e.keyCode === 229) return;
+      const { items: list, sel: i, query: q, picked: pk } = stateRef.current;
+      const cur = list[i];
       // W/S 备用导航（截图 WASD 惯例同源）：仅搜索框未聚焦时生效，且必须
       // 判在可打印键兜底之前——否则会被兜底截获进搜索词
       if (
@@ -386,12 +403,30 @@ export function ClipHistWindow() {
         document.activeElement !== inputRef.current
       ) {
         e.preventDefault();
-        const { items: list, sel: i } = stateRef.current;
         const next =
           e.key === "s" || e.key === "S" ? Math.min(i + 1, list.length - 1) : Math.max(i - 1, 0);
         setSel(next);
         goTo(next);
         return;
+      }
+      // Space 勾选当前条目（T1-4）：仅搜索框未聚焦时（聚焦时是输入字符）。
+      // 必须判在可打印键兜底之前——空格 key.length===1，排后会被兜底截获
+      // 进搜索词，勾选功能就此失效（2026-11-01 审查发现的顺序回归）
+      if ((e.key === " " || e.code === "Space") && document.activeElement !== inputRef.current) {
+        e.preventDefault();
+        if (cur) togglePick(cur.id);
+        return;
+      }
+      // 数字取条（T2-3）：Alt+1-9 任意时刻；裸 1-9 未聚焦时——同样必须先于
+      // 可打印键兜底（数字会被兜底补进搜索词，裸数字取条失效）
+      {
+        const pick = pickDigit(e, document.activeElement === inputRef.current);
+        if (pick !== null) {
+          e.preventDefault();
+          const item = list[pick];
+          if (item) pasteItem(item, e.ctrlKey);
+          return;
+        }
       }
       // 聚焦兜底：冷启动首次激活时三重试仍可能被 WebView2 激活序列冲掉——
       // 可打印字符落键到 body 时夺回输入焦点，并把该字符补进搜索词（免丢键）
@@ -405,26 +440,6 @@ export function ClipHistWindow() {
         inputRef.current?.focus();
         setQuery((q) => q + e.key);
         return;
-      }
-      const { items: list, sel: i, query: q, picked: pk } = stateRef.current;
-      const cur = list[i];
-      // Space 勾选当前条目（T1-4）：仅搜索框未聚焦时（聚焦时是输入字符），
-      // 判定在可打印键兜底之前
-      if ((e.key === " " || e.code === "Space") && document.activeElement !== inputRef.current) {
-        e.preventDefault();
-        if (cur) togglePick(cur.id);
-        return;
-      }
-      // 数字取条（T2-3）：Alt+1-9 任意时刻；裸 1-9 未聚焦时——判定同样
-      // 先于可打印键兜底
-      {
-        const pick = pickDigit(e, document.activeElement === inputRef.current);
-        if (pick !== null) {
-          e.preventDefault();
-          const item = list[pick];
-          if (item) pasteItem(item, e.ctrlKey);
-          return;
-        }
       }
       switch (e.key) {
         case "ArrowDown":

@@ -139,39 +139,30 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
          CREATE INDEX IF NOT EXISTS idx_clip_hash    ON clip_items(hash);",
     )
     .map_err(|e| format!("初始化 clipboard.db 失败：{e}"))?;
-    // 惰性迁移（T1-3 拼音搜索）：旧库无 py 列则补列（建表语句已含，新库勿动）
-    let has_py = conn
-        .prepare("SELECT 1 FROM pragma_table_info('clip_items') WHERE name = 'py'")
-        .and_then(|mut stmt| stmt.query_row([], |_| Ok(())))
-        .is_ok();
-    if !has_py {
+    // 惰性迁移（T1-3/T2-2/T3-1/T3-2）：一趟表结构查询判 py/source/html/fav
+    // 四列，缺哪补哪（建表语句已含，新库零 ALTER；2026-11-01 合并四次
+    // pragma 查询为一次）
+    let cols: Vec<String> = conn
+        .prepare("SELECT name FROM pragma_table_info('clip_items')")
+        .map_err(|e| format!("读取表结构失败：{e}"))?
+        .query_map([], |r| r.get(0))
+        .map_err(|e| format!("迭代表结构失败：{e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("读取表结构列失败：{e}"))?;
+    let has_col = |k: &str| cols.iter().any(|c| c == k);
+    if !has_col("py") {
         conn.execute_batch("ALTER TABLE clip_items ADD COLUMN py TEXT;")
             .map_err(|e| format!("补 py 列失败：{e}"))?;
     }
-    // 惰性迁移（T2-2 来源应用）：同法补 source 列
-    let has_source = conn
-        .prepare("SELECT 1 FROM pragma_table_info('clip_items') WHERE name = 'source'")
-        .and_then(|mut stmt| stmt.query_row([], |_| Ok(())))
-        .is_ok();
-    if !has_source {
+    if !has_col("source") {
         conn.execute_batch("ALTER TABLE clip_items ADD COLUMN source TEXT;")
             .map_err(|e| format!("补 source 列失败：{e}"))?;
     }
-    // 惰性迁移（T3-1 富文本）：同法补 html 列
-    let has_html = conn
-        .prepare("SELECT 1 FROM pragma_table_info('clip_items') WHERE name = 'html'")
-        .and_then(|mut stmt| stmt.query_row([], |_| Ok(())))
-        .is_ok();
-    if !has_html {
+    if !has_col("html") {
         conn.execute_batch("ALTER TABLE clip_items ADD COLUMN html TEXT;")
             .map_err(|e| format!("补 html 列失败：{e}"))?;
     }
-    // 惰性迁移（T3-2 收藏）：同法补 fav 列
-    let has_fav = conn
-        .prepare("SELECT 1 FROM pragma_table_info('clip_items') WHERE name = 'fav'")
-        .and_then(|mut stmt| stmt.query_row([], |_| Ok(())))
-        .is_ok();
-    if !has_fav {
+    if !has_col("fav") {
         conn.execute_batch("ALTER TABLE clip_items ADD COLUMN fav INTEGER NOT NULL DEFAULT 0;")
             .map_err(|e| format!("补 fav 列失败：{e}"))?;
     }
@@ -201,8 +192,21 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
          END;",
     )
     .map_err(|e| format!("初始化 FTS 失败：{e}"))?;
-    conn.execute_batch("INSERT INTO clip_fts(clip_fts) VALUES('rebuild');")
-        .map_err(|e| format!("FTS 重建失败：{e}"))?;
+    // 重建仅在计数漂移时执行（2026-11-01 启动速度优化）：触发器在每次
+    // 增删改时保持 FTS 与主表同步，常态启动零重建；旧无条件全量 rebuild
+    // 随库增长线性变慢（几千条文本时可达秒级），而它只对「触发器缺位的
+    // 历史库 / 中断写入」有意义——计数一致即视为已同步
+    let fts_drift: bool = conn
+        .query_row(
+            "SELECT (SELECT count(*) FROM clip_fts) != (SELECT count(*) FROM clip_items)",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(true);
+    if fts_drift {
+        conn.execute_batch("INSERT INTO clip_fts(clip_fts) VALUES('rebuild');")
+            .map_err(|e| format!("FTS 重建失败：{e}"))?;
+    }
     // 回填：仅 text 列非空且 py 为空的行（新库为空集，秒过）
     let rows: Vec<(i64, Option<String>)> = conn
         .prepare("SELECT id, text FROM clip_items WHERE text IS NOT NULL AND py IS NULL")
@@ -475,18 +479,19 @@ fn make_thumb(w: u32, h: u32, rgba: &[u8]) -> Option<Vec<u8>> {
 
 // ── 入库 / 清理 / 查询 ──────────────────────────────────────────────────────
 
-/// 入库（去重置顶 = Ditto 行为：相同 hash 已存在则把该条 created_at 提到现在）。
-/// 返回 Ok(true) = 有变化（新增或置顶），Ok(false) = 编码失败跳过
-fn ingest(
-    conn: &Connection,
-    content: &ClipContent,
-    now: i64,
-    source: Option<&str>,
-    html: Option<&str>,
-) -> rusqlite::Result<bool> {
-    let hash = content.hash_hex();
+/// 图片条目重编码（PNG 原图 + 缩略图）。独立出来供调用方在 **锁外** 执行：
+/// 4K 编码数百 ms，持 conn 锁做会让所有 cliphist 命令排队（同步命令在主
+/// 线程 = 整个应用卡住，2026-11-01 响应速度优化）
+fn encode_image_payload(w: u32, h: u32, rgba: &[u8]) -> Result<(Vec<u8>, Option<Vec<u8>>), String> {
+    let png = encode_png(w, h, rgba)?;
+    let thumb = make_thumb(w, h, rgba);
+    Ok((png, thumb))
+}
+
+/// 去重查询：相同 hash 已存在则置顶（Ditto 行为），返回 Some(id)
+fn promote_if_duplicate(conn: &Connection, hash: &str, now: i64) -> rusqlite::Result<Option<i64>> {
     let existing: Option<i64> =
-        match conn.query_row("SELECT id FROM clip_items WHERE hash = ?1", [&hash], |r| {
+        match conn.query_row("SELECT id FROM clip_items WHERE hash = ?1", [hash], |r| {
             r.get(0)
         }) {
             Ok(id) => Some(id),
@@ -498,19 +503,26 @@ fn ingest(
             "UPDATE clip_items SET created_at = ?1, last_used_at = ?1 WHERE id = ?2",
             rusqlite::params![now, id],
         )?;
-        return Ok(true);
+        return Ok(Some(id));
     }
+    Ok(None)
+}
+
+/// 新行落库（不做去重查询——两阶段调用方已复核）。image = 预编码的
+/// (原图, 缩略图)，仅 kind=image 条目需要
+fn insert_item(
+    conn: &Connection,
+    content: &ClipContent,
+    image: Option<(Vec<u8>, Option<Vec<u8>>)>,
+    now: i64,
+    source: Option<&str>,
+    html: Option<&str>,
+    hash: &str,
+) -> rusqlite::Result<()> {
     let (text, image, thumb, files, file_cut) = match content {
         ClipContent::Text(_) => (content.search_text(), None, None, None, 0i64),
-        ClipContent::Image { w, h, rgba } => {
-            let png = match encode_png(*w, *h, rgba) {
-                Ok(p) => p,
-                Err(e) => {
-                    log::warn!("剪贴板图片入库跳过：{e}");
-                    return Ok(false);
-                }
-            };
-            let thumb = make_thumb(*w, *h, rgba);
+        ClipContent::Image { .. } => {
+            let (png, thumb) = image.expect("图片条目必须先经 encode_image_payload");
             (None, Some(png), thumb, None, 0)
         }
         ClipContent::Files { paths, cut } => {
@@ -568,6 +580,36 @@ fn ingest(
             html.filter(|h| h.len() <= 2_000_000)
         ],
     )?;
+    Ok(())
+}
+
+/// 入库（单阶段便捷封装，仅供测试）：去重置顶 / 新条目编码落库。
+/// 持锁做图片编码——生产 watcher 路径不经过这里（见 handle_clipboard_change
+/// 的两阶段入库）
+#[cfg(test)]
+fn ingest(
+    conn: &Connection,
+    content: &ClipContent,
+    now: i64,
+    source: Option<&str>,
+    html: Option<&str>,
+) -> rusqlite::Result<bool> {
+    let hash = content.hash_hex();
+    if promote_if_duplicate(conn, &hash, now)?.is_some() {
+        return Ok(true);
+    }
+    let image = if let ClipContent::Image { w, h, rgba } = content {
+        match encode_image_payload(*w, *h, rgba) {
+            Ok(p) => Some(p),
+            Err(e) => {
+                log::warn!("剪贴板图片入库跳过：{e}");
+                return Ok(false);
+            }
+        }
+    } else {
+        None
+    };
+    insert_item(conn, content, image, now, source, html, &hash)?;
     Ok(true)
 }
 
@@ -824,25 +866,60 @@ fn handle_clipboard_change(app: &AppHandle) {
         None
     };
     let now = now_ms();
-    let conn = h.conn.lock().unwrap_or_else(|p| p.into_inner());
-    let changed = ingest(
-        &conn,
-        &content,
-        now,
-        source_app.as_deref(),
-        html_frag.as_deref(),
-    )
-    .unwrap_or_else(|e| {
-        log::warn!("剪贴板条目入库失败：{e}");
-        false
-    });
-    let capacity = h.capacity.load(Ordering::SeqCst);
-    let keep_days = h.keep_days.load(Ordering::SeqCst);
-    let _ = cleanup(&conn, capacity, keep_days, now);
-    drop(conn);
-    if changed {
+    // 两阶段入库（2026-11-01 响应速度优化）：先短锁查重（µs 级，命中即置顶
+    // 返回）；新条目在 **锁外** 做 PNG 编码（4K 数百 ms——持锁编码期间所有
+    // cliphist 命令排队，而它们是主线程同步命令 = 整个应用卡住），编码完再
+    // 短锁复核（编码期间同 hash 可能已被并发写入）+ 落库 + 清理
+    let promoted = {
+        let conn = h.conn.lock().unwrap_or_else(|p| p.into_inner());
+        promote_if_duplicate(&conn, &hash, now).unwrap_or_else(|e| {
+            log::warn!("剪贴板条目查重失败：{e}");
+            None
+        })
+    };
+    if promoted.is_some() {
         let _ = app.emit("cliphist-updated", ());
+        return;
     }
+    let image = if let ClipContent::Image { w, h: hh, rgba } = &content {
+        match encode_image_payload(*w, *hh, rgba) {
+            Ok(p) => Some(p),
+            Err(e) => {
+                log::warn!("剪贴板图片入库跳过：{e}");
+                return;
+            }
+        }
+    } else {
+        None
+    };
+    {
+        let conn = h.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let changed = match promote_if_duplicate(&conn, &hash, now) {
+            Ok(None) => insert_item(
+                &conn,
+                &content,
+                image,
+                now,
+                source_app.as_deref(),
+                html_frag.as_deref(),
+                &hash,
+            )
+            .map(|_| true),
+            Ok(Some(_)) => Ok(true),
+            Err(e) => {
+                log::warn!("剪贴板条目入库失败：{e}");
+                Ok(false)
+            }
+        }
+        .unwrap_or(false);
+        if !changed {
+            return;
+        }
+        let capacity = h.capacity.load(Ordering::SeqCst);
+        let keep_days = h.keep_days.load(Ordering::SeqCst);
+        let _ = cleanup(&conn, capacity, keep_days, now);
+    }
+    let _ = app.emit("cliphist-updated", ());
 }
 
 /// 读取剪贴板内容：文件 > 文本 > 图片（复制文件的应用通常同时挂多种格式，
@@ -1335,19 +1412,24 @@ pub fn png_data_url(bytes: &[u8]) -> String {
 
 /// 图片 OCR 取字（T2-4）：Windows.Media.Ocr（系统组件零新依赖，中文系统
 /// 即中文引擎）→ 识别文本写回剪贴板（不设自写 guard——识别结果作为新文本
-/// 条目自然入库，可搜索可再粘贴）。返回识别文本供前端回执
-pub fn ocr_clip_image(h: &ClipHistState, id: i64) -> Result<String, String> {
-    let png = {
-        let conn = h.conn.lock().unwrap_or_else(|p| p.into_inner());
-        conn.query_row(
-            "SELECT image FROM clip_items WHERE id = ?1 AND kind = 'image'",
-            [id],
-            |r| r.get::<_, Option<Vec<u8>>>(0),
-        )
-        .map_err(|_| "图片条目不存在".to_string())?
-        .ok_or("该条目没有原图数据")?
-    };
-    let img = image::load_from_memory_with_format(&png, image::ImageFormat::Png)
+/// 条目自然入库，可搜索可再粘贴）。识别文本返回供前端回执。
+/// 取字节与识别拆成两段（2026-11-01 响应速度）：OCR 是秒级重活，命令层
+/// 把 ocr_png 放 blocking 线程——旧同步命令整段在主线程跑，期间全部窗口
+/// 冻住
+pub fn image_png_bytes(h: &ClipHistState, id: i64) -> Result<Vec<u8>, String> {
+    let conn = h.conn.lock().unwrap_or_else(|p| p.into_inner());
+    conn.query_row(
+        "SELECT image FROM clip_items WHERE id = ?1 AND kind = 'image'",
+        [id],
+        |r| r.get::<_, Option<Vec<u8>>>(0),
+    )
+    .map_err(|_| "图片条目不存在".to_string())?
+    .ok_or("该条目没有原图数据".to_string())
+}
+
+/// PNG 字节 → OCR 识别文本（无状态重活；识别结果写回剪贴板）
+pub fn ocr_png(png: &[u8]) -> Result<String, String> {
+    let img = image::load_from_memory_with_format(png, image::ImageFormat::Png)
         .map_err(|e| format!("图片解码失败：{e}"))?;
     let rgba = img.into_rgba8();
     let (w, hh) = rgba.dimensions();
@@ -1516,13 +1598,22 @@ pub fn import_backup(conn: &Connection, backup: &Backup) -> rusqlite::Result<usi
 }
 
 /// 多条文本合并（T1-4）：按调用方给定顺序（列表可见序）取 text/link/path
-/// 三类条目的全文，换行连接；无可合并条目 = None。独立纯函数供 test
+/// 三类条目的全文，换行连接；无可合并条目 = None。独立纯函数供 test。
+/// 按 ids 精确取行（2026-11-01 优化：旧实现全表载入三类条目——容量上限
+/// 10000 × 单条 1MiB 文本的极端库会把无关节点全部读进内存）
 pub fn merge_texts(conn: &Connection, ids: &[i64]) -> Option<String> {
+    if ids.is_empty() {
+        return None;
+    }
+    let placeholders = vec!["?"; ids.len()].join(",");
+    let sql = format!(
+        "SELECT id, text FROM clip_items
+         WHERE kind IN ('text','link','path') AND id IN ({placeholders})"
+    );
     let mut by_id = std::collections::HashMap::new();
-    if let Ok(mut stmt) =
-        conn.prepare("SELECT id, kind, text FROM clip_items WHERE kind IN ('text','link','path')")
-        && let Ok(rows) = stmt.query_map([], |r| {
-            Ok((r.get::<_, i64>(0)?, r.get::<_, Option<String>>(2)?))
+    if let Ok(mut stmt) = conn.prepare(&sql)
+        && let Ok(rows) = stmt.query_map(rusqlite::params_from_iter(ids.iter()), |r| {
+            Ok((r.get::<_, i64>(0)?, r.get::<_, Option<String>>(1)?))
         })
     {
         for row in rows.flatten() {
@@ -1537,10 +1628,7 @@ pub fn merge_texts(conn: &Connection, ids: &[i64]) -> Option<String> {
     if parts.is_empty() {
         None
     } else {
-        Some(parts.join(
-            "
-",
-        ))
+        Some(parts.join("\n"))
     }
 }
 
@@ -1793,33 +1881,6 @@ MIIE...
         assert!(!app_excluded("keepass.exe", "explorer.exe"));
         assert!(!app_excluded("", "anything.exe"));
         assert!(!app_excluded("keepass.exe", ""));
-    }
-
-    #[test]
-    fn probe2() {
-        let c = mem_db();
-        ingest(&c, &text("季度审计报告要点"), 1000, None, None).unwrap();
-        ingest(&c, &text("hello world"), 2000, None, None).unwrap();
-        let raw: i64 = c
-            .query_row(
-                "SELECT COUNT(*) FROM clip_items WHERE text LIKE '%'||?1||'%'",
-                ["审计"],
-                |r| r.get(0),
-            )
-            .unwrap();
-        eprintln!("raw 审计={raw}");
-        let v: Vec<(i64, String)> = c
-            .prepare("SELECT id, kind FROM clip_items")
-            .unwrap()
-            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
-            .unwrap()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
-        eprintln!("rows={v:?}");
-        for q in ["sj", "审计", "hello", "zzz"] {
-            let n = list_page(&c, q, "", 0, 50).unwrap().items.len();
-            eprintln!("q={q} n={n}");
-        }
     }
 
     #[test]

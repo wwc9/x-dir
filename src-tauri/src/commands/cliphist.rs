@@ -1,4 +1,8 @@
 //! 剪贴板历史命令（§3.7）：核心逻辑见 crate::cliphist，此处仅薄封装。
+//! 重命令（DB 查询 / PNG 编解码 / OCR / 备份导入导出）一律 async +
+//! spawn_blocking（2026-11-01 响应速度优化）：同步命令在主线程执行，
+//! watcher 大图入库持有 conn 锁做 PNG 编码（数百 ms）时，主线程同步命令
+//! 会排队等锁 = 整个应用冻住；async 化后最多等待的是空闲的 blocking 池。
 
 use std::sync::atomic::Ordering;
 
@@ -43,72 +47,73 @@ pub fn cliphist_configure(
 
 /// 分页查询（query 空串 = 全部；kind 空串 = 全部类型）
 #[tauri::command]
-pub fn cliphist_list(
-    state: State<'_, AppState>,
+pub async fn cliphist_list(
+    app: AppHandle,
     query: String,
     kind: String,
     offset: i64,
     limit: i64,
 ) -> Result<crate::cliphist::ClipHistPage, String> {
-    let conn = state
-        .cliphist
-        .conn
-        .lock()
-        .unwrap_or_else(|p| p.into_inner());
-    crate::cliphist::list_page(&conn, &query, &kind, offset, limit)
-        .map_err(|e| format!("查询剪贴板历史失败：{e}"))
+    tauri::async_runtime::spawn_blocking(move || {
+        let st = app.state::<AppState>();
+        let conn = st.cliphist.conn.lock().unwrap_or_else(|p| p.into_inner());
+        crate::cliphist::list_page(&conn, &query, &kind, offset, limit)
+            .map_err(|e| format!("查询剪贴板历史失败：{e}"))
+    })
+    .await
+    .map_err(|e| format!("查询线程失败：{e}"))?
 }
 
 /// 写回系统剪贴板（paste=true 时直接粘贴到目标窗口，失败降级仅复制）。
-/// 返回 pasted：直接粘贴是否成功
+/// 返回 pasted：直接粘贴是否成功。图片条目含 PNG 解码 + DIB 构建（4K
+/// ~300ms）、直接粘贴含 60ms 等待——全部在 blocking 线程，粘贴图片不再
+/// 冻住全部窗口
 #[tauri::command]
-pub fn cliphist_write_back(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: i64,
-    paste: bool,
-) -> Result<bool, String> {
-    crate::cliphist::write_back(&app, &state.cliphist, id, paste)
+pub async fn cliphist_write_back(app: AppHandle, id: i64, paste: bool) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let h = &app.state::<AppState>().cliphist;
+        crate::cliphist::write_back(&app, h, id, paste)
+    })
+    .await
+    .map_err(|e| format!("写回线程失败：{e}"))?
 }
 
-/// 备份导出（T3-3）：全部条目写 JSON 文件（image 转 base64）
+/// 备份导出（T3-3）：全部条目写 JSON 文件（image 转 base64）。全库序列化
+/// 随条目数线性增长，blocking 线程执行
 #[tauri::command]
-pub fn cliphist_export(state: State<'_, AppState>, path: String) -> Result<usize, String> {
-    let bak = {
-        let conn = state
-            .cliphist
-            .conn
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
-        crate::cliphist::export_backup(&conn).map_err(|e| format!("导出读取失败：{e}"))?
-    };
-    let n = bak.items.len();
-    let json = serde_json::to_string_pretty(&bak).map_err(|e| format!("序列化失败：{e}"))?;
-    std::fs::write(&path, json).map_err(|e| format!("写文件失败：{e}"))?;
-    Ok(n)
+pub async fn cliphist_export(app: AppHandle, path: String) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let bak = {
+            let st = app.state::<AppState>();
+            let conn = st.cliphist.conn.lock().unwrap_or_else(|p| p.into_inner());
+            crate::cliphist::export_backup(&conn).map_err(|e| format!("导出读取失败：{e}"))?
+        };
+        let n = bak.items.len();
+        let json = serde_json::to_string_pretty(&bak).map_err(|e| format!("序列化失败：{e}"))?;
+        std::fs::write(&path, json).map_err(|e| format!("写文件失败：{e}"))?;
+        Ok(n)
+    })
+    .await
+    .map_err(|e| format!("导出线程失败：{e}"))?
 }
 
 /// 备份导入（T3-3）：JSON 文件追加导入（保留收藏/置顶/时间戳）
 #[tauri::command]
-pub fn cliphist_import(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    path: String,
-) -> Result<usize, String> {
-    let json = std::fs::read_to_string(&path).map_err(|e| format!("读文件失败：{e}"))?;
-    let bak: crate::cliphist::Backup =
-        serde_json::from_str(&json).map_err(|e| format!("备份文件格式不正确：{e}"))?;
-    if bak.app != "x-dir" {
-        return Err("不是 X-Dir 剪贴板备份文件".into());
-    }
-    let n = {
-        let conn = state
-            .cliphist
-            .conn
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
-        crate::cliphist::import_backup(&conn, &bak).map_err(|e| format!("导入失败：{e}"))?
-    };
+pub async fn cliphist_import(app: AppHandle, path: String) -> Result<usize, String> {
+    let app_in = app.clone();
+    let n = tauri::async_runtime::spawn_blocking(move || {
+        let json = std::fs::read_to_string(&path).map_err(|e| format!("读文件失败：{e}"))?;
+        let bak: crate::cliphist::Backup =
+            serde_json::from_str(&json).map_err(|e| format!("备份文件格式不正确：{e}"))?;
+        if bak.app != "x-dir" {
+            return Err("不是 X-Dir 剪贴板备份文件".into());
+        }
+        let st = app_in.state::<AppState>();
+        let conn = st.cliphist.conn.lock().unwrap_or_else(|p| p.into_inner());
+        crate::cliphist::import_backup(&conn, &bak).map_err(|e| format!("导入失败：{e}"))
+    })
+    .await
+    .map_err(|e| format!("导入线程失败：{e}"))??;
     let _ = app.emit("cliphist-updated", ());
     Ok(n)
 }
@@ -211,27 +216,40 @@ pub fn cliphist_set_maximized(app: AppHandle, maximized: bool) -> Result<(), Str
     crate::cliphist::set_window_maximized(&app, maximized)
 }
 
-/// 图片 OCR 取字（T2-4）：识别文本写回剪贴板并返回
+/// 图片 OCR 取字（T2-4）：识别文本写回剪贴板并返回。OCR 秒级重活在
+/// blocking 线程——旧同步命令在主线程 block_on，期间全部窗口冻住
 #[tauri::command]
-pub fn cliphist_ocr(state: State<'_, AppState>, id: i64) -> Result<String, String> {
-    crate::cliphist::ocr_clip_image(&state.cliphist, id)
+pub async fn cliphist_ocr(app: AppHandle, id: i64) -> Result<String, String> {
+    let png = crate::cliphist::image_png_bytes(&app.state::<AppState>().cliphist, id)?;
+    tauri::async_runtime::spawn_blocking(move || crate::cliphist::ocr_png(&png))
+        .await
+        .map_err(|e| format!("OCR 线程失败：{e}"))?
 }
 
-/// 图片条目放大预览（T2-1）：原图 dataURL
+/// 图片条目放大预览（T2-1）：原图 dataURL（多 MB base64，blocking 线程）
 #[tauri::command]
-pub fn cliphist_get_image(state: State<'_, AppState>, id: i64) -> Result<String, String> {
-    crate::cliphist::get_image_data_url(&state.cliphist, id)
+pub async fn cliphist_get_image(app: AppHandle, id: i64) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::cliphist::get_image_data_url(&app.state::<AppState>().cliphist, id)
+    })
+    .await
+    .map_err(|e| format!("读取线程失败：{e}"))?
 }
 
-/// 多选合并粘贴（T1-4）：ids 按列表可见序传入，换行连接后写回/直接粘贴
+/// 多选合并粘贴（T1-4）：ids 按列表可见序传入，换行连接后写回/直接粘贴。
+/// 直接粘贴路径含 60ms 焦点等待，blocking 线程执行
 #[tauri::command]
-pub fn cliphist_merge_paste(
+pub async fn cliphist_merge_paste(
     app: AppHandle,
-    state: State<'_, AppState>,
     ids: Vec<i64>,
     paste: bool,
 ) -> Result<bool, String> {
-    crate::cliphist::merge_paste(&app, &state.cliphist, &ids, paste)
+    tauri::async_runtime::spawn_blocking(move || {
+        let h = &app.state::<AppState>().cliphist;
+        crate::cliphist::merge_paste(&app, h, &ids, paste)
+    })
+    .await
+    .map_err(|e| format!("合并线程失败：{e}"))?
 }
 
 /// 文件/文件夹条目「粘贴到当前窗格」（T1-2）：回写 CF_HDROP 到系统剪贴板

@@ -104,9 +104,15 @@ pub fn run() {
                     if let Err(e) = commands::shot::ensure_shot_window(&h) {
                         log::warn!("截图覆盖窗预热失败：{e}");
                     }
-                    // 剪贴板历史浮窗（§3.7）同批预热：常驻停靠屏幕外，热键
-                    // 呼出只是一次原子移动；失败不致命，热键路径会现场补建
-                    if let Err(e) = cliphist::ensure_clip_window(&h) {
+                });
+                // 剪贴板浮窗（§3.7）错后 1s 单独建（2026-11-01 启动速度优化）：
+                // WebView 建窗各耗数百 ms 且必须落在主线程，同一闭包连续建
+                // 两窗会把停顿叠加成一个长卡顿；分批后中间主循环可呼吸。
+                // 常驻停靠屏幕外，热键呼出只是一次原子移动；失败不致命
+                std::thread::sleep(std::time::Duration::from_millis(1000));
+                let h2 = shot_prewarm.clone();
+                let _ = shot_prewarm.run_on_main_thread(move || {
+                    if let Err(e) = cliphist::ensure_clip_window(&h2) {
                         log::warn!("剪贴板浮窗预热失败：{e}");
                     }
                 });

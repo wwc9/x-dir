@@ -510,7 +510,7 @@ pub fn get_html() -> Option<String> {
 /// 格式，纯文本消费者仍读 CF_UNICODETEXT）
 #[cfg(windows)]
 pub fn set_text_and_html(text: &str, html: &str) -> Result<(), String> {
-    if text.contains(' ') {
+    if text.contains('\u{0}') {
         return Err("文本包含非法 NUL 字符".into());
     }
     let utf16: Vec<u8> = text

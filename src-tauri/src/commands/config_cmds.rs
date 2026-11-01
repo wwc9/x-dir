@@ -23,9 +23,17 @@ pub fn get_settings() -> Value {
 /// 完整设置对象，整对象回写会覆盖掉其他键；只写传入且在白名单内的键。
 /// 键 = 阴影/边框装饰三键 + 滚轮调节持久化的逐类型宽度五键
 /// （shotStrokeW 线形/shotTextFont 字号/shotStepW 序号圈/shotMosaicW
-/// 马赛克格/shotBlurAlpha 模糊不透明度，2026-10-30「滚轮记忆」定案）
+/// 马赛克格/shotBlurAlpha 模糊不透明度，2026-10-30「滚轮记忆」定案）。
+/// async + blocking：settings.json 可达上百 KB（含菜单布局），读改写整段
+/// 在主线程会卡标注滚轮调节的收尾（2026-11-01 响应速度优化）
 #[tauri::command]
-pub fn shot_save_prefs(prefs: Value) -> Result<(), String> {
+pub async fn shot_save_prefs(prefs: Value) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || shot_save_prefs_blocking(prefs))
+        .await
+        .map_err(|e| format!("保存线程失败：{e}"))?
+}
+
+fn shot_save_prefs_blocking(prefs: Value) -> Result<(), String> {
     const ALLOWED: &[&str] = &[
         "shotShadowW",
         "shotBorderW",
@@ -60,9 +68,15 @@ pub fn shot_save_prefs(prefs: Value) -> Result<(), String> {
 
 /// 剪贴板浮窗尺寸持久化（§3.7，2026-10-31 边缘拖拽调宽高）：白名单补丁
 /// cliphistWinW/H（逻辑 px），与 shot_save_prefs 同法 RMW——浮窗页拿不到
-/// 主窗完整设置对象，防覆盖
+/// 主窗完整设置对象，防覆盖；同因走 blocking 线程
 #[tauri::command]
-pub fn cliphist_save_size(width: f64, height: f64) -> Result<(), String> {
+pub async fn cliphist_save_size(width: f64, height: f64) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || cliphist_save_size_blocking(width, height))
+        .await
+        .map_err(|e| format!("保存线程失败：{e}"))?
+}
+
+fn cliphist_save_size_blocking(width: f64, height: f64) -> Result<(), String> {
     let p = config_root().join("settings.json");
     let mut v: Value = std::fs::read_to_string(&p)
         .ok()
