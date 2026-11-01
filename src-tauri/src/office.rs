@@ -170,6 +170,7 @@ pub(crate) fn run_office_to_pdf(
             failed.push(FailItem {
                 path: p.clone(),
                 message: e,
+                reason: None,
             });
         }
         prog.done_files += 1;
@@ -302,6 +303,7 @@ pub(crate) fn run_clean_meta(
             failed.push(FailItem {
                 path: p.clone(),
                 message: e,
+                reason: None,
             });
         }
         prog.done_files += 1;
@@ -355,6 +357,7 @@ pub(crate) fn run_extract_text(
             failed.push(FailItem {
                 path: p.clone(),
                 message: e,
+                reason: None,
             });
         }
         prog.done_files += 1;

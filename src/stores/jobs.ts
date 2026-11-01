@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
 
-import { api } from "../lib/ipc";
+import { api, type FailReason } from "../lib/ipc";
 import { JOB_LABELS } from "../lib/island";
 import { useIsland } from "./island";
 import { usePanes } from "./panes";
@@ -17,6 +17,8 @@ export interface JobInfo {
   currentPath: string;
   destDir: string | null;
   sourceParents: string[];
+  /** 删除任务的 permanent 标志（Shift+Del）：解除占用重试需按原语义重删 */
+  deletePermanent: boolean;
 }
 
 /** 任务类别：copy/move/delete 引擎原生；pdf* = PDF 处理（lopdf）；
@@ -59,12 +61,12 @@ interface JobProgressPayload {
   currentPath: string;
 }
 
-/** Rust JobDone 镜像（同上） */
+/** Rust JobDone 镜像（同上；reason = 删除失败的结构化归因，可缺省） */
 interface JobDonePayload {
   jobId: number;
   ok: boolean;
   cancelled: boolean;
-  failed: { path: string; message: string }[];
+  failed: { path: string; message: string; reason?: FailReason }[];
 }
 
 interface JobsStore {
@@ -81,6 +83,7 @@ interface JobsStore {
     destDir: string | null,
     sourceParents: string[],
     onDone?: (d: { ok: boolean; cancelled: boolean }) => void,
+    deletePermanent?: boolean,
   ): void;
   cancel(jobId: number): void;
   /** 暂停/恢复（仅 copy/move 任务响应；乐观切 phase，实际由后端 job-progress 确认） */
@@ -193,7 +196,7 @@ export const useJobs = create<JobsStore>()((set, get) => ({
     };
   },
 
-  register(jobId, mode, destDir, sourceParents, onDone) {
+  register(jobId, mode, destDir, sourceParents, onDone, deletePermanent = false) {
     if (onDone) doneHooks.set(jobId, onDone);
     set((s) => ({
       jobs: {
@@ -211,6 +214,7 @@ export const useJobs = create<JobsStore>()((set, get) => ({
             currentPath: "",
             destDir,
             sourceParents,
+            deletePermanent,
           } satisfies JobInfo),
       },
       order: s.order.includes(jobId) ? s.order : [...s.order, jobId],
@@ -234,6 +238,10 @@ export const useJobs = create<JobsStore>()((set, get) => ({
           ),
           order: s.order.filter((id) => id !== jobId),
         }));
+        // done 先于 register 的失败回执分支同样要给「解除占用」机会
+        if (!d.cancelled && d.failed?.length && info.mode === "delete") {
+          offerUnlock(d.failed, info.deletePermanent);
+        }
         // 失败/取消回执已在 job-done 监听器播过；这里只补漏掉的成功回执
         if (!d.cancelled && !d.failed?.length) {
           useIsland
@@ -266,6 +274,20 @@ export const useJobs = create<JobsStore>()((set, get) => ({
     api.resumeJob(jobId).catch(() => undefined);
   },
 }));
+
+/** 删除失败含「正被占用」项 → 弹「解除占用」对话框（关句柄后可重删）。
+ *  由 job-done 收尾调用（含 done 先于 register 的补漏路径） */
+function offerUnlock(failed: JobDonePayload["failed"], permanent: boolean) {
+  const inUse = failed.filter((f) => f.reason === "inUse");
+  if (!inUse.length) return;
+  void import("./ui").then(({ useUi }) => {
+    useUi.getState().openDialog({
+      type: "unlock",
+      items: inUse.map((f) => f.path),
+      permanent,
+    });
+  });
+}
 
 /** done 事件先于 register 到达时的暂存（极快完成的小任务） */
 const lateDone = new Map<number, JobDonePayload>();

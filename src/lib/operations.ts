@@ -89,6 +89,13 @@ export async function deletePaths(
     );
     if (!ok) return;
   }
+  await enqueueDelete(paths, permanent);
+}
+
+/** 入队删除任务（不做确认）：删除入口与「解除占用后重试」共用——
+ *  重试路径用户已在原始删除（及解除占用对话框）确认过，不再重复询问 */
+export async function enqueueDelete(paths: string[], permanent: boolean): Promise<void> {
+  if (!paths.length) return;
   try {
     const { jobId } = await api.deleteItems(paths, permanent);
     const sourceParents = paths
@@ -101,7 +108,7 @@ export async function deletePaths(
         : ({ ok, cancelled }: { ok: boolean; cancelled: boolean }) => {
             if (ok && !cancelled) useUndo.getState().push({ kind: "trash", paths });
           };
-    useJobs.getState().register(jobId, "delete", null, sourceParents, onDone);
+    useJobs.getState().register(jobId, "delete", null, sourceParents, onDone, permanent);
   } catch (e) {
     useUi.getState().toast(`删除失败：${String(e)}`, "error");
   }

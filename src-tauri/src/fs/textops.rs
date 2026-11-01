@@ -105,6 +105,7 @@ pub(crate) fn run_convert_encoding(
             failed.push(FailItem {
                 path: p.clone(),
                 message: e,
+                reason: None,
             });
         }
         prog.done_files += 1;
@@ -173,6 +174,7 @@ pub(crate) fn merge_documents(
             Err(e) => failed.push(FailItem {
                 path: p.clone(),
                 message: e,
+                reason: None,
             }),
         }
         prog.done_files += 1;
@@ -198,6 +200,7 @@ pub(crate) fn merge_documents(
         failed.push(FailItem {
             path: output.to_string(),
             message: e.to_string(),
+            reason: None,
         });
     }
 }
@@ -219,6 +222,7 @@ fn add_path_to_zip<W: Write + Seek>(
             failed.push(FailItem {
                 path: path.to_string(),
                 message: e.to_string(),
+                reason: None,
             });
             return;
         }
@@ -242,6 +246,7 @@ fn add_path_to_zip<W: Write + Seek>(
             failed.push(FailItem {
                 path: path.to_string(),
                 message: e.to_string(),
+                reason: None,
             });
             return;
         }
@@ -249,6 +254,7 @@ fn add_path_to_zip<W: Write + Seek>(
             failed.push(FailItem {
                 path: path.to_string(),
                 message: "目录枚举失败".into(),
+                reason: None,
             });
             return;
         };
@@ -269,6 +275,7 @@ fn add_path_to_zip<W: Write + Seek>(
             failed.push(FailItem {
                 path: path.to_string(),
                 message: e.to_string(),
+                reason: None,
             });
             return;
         }
@@ -280,6 +287,7 @@ fn add_path_to_zip<W: Write + Seek>(
         failed.push(FailItem {
             path: path.to_string(),
             message: e.to_string(),
+            reason: None,
         });
         return;
     }
@@ -288,6 +296,7 @@ fn add_path_to_zip<W: Write + Seek>(
         Err(e) => failed.push(FailItem {
             path: path.to_string(),
             message: e.to_string(),
+            reason: None,
         }),
     }
 }
@@ -312,6 +321,7 @@ pub(crate) fn run_zip(
             failed.push(FailItem {
                 path: output.to_string(),
                 message: e.to_string(),
+                reason: None,
             });
             return;
         }
@@ -332,6 +342,7 @@ pub(crate) fn run_zip(
         failed.push(FailItem {
             path: output.to_string(),
             message: e.to_string(),
+            reason: None,
         });
         let _ = std::fs::remove_file(to_extended(&tmp));
         return;
@@ -340,6 +351,7 @@ pub(crate) fn run_zip(
         failed.push(FailItem {
             path: output.to_string(),
             message: e.to_string(),
+            reason: None,
         });
         let _ = std::fs::remove_file(to_extended(&tmp));
     }

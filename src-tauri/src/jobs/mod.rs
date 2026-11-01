@@ -22,6 +22,9 @@ use crate::fs::path::{
 pub struct FailItem {
     pub path: String,
     pub message: String,
+    /// 结构化失败原因（目前仅删除链路归因）：前端据 inUse 弹「解除占用」
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<FailReason>,
 }
 
 #[derive(Serialize, Clone)]
@@ -783,6 +786,7 @@ impl JobManager {
                         failed: vec![FailItem {
                             path: String::new(),
                             message: "任务内部错误（panic，详见日志）".into(),
+                            reason: None,
                         }],
                     },
                 );
@@ -831,6 +835,7 @@ fn push_fail(failed: &mut Vec<FailItem>, path: &str, e: &io::Error) {
     failed.push(FailItem {
         path: path.to_string(),
         message: e.to_string(),
+        reason: None,
     });
 }
 
@@ -883,8 +888,9 @@ fn walk_stats(path: &str, files: &mut u64, bytes: &mut u64) {
     }
 }
 
-/// 单项删除：permanent = false 移入回收站（trash），true 直接移除（文件/目录）
-fn delete_one(p: &str, permanent: bool) -> Result<(), String> {
+/// 单项删除：permanent = false 移入回收站（trash），true 直接移除（文件/目录）。
+/// Err 携带结构化原因（FailReason）：前端据 InUse 弹「解除占用」跟进
+fn delete_one(p: &str, permanent: bool) -> Result<(), DeleteFailure> {
     let extended = to_extended(p);
     let ext = Path::new(&extended);
     if permanent {
@@ -910,27 +916,63 @@ fn delete_one(p: &str, permanent: bool) -> Result<(), String> {
 // 确定性错误；再用 DELETE 权限探测还原真实原因——探测 = 以删除权限
 // 开句柄，系统拒绝时 Win32 码即真实堵点（32/33 占用、5 拒绝访问、2/3 已消失）。
 
+/// 删除失败：用户可读消息 + 结构化原因（None = 未归因出）
+#[derive(Clone, Debug)]
+pub struct DeleteFailure {
+    pub message: String,
+    pub reason: Option<FailReason>,
+}
+
+impl DeleteFailure {
+    fn new(message: impl Into<String>, reason: Option<FailReason>) -> Self {
+        Self {
+            message: message.into(),
+            reason,
+        }
+    }
+}
+
+/// 删除失败的结构化原因（serde camelCase：inUse/accessDenied/missing）
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum FailReason {
+    /// 正被其他进程占用（前端弹「解除占用」）
+    InUse,
+    /// 无权限
+    AccessDenied,
+    /// 已被移动/删除
+    Missing,
+}
+
 /// trash 变体自带明确语义的错误（跨平台）
-fn explain_trash_variant(e: &trash::Error) -> Option<String> {
+fn explain_trash_variant(e: &trash::Error) -> Option<DeleteFailure> {
     match e {
-        trash::Error::TargetedRoot => Some("不能删除驱动器根目录".into()),
-        trash::Error::CouldNotAccess { .. } => {
-            Some("无法访问该项（可能已被移动或删除，或无权限）".into())
-        }
-        trash::Error::CanonicalizePath { .. } => {
-            Some("路径无法解析（可能包含非法字符或已不存在）".into())
-        }
+        trash::Error::TargetedRoot => Some(DeleteFailure::new("不能删除驱动器根目录", None)),
+        trash::Error::CouldNotAccess { .. } => Some(DeleteFailure::new(
+            "无法访问该项（可能已被移动或删除，或无权限）",
+            None,
+        )),
+        trash::Error::CanonicalizePath { .. } => Some(DeleteFailure::new(
+            "路径无法解析（可能包含非法字符或已不存在）",
+            None,
+        )),
         _ => None,
     }
 }
 
 /// Win32 码 → 删除失败原因（DELETE 探测与永久删除的 io 错误共用）
 #[cfg(windows)]
-fn explain_win32_code(code: u32) -> Option<&'static str> {
+fn explain_win32_code(code: u32) -> Option<(&'static str, FailReason)> {
     match code {
-        32 | 33 => Some("正被其他程序占用（例如已在 Word/WPS 中打开），请关闭后重试"),
-        5 => Some("没有删除权限（拒绝访问），请检查权限或以管理员身份重试"),
-        2 | 3 => Some("该项已被移动或删除，请刷新列表"),
+        32 | 33 => Some((
+            "正被其他程序占用（例如已在 Word/WPS 中打开），请关闭后重试",
+            FailReason::InUse,
+        )),
+        5 => Some((
+            "没有删除权限（拒绝访问），请检查权限或以管理员身份重试",
+            FailReason::AccessDenied,
+        )),
+        2 | 3 => Some(("该项已被移动或删除，请刷新列表", FailReason::Missing)),
         _ => None,
     }
 }
@@ -939,7 +981,7 @@ fn explain_win32_code(code: u32) -> Option<&'static str> {
 /// 文件/目录通用（目录需 FILE_FLAG_BACKUP_SEMANTICS）；返回 None = 探测不出，
 /// 交由调用方回退原始错误
 #[cfg(windows)]
-fn probe_delete_reason(raw_path: &str) -> Option<String> {
+fn probe_delete_reason(raw_path: &str) -> Option<(&'static str, FailReason)> {
     use std::os::windows::ffi::OsStrExt;
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::Storage::FileSystem::{
@@ -971,30 +1013,30 @@ fn probe_delete_reason(raw_path: &str) -> Option<String> {
             // CreateFileW 的错误 HRESULT 形如 0x8007XXXX（FACILITY_WIN32），
             // 低 16 位即真实 Win32 错误码
             let code = (e.code().0 as u32) & 0xFFFF;
-            explain_win32_code(code).map(str::to_string)
+            explain_win32_code(code)
         }
     }
 }
 
 /// 移入回收站失败 → 用户可读原因：变体语义 → DELETE 探测 → 原始错误兜底
-fn explain_trash_failure(raw_path: &str, e: &trash::Error) -> String {
-    if let Some(msg) = explain_trash_variant(e) {
-        return msg;
+fn explain_trash_failure(raw_path: &str, e: &trash::Error) -> DeleteFailure {
+    if let Some(d) = explain_trash_variant(e) {
+        return d;
     }
     #[cfg(windows)]
-    if let Some(msg) = probe_delete_reason(raw_path) {
-        return msg;
+    if let Some((msg, reason)) = probe_delete_reason(raw_path) {
+        return DeleteFailure::new(msg, Some(reason));
     }
-    format!("无法移入回收站：{e}")
+    DeleteFailure::new(format!("无法移入回收站：{e}"), None)
 }
 
 /// 永久删除失败 → 同源归因（io 错误自带 Win32 码，无需再探测）
-fn explain_permanent_failure(e: io::Error) -> String {
+fn explain_permanent_failure(e: io::Error) -> DeleteFailure {
     #[cfg(windows)]
-    if let Some(msg) = e.raw_os_error().and_then(|c| explain_win32_code(c as u32)) {
-        return msg.into();
+    if let Some((msg, reason)) = e.raw_os_error().and_then(|c| explain_win32_code(c as u32)) {
+        return DeleteFailure::new(msg, Some(reason));
     }
-    format!("无法删除：{e}")
+    DeleteFailure::new(format!("无法删除：{e}"), None)
 }
 
 /// best-effort 清除树内全部只读属性（删除/覆盖前）。跳过 reparse 目录——
@@ -1042,7 +1084,8 @@ fn run_delete(
         if let Err(e) = delete_one(p, permanent) {
             failed.push(FailItem {
                 path: p.clone(),
-                message: e,
+                message: e.message,
+                reason: e.reason,
             });
         }
         prog.done_files += 1;
@@ -1128,6 +1171,7 @@ fn copy_or_move_path(
         failed.push(FailItem {
             path: src.to_string(),
             message: "已跳过目录联接（防止联接环导致无限复制）".to_string(),
+            reason: None,
         });
         return;
     }
@@ -1423,18 +1467,32 @@ mod tests {
     #[test]
     fn trash_variant_errors_explained_in_plain_words() {
         let root = explain_trash_variant(&trash::Error::TargetedRoot).unwrap();
-        assert!(root.contains("根目录"), "actual: {root}");
+        assert!(root.message.contains("根目录"), "actual: {}", root.message);
         let access =
             explain_trash_variant(&trash::Error::CouldNotAccess { target: "x".into() }).unwrap();
-        assert!(access.contains("无法访问"), "actual: {access}");
+        assert!(
+            access.message.contains("无法访问"),
+            "actual: {}",
+            access.message
+        );
     }
 
     #[test]
     fn permanent_failure_maps_access_denied_and_keeps_raw_fallback() {
         let denied = explain_permanent_failure(io::Error::from_raw_os_error(5));
-        assert!(denied.contains("权限"), "actual: {denied}");
+        assert_eq!(denied.reason, Some(FailReason::AccessDenied));
+        assert!(
+            denied.message.contains("权限"),
+            "actual: {}",
+            denied.message
+        );
         let fallback = explain_permanent_failure(io::Error::other("boom"));
-        assert!(fallback.contains("boom"), "actual: {fallback}");
+        assert_eq!(fallback.reason, None);
+        assert!(
+            fallback.message.contains("boom"),
+            "actual: {}",
+            fallback.message
+        );
     }
 
     /// IFileOperation 对占用只回无信息的 aborted（2026-11-01 复现），
@@ -1471,14 +1529,20 @@ mod tests {
             description: "Some operations were aborted".into(),
         };
         let msg = explain_trash_failure(&path, &aborted());
-        assert!(msg.contains("占用"), "actual: {msg}");
+        assert_eq!(msg.reason, Some(FailReason::InUse));
+        assert!(msg.message.contains("占用"), "actual: {}", msg.message);
         unsafe {
             let _ = CloseHandle(h);
         }
-        // 解锁后探测不再命中，回退含原始错误的兜底文案
+        // 解锁后探测不再命中，回退含原始错误的兜底文案（reason 归因不出）
         assert!(probe_delete_reason(&path).is_none());
         let fallback = explain_trash_failure(&path, &aborted());
-        assert!(fallback.contains("无法移入回收站"), "actual: {fallback}");
+        assert_eq!(fallback.reason, None);
+        assert!(
+            fallback.message.contains("无法移入回收站"),
+            "actual: {}",
+            fallback.message
+        );
         std::fs::remove_file(&f).unwrap();
         std::fs::remove_dir_all(&tmp).unwrap();
     }

@@ -57,6 +57,7 @@ pub(crate) fn run_extract(
             failed.push(FailItem {
                 path: src.clone(),
                 message: msg,
+                reason: None,
             });
         }
         prog.done_files += 1;

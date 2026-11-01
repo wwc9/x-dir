@@ -426,6 +426,7 @@ fn finish_one(
         failed.push(FailItem {
             path: p.to_string(),
             message: e,
+            reason: None,
         });
     }
     prog.done_files += 1;
@@ -480,6 +481,7 @@ pub(crate) fn run_watermark(
             failed.push(FailItem {
                 path: "-".into(),
                 message: "未找到可用的系统字体（msyh/simhei/simsun/arial）".into(),
+                reason: None,
             });
             return;
         };
@@ -821,6 +823,7 @@ pub(crate) fn run_montage(
             failed.push(FailItem {
                 path: p.clone(),
                 message: e,
+                reason: None,
             });
         }
         prog.done_files += 1;
@@ -839,6 +842,7 @@ pub(crate) fn run_montage(
         failed.push(FailItem {
             path: opts.output.clone(),
             message: e,
+            reason: None,
         });
     }
 }

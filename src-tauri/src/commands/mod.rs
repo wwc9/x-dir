@@ -11,6 +11,7 @@ pub mod icons;
 pub mod img_cmds;
 pub mod index;
 pub mod jobs_cmds;
+pub mod locks_cmds;
 pub mod native;
 pub mod office_cmds;
 pub mod pdf_cmds;

@@ -32,6 +32,7 @@ function job(patch: Partial<JobInfo>): JobInfo {
     currentPath: "",
     destDir: null,
     sourceParents: [],
+    deletePermanent: false,
     ...patch,
   };
 }

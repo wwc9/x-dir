@@ -172,6 +172,7 @@ pub(crate) fn run_merge(
             Err(e) => failed.push(FailItem {
                 path: p.clone(),
                 message: e.to_string(),
+                reason: None,
             }),
         }
         prog.done_files += 1;
@@ -187,6 +188,7 @@ pub(crate) fn run_merge(
             failed.push(FailItem {
                 path: output.to_string(),
                 message: e,
+                reason: None,
             });
             return;
         }
@@ -195,6 +197,7 @@ pub(crate) fn run_merge(
         failed.push(FailItem {
             path: output.to_string(),
             message: e.to_string(),
+            reason: None,
         });
     }
 }
@@ -423,6 +426,7 @@ pub(crate) fn run_merge_ex(
                     Err(e) => failed.push(FailItem {
                         path: p.clone(),
                         message: e.to_string(),
+                        reason: None,
                     }),
                 }
             } else {
@@ -432,6 +436,7 @@ pub(crate) fn run_merge_ex(
                     Err(e) => failed.push(FailItem {
                         path: p.clone(),
                         message: e,
+                        reason: None,
                     }),
                 }
             }
@@ -445,6 +450,7 @@ pub(crate) fn run_merge_ex(
             failed.push(FailItem {
                 path: output.clone(),
                 message: "没有可合并的 PDF/图片".into(),
+                reason: None,
             });
             continue;
         }
@@ -455,6 +461,7 @@ pub(crate) fn run_merge_ex(
                 failed.push(FailItem {
                     path: output.clone(),
                     message: e,
+                    reason: None,
                 });
                 continue;
             }
@@ -467,6 +474,7 @@ pub(crate) fn run_merge_ex(
                     failed.push(FailItem {
                         path: output.clone(),
                         message: e.clone(),
+                        reason: None,
                     });
                 })
                 .is_err()
@@ -477,6 +485,7 @@ pub(crate) fn run_merge_ex(
             failed.push(FailItem {
                 path: output.clone(),
                 message: e.to_string(),
+                reason: None,
             });
         }
         prog.current_path = output.clone();
@@ -499,6 +508,7 @@ pub(crate) fn run_split(
             failed.push(FailItem {
                 path: path.to_string(),
                 message: e.to_string(),
+                reason: None,
             });
             return;
         }
@@ -510,6 +520,7 @@ pub(crate) fn run_split(
         failed.push(FailItem {
             path: out_dir.to_string(),
             message: e.to_string(),
+            reason: None,
         });
         return;
     }
@@ -530,6 +541,7 @@ pub(crate) fn run_split(
             failed.push(FailItem {
                 path: out_path.clone(),
                 message: e,
+                reason: None,
             });
         }
         prog.done_files += 1;
@@ -584,6 +596,7 @@ pub(crate) fn run_watermark(
             failed.push(FailItem {
                 path: p.clone(),
                 message: e,
+                reason: None,
             });
         }
         prog.done_files += 1;
@@ -695,6 +708,7 @@ pub(crate) fn run_page_select(
         failed.push(FailItem {
             path: path.to_string(),
             message: e,
+            reason: None,
         });
     }
     prog.done_files += 1;
@@ -740,6 +754,7 @@ pub(crate) fn run_rotate(
         failed.push(FailItem {
             path: path.to_string(),
             message: e,
+            reason: None,
         });
     }
     prog.done_files += 1;
@@ -772,6 +787,7 @@ pub(crate) fn run_compress(
             failed.push(FailItem {
                 path: p.clone(),
                 message: e,
+                reason: None,
             });
         }
         prog.done_files += 1;
@@ -914,6 +930,7 @@ pub(crate) fn run_images_to_pdf(
             Err(e) => failed.push(FailItem {
                 path: p.clone(),
                 message: e,
+                reason: None,
             }),
         }
         prog.done_files += 1;
@@ -923,6 +940,7 @@ pub(crate) fn run_images_to_pdf(
         failed.push(FailItem {
             path: output.to_string(),
             message: "没有可用的图片".into(),
+            reason: None,
         });
         return;
     }
@@ -930,6 +948,7 @@ pub(crate) fn run_images_to_pdf(
         failed.push(FailItem {
             path: output.to_string(),
             message: e,
+            reason: None,
         });
         return;
     }
@@ -937,6 +956,7 @@ pub(crate) fn run_images_to_pdf(
         failed.push(FailItem {
             path: output.to_string(),
             message: e.to_string(),
+            reason: None,
         });
     }
 }

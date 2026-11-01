@@ -230,6 +230,7 @@ pub(crate) fn run_merge_core(
             failed.push(FailItem {
                 path: p.clone(),
                 message: e,
+                reason: None,
             });
         }
         done += 1;
@@ -242,6 +243,7 @@ pub(crate) fn run_merge_core(
         failed.push(FailItem {
             path: output.to_string(),
             message: e.to_string(),
+            reason: None,
         });
     }
     failed

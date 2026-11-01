@@ -15,8 +15,9 @@ import { ArrowRight, Info, OctagonAlert, TriangleAlert } from "lucide-react";
 
 import { formatBytes, formatSize, formatTime } from "../lib/format";
 import { typeName } from "../lib/fileIcons";
-import { api, type FileEntry } from "../lib/ipc";
+import { api, type FileEntry, type FileLocks } from "../lib/ipc";
 import { DEFAULT_RULE, pickRenames, planRenames, type RenameRule } from "../lib/batchRename";
+import { enqueueDelete } from "../lib/operations";
 import { AppIcon, ic } from "./AppIcon";
 import {
   CompareDialog,
@@ -99,11 +100,13 @@ export function DialogHost() {
                       ? "图片格式转换"
                       : dialog?.type === "imgResize"
                         ? "图片尺寸调整"
-                        : dialog?.type === "imgMontage"
+                      : dialog?.type === "imgMontage"
                           ? "宫格拼图"
-                          : dialog?.type === "properties"
-                            ? "属性"
-                            : "";
+                          : dialog?.type === "unlock"
+                            ? "解除占用"
+                            : dialog?.type === "properties"
+                              ? "属性"
+                              : "";
   // 标题图标：confirm/alert 按 kind；冲突预检固定警示；其余无图标
   const icon =
     dialog?.type === "confirm" || dialog?.type === "alert"
@@ -129,7 +132,7 @@ export function DialogHost() {
           dialog?.type === "pdfWatermark" ||
           dialog?.type === "emptyScan"
             ? "min(680px, 92vw)"
-            : dialog?.type.startsWith("img")
+            : dialog?.type === "unlock" || dialog?.type.startsWith("img")
               ? "min(560px, 92vw)"
               : "var(--np-dialog-w)",
       }}
@@ -227,6 +230,10 @@ export function DialogHost() {
 
       {dialog?.type === "pdfWatermark" && (
         <PdfWatermarkDialog entries={dialog.entries} onDone={(v) => resolve(v)} />
+      )}
+
+      {dialog?.type === "unlock" && (
+        <UnlockDialog items={dialog.items} permanent={dialog.permanent} onDone={close} />
       )}
 
       {dialog?.type === "imgCompress" && (
@@ -403,9 +410,122 @@ function Prop({ k, v }: { k: string; v: React.ReactNode }) {
   );
 }
 
+/** 解除占用（2026-11-01）：删除撞上占用失败的路径入场——查出占用进程，
+ *  用户确认后远程关闭句柄并按原语义（回收站/永久）重删 */
+function UnlockDialog({
+  items,
+  permanent,
+  onDone,
+}: {
+  items: string[];
+  permanent: boolean;
+  onDone(): void;
+}) {
+  const [locks, setLocks] = useState<FileLocks[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    api
+      .findFileLocks(items)
+      .then((r) => {
+        if (alive) setLocks(r);
+      })
+      .catch(() => {
+        if (alive) setLocks([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [items]);
+
+  const baseName = (p: string) => p.split(/[\\/]/).pop() ?? p;
+
+  const release = async () => {
+    setBusy(true);
+    const freed: string[] = [];
+    const stuck: string[] = [];
+    let truncated = false;
+    for (const l of locks ?? []) {
+      try {
+        const r = await api.releaseFileLocks(l.path);
+        truncated = truncated || r.truncated;
+        (r.remaining.length ? stuck : freed).push(l.path);
+      } catch {
+        stuck.push(l.path);
+      }
+    }
+    onDone();
+    // 解除成功的立即按原语义重删（用户已在原始删除时确认过，不再重复询问）
+    if (freed.length) void enqueueDelete(freed, permanent);
+    if (stuck.length || truncated) {
+      const parts: string[] = [];
+      if (stuck.length) {
+        parts.push(`仍被占用，未能解除：${stuck.map(baseName).join("、")}`);
+      }
+      if (truncated) parts.push("部分系统句柄无响应，可能仍有未解除的占用");
+      useUi.getState().toast(parts.join("；"), "error");
+    }
+  };
+
+  return (
+    <>
+      <DialogBody>
+        <div className="np-dialog-muted">
+          {permanent
+            ? "以下文件正被其他程序占用，无法删除："
+            : "以下文件正被其他程序占用，无法移入回收站："}
+        </div>
+        <div className="np-conflict-list">
+          {locks === null ? (
+            <div className="np-dialog-muted">正在查找占用进程…</div>
+          ) : (
+            locks.map((l) => (
+              <div key={l.path} className="np-ellipsis">
+                · {baseName(l.path)}
+                {l.lockers.length > 0 && (
+                  <> — {l.lockers.map((p) => p.name).join("、")}</>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+        {locks !== null && locks.every((l) => l.lockers.length === 0) && (
+          <div className="np-dialog-muted">
+            未找到占用进程（可能是瞬时占用已释放，或系统级进程）。
+          </div>
+        )}
+        {locks !== null && locks.some((l) => l.truncated) && (
+          <div className="np-dialog-muted">
+            部分系统句柄无响应，占用进程列表可能不完整。
+          </div>
+        )}
+        <div className="np-dialog-muted">
+          解除占用会强制关闭这些程序打开的文件句柄，对应程序未保存的内容可能丢失。
+        </div>
+      </DialogBody>
+      <DialogFooter
+        actions={
+          <>
+            <Button size="small" onClick={onDone}>
+              取消
+            </Button>
+            <Button
+              size="small"
+              intent="primary"
+              disabled={busy || locks === null}
+              onClick={() => void release()}
+            >
+              解除占用并重试
+            </Button>
+          </>
+        }
+      />
+    </>
+  );
+}
+
 /** 大小行：文件即时显示；文件夹经 dir_sizes 异步求和（子项递归合计，
- *  200k 文件护栏与空间分析同源）；盘符根不扫全盘，维持 "—" */
-function SizeValue({ entry }: { entry: FileEntry }) {
+ *  200k 文件护栏与空间分析同源）；盘符根不扫全盘，维持 "—" */function SizeValue({ entry }: { entry: FileEntry }) {
   const [size, setSize] = useState<number | null>(null);
   const isDrive = /^[a-zA-Z]:\\?$/.test(entry.path);
   const scan = entry.isDir && !isDrive;

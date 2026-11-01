@@ -269,8 +269,39 @@ export interface AppError {
     // 索引模式取消（index）
     | "E_CANCELLED"
     // 分析类任务的失败通道（analyze_cmds）
-    | "E_JOB_FAILED";
+    | "E_JOB_FAILED"
+    // 解除占用命令（locks_cmds，2026-11-01）
+    | "E_LOCKS";
   message: string;
+}
+
+/** 删除失败的结构化原因（Rust jobs::FailReason 镜像，serde camelCase）；
+ *  job-done 的 failed[].reason 下发，inUse 触发「解除占用」对话框 */
+export type FailReason = "inUse" | "accessDenied" | "missing";
+
+/** 占用进程（Rust locks::LockingProcess 镜像） */
+export interface LockingProcess {
+  pid: number;
+  /** 进程映像名（如 WINWORD.EXE）；取不到时为 "PID <pid>" */
+  name: string;
+}
+
+/** 单个路径的占用进程清单（Rust locks::FileLocks 镜像） */
+export interface FileLocks {
+  path: string;
+  lockers: LockingProcess[];
+  /** true = 扫描超时被截断（病态句柄卡死枚举），结果可能不全 */
+  truncated: boolean;
+}
+
+/** 解除占用结果（Rust locks::ReleaseLocksResult 镜像） */
+export interface ReleaseLocksResult {
+  /** 已远程关闭的句柄数 */
+  closed: number;
+  /** 仍占用该文件的进程（权限不足等关不掉的） */
+  remaining: LockingProcess[];
+  /** true = 关闭前扫描超时被截断，可能仍有未关到的占用句柄 */
+  truncated: boolean;
 }
 
 export interface ColorRule {
@@ -616,6 +647,12 @@ export const api = {
     cmd<{ jobId: number }>("move_items", { sources, destDir, policy, native }),
   deleteItems: (paths: string[], permanent = false) =>
     cmd<{ jobId: number }>("delete_items", { paths, permanent }),
+  /** 解除占用（2026-11-01）：查询一批路径的占用进程（排除本应用自身） */
+  findFileLocks: (paths: string[]) =>
+    cmd<FileLocks[]>("find_file_locks", { paths }),
+  /** 解除占用：远程关闭指向该文件的句柄（DUPLICATE_CLOSE_SOURCE） */
+  releaseFileLocks: (path: string) =>
+    cmd<ReleaseLocksResult>("release_file_locks", { path }),
   restoreFromTrash: (paths: string[]) =>
     cmd<{ restored: number; missing: number }>("restore_trash", { paths }),
   pdfPageCount: (path: string) => cmd<number>("pdf_page_count", { path }),

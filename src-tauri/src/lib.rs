@@ -7,6 +7,7 @@ mod icons;
 mod img;
 mod index;
 mod jobs;
+mod locks;
 mod native_menu;
 mod native_ops;
 mod office;
@@ -208,6 +209,8 @@ pub fn run() {
             commands::jobs_cmds::cancel_job,
             commands::jobs_cmds::pause_job,
             commands::jobs_cmds::resume_job,
+            commands::locks_cmds::find_file_locks,
+            commands::locks_cmds::release_file_locks,
             commands::drives::get_drives,
             commands::drives::get_volume,
             commands::drives::get_known_folder,
