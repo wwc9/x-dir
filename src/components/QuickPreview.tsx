@@ -34,6 +34,7 @@ import { usePanes } from "../stores/panes";
 import { usePreview } from "../stores/preview";
 import { confirmDialog, useUi } from "../stores/ui";
 import { AppIcon, ic } from "./AppIcon";
+import { codeLangOf } from "./preview/DocPreview";
 import { needsPreviewLoad, PreviewBody, type PreviewMeta } from "./preview/PreviewBody";
 
 export function QuickPreviewHost() {
@@ -67,13 +68,15 @@ export function QuickPreviewHost() {
   const searchable = SEARCHABLE_KINDS.has(kind);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // 换条目：查找态与命中归零（store 开关一并收起）
+  // 换条目：查找态与命中归零（store 开关一并收起）；换行开关重置为该类型默认
+  // ——代码文件默认不换行（带行号，VS Code 主流读码形态），其余文本默认换行
   const entryKey = entry?.path;
   useEffect(() => {
     setTerm("");
     setMatchActive(0);
     setMatchTotal(0);
     setSearchOpen(false);
+    setTextWrap(!(entry && !entry.isDir && codeLangOf(entry.name)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entryKey]);
 

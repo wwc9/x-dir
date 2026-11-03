@@ -4,6 +4,9 @@ export const DENSITY = {
   rowH: 28,
   cellWList: 190,
   overscan: 6,
+  // 表格预览多行档行高基线（与 index.css --np-sheet-line-h 同名同值）：
+  // 换行/宽松档的行高估算 = 行数 × 此值 + 上下留白（lib/sheetGrid.ts）
+  sheetLineH: 20,
   // 图标四档（AGENTS §4.5）：xs=行内小动作 sm=按钮内图标 md=文件类型/标题示意 lg=空态示意
   iconXs: 12,
   iconSm: 14,

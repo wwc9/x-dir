@@ -2,6 +2,10 @@
 // → 行/列矩阵 + 自适应列宽。列宽启发式：CJK 13px、拉丁 7px（13px 字号实测），带上下限。
 // 合并单元格（2026-10-17）：锚点 + 跨度 → 查找表（锚点图 / 覆盖集），渲染层据此
 // span 展开、跳过被覆盖格。
+// 行高（2026-11-03）：多行档（换行/宽松）逐行高度估算（列宽折行启发），
+// 单行档维持 CSS auto-rows 恒高。
+
+import { DENSITY } from "./tokens";
 
 export type SheetRows = string[][];
 export type SheetMerge = {
@@ -57,20 +61,62 @@ export function sheetColumnWidths(rows: SheetRows, colCount: number): number[] {
   const PAD = 16;
   const MIN = 56;
   const MAX = 360;
-  const LATIN = 7;
-  const CJK = 13;
   const widths = new Array(colCount).fill(MIN) as number[];
   const sample = rows.length > 500 ? rows.slice(0, 500) : rows;
   for (const row of sample) {
     for (let c = 0; c < colCount && c < row.length; c++) {
       const v = row[c];
       if (!v) continue;
-      let px = PAD;
-      for (const ch of v) px += ch.charCodeAt(0) > 255 ? CJK : LATIN;
+      const px = PAD + textWidthPx(v);
       if (px > widths[c]) widths[c] = Math.min(MAX, px);
     }
   }
   return widths;
+}
+
+/** 单行文本像素宽估算（CJK 13px / 拉丁 7px @13px 字号实测，与列宽启发同源；
+ *  2026-11-03 抽出共用——多行档行高估算按列宽对文本折行计数） */
+export function textWidthPx(v: string): number {
+  let px = 0;
+  for (const ch of v) px += ch.charCodeAt(0) > 255 ? 13 : 7;
+  return px;
+}
+
+/** 表格行高模式：single = 单行省略（现状，CSS auto-rows 恒高）；
+ *  wrap = 自动换行（按内容折行数估行高）；relaxed = 换行 + 更大留白 */
+export type SheetRowMode = "single" | "wrap" | "relaxed";
+
+/** 多行档单格折行数上限（防一格千字把行撑到整屏；超出部分仍换行显示，
+ *  行高截停——溢出裁切与省略号兜底同语义） */
+export const SHEET_WRAP_MAX_LINES = 6;
+
+/** 行矩阵 + 列宽 → 逐行像素高（多行档）。行内取各格折行数的最大值：
+ *  lines = ceil((文本宽 + 内边距 16) / 列宽)；行高 = lines × 行高基线 + 上下留白。
+ *  单行结果不低于 --np-row-h（与单行档视觉连续）。 */
+export function sheetRowHeights(
+  rows: SheetRows,
+  colWidths: number[],
+  mode: Exclude<SheetRowMode, "single">,
+): number[] {
+  const LINE_H = DENSITY.sheetLineH;
+  const PAD = mode === "relaxed" ? 10 : 4;
+  const MIN = mode === "relaxed" ? LINE_H + 20 : DENSITY.rowH;
+  const out = new Array(rows.length);
+  for (let r = 0; r < rows.length; r++) {
+    let lines = 1;
+    const row = rows[r];
+    for (let c = 0; c < row.length && c < colWidths.length; c++) {
+      const v = row[c];
+      if (!v) continue;
+      const w = colWidths[c];
+      if (w <= 0) continue;
+      const need = Math.ceil((textWidthPx(v) + 16) / w);
+      if (need > lines) lines = need;
+    }
+    lines = Math.min(lines, SHEET_WRAP_MAX_LINES);
+    out[r] = Math.max(MIN, lines * LINE_H + PAD * 2);
+  }
+  return out;
 }
 
 /** 行矩阵的总列数（各行参差时取最大） */

@@ -6,6 +6,8 @@ import {
   isNumericLike,
   sheetNumericCols,
   sheetMatches,
+  sheetRowHeights,
+  textWidthPx,
 } from "../sheetGrid";
 
 describe("表格预览网格（parseSheetRows）", () => {
@@ -82,5 +84,42 @@ describe("sheetNumericCols / sheetMatches（2026-10-18）", () => {
       { r: 1, c: 0, occ: 0 },
     ]);
     expect(sheetMatches(rows, "")).toEqual([]);
+  });
+});
+
+describe("行高估算（textWidthPx / sheetRowHeights，2026-11-03）", () => {
+  it("textWidthPx：CJK 13px、拉丁 7px", () => {
+    expect(textWidthPx("中")).toBe(13);
+    expect(textWidthPx("ab")).toBe(14);
+    expect(textWidthPx("中a")).toBe(20);
+    expect(textWidthPx("")).toBe(0);
+  });
+
+  it("wrap 档：单行文本 = 行基线高（与单行档视觉连续）", () => {
+    const rows = [["短文本", "abc"]];
+    expect(sheetRowHeights(rows, [120, 120], "wrap")).toEqual([28]);
+  });
+
+  it("wrap 档：按列宽折行估高（行内取各格最大折行数）", () => {
+    // 列宽 100：8 个 CJK = 104px + 内边距 16 = 120 → 2 行 → 2×20+8 = 48
+    const rows = [["短", "八个汉字八个汉字"]];
+    expect(sheetRowHeights(rows, [100, 100], "wrap")).toEqual([48]);
+  });
+
+  it("wrap 档：单格折行数上限 6（防一格千字撑爆）", () => {
+    const rows = [["这是一段非常长的文本会反复折行超过六行上限被截停".repeat(6)]];
+    const h = sheetRowHeights(rows, [80], "wrap")[0];
+    expect(h).toBe(6 * 20 + 8);
+  });
+
+  it("relaxed 档：留白更大、最小行高更高", () => {
+    expect(sheetRowHeights([["短"]], [120], "relaxed")).toEqual([40]);
+    const h = sheetRowHeights([["八个汉字八个汉字"]], [100], "relaxed")[0];
+    expect(h).toBe(2 * 20 + 20);
+  });
+
+  it("空单元格不参与估高", () => {
+    const rows = [["a", "", undefined as unknown as string]];
+    expect(sheetRowHeights(rows, [100, 100, 100], "wrap")).toEqual([28]);
   });
 });

@@ -2,7 +2,9 @@
 // 纯文本走 <pre>（textContent，无注入面）；Markdown 经 marked + DOMPurify 双重净化；
 // office/odt/odp/rtf/eml/msg 按结构化 blocks 渲染（标题分级/列表缩进/表格网格/键值/备注），
 // 无 blocks 时回退纯文本 pre。文本类附加：换行开关、行号（仅不换行模式）、
-// 代码语法高亮（highlight.js 懒加载，≤200KB）。搜索高亮经 CSS Custom Highlight API。
+// 代码语法高亮（highlight.js 懒加载，≤200KB；着色主题 = index.css --np-code-* token 段，
+// 2026-11-03）、压缩 JSON 自动排版（lib/jsonPretty 纯函数，2026-11-03）。
+// 搜索高亮经 CSS Custom Highlight API。
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../lib/i18n";
@@ -11,6 +13,7 @@ import { marked } from "marked";
 
 import type { OfficeBlock, OfficeTextResult, PreviewTextResult } from "../../lib/ipc";
 import { extOf } from "../../lib/fileIcons";
+import { prettyJson } from "../../lib/jsonPretty";
 import type { PreviewKind } from "../../lib/previewKind";
 import { isNumericLike } from "../../lib/sheetGrid";
 import {
@@ -74,6 +77,12 @@ const HL_MAX_CHARS = 200_000;
 /** 行号上限（更长的文件退化为无行号的 nowrap 视图） */
 const LINE_NO_MAX = 20_000;
 
+/** 文件名 → highlight.js 语言；null = 非代码文件（无语言包）。
+ *  QuickPreview 用它判定"代码文件默认不换行 + 行号" */
+export function codeLangOf(fileName: string): string | null {
+  return HL_LANGS[extOf(fileName)] ?? null;
+}
+
 export function DocPreview({
   kind,
   text,
@@ -96,15 +105,23 @@ export function DocPreview({
     return DOMPurify.sanitize(marked.parse(text.content, { async: false }));
   }, [kind, text]);
 
+  // 压缩 JSON 自动排版（2026-11-03）：仅展示层重排，磁盘文件不动；
+  // 高亮/行号/行数全部走 displayText
+  const pretty = useMemo(
+    () => (kind === "text" && text?.content ? prettyJson(text.content) : null),
+    [kind, text],
+  );
+  const displayText = pretty?.text ?? text?.content ?? "";
+
   // 代码高亮：懒加载 highlight.js core + 单语言包，超长或非代码扩展名跳过
   const [hl, setHl] = useState<string | null>(null);
   useEffect(() => {
-    if (kind !== "text" || !text?.content) {
+    if (kind !== "text" || !displayText) {
       setHl(null);
       return;
     }
     const lang = HL_LANGS[extOf(fileName ?? "")];
-    if (!lang || text.content.length > HL_MAX_CHARS) {
+    if (!lang || displayText.length > HL_MAX_CHARS) {
       setHl(null);
       return;
     }
@@ -122,7 +139,7 @@ export function DocPreview({
         ]);
         if (!alive) return;
         hljs.registerLanguage(lang!, langMod.default as Parameters<typeof hljs.registerLanguage>[1]);
-        setHl(hljs.highlight(text!.content, { language: lang! }).value);
+        setHl(hljs.highlight(displayText, { language: lang! }).value);
       } catch {
         if (alive) setHl(null);
       }
@@ -130,11 +147,11 @@ export function DocPreview({
     return () => {
       alive = false;
     };
-  }, [kind, text, fileName]);
+  }, [kind, displayText, fileName]);
 
   const lineCount = useMemo(
-    () => (text ? (text.content ? text.content.split("\n").length : 0) : 0),
-    [text],
+    () => (text ? (displayText ? displayText.split("\n").length : 0) : 0),
+    [text, displayText],
   );
   const showLines = !textWrap && lineCount <= LINE_NO_MAX;
 
@@ -149,7 +166,7 @@ export function DocPreview({
   }, [search?.term, search?.active, hl, text, office, textWrap]);
   useEffect(() => () => clearGroupHighlights("doc"), []);
 
-  const code = text ? (hl !== null ? hl : text.content) : "";
+  const code = text ? (hl !== null ? hl : displayText) : "";
   const codeHtml = hl !== null ? DOMPurify.sanitize(hl) : "";
 
   if (!text && !office) return null;
@@ -162,23 +179,30 @@ export function DocPreview({
             <div className="np-md" dangerouslySetInnerHTML={{ __html: mdHtml }} />
           )}
           {kind !== "markdown" && text.content && (
-            <div className="np-pv-codewrap">
-              {showLines && (
-                <div className="np-pv-gutter" aria-hidden>
-                  {Array.from({ length: lineCount }, (_, i) => (
-                    <div key={i}>{i + 1}</div>
-                  ))}
+            <>
+              {pretty && (
+                <div className="np-pv-empty">
+                  {t("JSON 已自动排版显示（原文件为压缩单行，磁盘内容不变）")}
                 </div>
               )}
-              {hl !== null ? (
-                <pre
-                  className={`np-pv-pre${textWrap ? "" : " is-nowrap"}`}
-                  dangerouslySetInnerHTML={{ __html: codeHtml }}
-                />
-              ) : (
-                <pre className={`np-pv-pre${textWrap ? "" : " is-nowrap"}`}>{code}</pre>
-              )}
-            </div>
+              <div className="np-pv-codewrap">
+                {showLines && (
+                  <div className="np-pv-gutter" aria-hidden>
+                    {Array.from({ length: lineCount }, (_, i) => (
+                      <div key={i}>{i + 1}</div>
+                    ))}
+                  </div>
+                )}
+                {hl !== null ? (
+                  <pre
+                    className={`np-pv-pre${textWrap ? "" : " is-nowrap"}`}
+                    dangerouslySetInnerHTML={{ __html: codeHtml }}
+                  />
+                ) : (
+                  <pre className={`np-pv-pre${textWrap ? "" : " is-nowrap"}`}>{code}</pre>
+                )}
+              </div>
+            </>
           )}
         </>
       )}

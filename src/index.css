@@ -55,10 +55,22 @@
   --np-icon-font: #b4568d;
   --np-icon-generic: #8a93a0;
 
+  /* —— 代码语法高亮语义色（2026-11-03，highlight.js 标记 → token 着色；
+     取值对齐 GitHub Light 低饱和系，与中性灰 + 蓝强调色板共存）—— */
+  --np-code-kw: #cf222e;
+  --np-code-str: #0a3069;
+  --np-code-num: #0550ae;
+  --np-code-com: #6e7781;
+  --np-code-fn: #8250df;
+  --np-code-var: #24292f;
+  --np-code-attr: #0550ae;
+
   /* —— 密度（文件管理器紧凑规范）—— */
   --np-font-ui: 13px;
   --np-font-sm: 11px;
   --np-row-h: 28px;
+  /* 表格预览多行档行高基线（与 lib/tokens.ts DENSITY.sheetLineH 同名同值） */
+  --np-sheet-line-h: 20px;
   --np-head-h: 26px;
   --np-nav-h: 34px;
   --np-tab-h: 24px;
@@ -142,6 +154,15 @@ html.bp6-dark {
   --np-icon-slide: #e8926b;
   --np-icon-font: #d982ab;
   --np-icon-generic: #8b929c;
+
+  /* 代码语法高亮语义色（深色，GitHub Dark 系） */
+  --np-code-kw: #ff7b72;
+  --np-code-str: #a5d6ff;
+  --np-code-num: #79c0ff;
+  --np-code-com: #8b949e;
+  --np-code-fn: #d2a8ff;
+  --np-code-var: #e6edf3;
+  --np-code-attr: #79c0ff;
 
   /* 深色下的标记色整体提亮 */
   --np-tag-red: #f27073;
@@ -3301,6 +3322,37 @@ body.np-col-resizing * {
   background: var(--np-accent);
   color: var(--np-accent-fg);
 }
+/* 多行档（换行/宽松，2026-11-03）：格子文本换行完整展示，行高由
+   gridTemplateRows 显式轨道下发（合并区跨行高度 = 各行轨道之和仍正确）；
+   flex 列布局做垂直居中，数值列右对齐改走 align-items */
+.np-pv-sheet-inner.is-wrap .np-pv-sheet-cell {
+  white-space: normal;
+  overflow-wrap: break-word;
+  line-height: var(--np-sheet-line-h);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+.np-pv-sheet-inner.is-wrap .np-pv-sheet-cell.is-num {
+  align-items: flex-end;
+}
+/* 行高切换条（2026-11-03）：右上浮动 Seg（单行省略 / 换行自适应 / 宽松留白） */
+.np-pv-sheet {
+  position: relative;
+}
+.np-pv-sheet-bar {
+  position: absolute;
+  top: 6px;
+  right: 16px;
+  z-index: 5;
+  padding: 2px;
+  border-radius: var(--np-radius-lg);
+  background: var(--np-surface);
+  border: 1px solid var(--np-hairline);
+  box-shadow: var(--np-shadow);
+}
 
 /* 压缩包清单：虚拟行列表（图标 + 名称 + 大小） */
 .np-pv-ar {
@@ -3504,6 +3556,72 @@ body.np-col-resizing * {
   background: var(--np-surface);
   user-select: none;
   border-right: 1px solid var(--np-hairline);
+}
+
+/* ── 代码语法高亮着色（2026-11-03）──
+   highlight.js 输出的语义类 → --np-code-* token（此前只生成标记无主题，
+   高亮从未显色）；作用域限预览 pre，markdown/office 块不受影响 */
+.np-pv-pre .hljs-keyword,
+.np-pv-pre .hljs-built_in,
+.np-pv-pre .hljs-type,
+.np-pv-pre .hljs-literal,
+.np-pv-pre .hljs-symbol,
+.np-pv-pre .hljs-tag,
+.np-pv-pre .hljs-name,
+.np-pv-pre .hljs-selector-tag,
+.np-pv-pre .hljs-template-tag,
+.np-pv-pre .hljs-section {
+  color: var(--np-code-kw);
+}
+.np-pv-pre .hljs-string,
+.np-pv-pre .hljs-regexp {
+  color: var(--np-code-str);
+}
+.np-pv-pre .hljs-number,
+.np-pv-pre .hljs-bullet {
+  color: var(--np-code-num);
+}
+.np-pv-pre .hljs-comment,
+.np-pv-pre .hljs-doctag,
+.np-pv-pre .hljs-quote {
+  color: var(--np-code-com);
+}
+.np-pv-pre .hljs-function,
+.np-pv-pre .hljs-title,
+.np-pv-pre .hljs-title.function_,
+.np-pv-pre .hljs-title.class_ {
+  color: var(--np-code-fn);
+}
+.np-pv-pre .hljs-attr,
+.np-pv-pre .hljs-attribute,
+.np-pv-pre .hljs-property,
+.np-pv-pre .hljs-meta,
+.np-pv-pre .hljs-selector-attr,
+.np-pv-pre .hljs-selector-class,
+.np-pv-pre .hljs-selector-pseudo {
+  color: var(--np-code-attr);
+}
+.np-pv-pre .hljs-variable,
+.np-pv-pre .hljs-template-variable,
+.np-pv-pre .hljs-params,
+.np-pv-pre .hljs-subst {
+  color: var(--np-code-var);
+}
+.np-pv-pre .hljs-addition {
+  color: var(--np-success);
+}
+.np-pv-pre .hljs-deletion {
+  color: var(--np-danger);
+}
+.np-pv-pre .hljs-link {
+  color: var(--np-accent);
+  text-decoration: underline;
+}
+.np-pv-pre .hljs-emphasis {
+  font-style: italic;
+}
+.np-pv-pre .hljs-strong {
+  font-weight: 600;
 }
 
 /* ── office 结构化块（2026-10-18）：docx/pptx/odt/odp/rtf/eml/msg 富渲染 ── */
