@@ -4530,6 +4530,12 @@ mark.np-gsearch-mark {
      形成突兀的大数字框 */
   width: 120px;
 }
+/* wide 整行中的长文本输入恢复满宽（2026-11-03 §4.9 完善批：水印文字/
+   页码范围等独占行输入不被 120px 基线压缩） */
+.np-pdfmform.np-two-col .np-bren-field.np-wide > .bp6-input-group {
+  width: auto;
+  flex: 1;
+}
 /* 水印参数面板（2026-10-23 用户定案）：单列纵排 + 标签列/控件列分别
    左对齐——grid 两列（max-content 标签列 + 1fr 控件列），全部标签左对齐
    成列、全部控件同一 x 起始；行序 = 文字/字体/字号/颜色/不透明度/位置/

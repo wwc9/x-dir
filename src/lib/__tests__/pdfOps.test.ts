@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { pdfMenuState } from "../pdfOps";
+import { pagesToSpec, parsePageSpec, pdfMenuState } from "../pdfOps";
 
 const f = (name: string) => ({ name, isDir: false });
 const d = (name: string) => ({ name, isDir: true });
@@ -41,5 +41,59 @@ describe("PDF 菜单条件（pdfMenuState）", () => {
   it("空选中：全部不可", () => {
     const s = pdfMenuState([]);
     expect(!s.canMerge && !s.canSplit && !s.canWatermark).toBe(true);
+  });
+});
+
+describe("页码范围解析（parsePageSpec，与 Rust parse_page_ranges 同口径）", () => {
+  it("段间去重升序", () => {
+    expect(parsePageSpec("3,1-2", 10).pages).toEqual([1, 2, 3]);
+    expect(parsePageSpec("2,2，1", 5).pages).toEqual([1, 2]);
+  });
+
+  it("开区间到末页", () => {
+    expect(parsePageSpec("5-", 6).pages).toEqual([5, 6]);
+  });
+
+  it("段内空格剔除", () => {
+    expect(parsePageSpec(" 1 - 3 ", 5).pages).toEqual([1, 2, 3]);
+  });
+
+  it("空表达式 / 空段跳过后为空均报错", () => {
+    expect(parsePageSpec("", 5).error).toBe("页码范围不能为空");
+    expect(parsePageSpec(" , ，", 5).error).toBe("页码范围不能为空");
+  });
+
+  it("越界与非法页码报错（文案与 Rust 一致）", () => {
+    expect(parsePageSpec("0", 5).error).toBe("页码超出范围（共 5 页）：0");
+    expect(parsePageSpec("6", 5).error).toBe("页码超出范围（共 5 页）：6");
+    expect(parsePageSpec("a", 5).error).toBe("页码无效：a");
+    expect(parsePageSpec("1-x", 5).error).toBe("页码无效：x");
+  });
+
+  it("起始大于结束报错", () => {
+    expect(parsePageSpec("3-1", 5).error).toBe("页码范围无效：3-1（起始大于结束）");
+  });
+
+  it("仅首个连字符为分隔（第二个连字符按页码报错，同 Rust split_once）", () => {
+    expect(parsePageSpec("1-3-5", 10).error).toBe("页码无效：3-5");
+  });
+});
+
+describe("页号集合 → 区间表达式（pagesToSpec）", () => {
+  it("连续段折叠", () => {
+    expect(pagesToSpec([1, 2, 3, 8, 9])).toBe("1-3,8-9");
+    expect(pagesToSpec([4])).toBe("4");
+    expect(pagesToSpec([])).toBe("");
+  });
+
+  it("乱序输入先排序", () => {
+    expect(pagesToSpec([9, 1, 2, 3, 8])).toBe("1-3,8-9");
+  });
+
+  it("与 parsePageSpec 往返一致", () => {
+    const spec = "1-3,5,8-";
+    const r = parsePageSpec(spec, 10);
+    expect(r.error).toBeUndefined();
+    expect(parsePageSpec(pagesToSpec(r.pages), 10).pages).toEqual(r.pages);
   });
 });

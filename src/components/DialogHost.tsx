@@ -34,13 +34,35 @@ import {
 } from "./ImgDialogs";
 import { NpSelect } from "./NpSelect";
 import {
+  MergeFilesDialog,
   NewFoldersDialog,
   PdfMergeDialog,
+  PdfPagesDialog,
   PdfWatermarkDialog,
   XlsxMergeDialog,
 } from "./ToolsDialogs";
 import { DENSITY } from "../lib/tokens";
 import { useUi, type DialogKind, type DialogSpec } from "../stores/ui";
+
+/** 宽弹窗类型（§4.9 带/清单参数对话框，统一 680px）：分析类结果弹窗 +
+ *  PDF 合并/水印/提取删页 + 通用合并 + Excel 合并 + 图片五件套（2026-11-03
+ *  清单化后从 560 归入此组）；unlock 维持 560，其余走默认宽 */
+const WIDE_TYPES = new Set<string>([
+  "duplicates",
+  "dirsizes",
+  "compare",
+  "emptyScan",
+  "pdfMerge",
+  "pdfWatermark",
+  "pdfPages",
+  "filesMerge",
+  "xlsxMerge",
+  "imgCompress",
+  "imgWatermark",
+  "imgConvert",
+  "imgResize",
+  "imgMontage",
+]);
 
 /** 提示级别 → 标题图标（标准化的唯一映射，新弹窗不许自定） */
 const KIND_META: Record<DialogKind, { icon: typeof Info }> = {
@@ -66,7 +88,19 @@ export function DialogHost() {
       : "info";
 
   const title =
-    dialog?.type === "confirm"
+    dialog?.type === "filesMerge"
+      ? dialog.flavor === "images"
+        ? "图片合并为 PDF"
+        : dialog.flavor === "csv"
+          ? "CSV 合并"
+          : dialog.flavor === "zip"
+            ? "压缩为 zip"
+            : "文本合并"
+      : dialog?.type === "pdfPages"
+        ? dialog.mode === "extract"
+          ? "PDF 提取页"
+          : "PDF 删除页"
+        : dialog?.type === "confirm"
       ? (dialog.title ?? "确认")
       : dialog?.type === "alert"
         ? (dialog.title ?? "提示")
@@ -91,8 +125,8 @@ export function DialogHost() {
                       : dialog?.type === "pdfWatermark"
                         ? "PDF 加水印"
                         : dialog?.type === "xlsxMerge"
-                      ? "Excel 合并"
-                      : dialog?.type === "imgCompress"
+                          ? "Excel 合并"
+                          : dialog?.type === "imgCompress"
                   ? "图片压缩"
                   : dialog?.type === "imgWatermark"
                     ? "图片水印"
@@ -100,7 +134,7 @@ export function DialogHost() {
                       ? "图片格式转换"
                       : dialog?.type === "imgResize"
                         ? "图片尺寸调整"
-                      : dialog?.type === "imgMontage"
+                        : dialog?.type === "imgMontage"
                           ? "宫格拼图"
                           : dialog?.type === "unlock"
                             ? "解除占用"
@@ -124,17 +158,11 @@ export function DialogHost() {
       canOutsideClickClose
       className="np-dialog"
       style={{
-        width:
-          dialog?.type === "duplicates" ||
-          dialog?.type === "dirsizes" ||
-          dialog?.type === "compare" ||
-          dialog?.type === "pdfMerge" ||
-          dialog?.type === "pdfWatermark" ||
-          dialog?.type === "emptyScan"
-            ? "min(680px, 92vw)"
-            : dialog?.type === "unlock" || dialog?.type.startsWith("img")
-              ? "min(560px, 92vw)"
-              : "var(--np-dialog-w)",
+        width: WIDE_TYPES.has(dialog?.type ?? "")
+          ? "min(680px, 92vw)"
+          : dialog?.type === "unlock"
+            ? "min(560px, 92vw)"
+            : "var(--np-dialog-w)",
       }}
     >
       {dialog?.type === "confirm" && (
@@ -217,7 +245,23 @@ export function DialogHost() {
       )}
 
       {dialog?.type === "xlsxMerge" && (
-        <XlsxMergeDialog count={dialog.count} onDone={(v) => resolve(v)} />
+        <XlsxMergeDialog entries={dialog.entries} onDone={(v) => resolve(v)} />
+      )}
+
+      {dialog?.type === "filesMerge" && (
+        <MergeFilesDialog
+          flavor={dialog.flavor}
+          entries={dialog.entries}
+          onDone={(v) => resolve(v)}
+        />
+      )}
+
+      {dialog?.type === "pdfPages" && (
+        <PdfPagesDialog
+          mode={dialog.mode}
+          entry={dialog.entry}
+          onDone={(v) => resolve(v)}
+        />
       )}
 
       {dialog?.type === "pdfMerge" && (
@@ -237,24 +281,19 @@ export function DialogHost() {
       )}
 
       {dialog?.type === "imgCompress" && (
-        <CompressDialog
-          count={dialog.entries.length}
-          onDone={(v) => {
-            resolve(v);
-          }}
-        />
+        <CompressDialog entries={dialog.entries} onDone={(v) => resolve(v)} />
       )}
       {dialog?.type === "imgWatermark" && (
-        <WatermarkDialog count={dialog.entries.length} onDone={(v) => resolve(v)} />
+        <WatermarkDialog entries={dialog.entries} onDone={(v) => resolve(v)} />
       )}
       {dialog?.type === "imgConvert" && (
-        <ConvertDialog count={dialog.entries.length} onDone={(v) => resolve(v)} />
+        <ConvertDialog entries={dialog.entries} onDone={(v) => resolve(v)} />
       )}
       {dialog?.type === "imgResize" && (
-        <ResizeDialog count={dialog.entries.length} onDone={(v) => resolve(v)} />
+        <ResizeDialog entries={dialog.entries} onDone={(v) => resolve(v)} />
       )}
       {dialog?.type === "imgMontage" && (
-        <MontageDialog count={dialog.entries.length} onDone={(v) => resolve(v)} />
+        <MontageDialog entries={dialog.entries} onDone={(v) => resolve(v)} />
       )}
 
       {dialog?.type === "properties" && (

@@ -1,17 +1,24 @@
-// 工具箱对话框（2026-10-17）：批量新建文件夹 / Excel 合并。
+// 工具箱对话框（2026-10-17）：批量新建文件夹 / Excel 合并；2026-11-03 §4.9
+// 完善批：Excel 合并清单化（拖动定序）+ 通用合并对话框（图片转 PDF/CSV/文本，
+// 取代裸输入框）+ PDF 提取页/删除页对话框（页数回显 + 范围解析预演）。
 // 表单行复用 np-bren-form/field/k 基类、分段选择走 np-seg（Seg 自 ImgDialogs
-// 导出共用）、预览行复用 np-bren-preview/row（§4.7 二级页面规范）；
-// 编排（api + 任务登记）在 lib/operations.ts，名单预演纯函数在 lib/folderBatch。
-import { useMemo, useRef, useState } from "react";
+// 导出共用）、待处理清单 = FileQueue 共享组件（DragFileList 2026-11-03 抽出）、
+// 预览行复用 np-bren-preview/row（§4.7 二级页面规范）；
+// 编排（api + 任务登记）在 lib/operations.ts，名单预演纯函数在 lib/folderBatch，
+// 页码范围解析预演纯函数在 lib/pdfOps（与 Rust parse_page_ranges 同口径）。
+import { useEffect, useMemo, useState } from "react";
 import { t, useT } from "../lib/i18n";
-import type { FileEntry } from "../lib/ipc";
+import { api, type FileEntry } from "../lib/ipc";
 import { Button, DialogBody, DialogFooter, InputGroup, Slider } from "@blueprintjs/core";
-import { ArrowRight, GripVertical } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import { FOLDER_BATCH_CAP, planFolders } from "../lib/folderBatch";
 import { AppIcon } from "./AppIcon";
 import { Seg } from "./ImgDialogs";
 import { DENSITY } from "../lib/tokens";
+import { QueueSection, nameOf, pathsByNames } from "./FileQueue";
+import { isValidName, joinPath, parentPath } from "../lib/path";
+import { pagesToSpec, parsePageSpec } from "../lib/pdfOps";
 
 function FormRow({
   k,
@@ -181,22 +188,31 @@ export function NewFoldersDialog({
   );
 }
 
-/** Excel 合并：模式（每源表一张目标表 / 纵向拼接去重复表头）+ 输出名一次成形 */
+/** Excel 合并（2026-11-03 §4.9 对齐）：待处理清单拖动定序（表序/行序随清单）+
+ *  模式（每源表一张目标表 / 纵向拼接去重复表头）+ 输出名与预览一次成形 */
 export function XlsxMergeDialog({
-  count,
+  entries,
   onDone,
 }: {
-  count: number;
-  onDone(v: { mode: "sheets" | "rows"; name: string } | null): void;
+  entries: FileEntry[];
+  onDone(v: { paths: string[]; mode: "sheets" | "rows"; name: string } | null): void;
 }) {
+  const t2 = useT();
+  const [items, setItems] = useState<string[]>(() => pathsByNames(entries));
   const [mode, setMode] = useState<"sheets" | "rows">("sheets");
   const [name, setName] = useState("合并表格.xlsx");
-  const valid = name.trim().length > 0;
+  const trimmed = name.trim();
+  const valid = trimmed.length > 0;
+  // 与 Rust 端同口径：缺 .xlsx 后缀时补上
+  const withExt = trimmed.toLowerCase().endsWith(".xlsx") ? trimmed : `${trimmed}.xlsx`;
+  const preview = joinPath(parentPath(entries[0]?.path ?? "") ?? "", withExt);
   return (
     <>
       <DialogBody>
-        <div className="np-bren-form">
-          <FormRow k="方式">
+        <QueueSection title={t2("合并顺序")} items={items} onChange={setItems} />
+        <div className="np-pdfmform">
+          <FormRow k={t2("方式")} wide>
+            {/* 显式泛型收窄：options 对象字面量会把 T 推宽成 string，直传 setMode 不兼容 */}
             <Seg<"sheets" | "rows">
               value={mode}
               onChange={setMode}
@@ -206,7 +222,7 @@ export function XlsxMergeDialog({
               ]}
             />
           </FormRow>
-          <FormRow k="输出名">
+          <FormRow k={t2("输出名")}>
             <InputGroup
               size="small"
               value={name}
@@ -214,109 +230,26 @@ export function XlsxMergeDialog({
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && valid)
-                  onDone({ mode, name });
+                  onDone({ paths: items, mode, name: withExt });
               }}
             />
           </FormRow>
         </div>
         <div className="np-dialog-muted">
-          按当前顺序合并 {count} 个工作簿（xlsx/xlsm/xls/xlsb/ods 均可读，统一输出
-          .xlsx），旁写新文件不覆盖原文件。
+          {t2(
+            "按清单顺序合并 {n} 个工作簿（xlsx/xlsm/xls/xlsb/ods 均可读，统一输出 .xlsx），旁写新文件不覆盖原文件。",
+            { n: entries.length },
+          )}
+          {t2("输出预览：{out}", { out: preview })}
         </div>
       </DialogBody>
       <Footer
-        okText="合并"
+        okText={t2("合并")}
         disabled={!valid}
-        onOk={() => onDone({ mode, name })}
+        onOk={() => onDone({ paths: items, mode, name: withExt })}
         onCancel={() => onDone(null)}
       />
     </>
-  );
-}
-
-/** 文件名（去路径）与名称自然序比较器（数字感知，1 → 2 → 10）——
- *  合并与加水印对话框的待处理清单共用 */
-const nameOf = (p: string) => p.slice(p.lastIndexOf("\\") + 1);
-const NAME_COLLATOR = new Intl.Collator("zh-Hans-CN", {
-  numeric: true,
-  sensitivity: "base",
-});
-
-/** 按名称自然序初始化待处理清单（§4.9 置顶清单的默认顺序） */
-function pathsByNames(entries: FileEntry[]): string[] {
-  return entries
-    .map((e) => e.path)
-    .sort((a, b) => NAME_COLLATOR.compare(nameOf(a), nameOf(b)));
-}
-
-/** 可拖动排序的待处理文件清单（合并/加水印共用）：把手指针拖拽实时换行，
- *  行 = 把手 + 文件名省略 + 右侧序号；容器 np-pdfmlist surface-2 限高滚动 */
-function DragFileList({
-  items,
-  onChange,
-}: {
-  items: string[];
-  onChange(update: (items: string[]) => string[]): void;
-}) {
-  const listRef = useRef<HTMLDivElement | null>(null);
-  const dragFrom = useRef<number | null>(null);
-
-  /** 指针拖拽：按下把手捕获指针，移动时按行中点实时换位（矩形每次现查，
-   *  换位后行序即新序），松手收尾 */
-  function beginRowDrag(e: React.PointerEvent, idx: number) {
-    if (e.button !== 0 || !listRef.current) return;
-    e.preventDefault();
-    dragFrom.current = idx;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    const onMove = (ev: PointerEvent) => {
-      if (dragFrom.current === null || !listRef.current) return;
-      const rows = Array.from(
-        listRef.current.querySelectorAll<HTMLElement>("[data-row]"),
-      );
-      let target = rows.length - 1;
-      for (let i = 0; i < rows.length; i++) {
-        const rect = rows[i].getBoundingClientRect();
-        if (ev.clientY < rect.top + rect.height / 2) {
-          target = i;
-          break;
-        }
-      }
-      if (target !== dragFrom.current) {
-        const from = dragFrom.current;
-        onChange((arr) => {
-          const next = [...arr];
-          const [it] = next.splice(from, 1);
-          next.splice(target, 0, it);
-          return next;
-        });
-        dragFrom.current = target;
-      }
-    };
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      dragFrom.current = null;
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  }
-
-  return (
-    <div className="np-pdfmlist" ref={listRef}>
-      {items.map((p, i) => (
-        <div key={p} data-row={i} className="np-pdfmlist-item" title={p}>
-          <span
-            className="np-pdfmlist-grip"
-            title="拖动调整顺序"
-            onPointerDown={(e) => beginRowDrag(e, i)}
-          >
-            <AppIcon icon={GripVertical} size={DENSITY.iconXs} />
-          </span>
-          <span className="np-ellipsis np-pdfmlist-name">{nameOf(p)}</span>
-          <span className="np-pdfmlist-pos">{i + 1}</span>
-        </div>
-      ))}
-    </div>
   );
 }
 
@@ -357,23 +290,22 @@ export function PdfMergeDialog({
   return (
     <>
       <DialogBody>
-        <div className="np-pdfmsec">
-          <span className="np-bren-k">{t2("合并顺序")}</span>
-          <span className="np-dialog-muted">
-            {t2("默认按名称排序（数字感知），拖动行可调整合并顺序")}
-          </span>
-        </div>
         {byFolder ? (
-          <div className="np-pdfmlist">
-            {entries.map((e) => (
-              <div key={e.path} className="np-pdfmlist-item" title={e.path}>
-                <span className="np-pdfmlist-kind">{t2("文件夹")}</span>
-                <span className="np-ellipsis">{e.path}</span>
-              </div>
-            ))}
-          </div>
+          <>
+            <div className="np-pdfmsec">
+              <span className="np-bren-k">{t2("合并范围")}</span>
+            </div>
+            <div className="np-pdfmlist">
+              {entries.map((e) => (
+                <div key={e.path} className="np-pdfmlist-item" title={e.path}>
+                  <span className="np-pdfmlist-kind">{t2("文件夹")}</span>
+                  <span className="np-ellipsis">{e.path}</span>
+                </div>
+              ))}
+            </div>
+          </>
         ) : (
-          <DragFileList items={items} onChange={setItems} />
+          <QueueSection title={t2("合并顺序")} items={items} onChange={setItems} />
         )}
         <div className="np-pdfmform">
           {variant === "folders" && (
@@ -551,13 +483,7 @@ export function PdfWatermarkDialog({
   return (
     <>
       <DialogBody>
-        <div className="np-pdfmsec">
-          <span className="np-bren-k">{t2("处理顺序")}</span>
-          <span className="np-dialog-muted">
-            {t2("默认按名称排序（数字感知），拖动行可调整处理顺序")}
-          </span>
-        </div>
-        <DragFileList items={items} onChange={setItems} />
+        <QueueSection title={t2("处理顺序")} items={items} onChange={setItems} />
         <div className="np-wm-form">
           <span className="np-bren-k">{t2("水印文字")}</span>
           <div className="np-wm-ctl">
@@ -750,6 +676,207 @@ export function PdfWatermarkDialog({
             datetimeFormat,
           })
         }
+        onCancel={() => onDone(null)}
+      />
+    </>
+  );
+}
+
+// ─────────── 通用文件合并（2026-11-03 §4.9 对齐，取代裸输入框）───────────
+// 图片合并转 PDF / CSV 合并 / 文本合并共用：清单拖动定序 + 输出名 + 预览。
+// 三者此前只有一个输入文件名的 input 对话框，顺序既不可见也不可调。
+
+/** 各合并口味的文案与输出扩展名（标题在 DialogHost 集中映射） */
+const MERGE_FLAVORS = {
+  images: {
+    queueTitle: "合并顺序",
+    ok: "合并",
+    defName: "合并图片.pdf",
+    ext: "pdf",
+    note: "每张图片一页，按清单顺序合成 PDF（PNG/JPEG 均可）；输出旁写，不覆盖原文件。",
+  },
+  csv: {
+    queueTitle: "合并顺序",
+    ok: "合并",
+    defName: "合并表格.csv",
+    ext: "csv",
+    note: "按清单顺序拼接全部行，重复表头自动去除，输出 UTF-8 BOM；不覆盖原文件。",
+  },
+  text: {
+    queueTitle: "合并顺序",
+    ok: "合并",
+    defName: "合并文本.txt",
+    ext: "txt",
+    note: "按清单顺序全文拼接，空行分隔，输出 UTF-8；不覆盖原文件。",
+  },
+  zip: {
+    queueTitle: "打包清单",
+    ok: "压缩",
+    defName: "归档.zip",
+    ext: "zip",
+    note: "文件平铺打包、文件夹含目录结构递归打包；输出旁写，不覆盖原文件。",
+  },
+} as const;
+
+export function MergeFilesDialog({
+  flavor,
+  entries,
+  onDone,
+}: {
+  flavor: keyof typeof MERGE_FLAVORS;
+  entries: FileEntry[];
+  onDone(v: { paths: string[]; name: string } | null): void;
+}) {
+  const t2 = useT();
+  const cfg = MERGE_FLAVORS[flavor];
+  const [items, setItems] = useState<string[]>(() => pathsByNames(entries));
+  // as const 词典使 defName 为字面量联合，显式放宽为 string 供自由编辑
+  const [name, setName] = useState<string>(cfg.defName);
+  const trimmed = name.trim();
+  // 缺扩展名时补上（与 Rust 端落名同口径；返回值即最终文件名）
+  const withExt = trimmed.toLowerCase().endsWith("." + cfg.ext)
+    ? trimmed
+    : `${trimmed}.${cfg.ext}`;
+  // 输出名校验：非空 + Windows 合法名（非法字符/保留名红字内联，§4.9）
+  const err = !trimmed
+    ? t2("请输入文件名")
+    : isValidName(withExt)
+      ? null
+      : t2("名称含非法字符或为 Windows 保留名");
+  const valid = !err;
+  const preview = joinPath(parentPath(entries[0]?.path ?? "") ?? "", withExt);
+  return (
+    <>
+      <DialogBody>
+        <QueueSection title={t2(cfg.queueTitle)} items={items} onChange={setItems} />
+        <div className="np-pdfmform">
+          <FormRow k={t2("输出名")}>
+            <InputGroup
+              size="small"
+              value={name}
+              spellCheck={false}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && valid) onDone({ paths: items, name: withExt });
+              }}
+            />
+          </FormRow>
+        </div>
+        {err && <div className="np-dialog-error">{err}</div>}
+        <div className="np-dialog-muted">
+          {t2(cfg.note)}
+          {t2("输出预览：{out}", { out: preview })}
+        </div>
+      </DialogBody>
+      <Footer
+        okText={t2(cfg.ok)}
+        disabled={!valid}
+        onOk={() => onDone({ paths: items, name: withExt })}
+        onCancel={() => onDone(null)}
+      />
+    </>
+  );
+}
+
+// ───────────── PDF 提取页 / 删除页（2026-11-03 §4.9 对齐）─────────────
+// 此前是裸 input 对话框；现升级：文件与页数回显 + 页码范围解析预演
+// （lib/pdfOps.parsePageSpec 与 Rust parse_page_ranges 同口径，错误文案
+//  与提交后一致）+ 输出预览。Rust 端仍是最终校验。
+
+export function PdfPagesDialog({
+  mode,
+  entry,
+  onDone,
+}: {
+  mode: "extract" | "remove";
+  entry: FileEntry;
+  /** 成功 = 页码范围表达式（已客户端校验）；null = 取消 */
+  onDone(v: string | null): void;
+}) {
+  const t2 = useT();
+  const extract = mode === "extract";
+  const [total, setTotal] = useState<number | null>(null);
+  const [spec, setSpec] = useState("");
+  useEffect(() => {
+    let live = true;
+    api.pdfPageCount(entry.path).then(
+      (n) => live && setTotal(n),
+      () => live && setTotal(-1),
+    );
+    return () => {
+      live = false;
+    };
+  }, [entry.path]);
+
+  const parsed =
+    total !== null && total > 0 && spec.trim() ? parsePageSpec(spec, total) : null;
+  const err = parsed && parsed.error ? parsed.error : null;
+  const pages = parsed && !parsed.error ? parsed.pages : null;
+  // 删除模式不允许删光全部页（补集为空无从另存）
+  const wipeAll = !extract && pages !== null && pages.length >= (total ?? 0);
+  const valid = pages !== null && !wipeAll;
+  const stem = nameOf(entry.path).replace(/\.pdf$/i, "");
+  const outName = stem + (extract ? "_提取.pdf" : "_删页.pdf");
+  const preview = joinPath(parentPath(entry.path) ?? "", outName);
+  const brief = pages ? pagesToSpec(pages) : "";
+
+  return (
+    <>
+      <DialogBody>
+        <div className="np-pdfmsec">
+          <span className="np-bren-k">{t2("处理文件")}</span>
+          <span className="np-dialog-muted">
+            {total === null
+              ? t2("正在读取页数…")
+              : total > 0
+                ? t2("共 {n} 页", { n: total })
+                : t2("页数读取失败（文件可能损坏或加密）")}
+          </span>
+        </div>
+        <div className="np-pdfmlist">
+          <div className="np-pdfmlist-item" title={entry.path}>
+            <span className="np-ellipsis np-pdfmlist-name">{nameOf(entry.path)}</span>
+          </div>
+        </div>
+        <div className="np-pdfmform">
+          <FormRow k={t2("页码范围")} wide>
+            <InputGroup
+              size="small"
+              value={spec}
+              spellCheck={false}
+              placeholder={t2("如 1-3,5,8-（8- 表示第 8 页到末页）")}
+              onChange={(e) => setSpec(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && valid) onDone(spec.trim());
+              }}
+            />
+          </FormRow>
+        </div>
+        {err && <div className="np-dialog-error">{err}</div>}
+        {wipeAll && (
+          <div className="np-dialog-error">{t2("至少保留 1 页，不能删除全部页面")}</div>
+        )}
+        <div className="np-dialog-muted">
+          {valid && total !== null && (
+            <>
+              {extract
+                ? t2("将提取 {n} 页（{brief}）为新文件", { n: pages?.length, brief })
+                : t2("将删除 {n} 页（{brief}），其余 {k} 页另存为新文件", {
+                    n: pages?.length,
+                    brief,
+                    k: total - (pages?.length ?? 0),
+                  })}
+              <br />
+            </>
+          )}
+          {t2("输出预览：{out}", { out: preview })}
+          {!extract && t2("；原文件不动。")}
+        </div>
+      </DialogBody>
+      <Footer
+        okText={extract ? t2("提取") : t2("删除并另存")}
+        disabled={!valid}
+        onOk={() => onDone(spec.trim())}
         onCancel={() => onDone(null)}
       />
     </>

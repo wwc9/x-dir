@@ -51,12 +51,17 @@ export type DialogSpec =
   | { type: "emptyScan"; dir: string }
   /** 批量新建文件夹（右键"批量新建文件夹"，2026-10-17）：名单/序号模板预演后创建 */
   | { type: "newFolders"; dir: string; existing: string[] }
-  /** Excel 合并（右键"Excel 合并"，2026-10-17）：模式 + 输出名一次成形 */
-  | { type: "xlsxMerge"; count: number }
+  /** Excel 合并（右键"Excel 合并"，2026-10-17；2026-11-03 §4.9 清单化）：
+   *  清单拖动定序 + 模式 + 输出名一次成形 */
+  | { type: "xlsxMerge"; entries: FileEntry[] }
   /** PDF 合并扩展（2026-10-22）：混列 PDF/图片 + 按文件夹分组 + 空白页凑偶数 */
   | { type: "pdfMerge"; variant: "files" | "folders"; entries: FileEntry[] }
   /** PDF 加水印（右键"PDF 加水印"，2026-10-22 参数化）：带选中 PDF 入场 */
   | { type: "pdfWatermark"; entries: FileEntry[] }
+  /** 通用文件合并（2026-11-03 §4.9 对齐，取代裸输入框）：图片转 PDF / CSV / 文本 / zip 打包 */
+  | { type: "filesMerge"; flavor: "images" | "csv" | "text" | "zip"; entries: FileEntry[] }
+  /** PDF 提取页/删除页（2026-11-03 §4.9 对齐）：页数回显 + 范围解析预演 */
+  | { type: "pdfPages"; mode: "extract" | "remove"; entry: FileEntry }
   /** 解除占用（2026-11-01）：删除撞上占用失败的路径入场，可关句柄后按原语义重删 */
   | { type: "unlock"; items: string[]; permanent: boolean };;
 

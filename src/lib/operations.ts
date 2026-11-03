@@ -234,25 +234,18 @@ export async function watermarkPdfs(entries: FileEntry[], dir: string): Promise<
 
 // ── 办公批处理（2026-10-14）：PDF 页级编辑 / 图片转 PDF / Office 三件 / 表格文本 / 整理 ──
 
-/** 页码范围输入的轻校验（语法级；真实页数由 Rust 端按文档校验） */
-function validSpec(s: string): boolean {
-  return /^[0-9,\s\uFF0C-]+$/.test(s.trim());
-}
-
-/** PDF 提取页：spec 选中的页 → 旁写 "<名称>_提取.pdf" */
+/** PDF 提取页：pdfPages 对话框（页数回显 + 范围解析预演）→ 旁写 "<名称>_提取.pdf"；
+ *  Rust 端对真实页数做最终校验 */
 export async function extractPdfPages(entry: FileEntry, dir: string): Promise<void> {
-  const stem = fileNameOf(entry.path).replace(/\.pdf$/i, "");
   const spec = await useUi.getState().openDialog<string | null>({
-    type: "input",
-    title: "PDF 提取页",
-    label: "输入页码范围（如 1-3,5,8-），提取为新文件",
-    initial: "",
-    okText: "提取",
-    validate: (v) => (validSpec(v) ? null : "仅支持数字、逗号与连字符（如 1-3,5,8-）"),
+    type: "pdfPages",
+    mode: "extract",
+    entry,
   });
   if (!spec) return;
+  const stem = fileNameOf(entry.path).replace(/\.pdf$/i, "");
   try {
-    const { jobId } = await api.pdfExtractPages(entry.path, spec.trim(), joinPath(dir, `${stem}_提取.pdf`));
+    const { jobId } = await api.pdfExtractPages(entry.path, spec, joinPath(dir, `${stem}_提取.pdf`));
     useJobs.getState().register(jobId, "pdfextract", dir, [dir]);
   } catch (e) {
     useUi.getState().toast(`提取失败：${String(e)}`, "error");
@@ -261,18 +254,15 @@ export async function extractPdfPages(entry: FileEntry, dir: string): Promise<vo
 
 /** PDF 删除页：spec 指定的页被移除 → 旁写 "<名称>_删页.pdf"，原文件不动 */
 export async function removePdfPages(entry: FileEntry, dir: string): Promise<void> {
-  const stem = fileNameOf(entry.path).replace(/\.pdf$/i, "");
   const spec = await useUi.getState().openDialog<string | null>({
-    type: "input",
-    title: "PDF 删除页",
-    label: "输入要删除的页码范围（如 1-3,5,8-），其余页另存为新文件",
-    initial: "",
-    okText: "删除并另存",
-    validate: (v) => (validSpec(v) ? null : "仅支持数字、逗号与连字符（如 1-3,5,8-）"),
+    type: "pdfPages",
+    mode: "remove",
+    entry,
   });
   if (!spec) return;
+  const stem = fileNameOf(entry.path).replace(/\.pdf$/i, "");
   try {
-    const { jobId } = await api.pdfRemovePages(entry.path, spec.trim(), joinPath(dir, `${stem}_删页.pdf`));
+    const { jobId } = await api.pdfRemovePages(entry.path, spec, joinPath(dir, `${stem}_删页.pdf`));
     useJobs.getState().register(jobId, "pdfremove", dir, [dir]);
   } catch (e) {
     useUi.getState().toast(`删页失败：${String(e)}`, "error");
@@ -299,20 +289,17 @@ export async function compressPdfs(entries: FileEntry[], dir: string): Promise<v
   }
 }
 
-/** 图片合并转 PDF（每图一页，按选中序），输出到当前目录 */
+/** 图片合并转 PDF（每图一页）：filesMerge 对话框（清单拖动定序 + 输出预览） */
 export async function imagesToPdf(entries: FileEntry[], dir: string): Promise<void> {
-  const name = await useUi.getState().openDialog<string | null>({
-    type: "input",
-    title: "图片合并为 PDF",
-    label: `按当前顺序把 ${entries.length} 张图片合成为一个 PDF（每图一页）`,
-    initial: "合并图片.pdf",
-    okText: "合并",
-    validate: (v) => (v.trim() ? null : "请输入文件名"),
+  const res = await useUi.getState().openDialog<{ paths: string[]; name: string } | null>({
+    type: "filesMerge",
+    flavor: "images",
+    entries,
   });
-  if (!name) return;
-  const output = joinPath(dir, name.toLowerCase().endsWith(".pdf") ? name : `${name.trim()}.pdf`);
+  if (!res) return;
+  const output = joinPath(dir, res.name);
   try {
-    const { jobId } = await api.imagesToPdf(entries.map((e) => e.path), output);
+    const { jobId } = await api.imagesToPdf(res.paths, output);
     useJobs.getState().register(jobId, "imgtopdf", dir, [dir]);
   } catch (e) {
     useUi.getState().toast(`合并失败：${String(e)}`, "error");
@@ -368,38 +355,32 @@ export async function convertEncoding(
   }
 }
 
-/** CSV/TSV 合并（去重复表头），输出 UTF-8 BOM */
+/** CSV/TSV 合并（去重复表头，输出 UTF-8 BOM）：filesMerge 对话框定序定名 */
 export async function mergeCsvs(entries: FileEntry[], dir: string): Promise<void> {
-  const name = await useUi.getState().openDialog<string | null>({
-    type: "input",
-    title: "CSV 合并",
-    label: `按当前顺序合并 ${entries.length} 个表格文件（重复表头自动去除）`,
-    initial: "合并表格.csv",
-    okText: "合并",
-    validate: (v) => (v.trim() ? null : "请输入文件名"),
+  const res = await useUi.getState().openDialog<{ paths: string[]; name: string } | null>({
+    type: "filesMerge",
+    flavor: "csv",
+    entries,
   });
-  if (!name) return;
+  if (!res) return;
   try {
-    const { jobId } = await api.mergeCsv(entries.map((e) => e.path), joinPath(dir, name.trim()));
+    const { jobId } = await api.mergeCsv(res.paths, joinPath(dir, res.name));
     useJobs.getState().register(jobId, "mergecsv", dir, [dir]);
   } catch (e) {
     useUi.getState().toast(`合并失败：${String(e)}`, "error");
   }
 }
 
-/** 文本合并（按选中序全文拼接，空行分隔） */
+/** 文本合并（全文拼接，空行分隔）：filesMerge 对话框定序定名 */
 export async function mergeTexts(entries: FileEntry[], dir: string): Promise<void> {
-  const name = await useUi.getState().openDialog<string | null>({
-    type: "input",
-    title: "文本合并",
-    label: `按当前顺序合并 ${entries.length} 个文本文件（空行分隔）`,
-    initial: "合并文本.txt",
-    okText: "合并",
-    validate: (v) => (v.trim() ? null : "请输入文件名"),
+  const res = await useUi.getState().openDialog<{ paths: string[]; name: string } | null>({
+    type: "filesMerge",
+    flavor: "text",
+    entries,
   });
-  if (!name) return;
+  if (!res) return;
   try {
-    const { jobId } = await api.mergeTexts(entries.map((e) => e.path), joinPath(dir, name.trim()));
+    const { jobId } = await api.mergeTexts(res.paths, joinPath(dir, res.name));
     useJobs.getState().register(jobId, "mergetexts", dir, [dir]);
   } catch (e) {
     useUi.getState().toast(`合并失败：${String(e)}`, "error");
@@ -438,43 +419,32 @@ export async function createFolders(
   }
 }
 
-/** Excel 合并（按选中序）：np-seg 选模式 + 输出名 → 任务引擎（mergexlsx） */
+/** Excel 合并（清单拖动定序，2026-11-03 §4.9）：模式 + 输出名 → 任务引擎（mergexlsx） */
 export async function mergeXlsx(entries: FileEntry[], dir: string): Promise<void> {
   const plan = await useUi.getState().openDialog<
-    { mode: "sheets" | "rows"; name: string } | null
-  >({ type: "xlsxMerge", count: entries.length });
+    { paths: string[]; mode: "sheets" | "rows"; name: string } | null
+  >({ type: "xlsxMerge", entries });
   if (!plan) return;
-  const trimmed = plan.name.trim();
-  const output = joinPath(
-    dir,
-    trimmed.toLowerCase().endsWith(".xlsx") ? trimmed : `${trimmed}.xlsx`,
-  );
+  const output = joinPath(dir, plan.name);
   try {
-    const { jobId } = await api.mergeXlsx(
-      entries.map((e) => e.path),
-      output,
-      plan.mode,
-    );
+    const { jobId } = await api.mergeXlsx(plan.paths, output, plan.mode);
     useJobs.getState().register(jobId, "mergexlsx", dir, [dir]);
   } catch (e) {
     useUi.getState().toast(`合并失败：${String(e)}`, "error");
   }
 }
 
-/** 压缩为 zip（文件平铺、文件夹递归含顶层目录；同名覆盖） */
+/** 压缩为 zip（文件平铺、文件夹递归含顶层目录）：filesMerge 对话框
+ *  （打包清单 + 输出名合法校验 + 预览，2026-11-03 §4.9 对齐） */
 export async function zipEntries(entries: FileEntry[], dir: string): Promise<void> {
-  const name = await useUi.getState().openDialog<string | null>({
-    type: "input",
-    title: "压缩为 zip",
-    label: `打包 ${entries.length} 个对象（文件夹含目录结构）`,
-    initial: "归档.zip",
-    okText: "压缩",
-    validate: (v) => (isValidName(v.trim()) ? null : "名称含非法字符或为 Windows 保留名"),
+  const res = await useUi.getState().openDialog<{ paths: string[]; name: string } | null>({
+    type: "filesMerge",
+    flavor: "zip",
+    entries,
   });
-  if (!name) return;
-  const output = joinPath(dir, name.toLowerCase().endsWith(".zip") ? name : `${name.trim()}.zip`);
+  if (!res) return;
   try {
-    const { jobId } = await api.zipFiles(entries.map((e) => e.path), output);
+    const { jobId } = await api.zipFiles(res.paths, joinPath(dir, res.name));
     useJobs.getState().register(jobId, "zip", dir, [dir]);
   } catch (e) {
     useUi.getState().toast(`压缩失败：${String(e)}`, "error");
@@ -588,22 +558,20 @@ export async function applyRenames(
 }
 
 // ────────────────────────── 图片处理（2026-10-15） ──────────────────────────
-// 五件套（压缩/水印/格式转换/尺寸调整/宫格拼图）：对话框选项在 ImgDialogs.tsx，
-// 这里只做「开对话框 → api 入任务引擎 → 登记」。全部旁写不覆盖原文件。
+// 五件套（压缩/水印/格式转换/尺寸调整/宫格拼图）：对话框（§4.9 三段式，2026-11-03
+// 清单化——处理顺序随清单拖动）在 ImgDialogs.tsx，这里只做「开对话框 → api 入
+// 任务引擎 → 登记」。全部旁写不覆盖原文件。
 
 /** 图片压缩（Auto/JPEG/PNG8/无损优化） */
 export async function imgCompress(entries: FileEntry[], dir: string): Promise<void> {
   const spec = await useUi.getState().openDialog<{
+    paths: string[];
     target: 0 | 1 | 2 | 3;
     quality: number;
   } | null>({ type: "imgCompress", entries });
   if (!spec) return;
   try {
-    const { jobId } = await api.imgCompress(
-      entries.map((e) => e.path),
-      spec.target,
-      spec.quality,
-    );
+    const { jobId } = await api.imgCompress(spec.paths, spec.target, spec.quality);
     useJobs.getState().register(jobId, "imgcompress", dir, [dir]);
   } catch (e) {
     useUi.getState().toast(`压缩失败：${String(e)}`, "error");
@@ -613,6 +581,7 @@ export async function imgCompress(entries: FileEntry[], dir: string): Promise<vo
 /** 图片水印（文字/贴图 × 平铺/角标） */
 export async function imgWatermark(entries: FileEntry[], dir: string): Promise<void> {
   const spec = await useUi.getState().openDialog<{
+    paths: string[];
     imagePath: string;
     text: string;
     tile: boolean;
@@ -620,11 +589,9 @@ export async function imgWatermark(entries: FileEntry[], dir: string): Promise<v
     scaleDiv: number;
   } | null>({ type: "imgWatermark", entries });
   if (!spec) return;
+  const { paths, ...opts } = spec;
   try {
-    const { jobId } = await api.imgWatermark(
-      entries.map((e) => e.path),
-      spec,
-    );
+    const { jobId } = await api.imgWatermark(paths, opts);
     useJobs.getState().register(jobId, "imgwatermark", dir, [dir]);
   } catch (e) {
     useUi.getState().toast(`加水印失败：${String(e)}`, "error");
@@ -634,6 +601,7 @@ export async function imgWatermark(entries: FileEntry[], dir: string): Promise<v
 /** 图片格式转换（PNG/JPEG/BMP/TIFF/ICO/WebP） */
 export async function imgConvert(entries: FileEntry[], dir: string): Promise<void> {
   const spec = await useUi.getState().openDialog<{
+    paths: string[];
     target: 0 | 1 | 2 | 3 | 4 | 5;
     quality: number;
     bakeExif: boolean;
@@ -641,7 +609,7 @@ export async function imgConvert(entries: FileEntry[], dir: string): Promise<voi
   if (!spec) return;
   try {
     const { jobId } = await api.imgConvert(
-      entries.map((e) => e.path),
+      spec.paths,
       spec.target,
       spec.quality,
       spec.bakeExif,
@@ -655,6 +623,7 @@ export async function imgConvert(entries: FileEntry[], dir: string): Promise<voi
 /** 图片尺寸调整（百分比/指定宽/指定高） */
 export async function imgResize(entries: FileEntry[], dir: string): Promise<void> {
   const spec = await useUi.getState().openDialog<{
+    paths: string[];
     mode: 0 | 1 | 2;
     value: number;
     lanczos: boolean;
@@ -663,7 +632,7 @@ export async function imgResize(entries: FileEntry[], dir: string): Promise<void
   if (!spec) return;
   try {
     const { jobId } = await api.imgResize(
-      entries.map((e) => e.path),
+      spec.paths,
       spec.mode,
       spec.value,
       spec.lanczos,
@@ -678,6 +647,7 @@ export async function imgResize(entries: FileEntry[], dir: string): Promise<void
 /** 宫格拼图：多图 → 单张网格画布（输出到首图所在目录） */
 export async function imgMontage(entries: FileEntry[], dir: string): Promise<void> {
   const spec = await useUi.getState().openDialog<{
+    paths: string[];
     cols: number;
     cell: number;
     gap: number;
@@ -686,12 +656,10 @@ export async function imgMontage(entries: FileEntry[], dir: string): Promise<voi
     png: boolean;
   } | null>({ type: "imgMontage", entries });
   if (!spec) return;
+  const { paths, ...opts } = spec;
   const output = joinPath(dir, montageOutputName(new Date()));
   try {
-    const { jobId } = await api.imgMontage(
-      entries.map((e) => e.path),
-      { ...spec, output },
-    );
+    const { jobId } = await api.imgMontage(paths, { ...opts, output });
     useJobs.getState().register(jobId, "imgmontage", dir, [dir]);
   } catch (e) {
     useUi.getState().toast(`拼图失败：${String(e)}`, "error");
