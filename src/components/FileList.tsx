@@ -692,6 +692,9 @@ export function FileList({
    *  多选、未选中先单选；左键 = 未选项/带 Ctrl·Shift 立即改选，已选项裸按不动
    *  选中（多选整体可拖），收敛与否交给 armRowDrag 的「待定单击」裁决 */
   function rowMouseDown(e: React.MouseEvent, entry: FileEntry) {
+    // 重命名输入框内按下：完全交给浏览器原生 caret 定位/拖选——改选与 armRowDrag
+    // 都不适用（armed 拖拽会把框内拖选文字劫持成 OLE 文件拖动）
+    if ((e.target as HTMLElement).closest(".np-rename")) return;
     if (e.button === 1) {
       // 中键 = 文件夹在新标签打开（浏览器/Explorer 惯例；preventDefault 顺带
       // 拦掉中键自动滚动）
@@ -760,6 +763,9 @@ export function FileList({
     if ((e.target as HTMLElement).closest(".np-row")) return; // 行内按下 = 点选/拖出
     const scRect = sc.getBoundingClientRect();
     if (e.clientX - scRect.left >= sc.clientWidth) return; // 竖向滚动条
+    // 空白按下时若重命名进行中：先主动失焦提交——下方 preventDefault 会拦掉
+    // 浏览器默认的焦点转移，onBlur 不触发，重命名模式就退不出去
+    sc.querySelector<HTMLInputElement>(".np-rename")?.blur();
     e.preventDefault();
     const inner = innerRef.current?.getBoundingClientRect();
     if (!inner) return;
@@ -824,6 +830,8 @@ export function FileList({
 
   /** 双轨右键菜单：Shift+右键 = 系统原生 IContextMenu（§3.3），否则自绘 */
   function openRowMenu(e: React.MouseEvent, entry: FileEntry) {
+    // 重命名框内右键 = 浏览器原生文本编辑菜单（剪切/复制/粘贴），不出文件菜单
+    if ((e.target as HTMLElement).closest(".np-rename")) return;
     e.preventDefault();
     const now = usePanes.getState().tabs[tabId];
     const sel = now?.selected ?? [];
@@ -1657,7 +1665,10 @@ export function FileList({
                         }`}
                         style={{ width: "100%" }}
                         onMouseDown={(e) => rowMouseDown(e, entry)}
-                        onDoubleClick={() => openEntry(entry)}
+                        onDoubleClick={(e) => {
+                          // 框内双击 = 选词，不冒泡成「打开该项」
+                          if (!(e.target as HTMLElement).closest(".np-rename")) openEntry(entry);
+                        }}
                         onContextMenu={(e) => openRowMenu(e, entry)}
                       >
                         <RowFileIcon
@@ -1720,7 +1731,10 @@ export function FileList({
                       }`}
                       style={{ width: cellW, flex: "0 0 auto" }}
                       onMouseDown={(e) => rowMouseDown(e, entry)}
-                      onDoubleClick={() => openEntry(entry)}
+                      onDoubleClick={(e) => {
+                        // 框内双击 = 选词，不冒泡成「打开该项」
+                        if (!(e.target as HTMLElement).closest(".np-rename")) openEntry(entry);
+                      }}
                       onContextMenu={(e) => openRowMenu(e, entry)}
                     >
                       <RowFileIcon
