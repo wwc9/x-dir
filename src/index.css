@@ -87,13 +87,13 @@
   /* 面板统一圆角（2026-11-03 统一规范）：窗格/侧栏卡/导航树/暂存架/顶栏/
    *  全盘搜索页/Dialog/浮层面板一档到底；设置「外观 → 面板圆角」经 :root
    *  内联覆写本值（stores/settings.applyMetrics），运行值默认与此处一致 */
-  --np-radius-pane: 14px;
+  --np-radius-pane: 10px;
   /* 全圆角（pill/圆点/分隔线端头），禁止再写 99px/999px 裸值 */
   --np-radius-pill: 999px;
   --np-gap: 4px;
   /* 组件间隔：窗格分隔条热区、卡片间距与画布四周留白同源；设置「外观 →
    *  组件间隔」经 :root 内联覆写（分隔条可拖依赖此宽度，下限 4px） */
-  --np-gutter: 8px;
+  --np-gutter: 6px;
 
   /* —— 弹窗尺寸 —— */
   --np-dialog-w: 460px;
