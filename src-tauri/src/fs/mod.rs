@@ -1,7 +1,6 @@
 pub mod analyze;
 pub mod archive;
 pub mod cache;
-pub mod content;
 pub mod entry;
 pub mod matcher;
 pub mod path;
