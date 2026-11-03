@@ -22,6 +22,7 @@ export interface PreviewSearchCtl {
 /** 可搜索的预览类型（officeBinary 转换完成后按 PDF 通道可搜） */
 export const SEARCHABLE_KINDS = new Set([
   "pdf",
+  "ofd",
   "officeBinary",
   "text",
   "markdown",

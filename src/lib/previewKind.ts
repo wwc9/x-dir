@@ -8,6 +8,7 @@ export type PreviewKind =
   | "video"
   | "audio"
   | "pdf"
+  | "ofd"
   | "text"
   | "markdown"
   | "officeDoc"
@@ -50,6 +51,8 @@ const MAP: Record<string, PreviewKind> = {
   aac: "audio",
   // PDF（M2：pdf.js）
   pdf: "pdf",
+  // OFD 版式文档（GB/T 33190，2026-11-03）：Rust 端文本抽取（正文可读、版式不保真）
+  ofd: "ofd",
   // 文本 / 代码（HTML 一律按文本显示，不渲染不可信内容）
   txt: "text",
   log: "text",
@@ -150,6 +153,7 @@ export const PREVIEW_LABELS: Record<PreviewKind, string> = {
   video: "视频",
   audio: "音频",
   pdf: "PDF",
+  ofd: "OFD 版式文档",
   text: "文本",
   markdown: "Markdown",
   officeDoc: "Word 文档",

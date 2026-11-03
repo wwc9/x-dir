@@ -308,8 +308,176 @@ pub async fn preview_extract_office(path: String) -> Result<OfficeText, String> 
                 cover: None,
             })
         }
+        // OFD 版式文档（GB/T 33190，2026-11-03）：文本抽取预览（版式不保真）
+        "ofd" => {
+            let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+            ofd_office(&data)
+        }
         other => Err(format!("不支持的预览格式：.{other}")),
     }
+}
+
+// ────────────────────────── OFD 版式文档（GB/T 33190，2026-11-03）──────────
+// zip 容器：OFD.xml → DocBody/DocRoot → <文档目录>/Document.xml →
+// Pages 区 Page@BaseLoc → 页 XML 内 TextObject/TextCode 文字逐行抽取。
+// 定位坐标不还原（版式保真走渲染引擎，此处只保正文可读）；文本对象在 XML
+// 中的出现序即抽取序（公文/发票转换器通常按阅读序输出）。
+
+/// zip 条目读取（大小写不敏感兜底：个别生成器用 doc_0/Doc_0 混排）
+fn zip_read_entry_ci(z: &mut zip::ZipArchive<Cursor<&[u8]>>, name: &str) -> Result<String, String> {
+    if z.by_name(name).is_ok() {
+        return zip_read_entry_name(z, name);
+    }
+    let lower = name.to_ascii_lowercase();
+    let hit = z
+        .file_names()
+        .find(|f| f.to_ascii_lowercase() == lower)
+        .map(|f| f.to_string());
+    match hit {
+        Some(f) => zip_read_entry_name(z, &f),
+        None => Err(format!("缺少部件 {name}")),
+    }
+}
+
+fn zip_read_entry_name(
+    z: &mut zip::ZipArchive<Cursor<&[u8]>>,
+    name: &str,
+) -> Result<String, String> {
+    use std::io::Read as _;
+    let mut f = z.by_name(name).map_err(|e| e.to_string())?;
+    let mut s = String::new();
+    f.read_to_string(&mut s).map_err(|e| e.to_string())?;
+    Ok(s)
+}
+
+/// OFD.xml → 首个 DocBody 的 DocRoot 部件路径（元素文本）
+fn ofd_doc_root(ofd_xml: &str) -> Option<String> {
+    use quick_xml::events::Event;
+    let mut r = quick_xml::Reader::from_reader(ofd_xml.as_bytes());
+    let mut buf = Vec::new();
+    let mut in_root = false;
+    let mut out = String::new();
+    loop {
+        match r.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) => {
+                if is_local(e.name().local_name(), "DocRoot") {
+                    in_root = true;
+                }
+            }
+            Ok(Event::End(e)) => {
+                if is_local(e.name().local_name(), "DocRoot") {
+                    break;
+                }
+            }
+            Ok(Event::Text(t)) if in_root => {
+                if let Ok(s) = t.unescape() {
+                    out.push_str(&s);
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    let t = out.trim().to_string();
+    if t.is_empty() { None } else { Some(t) }
+}
+
+/// Document.xml → 页部件路径列表（文档序；BaseLoc 相对文档目录展开）
+fn ofd_page_locs(doc_xml: &str, doc_dir: &str) -> Vec<String> {
+    use quick_xml::events::Event;
+    let mut r = quick_xml::Reader::from_reader(doc_xml.as_bytes());
+    let mut buf = Vec::new();
+    let mut out = Vec::new();
+    loop {
+        match r.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
+                if is_local(e.name().local_name(), "Page") {
+                    for a in e.attributes().flatten() {
+                        if a.key.as_ref() == b"BaseLoc"
+                            && let Ok(v) = a.unescape_value()
+                        {
+                            let loc = v.trim().trim_start_matches("./");
+                            let full = if doc_dir.is_empty() {
+                                loc.to_string()
+                            } else {
+                                format!("{doc_dir}/{loc}")
+                            };
+                            out.push(full.replace('\\', "/"));
+                        }
+                    }
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    out
+}
+
+/// OFD → 逐页文本预览（宽容原则：个别页部件缺失/损坏跳过不整体失败）
+pub fn ofd_office(data: &[u8]) -> Result<OfficeText, String> {
+    const PAGE_CAP: usize = 200;
+    ofd_office_with_caps(data, PAGE_CAP, SECTION_CHAR_CAP)
+}
+
+fn ofd_office_with_caps(
+    data: &[u8],
+    page_cap: usize,
+    char_cap: usize,
+) -> Result<OfficeText, String> {
+    let mut z =
+        zip::ZipArchive::new(Cursor::new(data)).map_err(|e| format!("容器解析失败：{e}"))?;
+    let ofd_xml = zip_read_entry_ci(&mut z, "OFD.xml")?;
+    let doc_root = ofd_doc_root(&ofd_xml).ok_or("OFD.xml 缺少 DocRoot（文件可能损坏）")?;
+    let doc_dir = match doc_root.rfind('/') {
+        Some(i) => doc_root[..i].to_string(),
+        None => String::new(),
+    };
+    let doc_xml = zip_read_entry_ci(&mut z, &doc_root)?;
+    let locs = ofd_page_locs(&doc_xml, &doc_dir);
+    let mut truncated = locs.len() > page_cap;
+    let mut sections = Vec::new();
+    let mut any_text = false;
+    for (i, loc) in locs.iter().enumerate().take(page_cap) {
+        // 缺页/坏页跳过（预览宽容），整页文本超限截断
+        let Ok(page_xml) = zip_read_entry_ci(&mut z, loc) else {
+            continue;
+        };
+        let (text, page_trunc) = xml_paragraphs(&page_xml, "TextObject", "TextCode", char_cap);
+        truncated = truncated || page_trunc;
+        if !text.trim().is_empty() {
+            any_text = true;
+        }
+        sections.push(OfficeSection::text_only(
+            format!("第 {} 页", i + 1),
+            text,
+            page_trunc,
+        ));
+    }
+    if sections.is_empty() {
+        sections.push(OfficeSection::text_only(
+            "（无页面）",
+            "文档未包含可读页面。".to_string(),
+            false,
+        ));
+    } else if !any_text {
+        // 全部页面无文字：图像版式 OFD（扫描/图片型），明示而非空白
+        sections = vec![OfficeSection::text_only(
+            "（无文本层）",
+            "该 OFD 为图像版式（扫描或图片型页面），无文字层可抽取。\n可右键用默认程序打开（数科/福昕/WPS 阅读器）。".to_string(),
+            false,
+        )];
+    }
+    Ok(OfficeText {
+        kind: "ofd".into(),
+        sections,
+        truncated,
+        cover: None,
+    })
 }
 
 /// 容器嗅探分流（纯函数部分 sniff_container 另测）：zip 按 OOXML/ODF 特征部件路由，
@@ -3831,5 +3999,169 @@ mod office_tests {
         );
         let dur = ExcelDateTime::new(0.5, ExcelDateTimeType::TimeDelta, false);
         assert_eq!(cell_display(&calamine::Data::DateTime(dur)), "12:00:00");
+    }
+
+    // ── OFD 抽取（2026-11-03）：内存构造最小 OFD（GB/T 33190 结构）──
+
+    fn test_ofd_zip(entries: &[(&str, &str)]) -> Vec<u8> {
+        use std::io::Write as _;
+        use zip::write::SimpleFileOptions;
+        let mut w = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let opt = SimpleFileOptions::default();
+        for (name, data) in entries {
+            w.start_file(*name, opt).unwrap();
+            w.write_all(data.as_bytes()).unwrap();
+        }
+        w.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn ofd_extracts_pages_in_order() {
+        let ofd = test_ofd_zip(&[
+            (
+                "OFD.xml",
+                r#"<OFD><DocBody><DocRoot>Doc_0/Document.xml</DocRoot></DocBody></OFD>"#,
+            ),
+            (
+                "Doc_0/Document.xml",
+                r#"<Document><Pages><Page BaseLoc="Pages/Page_1/Page_1.xml"/><Page BaseLoc="Pages/Page_2/Page_2.xml"/></Pages></Document>"#,
+            ),
+            (
+                "Doc_0/Pages/Page_1/Page_1.xml",
+                r#"<Page><Body><TextObject ID="1"><TextCode>省国资委关于预算编制的通知</TextCode></TextObject><TextObject ID="2"><TextCode>各出资监管企业：</TextCode></TextObject></Body></Page>"#,
+            ),
+            (
+                "Doc_0/Pages/Page_2/Page_2.xml",
+                r#"<Page><Body><TextObject><TextCode>第二页正文内容</TextCode></TextObject></Body></Page>"#,
+            ),
+        ]);
+        let t = ofd_office(&ofd).unwrap();
+        assert_eq!(t.kind, "ofd");
+        assert_eq!(t.sections.len(), 2);
+        assert_eq!(t.sections[0].title, "第 1 页");
+        assert!(t.sections[0].text.contains("省国资委关于预算编制的通知"));
+        assert!(t.sections[0].text.contains("各出资监管企业"));
+        assert!(t.sections[1].text.contains("第二页正文内容"));
+        assert!(!t.truncated);
+    }
+
+    #[test]
+    fn ofd_doc_root_without_directory() {
+        let ofd = test_ofd_zip(&[
+            (
+                "OFD.xml",
+                r#"<OFD><DocBody><DocRoot>Document.xml</DocRoot></DocBody></OFD>"#,
+            ),
+            (
+                "Document.xml",
+                r#"<Document><Pages><Page BaseLoc="Pages/1.xml"/></Pages></Document>"#,
+            ),
+            (
+                "Pages/1.xml",
+                r#"<Page><TextObject><TextCode>根目录文档</TextCode></TextObject></Page>"#,
+            ),
+        ]);
+        let t = ofd_office(&ofd).unwrap();
+        assert_eq!(t.sections.len(), 1);
+        assert!(t.sections[0].text.contains("根目录文档"));
+    }
+
+    #[test]
+    fn ofd_entry_name_case_insensitive_fallback() {
+        let ofd = test_ofd_zip(&[
+            (
+                "ofd.xml",
+                r#"<OFD><DocBody><DocRoot>doc_0/Document.xml</DocRoot></DocBody></OFD>"#,
+            ),
+            (
+                "doc_0/Document.xml",
+                r#"<Document><Pages><Page BaseLoc="Pages/1.xml"/></Pages></Document>"#,
+            ),
+            (
+                "doc_0/Pages/1.xml",
+                r#"<Page><TextObject><TextCode>小写路径</TextCode></TextObject></Page>"#,
+            ),
+        ]);
+        let t = ofd_office(&ofd).unwrap();
+        assert!(t.sections[0].text.contains("小写路径"));
+    }
+
+    #[test]
+    fn ofd_missing_container_part_errors() {
+        let ofd = test_ofd_zip(&[("readme.txt", "not an ofd")]);
+        assert!(ofd_office(&ofd).is_err());
+    }
+
+    #[test]
+    fn ofd_page_cap_truncates() {
+        let ofd = test_ofd_zip(&[
+            (
+                "OFD.xml",
+                r#"<OFD><DocBody><DocRoot>Doc_0/Document.xml</DocRoot></DocBody></OFD>"#,
+            ),
+            (
+                "Doc_0/Document.xml",
+                r#"<Document><Pages><Page BaseLoc="Pages/1.xml"/><Page BaseLoc="Pages/2.xml"/><Page BaseLoc="Pages/3.xml"/></Pages></Document>"#,
+            ),
+            (
+                "Doc_0/Pages/1.xml",
+                r#"<Page><TextObject><TextCode>一</TextCode></TextObject></Page>"#,
+            ),
+            (
+                "Doc_0/Pages/2.xml",
+                r#"<Page><TextObject><TextCode>二</TextCode></TextObject></Page>"#,
+            ),
+            (
+                "Doc_0/Pages/3.xml",
+                r#"<Page><TextObject><TextCode>三</TextCode></TextObject></Page>"#,
+            ),
+        ]);
+        let t = ofd_office_with_caps(&ofd, 2, SECTION_CHAR_CAP).unwrap();
+        assert_eq!(t.sections.len(), 2);
+        assert!(t.truncated);
+    }
+
+    #[test]
+    fn ofd_image_only_pages_hint_no_text_layer() {
+        let ofd = test_ofd_zip(&[
+            (
+                "OFD.xml",
+                r#"<OFD><DocBody><DocRoot>Doc_0/Document.xml</DocRoot></DocBody></OFD>"#,
+            ),
+            (
+                "Doc_0/Document.xml",
+                r#"<Document><Pages><Page BaseLoc="Pages/1.xml"/></Pages></Document>"#,
+            ),
+            (
+                "Doc_0/Pages/1.xml",
+                r#"<Page><Body><ImageObject ID="1"/></Body></Page>"#,
+            ),
+        ]);
+        let t = ofd_office(&ofd).unwrap();
+        assert_eq!(t.sections.len(), 1);
+        assert_eq!(t.sections[0].title, "（无文本层）");
+    }
+
+    #[test]
+    fn ofd_broken_page_skipped_not_fatal() {
+        let ofd = test_ofd_zip(&[
+            (
+                "OFD.xml",
+                r#"<OFD><DocBody><DocRoot>Doc_0/Document.xml</DocRoot></DocBody></OFD>"#,
+            ),
+            (
+                "Doc_0/Document.xml",
+                r#"<Document><Pages><Page BaseLoc="Pages/missing.xml"/><Page BaseLoc="Pages/2.xml"/></Pages></Document>"#,
+            ),
+            (
+                "Doc_0/Pages/2.xml",
+                r#"<Page><TextObject><TextCode>可读页</TextCode></TextObject></Page>"#,
+            ),
+        ]);
+        let t = ofd_office(&ofd).unwrap();
+        // 缺页整节跳过（不占位），但页码编号随文档序保持（可读页 = 第 2 页）
+        assert_eq!(t.sections.len(), 1);
+        assert_eq!(t.sections[0].title, "第 2 页");
+        assert!(t.sections[0].text.contains("可读页"));
     }
 }

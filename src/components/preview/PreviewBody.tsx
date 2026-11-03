@@ -49,6 +49,7 @@ export function needsPreviewLoad(kind: string): boolean {
   return (
     kind === "text" ||
     kind === "markdown" ||
+    kind === "ofd" ||
     kind === "officeDoc" ||
     kind === "officeSheet" ||
     kind === "officeSlides" ||
@@ -260,6 +261,7 @@ export function PreviewBody({
         );
       case "text":
       case "markdown":
+      case "ofd":
       case "officeDoc":
       case "officeSheet":
       case "officeSlides":

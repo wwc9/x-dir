@@ -157,8 +157,8 @@ export const BY_EXT: Record<string, FileIconSpec> = {
   md: TEXT_MD, markdown: TEXT_MD, mdx: TEXT_MD,
   log: TEXT_LOG, bib: TEXT_LOG,
   eml: TEXT_MAIL,
-  // ── PDF ──
-  pdf: PDF,
+  // ── PDF（ofd = 国标版式文档，同族图标）──
+  pdf: PDF, ofd: PDF,
   // ── 办公文档（Word 族）──
   doc: DOC, docx: DOC, docm: DOC, dot: DOC, dotx: DOC, dotm: DOC,
   odt: DOC, ott: DOC, fodt: DOC, rtf: DOC, pages: DOC, wps: DOC,
