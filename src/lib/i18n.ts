@@ -290,6 +290,8 @@ const EN: Record<string, string> = {
   "目标窗格在「此电脑」页，请先进入一个文件夹": "Target pane is on This PC — enter a folder first",
   "直接子项": "Direct children",
   "真实文件图标": "Real file icons",
+  "面板圆角": "Panel corner radius",
+  "组件间隔": "Component spacing",
   "确定": "OK",
   "空目录": "Empty folder",
   "窗格工具栏": "Pane toolbar",

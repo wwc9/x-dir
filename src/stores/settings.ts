@@ -82,6 +82,8 @@ function toPlain(s: SettingsStore): Settings {  return {
     shotShadowW: s.shotShadowW,
     shotBorderW: s.shotBorderW,
     shotBorderColor: s.shotBorderColor,
+    uiRadius: s.uiRadius,
+    uiGap: s.uiGap,
   };
 }
 
@@ -214,6 +216,15 @@ export function applyZoom(zoom: number) {
     .catch(() => undefined);
 }
 
+/** 界面度量（2026-11-03 统一规范）：面板统一圆角与组件间隔都以 :root 内联
+ *  覆写 CSS token（style 属性优先级高于 index.css 的 :root 规则），全部
+ *  引用点（窗格/侧栏/导航树/Dialog/分隔条/画布留白…）即时跟随，无需重渲染 */
+export function applyMetrics(radius: number, gap: number) {
+  const root = document.documentElement.style;
+  root.setProperty("--np-radius-pane", `${radius}px`);
+  root.setProperty("--np-gutter", `${gap}px`);
+}
+
 /** 主题圆形揭示时长（ms，2026-10-21 由 450 放缓）：页面揭示动画与原生边色
  *  渐变共用同一常量保证同步，调速只改这里 */
 const THEME_FX_MS = 650;
@@ -303,6 +314,14 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
       typeof merged.sideSplitRatio === "number" && Number.isFinite(merged.sideSplitRatio)
         ? Math.min(0.8, Math.max(0.2, merged.sideSplitRatio))
         : DEFAULT_SETTINGS.sideSplitRatio;
+    // 界面度量钳制：圆角 0–24 / 间隔 4–24（分隔条可拖热区依赖间隔，下限 4）；
+    // 脏数据（非有限数/越界）回落默认
+    const clampMetric = (v: number | undefined, lo: number, hi: number, dflt: number) =>
+      typeof v === "number" && Number.isFinite(v)
+        ? Math.min(hi, Math.max(lo, Math.round(v)))
+        : dflt;
+    merged.uiRadius = clampMetric(merged.uiRadius, 0, 24, DEFAULT_SETTINGS.uiRadius);
+    merged.uiGap = clampMetric(merged.uiGap, 4, 24, DEFAULT_SETTINGS.uiGap);
     // 图标视图已删除（2026-10-13）：旧档存过 icons 时回落详细信息
     if ((merged.defaultView as string) === "icons") merged.defaultView = "details";
     // 右键菜单迁移：旧档缺 menuEntries 字段时生成出厂布局（用户刻意清空的
@@ -330,6 +349,7 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     set({ ...merged, loaded: true });
     applyTheme(get().theme);
     applyZoom(get().uiZoom);
+    applyMetrics(get().uiRadius, get().uiGap);
   },
 
   update(p) {
@@ -341,6 +361,8 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     if (!get().loaded) return;
     if (p.theme) applyTheme(p.theme);
     if (p.uiZoom !== undefined) applyZoom(p.uiZoom);
+    if (p.uiRadius !== undefined || p.uiGap !== undefined)
+      applyMetrics(get().uiRadius, get().uiGap);
     // 落盘合并 800ms 防抖（2026-11-01 审查修复）：recentFolders 随每次目录
     // 导航 update——旧实现逐次全量序列化 settings.json（含菜单/工具栏布局
     // 可达上百 KB）+ 整店订阅组件（SettingsPanel）逐次重渲染；UI 态仍即时

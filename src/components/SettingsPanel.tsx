@@ -10,6 +10,7 @@ import {
   Dialog,
   DialogBody,
   InputGroup,
+  Slider,
   Switch,
 } from "@blueprintjs/core";
 import {
@@ -214,6 +215,38 @@ export function SettingsPanel() {
                 checked={s.realIcons}
                 onChange={(e) => s.update({ realIcons: e.currentTarget.checked })}
               />
+            </SetRow>
+            <SetRow
+              label={t("面板圆角")}
+              desc="窗格、侧栏卡片、导航树、对话框等所有面板的统一圆角半径"
+            >
+              <div className="np-set-slider">
+                <Slider
+                  min={0}
+                  max={24}
+                  stepSize={1}
+                  labelValues={[]}
+                  value={s.uiRadius}
+                  onChange={(v) => s.update({ uiRadius: Array.isArray(v) ? v[0] : v })}
+                />
+                <span className="np-set-slider-val">{s.uiRadius} px</span>
+              </div>
+            </SetRow>
+            <SetRow
+              label={t("组件间隔")}
+              desc="窗格之间及各卡片组件的间隔条宽度（分隔条可拖拽热区同宽）"
+            >
+              <div className="np-set-slider">
+                <Slider
+                  min={4}
+                  max={24}
+                  stepSize={1}
+                  labelValues={[]}
+                  value={s.uiGap}
+                  onChange={(v) => s.update({ uiGap: Array.isArray(v) ? v[0] : v })}
+                />
+                <span className="np-set-slider-val">{s.uiGap} px</span>
+              </div>
             </SetRow>
           </>
         )}

@@ -8,7 +8,7 @@
 
 | 场景 | 组件 | 备注 |
 |---|---|---|
-| **弹层统一规范（2026-10-12）** | 面板一律 `--np-surface` 底 + `--np-shadow`；Dialog = `--np-radius-xl`、浮层（菜单/Popover/补全/右键菜单）= `--np-radius-lg` | Dialog 三段 header/body/footer 全透明（Blueprint 白头灰身默认已覆写），footer 用 `--np-hairline` 分隔；**新增浮层禁自带灰底**；输入框/内嵌列表用 `--np-surface-2` 作凹陷层级 |
+| **弹层统一规范（2026-10-12；圆角 2026-11-03 并档）** | 面板一律 `--np-surface` 底 + `--np-shadow`；Dialog 与卡片/窗格/浮层面板 = `--np-radius-pane`（统一档、设置可调，`--np-radius-xl` 已退役）、瞬态浮层（菜单/Popover/补全/右键菜单）= `--np-radius-lg` | Dialog 三段 header/body/footer 全透明（Blueprint 白头灰身默认已覆写），footer 用 `--np-hairline` 分隔；**新增浮层禁自带灰底**；输入框/内嵌列表用 `--np-surface-2` 作凹陷层级 |
 | 对话框 | `Dialog` + `DialogBody`/`DialogFooter` | 编排层是 `useUi.openDialog()` promise API，**调用方不许直接碰 Dialog**；确认按钮 intent 统一二映射（2026-10-15 定案）：主操作 = primary（accent 实心）/ 危险 = danger（danger 实心），Blueprint 原生 warning 琥珀弃用——intent 按钮样式经 index.css 全局压回 token（圆角/底色/悬停 = fg 混色），新弹窗不许自带 intent 配色 |
 | 右键菜单/下拉 | `Menu` + `MenuItem`/`MenuDivider`；右键定位层在 `components/ContextMenu.tsx` | 右键菜单数据流：`useUi.openMenu(items, x, y)` |
 | 弹出层 | `PopoverNext`（placement="bottom-start/end"，`arrow={false}`） | 工具栏下拉、地址栏历史。**禁用经典 `Popover`**：其 react-popper 依赖在 React 19 下静默错位（Blueprint v6 官方警告）；面板外观经 index.css 的 `.bp6-popover` 覆盖与菜单统一为 surface 卡片 |

@@ -44,6 +44,8 @@ vi.stubGlobal("document", {
   ...globalThis.document,
   documentElement: {
     classList: { toggle: () => {}, contains: () => false },
+    // load() 末尾 applyMetrics 写 CSS 变量（:root 内联覆写）：node 环境补桩
+    style: { setProperty: () => undefined },
   },
 });
 

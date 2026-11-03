@@ -84,11 +84,15 @@
   /* —— 形状 —— */
   --np-radius: 6px;
   --np-radius-lg: 10px;
-  --np-radius-xl: 12px;
+  /* 面板统一圆角（2026-11-03 统一规范）：窗格/侧栏卡/导航树/暂存架/顶栏/
+   *  全盘搜索页/Dialog/浮层面板一档到底；设置「外观 → 面板圆角」经 :root
+   *  内联覆写本值（stores/settings.applyMetrics），运行值默认与此处一致 */
   --np-radius-pane: 14px;
   /* 全圆角（pill/圆点/分隔线端头），禁止再写 99px/999px 裸值 */
   --np-radius-pill: 999px;
   --np-gap: 4px;
+  /* 组件间隔：窗格分隔条热区、卡片间距与画布四周留白同源；设置「外观 →
+   *  组件间隔」经 :root 内联覆写（分隔条可拖依赖此宽度，下限 4px） */
   --np-gutter: 8px;
 
   /* —— 弹窗尺寸 —— */
@@ -319,14 +323,15 @@ body {
   border: 1px solid var(--np-border);
   color: var(--np-muted);
 }
-/* ═══ 弹层统一规范（2026-10-12 定案）：所有浮层面板一张"脸" ═══
-   面板 = --np-surface 底 + --np-radius-xl(Dialog)/--np-radius-lg(浮层) + --np-shadow；
-   Dialog 三段 header/body/footer 全部透明（覆写 Blueprint 白头灰身默认值），
-   footer 以 --np-hairline 分隔；输入框/内嵌列表用 --np-surface-2 作凹陷层级，
-   不算面板底色；菜单/Popover/Toast/地址补全/右键菜单共用同款 surface 卡片 */
+/* ═══ 弹层统一规范（2026-10-12 定案，2026-11-03 圆角并入面板统一档）═══
+   面板 = --np-surface 底 + --np-radius-pane(面板统一圆角：Dialog 与卡片同档)
+   + --np-shadow；瞬态浮层（菜单/Popover/Toast/地址补全）小一档 --np-radius-lg
+   保留层级；Dialog 三段 header/body/footer 全部透明（覆写 Blueprint 白头灰身
+   默认值），footer 以 --np-hairline 分隔；输入框/内嵌列表用 --np-surface-2
+   作凹陷层级，不算面板底色 */
 .bp6-dialog {
   background: var(--np-surface);
-  border-radius: var(--np-radius-xl);
+  border-radius: var(--np-radius-pane);
   /* 同上：ring 描边统一浮层边界质感 */
   box-shadow:
     0 0 0 1px var(--np-border),
@@ -1333,7 +1338,7 @@ body.np-col-resizing .np-menued-grip::after {
   display: flex;
   flex-direction: column;
   background: var(--np-surface);
-  border-radius: var(--np-radius-xl);
+  border-radius: var(--np-radius-pane);
   overflow: hidden;
 }
 .np-menupage-head {
@@ -1454,6 +1459,26 @@ body.np-col-resizing .np-menued-grip::after {
   display: flex;
   gap: 4px;
 }
+/* 设置行内滑块（外观 → 面板圆角/组件间隔）：定宽 + 当前值随行尾回显 */
+.np-set-slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 200px;
+  flex: 0 0 auto;
+}
+.np-set-slider .bp6-slider {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.np-set-slider-val {
+  flex: 0 0 auto;
+  min-width: 34px;
+  text-align: right;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  font-variant-numeric: tabular-nums;
+}
 /* 着色规则编辑区：surface-2 凹陷面板（§4.7 内嵌列表层级） */
 .np-set-rules {
   display: flex;
@@ -1547,7 +1572,7 @@ body.np-col-resizing .np-menued-grip::after {
   width: 320px;
   padding: 6px;
   background: var(--np-surface);
-  border-radius: var(--np-radius-lg);
+  border-radius: var(--np-radius-pane);
   box-shadow: var(--np-shadow);
 }
 /* 输入框 + 类型选择同行（2026-10-17）：类型对应 ext: 过滤词随查询下发 */
@@ -2414,7 +2439,7 @@ body.np-col-resizing * {
   flex-direction: column;
   gap: var(--np-gutter);
   background: var(--np-surface-2);
-  border-radius: var(--np-radius-lg);
+  border-radius: var(--np-radius-pane);
   padding: var(--np-gutter);
 }
 .np-about-update-title {
@@ -3675,7 +3700,7 @@ body.np-col-resizing * {
   max-width: 360px;
   padding: var(--np-gutter);
   gap: var(--np-gutter);
-  border-radius: var(--np-radius-lg);
+  border-radius: var(--np-radius-pane);
   background: var(--np-surface);
   border: 1px solid var(--np-hairline);
   box-shadow: var(--np-shadow);
@@ -3782,7 +3807,7 @@ body.np-col-resizing * {
   min-width: 0;
   min-height: 0;
   padding: var(--np-gutter);
-  border-radius: var(--np-radius-lg);
+  border-radius: var(--np-radius-pane);
   background: var(--np-surface-2);
 }
 /* 面板标题（窗格工具栏 / 启用菜单 / 功能库三行头统一，2026-10-15 定案）：
@@ -4014,7 +4039,7 @@ body.np-col-resizing * {
   min-height: 0;
   overflow-y: auto;
   background: var(--np-surface);
-  border-radius: var(--np-radius-lg);
+  border-radius: var(--np-radius-pane);
   padding: var(--np-gap);
 }
 .np-menued-ritem {
@@ -4058,7 +4083,7 @@ body.np-col-resizing * {
   min-height: 0;
   overflow-y: auto;
   background: var(--np-surface);
-  border-radius: var(--np-radius-lg);
+  border-radius: var(--np-radius-pane);
   padding: var(--np-gap);
 }
 .np-menued-cluster {
@@ -4132,7 +4157,7 @@ body.np-col-resizing * {
   display: flex;
   flex-direction: column;
   padding: 10px 12px;
-  border-radius: var(--np-radius-lg);
+  border-radius: var(--np-radius-pane);
   background: var(--np-surface);
   box-shadow: var(--np-shadow);
   width: 340px;
@@ -4222,7 +4247,7 @@ body.np-col-resizing * {
   max-height: 220px;
   overflow-y: auto;
   background: var(--np-surface-2);
-  border-radius: var(--np-radius-lg);
+  border-radius: var(--np-radius-pane);
   padding: var(--np-gutter);
   margin-bottom: var(--np-gutter);
 }
@@ -5325,7 +5350,7 @@ mark.np-gsearch-mark {
   flex-direction: column;
   height: 100vh;
   background: var(--np-surface);
-  border-radius: var(--np-radius-lg);
+  border-radius: var(--np-radius-pane);
   /* ring 描边随圆角走（Popover 卡同脸），不用 border 免占布局 */
   box-shadow: 0 0 0 1px var(--np-border);
   overflow: hidden;

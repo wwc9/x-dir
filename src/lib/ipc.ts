@@ -406,6 +406,14 @@ export interface Settings {
    *  白名单补丁落盘，主窗不回写——可选键，旧档无此键用默认） */
   cliphistWinW?: number;
   cliphistWinH?: number;
+  /** ── 界面度量（2026-11-03 统一规范：面板圆角与组件间隔一档到底、设置可调）── */
+  /** 面板统一圆角（px，0–24，默认 14）：驱动 --np-radius-pane——窗格/侧栏卡/
+   *  导航树/暂存架/顶栏/全盘搜索页/Dialog/浮层面板同值；瞬态菜单·提示与
+   *  控件小圆角、pill 不随动（层级保留） */
+  uiRadius: number;
+  /** 组件间隔宽度（px，4–24，默认 8）：驱动 --np-gutter——窗格分隔条热区、
+   *  卡片间距与画布四周留白同源（分隔条可拖依赖此宽度，下限 4） */
+  uiGap: number;
 }
 
 /** 自定义右键命令：占位符 %f=全部选中路径（逐个引号包裹） %n=首项文件名 %d=所在目录；
@@ -498,6 +506,8 @@ export const DEFAULT_SETTINGS: Settings = {
   cliphistKeepDays: 30,
   cliphistExcludeApps: "keepass.exe,keepassxc.exe,1password.exe",
   cliphistRichText: true,
+  uiRadius: 14,
+  uiGap: 8,
 };
 export const PAGE_SIZE = 500;
 
