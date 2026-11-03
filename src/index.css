@@ -1611,11 +1611,33 @@ body.np-col-resizing .np-menued-grip::after {
   flex: none;
   width: 88px;
 }
-/* 穿透子文件夹开关（2026-11-01）：开关 + 右侧文字标签，与类型选择同排尾端 */
+/* 穿透子文件夹开关（2026-11-01）：开关 + 右侧文字标签，与类型选择同排尾端。
+   垂直对齐（2026-11-03 修复）：.bp6-control 默认 block + 8px 下边距、轨道再带
+   -3px 上移，两者叠加使开关在同排居中行里下垂 2-3px——压平配方同
+   np-menued-libhead（2026-10-15）：24px 行内 flex 居中 + 清零微调；
+   np-search-deep-sw = 提示载体外层（Blueprint Switch 把 props 透传给内部
+   input，data-tip 须挂 label 外）；文字标签同步行高居中 */
+.np-search-deep-sw {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  height: var(--np-ctl-h);
+}
+.np-search-row .bp6-switch {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  height: var(--np-ctl-h);
+  margin: 0;
+}
+.np-search-row .bp6-switch .bp6-control-indicator {
+  margin-top: 0;
+}
 .np-search-row .np-search-deep-label {
   flex: none;
   color: var(--np-muted);
   font-size: var(--np-font-sm);
+  line-height: var(--np-ctl-h);
   cursor: default;
   user-select: none;
 }

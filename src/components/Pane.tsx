@@ -849,19 +849,25 @@ export function Pane({ pane }: { pane: PaneNode }) {
                 popoverClassName="np-search-type-pop"
                 onChange={(v) => usePanes.getState().setSearchType(tabId, v)}
               />
-              {/* 穿透子文件夹开关（2026-11-01）：默认关 = 仅搜当前目录；跨导航粘性 */}
-              <Switch
-                checked={searchDeep}
-                onChange={(e) =>
-                  usePanes.getState().setSearchDeep(tabId, e.currentTarget.checked)
-                }
-              />
+              {/* 穿透子文件夹开关（2026-11-01）：默认关 = 仅搜当前目录；跨导航粘性。
+                  提示挂外层 span（Blueprint Switch 把 props 透传给内部 input，
+                  data-tip 落在 label 外才可被悬停命中；§4.8 开关类口径） */}
               <span
-                className="np-search-deep-label"
-                data-tip={t("开启后递归穿透子文件夹搜索；关闭仅搜当前目录")}
+                className="np-search-deep-sw"
+                data-tip={
+                  searchDeep
+                    ? t("子文件夹：开（递归穿透子文件夹搜索，点击改为仅当前目录）")
+                    : t("子文件夹：关（仅搜当前目录，点击改为递归穿透子文件夹）")
+                }
               >
-                {t("子文件夹")}
+                <Switch
+                  checked={searchDeep}
+                  onChange={(e) =>
+                    usePanes.getState().setSearchDeep(tabId, e.currentTarget.checked)
+                  }
+                />
               </span>
+              <span className="np-search-deep-label">{t("子文件夹")}</span>
             </div>
           </div>
         )}
