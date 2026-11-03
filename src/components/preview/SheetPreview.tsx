@@ -41,8 +41,9 @@ export function SheetPreview({
   search?: PreviewSearchCtl;
 }) {
   const [active, setActive] = useState(0);
-  // 行高模式（会话级，不持久化）：single 维持历史恒高省略
-  const [rowMode, setRowMode] = useState<SheetRowMode>("single");
+  // 行高模式（会话级，不持久化）：默认换行自适应（2026-11-03 用户定案——
+  // 长文本格完整可读优先于紧凑恒高；单行省略/宽松仍可一键切换）
+  const [rowMode, setRowMode] = useState<SheetRowMode>("wrap");
   const sec = sections[Math.min(active, sections.length - 1)];
   const rows = useMemo(() => parseSheetRows(sec.text), [sec.text]);
   const colCount = useMemo(() => sheetColumnCount(rows), [rows]);
