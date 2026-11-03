@@ -313,6 +313,16 @@ pub async fn preview_extract_office(path: String) -> Result<OfficeText, String> 
             let data = std::fs::read(&path).map_err(|e| e.to_string())?;
             ofd_office(&data)
         }
+        // 旧版二进制 Office（2026-11-03）：原生文本抽取（无 Office/WPS 依赖）；
+        // 前端在本通道失败时回落 COM 转 PDF
+        "doc" => {
+            let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+            doc_office(&data)
+        }
+        "ppt" | "pps" => {
+            let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+            ppt_office(&data)
+        }
         other => Err(format!("不支持的预览格式：.{other}")),
     }
 }
@@ -543,6 +553,330 @@ pub(crate) fn sniff_extract(data: &[u8], path: &str) -> Result<OfficeText, Strin
             Err("旧版二进制格式（OLE 容器）暂不支持文本预览，可右键「转 PDF」后预览".into())
         }
     }
+}
+
+// ────────────── 旧版二进制 Office（.doc/.ppt/.pps）原生文本抽取 ──────────────
+// 2026-11-03：此前唯一通道是 COM 转 PDF（需装 Office/WPS）；现以 cfb 拆开
+// OLE 复合容器后按格式解析文本流——ppt 走记录树（TextCharsAtom/TextBytesAtom
+// 规整），doc 走 FIB + CLX 分段表（piece table）。正文可读可搜、版式不保真；
+// 解析失败（加密/旧版 Word 6/95/损坏）由前端回落 COM 通道。
+
+fn cfb_stream(c: &mut cfb::CompoundFile<Cursor<&[u8]>>, name: &str) -> Result<Vec<u8>, String> {
+    use std::io::Read as _;
+    let mut s = c
+        .open_stream(name)
+        .map_err(|e| format!("缺少 {name} 流：{e}"))?;
+    let mut v = Vec::new();
+    s.read_to_end(&mut v).map_err(|e| e.to_string())?;
+    Ok(v)
+}
+
+// ── PowerPoint 记录树（MS-PPT）：容器 ver=0xF 递归，文本原子两型 ──
+
+const PPT_RT_SLIDE: u16 = 0x03EE;
+const PPT_RT_TEXT_CHARS: u16 = 0x0FA0; // UTF-16LE
+const PPT_RT_TEXT_BYTES: u16 = 0x0FA8; // Windows-1252
+
+struct PptWalk {
+    /// 每张幻灯片的文本行（含空幻灯占位，编号随容器序）
+    slides: Vec<Vec<String>>,
+    /// 幻灯容器之外的文本（母版/备注占位等，仅在无幻灯文本时兜底）
+    outside: Vec<String>,
+    truncated: bool,
+}
+
+fn ppt_walk(buf: &[u8], depth: usize, in_slide: bool, st: &mut PptWalk, char_cap: usize) {
+    const MAX_DEPTH: usize = 8;
+    let mut i = 0usize;
+    while i + 8 <= buf.len() {
+        let ver_inst = u16_at(buf, i);
+        let rtype = u16_at(buf, i + 2);
+        let rlen = u32_at(buf, i + 4) as usize;
+        let end = match i.checked_add(8).and_then(|e| e.checked_add(rlen)) {
+            Some(e) if e <= buf.len() => e,
+            _ => break, // 病态长度：截停（预览宽容）
+        };
+        let payload = &buf[i + 8..end];
+        let ver = ver_inst & 0x0F;
+        let is_text = rtype == PPT_RT_TEXT_CHARS || rtype == PPT_RT_TEXT_BYTES;
+        if rtype == PPT_RT_SLIDE && ver == 0xF {
+            st.slides.push(Vec::new());
+            ppt_walk(payload, depth + 1, true, st, char_cap);
+        } else if is_text && in_slide {
+            let s = if rtype == PPT_RT_TEXT_CHARS {
+                utf16le_to_string(payload)
+            } else {
+                let (cow, _, _) = encoding_rs::WINDOWS_1252.decode(payload);
+                cow.into_owned()
+            };
+            ppt_push_text(&s, st, char_cap);
+        } else if is_text {
+            // 母版/备注等幻灯外文本：仅作无幻灯文本时的兜底，不入幻灯分节
+            let s = if rtype == PPT_RT_TEXT_CHARS {
+                utf16le_to_string(payload)
+            } else {
+                let (cow, _, _) = encoding_rs::WINDOWS_1252.decode(payload);
+                cow.into_owned()
+            };
+            let t = s
+                .trim_matches(|c: char| c.is_control() || c == ' ')
+                .replace('\r', "\n")
+                .replace('\u{0}', "");
+            if !t.is_empty()
+                && st.outside.iter().map(|x| x.len()).sum::<usize>() + t.len() <= char_cap
+            {
+                st.outside.push(t);
+            }
+        } else if ver == 0xF && depth < MAX_DEPTH {
+            ppt_walk(payload, depth + 1, false, st, char_cap);
+        }
+        i = end;
+    }
+}
+
+fn ppt_push_text(raw: &str, st: &mut PptWalk, char_cap: usize) {
+    let t = raw.trim_matches(|c: char| c.is_control() || c == ' ');
+    if t.is_empty() {
+        return;
+    }
+    let Some(bucket) = st.slides.last_mut() else {
+        return;
+    };
+    if bucket.iter().map(|s| s.len()).sum::<usize>() + t.len() > char_cap {
+        st.truncated = true;
+        return;
+    }
+    bucket.push(t.replace('\r', "\n").replace('\u{0}', ""));
+}
+
+pub fn ppt_office(data: &[u8]) -> Result<OfficeText, String> {
+    const SLIDE_CAP: usize = 100;
+    ppt_office_with_caps(data, SLIDE_CAP, SECTION_CHAR_CAP)
+}
+
+fn ppt_office_with_caps(
+    data: &[u8],
+    slide_cap: usize,
+    char_cap: usize,
+) -> Result<OfficeText, String> {
+    let mut c =
+        cfb::CompoundFile::open(Cursor::new(data)).map_err(|e| format!("容器解析失败：{e}"))?;
+    let stream = cfb_stream(&mut c, "PowerPoint Document")?;
+    let mut st = PptWalk {
+        slides: Vec::new(),
+        outside: Vec::new(),
+        truncated: false,
+    };
+    ppt_walk(&stream, 0, false, &mut st, char_cap);
+    let truncated = st.truncated || st.slides.len() > slide_cap;
+    let mut sections: Vec<OfficeSection> = st
+        .slides
+        .iter()
+        .take(slide_cap)
+        .enumerate()
+        .map(|(i, lines)| {
+            OfficeSection::text_only(format!("幻灯片 {}", i + 1), lines.join("\n"), false)
+        })
+        .collect();
+    if sections.is_empty() && !st.outside.is_empty() {
+        // 无幻灯容器的非常规结构：全部文本并入单节
+        sections.push(OfficeSection::text_only(
+            "正文文本",
+            st.outside.join("\n"),
+            false,
+        ));
+    }
+    if sections.is_empty() {
+        sections.push(OfficeSection::text_only(
+            "（无文本层）",
+            "该演示文稿未抽取到文字（可能为图片型或损坏文件）。\n可右键用默认程序打开。"
+                .to_string(),
+            false,
+        ));
+    }
+    Ok(OfficeText {
+        kind: "slides".into(),
+        sections,
+        truncated,
+        cover: None,
+    })
+}
+
+// ── Word 97-2003（.doc）：FIB → CLX 分段表（piece table）正文拼接 ──
+
+fn u16_at(b: &[u8], i: usize) -> u16 {
+    if i + 2 > b.len() {
+        return 0;
+    }
+    u16::from_le_bytes([b[i], b[i + 1]])
+}
+
+fn u32_at(b: &[u8], i: usize) -> u32 {
+    if i + 4 > b.len() {
+        return 0;
+    }
+    u32::from_le_bytes([b[i], b[i + 1], b[i + 2], b[i + 3]])
+}
+
+/// Word 控制字符 → 可读文本（0x0D 段落/行尾、0x0B/0x0C/0x0E 换行、0x07 制表；
+/// 其余 C0 与 0xFFFE/0xFFFF 丢弃），3+ 连续换行收敛
+fn doc_sanitize(s: String) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '\r' | '\u{0B}' | '\u{0C}' | '\u{0E}' => out.push('\n'),
+            '\u{07}' => out.push('\t'),
+            c if (c as u32) < 0x20 => {}
+            '\u{FFFE}' | '\u{FFFF}' => {}
+            c => out.push(c),
+        }
+    }
+    let mut collapsed = String::with_capacity(out.len());
+    let mut run = 0usize;
+    for ch in out.chars() {
+        if ch == '\n' {
+            run += 1;
+            if run <= 2 {
+                collapsed.push(ch);
+            }
+        } else {
+            run = 0;
+            collapsed.push(ch);
+        }
+    }
+    collapsed.trim_matches('\n').to_string()
+}
+
+pub fn doc_office(data: &[u8]) -> Result<OfficeText, String> {
+    doc_office_with_caps(data, SECTION_CHAR_CAP, 10_000)
+}
+
+fn doc_office_with_caps(
+    data: &[u8],
+    char_cap: usize,
+    piece_cap: usize,
+) -> Result<OfficeText, String> {
+    let mut c =
+        cfb::CompoundFile::open(Cursor::new(data)).map_err(|e| format!("容器解析失败：{e}"))?;
+    let wd = cfb_stream(&mut c, "WordDocument")?;
+    if wd.len() < 0x200 {
+        return Err("WordDocument 流过短（文件可能损坏）".into());
+    }
+    let w_ident = u16_at(&wd, 0);
+    if w_ident != 0xA5EC {
+        return Err("非 Word 97-2003 二进制格式（可能是更旧版本）".into());
+    }
+    let flags = u16_at(&wd, 0x000A);
+    if flags & 0x0100 != 0 {
+        return Err("文档已加密，无法直接预览".into());
+    }
+    // fWhichTblStm（bit 9）选表流名；打开失败换另一条（个别生成器写错位）
+    let primary = if flags & 0x0200 != 0 {
+        "1Table"
+    } else {
+        "0Table"
+    };
+    let alt = if primary == "1Table" {
+        "0Table"
+    } else {
+        "1Table"
+    };
+    let table = cfb_stream(&mut c, primary).or_else(|_| cfb_stream(&mut c, alt))?;
+    // fcClx/lcbClx（Word 97+ FIB 固定位）
+    let fc_clx = u32_at(&wd, 0x01A2) as usize;
+    let lcb_clx = u32_at(&wd, 0x01A6) as usize;
+    if lcb_clx == 0 || fc_clx + lcb_clx > table.len() {
+        return Err("分段表定位失败（非常规或损坏的 FIB）".into());
+    }
+    // CLX：跳过 Prc（0x01）直到 Pcdt（0x02）
+    let clx = &table[fc_clx..fc_clx + lcb_clx];
+    let mut i = 0usize;
+    let plc = loop {
+        if i >= clx.len() {
+            return Err("CLX 缺少 Pcdt（分段表）".into());
+        }
+        match clx[i] {
+            0x01 => {
+                let cb = u16_at(clx, i + 1) as usize;
+                i += 3 + cb;
+            }
+            0x02 => {
+                let lcb = u32_at(clx, i + 1) as usize;
+                let end = i + 5 + lcb;
+                if end > clx.len() {
+                    return Err("PlcPcd 长度越界".into());
+                }
+                break &clx[i + 5..end];
+            }
+            _ => return Err("CLX 结构无法识别".into()),
+        }
+    };
+    // PlcPcd：CP[n+1] 个 u32 + PCD n 个 8 字节（flags u16 + fc u32 + prm u16）
+    let n = match plc.len().checked_sub(4) {
+        Some(v) => v / 12,
+        None => return Err("PlcPcd 过短".into()),
+    };
+    if n == 0 || n > piece_cap {
+        return Err(if n == 0 {
+            "分段表为空".into()
+        } else {
+            "分段数异常".into()
+        });
+    }
+    let mut text = String::new();
+    let mut truncated = false;
+    for p in 0..n {
+        let cp_start = u32_at(plc, p * 4) as usize;
+        let cp_end = u32_at(plc, (p + 1) * 4) as usize;
+        let cp_len = cp_end.saturating_sub(cp_start);
+        if cp_len == 0 {
+            continue;
+        }
+        let pcd = (n + 1) * 4 + p * 8;
+        let fc = u32_at(plc, pcd + 2);
+        let compressed = fc & 0x4000_0000 != 0;
+        let offset = (fc & 0x3FFF_FFFF) as usize;
+        // 压缩段：fc 记录值 = 字节偏移 ×2；UTF-16 段：直接字节偏移
+        let (start, byte_len) = if compressed {
+            (offset / 2, cp_len)
+        } else {
+            (offset, cp_len * 2)
+        };
+        if start + byte_len > wd.len() {
+            continue; // 越界段跳过（宽容）
+        }
+        let piece = &wd[start..start + byte_len];
+        let decoded = if compressed {
+            let (cow, _, _) = encoding_rs::WINDOWS_1252.decode(piece);
+            cow.into_owned()
+        } else {
+            utf16le_to_string(piece)
+        };
+        if text.len() + decoded.len() > char_cap {
+            let remain = char_cap.saturating_sub(text.len());
+            // 按字符边界截断，防切在代理对中间
+            text.extend(decoded.chars().take(remain));
+            truncated = true;
+            break;
+        }
+        text.push_str(&decoded);
+    }
+    let body = doc_sanitize(text);
+    let sections = if body.trim().is_empty() {
+        vec![OfficeSection::text_only(
+            "（无文本层）",
+            "该文档未抽取到正文文字（可能为损坏文件）。\\n可右键用默认程序打开。".to_string(),
+            false,
+        )]
+    } else {
+        vec![OfficeSection::text_only("正文", body, false)]
+    };
+    Ok(OfficeText {
+        kind: "docx".into(),
+        sections,
+        truncated,
+        cover: None,
+    })
 }
 
 /// 嗅探结果（纯函数，可测）
@@ -4163,5 +4497,202 @@ mod office_tests {
         assert_eq!(t.sections.len(), 1);
         assert_eq!(t.sections[0].title, "第 2 页");
         assert!(t.sections[0].text.contains("可读页"));
+    }
+
+    // ── 旧版二进制 Office 抽取（2026-11-03）：cfb 写入构造最小 .doc/.ppt ──
+
+    fn cfb_bytes(streams: &[(String, Vec<u8>)]) -> Vec<u8> {
+        use std::io::Write as _;
+        let mut c = cfb::CompoundFile::create(Cursor::new(Vec::new())).unwrap();
+        for (name, data) in streams {
+            let mut s = c.create_stream(name.as_str()).unwrap();
+            s.write_all(data).unwrap();
+        }
+        c.flush().unwrap();
+        c.into_inner().into_inner()
+    }
+
+    fn ppt_rec_header(ver_inst: u16, rtype: u16, payload: &[u8]) -> Vec<u8> {
+        let mut v = Vec::with_capacity(8 + payload.len());
+        v.extend_from_slice(&ver_inst.to_le_bytes());
+        v.extend_from_slice(&rtype.to_le_bytes());
+        v.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+        v.extend_from_slice(payload);
+        v
+    }
+
+    /// TextCharsAtom：UTF-16LE
+    fn ppt_atom_u16(s: &str) -> Vec<u8> {
+        let payload: Vec<u8> = s.encode_utf16().flat_map(|c| c.to_le_bytes()).collect();
+        ppt_rec_header(0x0000, 0x0FA0, &payload)
+    }
+
+    /// TextBytesAtom：单字节（演示用 ASCII）
+    fn ppt_atom_cp1252(s: &str) -> Vec<u8> {
+        ppt_rec_header(0x0000, 0x0FA8, s.as_bytes())
+    }
+
+    fn ppt_container(rtype: u16, children: &[u8]) -> Vec<u8> {
+        ppt_rec_header(0x000F, rtype, children)
+    }
+
+    fn build_ppt(slides: &[(&str, &str)], notes: Option<&str>) -> Vec<u8> {
+        let mut body = Vec::new();
+        for (title, sub) in slides {
+            let mut inner = ppt_atom_u16(title);
+            inner.extend(ppt_atom_cp1252(sub));
+            body.extend(ppt_container(0x03EE, &inner));
+        }
+        if let Some(n) = notes {
+            body.extend(ppt_container(0x03F0, &ppt_atom_u16(n))); // Notes 容器：不入幻灯文本
+        }
+        let doc = ppt_container(0x03E8, &body);
+        cfb_bytes(&[("PowerPoint Document".to_string(), doc)])
+    }
+
+    /// 最小 Word 97 .doc：FIB + 单分段（piece）CLX
+    fn build_doc(offset: usize, text: &str, compressed: bool, flags_extra: u16) -> Vec<u8> {
+        let text_bytes: Vec<u8> = if compressed {
+            text.bytes().collect()
+        } else {
+            text.encode_utf16().flat_map(|c| c.to_le_bytes()).collect()
+        };
+        let mut wd = vec![0u8; offset + text_bytes.len().max(0x400)];
+        wd[0..2].copy_from_slice(&0xA5ECu16.to_le_bytes());
+        wd[2..4].copy_from_slice(&0x00C1u16.to_le_bytes());
+        wd[0x000A..0x000C].copy_from_slice(&flags_extra.to_le_bytes());
+        wd[offset..offset + text_bytes.len()].copy_from_slice(&text_bytes);
+        let cp_len = text.chars().count() as u32;
+        let fc = if compressed {
+            0x4000_0000u32 | (offset as u32 * 2)
+        } else {
+            offset as u32
+        };
+        let mut plc = Vec::new();
+        plc.extend_from_slice(&0u32.to_le_bytes());
+        plc.extend_from_slice(&cp_len.to_le_bytes());
+        plc.extend_from_slice(&0u16.to_le_bytes()); // PCD flags
+        plc.extend_from_slice(&fc.to_le_bytes());
+        plc.extend_from_slice(&0u16.to_le_bytes()); // prm
+        let mut clx = vec![0x02u8];
+        clx.extend_from_slice(&(plc.len() as u32).to_le_bytes());
+        clx.extend_from_slice(&plc);
+        wd[0x01A2..0x01A6].copy_from_slice(&0u32.to_le_bytes()); // fcClx = 0
+        wd[0x01A6..0x01AA].copy_from_slice(&(clx.len() as u32).to_le_bytes());
+        cfb_bytes(&[
+            ("WordDocument".to_string(), wd),
+            ("0Table".to_string(), clx),
+        ])
+    }
+
+    #[test]
+    fn doc_utf16_piece_extracts_chinese() {
+        let data = build_doc(
+            0x800,
+            "关于做好2027年预算编制的通知\r各出资监管企业：",
+            false,
+            0,
+        );
+        let t = doc_office(&data).unwrap();
+        assert_eq!(t.kind, "docx");
+        assert_eq!(t.sections.len(), 1);
+        assert_eq!(t.sections[0].title, "正文");
+        assert!(t.sections[0].text.contains("关于做好2027年预算编制的通知"));
+        assert!(t.sections[0].text.contains("\n各出资监管企业：")); // 段落标记 CR → 换行
+    }
+
+    #[test]
+    fn doc_compressed_piece_extracts_ascii() {
+        let data = build_doc(
+            0x800,
+            "Annual budget plan 2027.\rSecond paragraph.",
+            true,
+            0,
+        );
+        let t = doc_office(&data).unwrap();
+        assert!(
+            t.sections[0]
+                .text
+                .contains("Annual budget plan 2027.\nSecond paragraph.")
+        );
+    }
+
+    #[test]
+    fn doc_encrypted_and_bad_container_error() {
+        let enc = build_doc(0x800, "x", false, 0x0100);
+        let e = doc_office(&enc).err().unwrap();
+        assert!(e.contains("加密"));
+        assert!(doc_office(b"not a cfb at all").is_err());
+    }
+
+    #[test]
+    fn ppt_two_slides_extracts_and_notes_excluded() {
+        let data = build_ppt(
+            &[
+                ("第一页：总体要求", "Slide one body"),
+                ("第二页：预算安排", "Slide two body"),
+            ],
+            Some("备注不应出现"),
+        );
+        let t = ppt_office(&data).unwrap();
+        assert_eq!(t.kind, "slides");
+        assert_eq!(t.sections.len(), 2);
+        assert_eq!(t.sections[0].title, "幻灯片 1");
+        assert!(t.sections[0].text.contains("第一页：总体要求"));
+        assert!(t.sections[0].text.contains("Slide one body"));
+        assert!(t.sections[1].text.contains("第二页：预算安排"));
+        assert!(!t.sections.iter().any(|s| s.text.contains("备注不应出现")));
+    }
+
+    #[test]
+    fn ppt_without_slide_containers_single_section() {
+        let mut body = ppt_atom_u16("散落文本");
+        body.extend(ppt_atom_cp1252("loose bytes"));
+        let doc = ppt_container(0x03E8, &body);
+        let data = cfb_bytes(&[("PowerPoint Document".to_string(), doc)]);
+        let t = ppt_office(&data).unwrap();
+        assert_eq!(t.sections.len(), 1);
+        assert_eq!(t.sections[0].title, "正文文本");
+        assert!(t.sections[0].text.contains("散落文本"));
+        assert!(t.sections[0].text.contains("loose bytes"));
+    }
+
+    #[test]
+    fn ppt_slide_cap_truncates() {
+        let data = build_ppt(&[("一", "a"), ("二", "b"), ("三", "c")], None);
+        let t = ppt_office_with_caps(&data, 2, SECTION_CHAR_CAP).unwrap();
+        assert_eq!(t.sections.len(), 2);
+        assert!(t.truncated);
+    }
+
+    /// E2E 演示文件生成（不进常规测试）：cargo test write_demo_legacy -- --ignored
+    #[test]
+    #[ignore = "仅手动运行：生成 verify-out/_pv_demo 演示文件"]
+    fn write_demo_legacy_office_files() {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../verify-out/_pv_demo");
+        std::fs::create_dir_all(dir).unwrap();
+        let doc = build_doc(
+            0x800,
+            "省国资委关于认真做好2027年国有资本经营预算编制有关事项的通知\r\r各出资监管企业：\r为深化国有资本经营预算管理制度改革，提升预算管理规范化水平，现将有关事项通知如下。\r一、科学编制年度预算。企业应当根据生产经营情况和行业发展态势，科学测算2027年度国有资本经营预算。\r二、规范申报程序。各企业应当按照时间节点要求完成预算申报工作。",
+            false,
+            0,
+        );
+        std::fs::write(format!("{dir}/demo_doc.doc"), &doc).unwrap();
+        let ppt = build_ppt(
+            &[
+                ("预算编制总体要求", "Overall requirements"),
+                ("收入预算测算方法", "Revenue estimation"),
+                ("支出预算安排原则", "Expenditure principles"),
+            ],
+            None,
+        );
+        std::fs::write(format!("{dir}/demo_ppt.ppt"), &ppt).unwrap();
+        // 自检：生成的文件能被抽取器读回
+        assert!(
+            doc_office(&doc).unwrap().sections[0]
+                .text
+                .contains("国有资本经营预算")
+        );
+        assert_eq!(ppt_office(&ppt).unwrap().sections.len(), 3);
     }
 }

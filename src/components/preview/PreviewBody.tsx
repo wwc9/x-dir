@@ -50,6 +50,9 @@ export function needsPreviewLoad(kind: string): boolean {
     kind === "text" ||
     kind === "markdown" ||
     kind === "ofd" ||
+    // officeBinary（doc/ppt/pps）：2026-11-03 起先走原生文本抽取（无 Office/WPS
+    // 依赖）；抽取失败（加密/旧版/损坏）由 COM 转 PDF 通道兜底
+    kind === "officeBinary" ||
     kind === "officeDoc" ||
     kind === "officeSheet" ||
     kind === "officeSlides" ||
@@ -126,7 +129,12 @@ export function PreviewBody({
             })
         : api
             .previewExtractOffice(entry.path)
-            .then((data): PreviewLoad => ({ stage: "office", data }));
+            .then((data): PreviewLoad => ({ stage: "office", data }))
+            // officeBinary 抽取失败静默收场：交给 COM 转 PDF 通道兜底
+            .catch((err): PreviewLoad => {
+              if (kind === "officeBinary") return { stage: "error", message: String(err) };
+              throw err;
+            });
     p.then((r) => {
       if (reqRef.current === req) setLoad(r);
     }).catch((err) => {
@@ -135,9 +143,10 @@ export function PreviewBody({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry?.path, entry?.mtimeMs, kind]);
 
-  // doc/ppt/pps → COM 转 PDF（缓存 %TEMP%/xdir_preview；需已装 Office/WPS）
+  // doc/ppt/pps → COM 转 PDF 兜底（2026-11-03 起仅当原生文本抽取失败时启用；
+  // 缓存 %TEMP%/xdir_preview；需已装 Office/WPS）
   useEffect(() => {
-    if (!entry || kind !== "officeBinary") return;
+    if (!entry || kind !== "officeBinary" || load.stage !== "error") return;
     const req = ++reqRef.current;
     setBinPdf({ loading: true, path: null });
     api
@@ -152,7 +161,7 @@ export function PreviewBody({
         }
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entry?.path, entry?.mtimeMs, kind]);
+  }, [entry?.path, entry?.mtimeMs, kind, load.stage]);
 
   // TIFF：WebView2 无内置解码，Rust 解码转 PNG data URL
   useEffect(() => {
@@ -179,10 +188,13 @@ export function PreviewBody({
     if (!entry) {
       return <div className="np-pv-none">{emptyHint}</div>;
     }
-    // 错误兜底只认本条目的状态（load 在条目切换时已重置，无陈旧泄漏）
+    // 错误兜底只认本条目的状态（load 在条目切换时已重置，无陈旧泄漏）；
+    // officeBinary 的 error 阶段 = 原生抽取失败，COM 兜底即将接手，不算终态错误
     const errNote =
       mediaError ??
-      (load.stage === "error" ? load.message || "无法预览此文件" : undefined);
+      (load.stage === "error" && kind !== "officeBinary"
+        ? load.message || "无法预览此文件"
+        : undefined);
     if (errNote) {
       return (
         <FallbackPreview
@@ -290,7 +302,18 @@ export function PreviewBody({
         );
       }
       case "officeBinary": {
-        // doc/ppt/pps → COM 转 PDF 通道（需已装 Office/WPS；结果缓存秒开）
+        // 原生文本抽取成功（2026-11-03）：正文可读可搜，无需 Office/WPS
+        if (load.stage === "office")
+          return (
+            <DocPreview
+              kind={kind}
+              office={load.data}
+              fileName={entry.name}
+              search={search}
+              textWrap={textWrap}
+            />
+          );
+        // 抽取失败 → COM 转 PDF 通道兜底（需已装 Office/WPS；结果缓存秒开）
         if (binPdf.loading)
           return (
             <div className="np-pv-none np-pv-converting">

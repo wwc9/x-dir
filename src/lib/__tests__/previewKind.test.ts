@@ -111,7 +111,7 @@ describe("previewKind（2026-10-18 新格式路由）", () => {
   });
 
   it("新类型徽标文案齐备", () => {
-    expect(PREVIEW_LABELS.officeBinary).toBe("文档（转换预览）");
+    expect(PREVIEW_LABELS.officeBinary).toBe("旧版 Office 文档");
     expect(PREVIEW_LABELS.email).toBe("邮件");
   });
 });

@@ -159,7 +159,7 @@ export const PREVIEW_LABELS: Record<PreviewKind, string> = {
   officeDoc: "Word 文档",
   officeSheet: "电子表格",
   officeSlides: "演示文稿",
-  officeBinary: "文档（转换预览）",
+  officeBinary: "旧版 Office 文档",
   email: "邮件",
   epub: "电子书",
   archive: "压缩包",
