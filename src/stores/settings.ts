@@ -147,29 +147,19 @@ let borderFadeTimer: number | null = null;
 const toColorref = (rgb: number): number =>
   ((rgb & 0xff) << 16) | (rgb & 0xff00) | ((rgb >> 16) & 0xff);
 
-/** 窗缘底色解析：基准 = 主题画布色（与 index.css --np-bg 同值：#e9ecf1 /
- *  #131519）；遮罩在场（maskPresent 标记）时改取「画布色经 --np-overlay 合成」
- *  的压暗值——backdrop 盖不到 DWM 边框区（WebView 之外），边框停留画布原色
- *  会在遮罩下浮成四缘亮色细线（2026-11-03 实测定案）。压暗值按遮罩透明度
- *  直接合成，与 index.css body:has(.bp6-overlay-backdrop) .np-winedge 的
- *  CSS 叠加同式逐像素一致：
- *  浅 rgba(15,22,34,.35) × #e9ecf1 → #9da1a9；深 rgba(0,0,0,.45) × #131519 → #0a0c0e */
-function resolveBorder(dark: boolean): number {
-  if (maskPresent) return dark ? 0x0a0c0e : 0x9da1a9;
-  return dark ? 0x131519 : 0xe9ecf1;
-}
-
-/** 原生窗缘底色（顶缘 1px 非客户区 + DWM 窗框，WebView 之外）随主题与遮罩
- *  同步（COLORREF = 0x00BBGGRR；Rust 侧默认浅色画布，深色/遮罩态由本函数同步） */
+/** 原生窗缘底色（顶缘 1px 非客户区 + DWM 窗框，WebView 之外）与画布同色，
+ *  取当前 DOM 主题类计算（COLORREF = 0x00BBGGRR；#e9ecf1 / #131519 与
+ *  index.css --np-bg 同值；Rust 侧默认浅色，深色由本函数同步） */
 function syncBorderColor() {
   if (borderFadeTimer !== null) {
     clearInterval(borderFadeTimer);
     borderFadeTimer = null;
   }
-  borderCur = resolveBorder(
-    document.documentElement.classList.contains("dark"),
-  );
-  api.setBorderColor(toColorref(borderCur)).catch(() => undefined);
+  const canvas = document.documentElement.classList.contains("dark")
+    ? 0x131519
+    : 0xe9ecf1;
+  borderCur = canvas;
+  api.setBorderColor(toColorref(canvas)).catch(() => undefined);
 }
 
 /** 原生窗缘色随揭示时长平行渐变（约 8 步插值 + ease-in-out，与圆形揭示同
@@ -208,29 +198,7 @@ function fadeBorderColor(target: number, duration: number) {
  *  不置位，仍走 syncBorderColor 瞬切 */
 let themeFxInFlight = false;
 
-/** 遮罩开关监听（2026-11-03）：任一浮层 backdrop 挂载/卸载即翻转 maskPresent
- *  并同步窗缘底色（压暗 ↔ 画布）。body 子树变动频繁（虚拟滚动/列表刷新），
- *  仅在布尔翻转时才发 IPC；主题渐变期间跳过——fadeBorderColor 已按当时遮罩
- *  态定过终点，落定后 setThemeWithFx 的 .then(syncBorderColor) 会按新态兜底。
- *  惰性安装于 applyTheme 首次调用（真机启动 load 必经）：vitest node 环境
- *  无 MutationObserver，模块顶层创建会让所有引入本店的测试炸 import。
- *  maskPresent 恒为模块级单一事实来源，resolveBorder 只读标记不查 DOM
- *  （守卫测试的 document 桩无 querySelector，标记路径天然可测） */
-let maskPresent = false;
-let maskObserverInstalled = false;
-function ensureMaskObserver() {
-  if (maskObserverInstalled || typeof MutationObserver === "undefined") return;
-  maskObserverInstalled = true;
-  new MutationObserver(() => {
-    const present = document.querySelector(".bp6-overlay-backdrop") !== null;
-    if (present === maskPresent || themeFxInFlight) return;
-    maskPresent = present;
-    syncBorderColor();
-  }).observe(document.body, { childList: true, subtree: true });
-}
-
 export function applyTheme(theme: Settings["theme"]) {
-  ensureMaskObserver();
   const dark =
     theme === "dark" ||
     (theme === "system" &&
@@ -292,7 +260,7 @@ export function setThemeWithFx(
       theme === "dark" ||
       (theme === "system" &&
         window.matchMedia("(prefers-color-scheme: dark)").matches);
-    fadeBorderColor(resolveBorder(dark), THEME_FX_MS);
+    fadeBorderColor(dark ? 0x131519 : 0xe9ecf1, THEME_FX_MS);
     void vt.finished
       .catch(() => undefined)
       .then(() => {

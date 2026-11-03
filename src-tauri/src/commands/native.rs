@@ -7,16 +7,13 @@ use tauri::{AppHandle, Manager};
 use super::files::AppError;
 
 /// 无边框窗口顶部 1px 非客户区的填充色（COLORREF 0x00BBGGRR）。
-/// 默认浅色画布 #e9ecf1；深色/遮罩态由前端经 set_border_color 同步
-/// （#131519；遮罩在场 = 压暗画布 #9da1a9，2026-11-03 定案）
+/// 默认浅色画布 #e9ecf1；深色主题由前端经 set_border_color 同步（#131519）
 #[cfg(windows)]
 pub static BORDER_COLOR: AtomicU32 = AtomicU32::new(0x00F1_ECE9);
 
-/// 主题切换/遮罩开关时同步窗口边框区颜色（color = COLORREF 0x00BBGGRR）。
+/// 主题切换时同步窗口边框区颜色（color = COLORREF 0x00BBGGRR）。
 /// 该区是 tao 阴影 insets 留出的系统绘制带（Win11 顶缘 1px），系统默认强调色
-/// 或窗口背景亮条都会浮出可见横线——填成画布色融入背景（2026-10-17 定案）。
-/// 遮罩（.bp6-overlay-backdrop）在场时前端改传压暗画布色：backdrop 盖不到
-/// 本区，停留画布原色会浮成四缘亮线（2026-11-03 定案）
+/// 或窗口背景亮条都会浮出可见横线——填成画布色融入背景（2026-10-17 定案）
 #[tauri::command]
 pub fn set_border_color(app: AppHandle, color: u32) {
     #[cfg(windows)]
