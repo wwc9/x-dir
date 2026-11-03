@@ -1803,15 +1803,10 @@ export function FileList({
                     time: formatShortTime(stats.single.mtimeMs),
                   })
               : t(" · 选中 {n} 项", { n: selected.length }) +
-                // 含文件夹 = 仅数量（合计/类型摘要不展示——文件夹大小未知，部分和误导）
-                (stats.hasDir
-                  ? ""
-                  : (stats.size > 0
-                      ? ` (${formatSize({ isDir: false, size: stats.size })})`
-                      : "") +
-                    (stats.topTypes.length
-                      ? ` · ${stats.topTypes.map((x) => `${x.label}×${x.n}`).join(" · ")}`
-                      : "")))}
+                // 含文件夹 = 仅数量（合计不展示——文件夹大小未知，部分和误导）
+                (!stats.hasDir && stats.size > 0
+                  ? ` (${formatSize({ isDir: false, size: stats.size })})`
+                  : ""))}
         </span>
         <span className="np-ellipsis">
           {free !== null && !searchActive && t("可用 {s}", { s: formatSize({ isDir: false, size: free }) })}
