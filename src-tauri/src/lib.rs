@@ -127,7 +127,9 @@ pub fn run() {
             // insets，WebView 之外由系统绘制）。该区颜色由 DWMWA_BORDER_COLOR 决定：
             // 系统默认 = 强调色蓝线（弹层抢焦点后还会被重置回来），COLOR_NONE =
             // 露出窗口背景亮条——都会形成可见横线（2026-10-17 三次定位）。正确做法
-            // 是填成画布色融入背景，且主题切换时由前端 set_border_color 同步深浅值
+            // 是填成画布色融入背景，且主题切换时由前端 set_border_color 同步深浅值；
+            // 遮罩（backdrop）在场时前端同步切为压暗画布色——backdrop 盖不到本区，
+            // 停留画布原色会浮成四缘亮线（2026-11-03 定案）
             #[cfg(windows)]
             {
                 use windows::Win32::Foundation::HWND;
