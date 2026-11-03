@@ -15,6 +15,7 @@ import {
 } from "../lib/ipc";
 import { applyBatch, EMPTY_STREAM, nextPaneSearchReq } from "../lib/searchStream";
 import { formatElapsed, formatSize, formatTime } from "../lib/format";
+import { formatShortTime, selStats } from "../lib/selStats";
 import { extOf, fileIcon, typeName } from "../lib/fileIcons";
 import { DENSITY } from "../lib/tokens";
 import { isValidName, joinPath, parentPath } from "../lib/path";
@@ -1426,11 +1427,8 @@ export function FileList({
     [tabId, count, perRow, entries, pages, drives, confirmDelete, path],
   );
 
-  const selSize = useMemo(() => {
-    if (!selected.length) return 0;
-    const set_ = new Set(selected);
-    return entries.reduce((n, e) => (set_.has(e.path) ? n + e.size : n), 0);
-  }, [selected, entries]);
+  // 选中统计（2026-11-03 方案 B）：多选 = 数量+大小+类型 Top2；单选 = 行内属性条
+  const stats = useMemo(() => selStats(selected, entries), [selected, entries]);
 
   const sortArrow = (key: SortKey) =>
     sort.key === key ? (sort.dir === "asc" ? " ↑" : " ↓") : "";
@@ -1796,9 +1794,22 @@ export function FileList({
               : t("Σ {n} 个对象", { n: count.toLocaleString() })}
           {!searchActive &&
             selected.length > 0 &&
-            t(" · 选中 {n} 项", { n: selected.length }) +
-              (selSize > 0 ? ` (${formatSize({ isDir: false, size: selSize })})` : "")
-        }</span>
+            (stats.single
+              ? stats.single.isDir
+                ? t(" · {name} · 文件夹", { name: stats.single.name })
+                : t(" · {name} · {size} · 修改于 {time}", {
+                    name: stats.single.name,
+                    size: formatSize({ isDir: false, size: stats.single.size }),
+                    time: formatShortTime(stats.single.mtimeMs),
+                  })
+              : t(" · 选中 {n} 项", { n: selected.length }) +
+                (stats.size > 0
+                  ? ` (${formatSize({ isDir: false, size: stats.size })})`
+                  : "") +
+                (stats.topTypes.length
+                  ? ` · ${stats.topTypes.map((x) => `${x.label}×${x.n}`).join(" · ")}`
+                  : ""))}
+        </span>
         <span className="np-ellipsis">
           {free !== null && !searchActive && t("可用 {s}", { s: formatSize({ isDir: false, size: free }) })}
           {dropHover && t(" · 释放以放入")}
