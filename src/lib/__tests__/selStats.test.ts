@@ -33,25 +33,23 @@ describe("选中统计（selStats，2026-11-03）", () => {
     expect(s.resolved).toBe(0);
   });
 
-  it("多选：大小合计（文件夹不计）+ 类型 Top2 摘要", () => {
+  it("多选纯文件：大小合计 + 类型 Top2 摘要（无文件夹）", () => {
     const es = [f("a.pdf"), f("b.pdf"), f("c.pdf"), f("d.xlsx"), f("e.xlsx"), f("f.png")];
     const s = selStats(es.map((x) => x.path), es);
     expect(s.count).toBe(6);
     expect(s.size).toBe(600);
+    expect(s.hasDir).toBe(false);
     expect(s.topTypes).toEqual([
       { label: "PDF", n: 3 },
       { label: "XLSX", n: 2 },
     ]); // PNG 第三名被截掉
   });
 
-  it("文件夹归并为统一标签且不计大小", () => {
+  it("多选含文件夹：hasDir 置位（调用方只显示数量，不含合计/摘要）", () => {
     const es = [d("dir1"), d("dir2"), f("a.txt", 50)];
     const s = selStats(es.map((x) => x.path), es);
-    expect(s.size).toBe(50);
-    expect(s.topTypes).toEqual([
-      { label: "文件夹", n: 2 },
-      { label: "TXT", n: 1 },
-    ]);
+    expect(s.hasDir).toBe(true);
+    expect(s.size).toBe(50); // 纯文件部分仍计，但调用方不再展示
   });
 
   it("扩展名大写归并；无扩展名单列", () => {
