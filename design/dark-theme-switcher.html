@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>X-Dir 暗色主题实验室 · 六套方案一页切换</title>
+<style>
+/* ═══ 调色板 token：六套方案，body 换类即全局生效 ═══ */
+/* 指标/图标/标记色全方案共用 */
+:root {
+  --np-radius-pane: 10px; --np-gutter: 6px; --np-radius: 6px; --np-radius-lg: 10px;
+  --np-ctl-h: 24px; --np-row-h: 28px; --np-font-ui: 13px; --np-font-sm: 11px;
+  --np-danger: #f27073; --np-success: #5cb964;
+  --np-icon-folder: #e5a922; --np-icon-code: #43c1dc; --np-icon-image: #79a9ff;
+  --np-icon-exe: #a08df5; --np-icon-generic: var(--np-muted);
+  --np-tag-red: #f27073; --np-tag-green: #3bb074;
+}
+/* A 黑曜石 Onyx：近黑画布 + 亮卡，拉大明暗差 */
+body.t-a {
+  --np-bg: #0d0f12; --np-surface: #1a1e24; --np-surface-2: #232833; --np-border: #454d59;
+  --np-hairline: rgba(255,255,255,0.11); --np-fg: #f0f2f5; --np-muted: #9aa3af;
+  --np-accent: #5c9dff; --np-accent-fg: #0d1117; --np-sel: rgba(92,157,255,0.20);
+  --np-hover: rgba(255,255,255,0.07); --np-stripe: rgba(255,255,255,0.045);
+}
+/* B 石墨 Graphite：亮度不变，描边与结构线全线加强 */
+body.t-b {
+  --np-bg: #14171b; --np-surface: #1d2127; --np-surface-2: #272c34; --np-border: #4b5462;
+  --np-hairline: rgba(255,255,255,0.10); --np-fg: #eceef1; --np-muted: #949ca7;
+  --np-accent: #5c9dff; --np-accent-fg: #0d1117; --np-sel: rgba(92,157,255,0.18);
+  --np-hover: rgba(255,255,255,0.06); --np-stripe: rgba(255,255,255,0.04);
+}
+/* C 冷钢 Steel：全栈蓝灰同色相分层 */
+body.t-c {
+  --np-bg: #0f1318; --np-surface: #171d26; --np-surface-2: #1f2732; --np-border: #39455a;
+  --np-hairline: rgba(255,255,255,0.09); --np-fg: #e9edf4; --np-muted: #939ead;
+  --np-accent: #6daaff; --np-accent-fg: #0d1117; --np-sel: rgba(109,170,255,0.20);
+  --np-hover: rgba(255,255,255,0.06); --np-stripe: rgba(255,255,255,0.04);
+}
+/* D 纯黑 OLED：真·纯黑画布（AMOLED 式），零灰汤、对比之王 */
+body.t-d {
+  --np-bg: #000000; --np-surface: #0e0e10; --np-surface-2: #191a1c; --np-border: #303237;
+  --np-hairline: rgba(255,255,255,0.12); --np-fg: #f4f4f5; --np-muted: #a0a0a6;
+  --np-accent: #5c9dff; --np-accent-fg: #0d1117; --np-sel: rgba(92,157,255,0.22);
+  --np-hover: rgba(255,255,255,0.07); --np-stripe: rgba(255,255,255,0.05);
+}
+/* E 夜读暖褐：暖褐纸感 + 琥珀强调，夜间不刺眼的护眼向 */
+body.t-e {
+  --np-bg: #1a1512; --np-surface: #241e19; --np-surface-2: #2f2721; --np-border: #4a3d31;
+  --np-hairline: rgba(255,225,190,0.10); --np-fg: #f2ebe3; --np-muted: #ab9d8f;
+  --np-accent: #e8a35c; --np-accent-fg: #201408; --np-sel: rgba(232,163,92,0.20);
+  --np-hover: rgba(255,230,200,0.055); --np-stripe: rgba(255,230,200,0.04);
+}
+/* F 暗夜紫：One Dark / Discord 式紫调深色，彩色氛围最浓 */
+body.t-f {
+  --np-bg: #14111c; --np-surface: #1d1927; --np-surface-2: #282234; --np-border: #403654;
+  --np-hairline: rgba(255,255,255,0.09); --np-fg: #edeaf5; --np-muted: #9c94b0;
+  --np-accent: #a78bfa; --np-accent-fg: #17121f; --np-sel: rgba(167,139,250,0.22);
+  --np-hover: rgba(255,255,255,0.06); --np-stripe: rgba(255,255,255,0.04);
+}
+
+* { box-sizing: border-box; margin: 0; }
+body {
+  background: var(--np-bg); color: var(--np-fg);
+  font: var(--np-font-ui)/1.45 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+  padding: 0 clamp(16px, 4vw, 48px) 60px;
+  transition: background .18s ease;
+}
+/* ── 主题切换条（吸顶）── */
+.switcher {
+  position: sticky; top: 0; z-index: 9; margin: 0 calc(-1 * clamp(16px, 4vw, 48px)) 16px;
+  padding: 10px clamp(16px, 4vw, 48px);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: color-mix(in srgb, var(--np-bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--np-hairline);
+}
+.switcher .lab { font-size: var(--np-font-sm); color: var(--np-muted); margin-right: 2px; }
+.swb {
+  display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 12px;
+  border-radius: 999px; border: 1px solid var(--np-border);
+  background: var(--np-surface); color: var(--np-muted);
+  font: 600 12px/1 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; cursor: pointer;
+}
+.swb:hover { color: var(--np-fg); background: var(--np-hover); }
+.swb.on {
+  color: var(--np-accent-fg); background: var(--np-accent); border-color: transparent;
+}
+.swb i { width: 9px; height: 9px; border-radius: 999px; display: inline-block; }
+.switcher .kbd { margin-left: auto; font-size: var(--np-font-sm); color: var(--np-muted); }
+
+.hd { max-width: 1240px; margin: 0 auto 18px; }
+.hd h1 { font-size: 17px; font-weight: 600; }
+.hd .tg { color: var(--np-muted); font-size: var(--np-font-sm); margin-top: 4px; }
+.hd .tg b { color: var(--np-fg); }
+.app { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--np-gutter); }
+/* 顶栏 */
+.titlebar { display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 8px;
+  background: var(--np-surface); border: 1px solid var(--np-border); border-radius: var(--np-radius-pane); }
+.tbtn { display: inline-flex; align-items: center; justify-content: center; width: var(--np-ctl-h); height: var(--np-ctl-h);
+  border-radius: var(--np-radius); color: var(--np-muted); }
+.tbtn:hover { background: var(--np-hover); color: var(--np-fg); }
+.tbtn.primary { color: var(--np-accent); }
+.addr { flex: 1; display: flex; align-items: center; gap: 6px; height: var(--np-ctl-h); padding: 0 10px;
+  background: var(--np-surface-2); border-radius: var(--np-radius); color: var(--np-muted); font-size: 12px; }
+.addr.focus { box-shadow: 0 0 0 2px color-mix(in srgb, var(--np-accent) 45%, transparent); color: var(--np-fg); }
+.tsep { width: 1px; height: 14px; background: var(--np-border); margin: 0 4px; }
+.winbtn { width: 40px; height: 28px; display: inline-flex; align-items: center; justify-content: center; color: var(--np-muted); border-radius: var(--np-radius); }
+.winbtn.close:hover { background: #c42b1c; color: #fff; }
+/* 主体三栏 */
+.body { display: flex; gap: var(--np-gutter); align-items: stretch; }
+.card { background: var(--np-surface); border: 1px solid var(--np-border); border-radius: var(--np-radius-pane); }
+.side { width: 148px; flex: 0 0 auto; display: flex; flex-direction: column; gap: var(--np-gutter); }
+.side .card { padding: 8px; }
+.side h5 { font-size: var(--np-font-sm); font-weight: 600; color: var(--np-muted); padding: 2px 4px 6px; }
+.wsi { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border-radius: var(--np-radius); color: var(--np-muted); font-size: 12px; }
+.wsi:hover { background: var(--np-hover); color: var(--np-fg); }
+.wsi.on { background: var(--np-sel); color: var(--np-fg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--np-accent) 40%, transparent); }
+.shelfrow { display: flex; gap: 6px; }
+.shelf-chip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 999px;
+  background: var(--np-surface-2); border: 1px solid var(--np-hairline); font-size: var(--np-font-sm); color: var(--np-muted); }
+/* 导航树 */
+.tree { width: 168px; flex: 0 0 auto; padding: 6px; }
+.trw { display: flex; align-items: center; gap: 5px; height: 26px; padding: 0 6px; border-radius: var(--np-radius); color: var(--np-muted); font-size: 12px; }
+.trw .chev { width: 12px; font-size: 9px; color: var(--np-muted); }
+.trw:hover { background: var(--np-hover); color: var(--np-fg); }
+.trw.on { background: var(--np-sel); color: var(--np-fg); }
+.trw.sub { margin-left: 14px; }
+.trw.loc { color: var(--np-fg); font-weight: 600; }
+/* 窗格 */
+.panes { flex: 1; min-width: 0; display: flex; gap: var(--np-gutter); }
+.pane { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+.pane.active { border-color: color-mix(in srgb, var(--np-accent) 60%, var(--np-border)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--np-accent) 55%, transparent); }
+.tabs { display: flex; align-items: center; gap: 4px; padding: 6px 8px 0; }
+.tab { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 12px; border-radius: var(--np-radius);
+  background: var(--np-surface-2); color: var(--np-muted); font-size: 12px; }
+.pane.active .tab.on { background: var(--np-sel); color: var(--np-fg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--np-accent) 45%, transparent); }
+.pnav { display: flex; align-items: center; gap: 4px; padding: 6px 8px; }
+.tool { display: flex; gap: 2px; margin-left: auto; }
+.head, .row { display: grid; grid-template-columns: minmax(0,1fr) 110px 96px 76px; gap: 8px; align-items: center; }
+.head { height: 26px; padding: 0 10px; margin-top: 4px; color: var(--np-muted); font-size: var(--np-font-sm);
+  border-bottom: 1px solid var(--np-hairline); }
+.head .r { text-align: right; }
+.rows { padding: 0 2px 6px; }
+.row { height: var(--np-row-h); padding: 0 8px; border-radius: var(--np-radius); }
+.row:nth-child(even) { background: var(--np-stripe); }
+.row:hover { background: var(--np-hover); }
+.row.sel { background: var(--np-sel); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--np-accent) 35%, transparent); }
+.c { color: var(--np-muted); font-size: 12px; }
+.r { text-align: right; }
+.c-name { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.ic { display: inline-flex; flex: 0 0 auto; }
+.ic.folder { color: var(--np-icon-folder); } .ic.code { color: var(--np-icon-code); }
+.ic.image { color: var(--np-icon-image); } .ic.exe { color: var(--np-icon-exe); } .ic.file { color: var(--np-icon-generic); }
+.nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dot { width: 7px; height: 7px; border-radius: 999px; background: var(--c); }
+.pstatus { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; margin-top: auto;
+  border-top: 1px solid var(--np-hairline); color: var(--np-muted); font-size: var(--np-font-sm); }
+.pstatus .no { color: var(--np-accent); font-weight: 600; }
+.pane.active .pstatus .no { color: var(--np-fg); }
+/* 浮层样例 */
+.overlays { max-width: 1240px; margin: var(--np-gutter) auto 0; display: flex; gap: var(--np-gutter); align-items: flex-start; flex-wrap: wrap; }
+.menu { width: 232px; padding: 5px; background: var(--np-surface); border: 1px solid var(--np-border);
+  border-radius: var(--np-radius-lg); box-shadow: 0 16px 40px rgba(0,0,0,.5); }
+.mi { display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 9px; border-radius: var(--np-radius); color: var(--np-fg); font-size: 12px; }
+.mi:hover { background: var(--np-hover); }
+.mi .sc { margin-left: auto; color: var(--np-muted); font-size: var(--np-font-sm); }
+.mi.danger { color: var(--np-danger); }
+.msep { height: 1px; margin: 5px 8px; background: var(--np-hairline); }
+.dlg { width: 340px; background: var(--np-surface); border: 1px solid var(--np-border); border-radius: var(--np-radius-pane);
+  box-shadow: 0 16px 40px rgba(0,0,0,.5); overflow: hidden; }
+.dlg .bd { padding: 16px 18px; font-size: 13px; }
+.dlg .bd small { display: block; margin-top: 6px; color: var(--np-muted); font-size: var(--np-font-sm); }
+.dlg .ft { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--np-hairline); }
+.btn { display: inline-flex; align-items: center; height: var(--np-ctl-h); padding: 0 14px; border-radius: var(--np-radius);
+  background: var(--np-surface-2); color: var(--np-fg); font-size: 12px; }
+.btn.primary { background: var(--np-accent); color: var(--np-accent-fg); font-weight: 600; }
+.btn.danger { background: var(--np-danger); color: #14161a; font-weight: 600; }
+.ovlabel { width: 100%; color: var(--np-muted); font-size: var(--np-font-sm); margin: 14px 0 -6px; }
+/* token 表 */
+.tokens { max-width: 1240px; margin: 26px auto 0; }
+.tokens h2 { font-size: 13px; margin-bottom: 10px; }
+.tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(288px, 1fr)); gap: 8px; }
+.tk { display: flex; align-items: center; gap: 8px; padding: 7px 10px; background: var(--np-surface);
+  border: 1px solid var(--np-border); border-radius: var(--np-radius); font-size: 12px; }
+.chip { width: 15px; height: 15px; border-radius: 4px; flex: 0 0 auto; border: 1px solid var(--np-border); }
+.tk b { font-family: ui-monospace, Consolas, monospace; font-weight: 600; font-size: 11px; }
+.tk code { color: var(--np-muted); font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
+.tk span { margin-left: auto; color: var(--np-muted); font-size: 11px; text-align: right; }
+</style>
+</head>
+<body class="t-d">
+
+<div class="switcher" id="switcher">
+  <span class="lab">方案</span>
+  <button class="swb" data-t="a"><i style="background:#0d0f12;box-shadow:inset 0 0 0 1px #454d59"></i>A 黑曜石</button>
+  <button class="swb" data-t="b"><i style="background:#1d2127;box-shadow:inset 0 0 0 1px #4b5462"></i>B 石墨</button>
+  <button class="swb" data-t="c"><i style="background:#171d26;box-shadow:inset 0 0 0 1px #39455a"></i>C 冷钢</button>
+  <button class="swb" data-t="d"><i style="background:#000;box-shadow:inset 0 0 0 1px #303237"></i>D 纯黑 OLED</button>
+  <button class="swb" data-t="e"><i style="background:#241e19;box-shadow:inset 0 0 0 1px #4a3d31"></i>E 夜读暖褐</button>
+  <button class="swb" data-t="f"><i style="background:#1d1927;box-shadow:inset 0 0 0 1px #403654"></i>F 暗夜紫</button>
+  <span class="kbd">数字键 1–6 快速切换</span>
+</div>
+
+<header class="hd">
+  <h1>X-Dir 暗色主题实验室</h1>
+  <div class="tg" id="tagline">占位</div>
+</header>
+
+<div class="app">
+  <div class="titlebar">
+    <span class="tbtn primary">▣</span><span class="tbtn">‹</span><span class="tbtn">›</span><span class="tbtn">↑</span>
+    <div class="addr"><span>📁</span> E: › AIProject › <b>x-dir</b><span style="margin-left:auto">⌕</span></div>
+    <div class="addr focus" style="flex:0 0 150px">筛选…</div>
+    <span class="tsep"></span>
+    <span class="tbtn">⧉</span><span class="tbtn">⚙</span>
+    <span class="tsep"></span>
+    <span class="winbtn">─</span><span class="winbtn">▢</span><span class="winbtn close">✕</span>
+  </div>
+
+  <div class="body">
+    <aside class="side">
+      <div class="card">
+        <h5>布局方案</h5>
+        <div class="wsi on">双列 A</div>
+        <div class="wsi">四宫格</div>
+        <div class="wsi">三列宽</div>
+      </div>
+      <div class="card">
+        <h5>暂存区</h5>
+        <div class="shelfrow">
+          <span class="shelf-chip">📄 报表.xlsx</span>
+          <span class="shelf-chip">📁 素材</span>
+        </div>
+      </div>
+    </aside>
+
+    <nav class="tree card">
+      <div class="trw on"><span class="chev">▾</span>💽 此电脑</div>
+      <div class="trw sub loc"><span class="chev">▾</span>📁 x-dir (E:)</div>
+      <div class="trw sub"><span class="chev">▸</span>📁 src</div>
+      <div class="trw sub"><span class="chev">▸</span>📁 src-tauri</div>
+      <div class="trw sub"><span class="chev">▸</span>📁 docs</div>
+      <div class="trw"><span class="chev">▸</span>📁 下载</div>
+      <div class="trw"><span class="chev">▸</span>📁 桌面</div>
+    </nav>
+
+    <div class="panes">
+      <section class="pane card active">
+        <div class="tabs">
+          <span class="tab on">📁 x-dir</span>
+          <span class="tab">📁 docs</span>
+          <span class="tbtn" style="width:22px;height:22px">＋</span>
+        </div>
+        <div class="pnav">
+          <span class="tbtn">‹</span><span class="tbtn">↑</span><span class="tbtn">⟳</span>
+          <span class="tool"><span class="tbtn">⊞</span><span class="tbtn">⋮</span></span>
+        </div>
+        <div class="head"><span>名称 ↑</span><span>修改时间</span><span>类型</span><span class="r">大小</span></div>
+        <div class="rows">
+          <div class="row"><span class="c-name"><i class="ic folder"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M1.5 4.5a1 1 0 0 1 1-1h3.2l1.4 1.6h6.4a1 1 0 0 1 1 1v6.4a1 1 0 0 1-1 1H2.5a1 1 0 0 1-1-1z" fill="currentColor" fill-opacity="0.18"/></svg></i><span class="nm">src</span></span><span class="c">今天 14:32</span><span class="c">文件夹</span><span class="c r"></span></div>
+          <div class="row sel"><span class="c-name"><i class="ic folder"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M1.5 4.5a1 1 0 0 1 1-1h3.2l1.4 1.6h6.4a1 1 0 0 1 1 1v6.4a1 1 0 0 1-1 1H2.5a1 1 0 0 1-1-1z" fill="currentColor" fill-opacity="0.18"/></svg></i><span class="nm">src-tauri</span></span><span class="c">今天 14:32</span><span class="c">文件夹</span><span class="c r"></span></div>
+          <div class="row"><span class="c-name"><i class="ic code"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"><path d="M4 1.5h5l3 3v10a.8.8 0 0 1-.8.8H4.8A.8.8 0 0 1 4 14.5v-12.2a.8.8 0 0 1 .8-.8z"/><path d="m6.6 8.4-1.4 1.4 1.4 1.4M9.4 8.4l1.4 1.4-1.4 1.4"/></svg></i><span class="nm">App.tsx</span><span class="dot" style="--c:var(--np-accent)"></span></span><span class="c">昨天 21:07</span><span class="c">TSX 文件</span><span class="c r">18 KB</span></div>
+          <div class="row sel"><span class="c-name"><i class="ic code"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"><path d="M4 1.5h5l3 3v10a.8.8 0 0 1-.8.8H4.8A.8.8 0 0 1 4 14.5v-12.2a.8.8 0 0 1 .8-.8z"/><path d="m6.6 8.4-1.4 1.4 1.4 1.4M9.4 8.4l1.4 1.4-1.4 1.4"/></svg></i><span class="nm">settings.ts</span></span><span class="c">昨天 21:07</span><span class="c">TS 文件</span><span class="c r">12 KB</span></div>
+          <div class="row"><span class="c-name"><i class="ic image"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"><rect x="2" y="3" width="12" height="10" rx="1"/><circle cx="5.6" cy="6.4" r="1"/><path d="m3.5 12 3-3 2.5 2.5 2-2 2.5 2.5"/></svg></i><span class="nm">banner.png</span></span><span class="c">10-30 09:15</span><span class="c">PNG 图片</span><span class="c r">204 KB</span></div>
+          <div class="row"><span class="c-name"><i class="ic exe"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 6h12M5 4.4h.01M7 4.4h.01"/></svg></i><span class="nm">x-dir.exe</span></span><span class="c">10-28 17:40</span><span class="c">应用程序</span><span class="c r">9.4 MB</span></div>
+          <div class="row"><span class="c-name"><i class="ic file"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"><path d="M4 1.5h5l3 3v10a.8.8 0 0 1-.8.8H4.8A.8.8 0 0 1 4 14.5v-12.2a.8.8 0 0 1 .8-.8z"/><path d="M9 1.5v3h3"/></svg></i><span class="nm">REQUIREMENTS.md</span><span class="dot" style="--c:var(--np-tag-green)"></span></span><span class="c">10-27 11:02</span><span class="c">Markdown</span><span class="c r">64 KB</span></div>
+        </div>
+        <div class="pstatus"><span class="no">#1</span> · 128 项 · 已选 2 项 · 12.4 MB</div>
+      </section>
+
+      <section class="pane card">
+        <div class="tabs"><span class="tab on">📁 下载</span><span class="tbtn" style="width:22px;height:22px">＋</span></div>
+        <div class="pnav">
+          <span class="tbtn">‹</span><span class="tbtn">↑</span><span class="tbtn">⟳</span>
+          <span class="tool"><span class="tbtn">⊞</span><span class="tbtn">⋮</span></span>
+        </div>
+        <div class="head"><span>名称 ↓</span><span>修改时间</span><span>类型</span><span class="r">大小</span></div>
+        <div class="rows">
+          <div class="row"><span class="c-name"><i class="ic folder"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M1.5 4.5a1 1 0 0 1 1-1h3.2l1.4 1.6h6.4a1 1 0 0 1 1 1v6.4a1 1 0 0 1-1 1H2.5a1 1 0 0 1-1-1z" fill="currentColor" fill-opacity="0.18"/></svg></i><span class="nm">驱动与固件</span></span><span class="c">今天 09:02</span><span class="c">文件夹</span><span class="c r"></span></div>
+          <div class="row"><span class="c-name"><i class="ic file"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"><path d="M4 1.5h5l3 3v10a.8.8 0 0 1-.8.8H4.8A.8.8 0 0 1 4 14.5v-12.2a.8.8 0 0 1 .8-.8z"/><path d="M9 1.5v3h3"/></svg></i><span class="nm">年度审计底稿.zip</span></span><span class="c">今天 08:47</span><span class="c">ZIP 压缩包</span><span class="c r">1.2 GB</span></div>
+          <div class="row"><span class="c-name"><i class="ic image"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"><rect x="2" y="3" width="12" height="10" rx="1"/><circle cx="5.6" cy="6.4" r="1"/><path d="m3.5 12 3-3 2.5 2.5 2-2 2.5 2.5"/></svg></i><span class="nm">截图 2026-11-02.png</span></span><span class="c">昨天 22:31</span><span class="c">PNG 图片</span><span class="c r">88 KB</span></div>
+          <div class="row"><span class="c-name"><i class="ic code"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"><path d="M4 1.5h5l3 3v10a.8.8 0 0 1-.8.8H4.8A.8.8 0 0 1 4 14.5v-12.2a.8.8 0 0 1 .8-.8z"/><path d="m6.6 8.4-1.4 1.4 1.4 1.4M9.4 8.4l1.4 1.4-1.4 1.4"/></svg></i><span class="nm">cleanup.ps1</span></span><span class="c">10-25 15:19</span><span class="c">脚本</span><span class="c r">3 KB</span></div>
+        </div>
+        <div class="pstatus"><span class="no">#2</span> · 46 项</div>
+      </section>
+    </div>
+  </div>
+
+  <div class="overlays">
+    <div class="ovlabel">浮层样例：右键菜单 / 确认对话框（surface 底 + 描边 + 阴影 + 悬停态）</div>
+    <div class="menu">
+      <div class="mi">打开 <span class="sc">Enter</span></div>
+      <div class="mi">在终端中打开</div>
+      <div class="msep"></div>
+      <div class="mi">复制 <span class="sc">Ctrl+C</span></div>
+      <div class="mi">剪切 <span class="sc">Ctrl+X</span></div>
+      <div class="mi">重命名 <span class="sc">F2</span></div>
+      <div class="msep"></div>
+      <div class="mi danger">删除 <span class="sc">Del</span></div>
+    </div>
+    <div class="dlg">
+      <div class="bd">删除 2 个项目？<small>放入回收站（可在其中恢复）</small></div>
+      <div class="ft"><span class="btn">取消</span><span class="btn danger">删除</span></div>
+    </div>
+    <div class="dlg">
+      <div class="bd">移动并替换？<small>目标已存在同名文件，保留较新版本。</small></div>
+      <div class="ft"><span class="btn">跳过</span><span class="btn primary">替换</span></div>
+    </div>
+  </div>
+
+  <section class="tokens">
+    <h2>Token 对照（随方案切换实时更新，选中后可整体平移进 index.css 的 .dark 段）</h2>
+    <div class="tgrid" id="tgrid"></div>
+  </section>
+</div>
+
+<script>
+const THEMES = {
+  a: { name: "A · 黑曜石 Onyx", tag: "对比优先：<b>近黑画布 + 亮卡</b>，拉大明暗差——卡片浮起感最强，长列表阅读最省力" },
+  b: { name: "B · 石墨 Graphite", tag: "边缘优先：<b>亮度与现行一致</b>，卡片描边与 hairline 全线加强——改动最克制，靠结构线分层" },
+  c: { name: "C · 冷钢 Steel", tag: "色相优先：<b>全栈蓝灰同色相分层</b>（VS Code / GitHub Dark 气质），强调色提亮" },
+  d: { name: "D · 纯黑 OLED", tag: "AMOLED 式<b>真·纯黑画布 #000000</b> + 微亮卡片：零灰汤、对比之王，夜间 OLED 屏最省电" },
+  e: { name: "E · 夜读暖褐", tag: "<b>暖褐纸感 + 琥珀强调色</b>：去蓝光的护眼向，深夜盯盘不刺眼，像给界面开了夜间模式" },
+  f: { name: "F · 暗夜紫", tag: "One Dark / Discord 式<b>紫调深色</b>：彩色氛围最浓、选中态最醒目，代码工具的熟悉感" },
+};
+const TOKENS = [
+  ["--np-bg", "画布（卡片之外的底）"],
+  ["--np-surface", "卡片/窗格/浮层面板底"],
+  ["--np-surface-2", "凹陷控件：输入框/内嵌列表"],
+  ["--np-border", "卡片描边"],
+  ["--np-hairline", "发丝线：表头下线/行分隔"],
+  ["--np-fg", "正文"],
+  ["--np-muted", "次级文字/辅助列"],
+  ["--np-accent", "强调色：激活描边/选中/主按钮"],
+  ["--np-sel", "选中行底色"],
+  ["--np-hover", "悬停底色"],
+  ["--np-stripe", "斑马纹"],
+];
+const KEYS = Object.keys(THEMES);
+
+function applyTheme(k) {
+  if (!THEMES[k]) k = "d";
+  document.body.className = "t-" + k;
+  document.getElementById("tagline").innerHTML =
+    "<b>" + THEMES[k].name + "</b> —— " + THEMES[k].tag;
+  document.querySelectorAll(".swb").forEach((b) =>
+    b.classList.toggle("on", b.dataset.t === k),
+  );
+  const cs = getComputedStyle(document.body);
+  const grid = document.getElementById("tgrid");
+  grid.innerHTML = "";
+  for (const [name, desc] of TOKENS) {
+    const v = cs.getPropertyValue(name).trim();
+    const el = document.createElement("div");
+    el.className = "tk";
+    el.innerHTML =
+      '<i class="chip" style="background:' + v + '"></i><b>' + name +
+      "</b><code>" + v + "</code><span>" + desc + "</span>";
+    grid.appendChild(el);
+  }
+  location.hash = k;
+}
+document.querySelectorAll(".swb").forEach((b) => {
+  b.addEventListener("click", () => applyTheme(b.dataset.t));
+});
+document.addEventListener("keydown", (e) => {
+  const i = Number(e.key) - 1;
+  if (i >= 0 && i < KEYS.length) applyTheme(KEYS[i]);
+});
+applyTheme((location.hash || "#d").slice(1));
+</script>
+</body>
+</html>
