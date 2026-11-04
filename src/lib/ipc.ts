@@ -1000,12 +1000,3 @@ export const api = {
   shotPinFile: (file: string, cx: number, cy: number) =>
     cmd<void>("shot_pin_file", { file, cx, cy }),
 };
-
-// M0 内存对比用假数据命令保留
-export function listFakeDir(
-  path: string,
-  offset: number,
-  limit: number,
-): Promise<DirPage> {
-  return invoke("fake_list_dir", { path, offset, limit });
-}

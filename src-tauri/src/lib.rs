@@ -257,7 +257,6 @@ pub fn run() {
             commands::terminal::open_terminal,
             commands::watch::watch_dir,
             commands::watch::unwatch_dir,
-            commands::fake::fake_list_dir,
             commands::search::search_dir,
             commands::search::search_all,
             commands::search::suggest_paths,

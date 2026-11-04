@@ -4,7 +4,6 @@ pub mod clipboard;
 pub mod cliphist;
 pub mod config_cmds;
 pub mod drives;
-pub mod fake;
 pub mod files;
 pub mod hotkeys;
 pub mod icons;

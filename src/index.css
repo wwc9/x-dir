@@ -738,19 +738,11 @@ body:has(.bp6-overlay-backdrop) .np-winedge {
 .np-island.is-static {
   pointer-events: none;
 }
-.np-island.is-live,
-.np-island.is-ok {
+.np-island.is-live {
   color: var(--np-accent);
 }
-.np-island.is-fail {
-  color: var(--np-danger);
-}
-.np-island.is-clickable.is-live:hover,
-.np-island.is-clickable.is-ok:hover {
+.np-island.is-clickable.is-live:hover {
   color: var(--np-accent);
-}
-.np-island.is-clickable.is-fail:hover {
-  color: var(--np-danger);
 }
 /* 迷你进度条（岛任务通道）：track = hover 底、fill = accent；
    确定态宽度 = 百分比（width 过渡让进度事件间平滑滑动）；
@@ -1199,16 +1191,6 @@ body.np-col-resizing .np-menued-grip::after {
   align-items: center;
   gap: 4px;
 }
-.np-shelf-count {
-  min-width: 16px;
-  padding: 0 5px;
-  border-radius: var(--np-radius-pill);
-  background: var(--np-surface-2);
-  font-size: var(--np-font-sm);
-  line-height: 16px;
-  text-align: center;
-  color: var(--np-muted);
-}
 /* 拖出语义切换（2026-10-20 定案双段文字分段 → 2026-10-21 定案 · 方案 F 滑块式
    双图标分段）：胶囊轨道内 accent thumb 平移指示当前态（0.18s transform 过渡），
    folder-input = 移动、copy = 复制，两态同见点另一半即切换；激活钮图标反白，
@@ -1394,10 +1376,6 @@ body.np-col-resizing .np-menued-grip::after {
 .np-menupage-title {
   font-size: var(--np-font-ui);
   color: var(--np-muted);
-}
-/* 工具栏行：勾选居左、↑↓ 靠右 */
-.np-set-rule-spacer {
-  flex: 1;
 }
 .np-menupage-body {
   flex: 1;
@@ -2866,13 +2844,6 @@ body.np-col-resizing * {
   color: var(--np-muted);
   min-width: 0;
 }
-/* 分段选择走通用 .np-seg（Blueprint 对齐覆盖段）；此处不再单独覆写 */
-.np-gsearch-sep {
-  flex: 0 0 auto;
-  width: 1px;
-  height: var(--np-ctl-h);
-  background: var(--np-hairline);
-}
 /* 过滤行：类型 / 范围分段 + 结果二次过滤框 + 排序与上限选择 */
 .np-gsearch-rowfilter {
   flex: 0 1 auto;
@@ -3809,16 +3780,6 @@ body.np-col-resizing * {
   min-width: 0;
   max-width: 100%;
 }
-.np-island-jobs {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
-  /* 高于内容区与普通浮层；低于对话框/预览 overlay */
-  z-index: 50;
-  max-height: 320px;
-  overflow-y: auto;
-}
 .np-job-icon {
   display: inline-flex;
   color: var(--np-fg);
@@ -4318,21 +4279,6 @@ body.np-col-resizing * {
   color: var(--np-muted);
   font-size: var(--np-font-sm);
 }
-/* 条件字段网格：标签在控件上方（caption 式），宽度自适应换行 */
-.np-menued-cond-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 8px 12px;
-}
-.np-menued-cfield {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-.np-menued-cfield .bp6-input-group {
-  width: 100%;
-}
 .np-menued-crange {
   display: flex;
   gap: var(--np-gap);
@@ -4510,9 +4456,6 @@ body.np-col-resizing * {
 }
 .np-pdfmlist-item[draggable="true"]:active {
   cursor: grabbing;
-}
-.np-pdfmlist-item.np-drag-over {
-  box-shadow: inset 0 2px 0 var(--np-accent);
 }
 .np-pdfmlist-grip {
   flex: none;
@@ -4815,20 +4758,6 @@ body.np-col-resizing * {
 }
 .np-shot-grip:active {
   cursor: grabbing;
-}
-.np-shot-size {
-  font-size: var(--np-font-sm);
-  color: var(--np-muted);
-  font-variant-numeric: tabular-nums;
-  padding: 0 6px;
-  white-space: nowrap;
-}
-.np-shot-sep {
-  width: 1px;
-  height: 22px;
-  background: var(--np-hairline);
-  margin: 0 2px;
-  flex: none;
 }
 .np-shot-tool {
   /* 统一固定宽度：两行按钮形成对齐网格（图标列跨行水平对齐） */

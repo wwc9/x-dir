@@ -1,5 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+// tailwind v4: index.css 顶部 @import "tailwindcss" 提供 preflight 基础层与
+// @custom-variant dark(暗色变体),插件不可移除
 import tailwindcss from "@tailwindcss/vite";
 // @ts-expect-error type error without @types/node package
 import process from "node:process";
