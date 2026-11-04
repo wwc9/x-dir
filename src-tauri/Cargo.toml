@@ -1,8 +1,9 @@
 [package]
 name = "x-dir"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "A multi-pane file manager for Windows with Everything-style full-disk search"
+authors = ["wwwwwc"]
+license = "MIT"
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
