@@ -120,18 +120,21 @@ function driveEntries(drives: DriveInfo[]): FileEntry[] {
 
 /** 着色规则匹配：*.ext 通配或名称子串（大小写不敏感），手动标记优先 */
 /** 首字母定位行内命中高亮（2026-11-05）：matchRangeOf 的字符区间把名称分三段，
- *  匹配段包 np-ta-hit；未激活 / 未命中 / 对齐失败（罕见字符）原样渲染 */
+ *  匹配段包 np-ta-hit；未激活 / 未命中 / 对齐失败（罕见字符）原样渲染。
+ *  isDir 透传：主名定位规则（文件夹整名不剥扩展名分隔）与匹配侧一致 */
 function TaName({
   name,
   py,
+  isDir,
   ta,
 }: {
   name: string;
   py?: string[] | null;
+  isDir?: boolean;
   ta: TypeAheadState | null;
 }) {
   if (!ta?.needle || !ta.mode) return <>{name}</>;
-  const range = matchRangeOf(name, py, ta.needle, ta.mode);
+  const range = matchRangeOf(name, py, ta.needle, ta.mode, isDir);
   if (!range) return <>{name}</>;
   const [start, len] = range;
   const chars = Array.from(name);
@@ -1677,6 +1680,7 @@ export function FileList({
                       <TaName
                         name={entry.name}
                         py={entry.py}
+                        isDir={entry.isDir}
                         ta={active && !searching ? typeAhead : null}
                       />
                     </span>

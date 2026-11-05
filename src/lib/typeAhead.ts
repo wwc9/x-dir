@@ -25,8 +25,11 @@
 export interface TypeAheadItem {
   name: string;
   path: string;
-  /** 拼音首字母匹配变体（Rust 端随列表下发，多音字全读音组合；不含汉字为 null） */
+  /** 拼音首字母匹配变体（Rust 端随列表下发，多音字全读音组合、**按主名生成**
+   *  ——扩展名不入定位（2026-11-05 定案）；不含汉字为 null） */
   py?: string[] | null;
+  /** 文件夹（主名 = 整名，名内的点不是扩展名分隔）；缺省按文件处理 */
+  isDir?: boolean;
 }
 
 export interface TypeAheadMatch {
@@ -69,8 +72,17 @@ function pysOf(it: TypeAheadItem, src: TaSrc): string[] {
   return src === 0 ? py.slice(0, 1) : py.slice(1);
 }
 
+/** 主名（去扩展名，2026-11-05 定案：定位只处理文件/文件夹名，不对扩展名
+ *  定位）——与 Rust entry.rs 同款规则：文件夹整名即主名（"2.收子公司附件"
+ *  的点不是分隔），首点文件（".gitignore"）不剥，仅剥最后一个点段 */
+function stemOf(name: string, isDir?: boolean): string {
+  if (isDir) return name;
+  const i = name.lastIndexOf(".");
+  return i > 0 && i + 1 < name.length ? name.slice(0, i) : name;
+}
+
 function matchOf(it: TypeAheadItem, needle: string, mode: Mode, src: TaSrc = 2): boolean {
-  const name = it.name.toLowerCase();
+  const name = stemOf(it.name, it.isDir).toLowerCase();
   const pys = pysOf(it, src).map((p) => p.toLowerCase());
   if (mode === "prefix") {
     if (name.startsWith(needle)) return true;
@@ -279,10 +291,14 @@ export function matchRangeOf(
   py: string[] | null | undefined,
   needle: string,
   mode: TaMode,
+  isDir?: boolean,
 ): [number, number] | null {
   const nd = needle.toLowerCase();
   if (!nd) return null;
-  const lname = name.toLowerCase();
+  // 主名定位（2026-11-05）：名称档与 py 对齐都只走主名——py 串本身已按主名
+  // 生成，名称分支用扩展名会对不齐
+  const stem = stemOf(name, isDir);
+  const lname = stem.toLowerCase();
   if (mode !== "pymid" && lname.includes(nd)) {
     // 名称命中（prefix 的 includes ⊇ startsWith；contains 同式）：按码点定位起点与长度
     let start = -1;
@@ -306,7 +322,7 @@ export function matchRangeOf(
   //（多变体：取首个能对齐成功的变体）
   if (!py?.length) return null;
   for (const variant of py) {
-    const r = pyRangeOf(name, variant, nd);
+    const r = pyRangeOf(stem, variant, nd);
     if (r) return r;
   }
   return null;

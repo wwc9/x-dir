@@ -93,7 +93,7 @@ describe("* 前缀 = 子串匹配（TC 原生语义）", () => {
 const cnItems = [
   { name: "forge请下这个txt文件", path: "E:\\a\\1", py: ["forgeqxzgtxtwj"] },
   { name: "modules", path: "E:\\a\\2", py: null },
-  { name: "预算表.xlsx", path: "E:\\a\\3", py: ["ysb.xlsx"] },
+  { name: "预算表.xlsx", path: "E:\\a\\3", py: ["ysb"] },
 ];
 
 describe("拼音首字母跳转（py 匹配串）", () => {
@@ -115,7 +115,7 @@ describe("拼音首字母跳转（py 匹配串）", () => {
 
 // 中段首字母场景（2026-11-05）：py = Rust 下发拼音首字母串（ASCII/数字段原样保留）
 const midItems = [
-  { name: "2026年度审计报告.pdf", path: "E:\\m\\1", py: ["2026ndsjbg.pdf"] },
+  { name: "2026年度审计报告.pdf", path: "E:\\m\\1", py: ["2026ndsjbg"] },
   { name: "审计底稿.docx", path: "E:\\m\\2", py: ["sjdg.docx"] },
   { name: "readme.md", path: "E:\\m\\3", py: null },
 ];
@@ -134,8 +134,8 @@ describe("拼音首字母中段匹配（文件名中间文字的首字母直达�
   it("前缀命中优先于中段（与列表顺序无关）", () => {
     // 中段命中项在前、前缀命中项在后：needle "sjbg" 应落前缀命中（idx 1）
     const mix = [
-      { name: "2026年度审计报告.pdf", path: "p0", py: ["2026ndsjbg.pdf"] },
-      { name: "世界博览会.txt", path: "p1", py: ["sjbg.txt"] },
+      { name: "2026年度审计报告.pdf", path: "p0", py: ["2026ndsjbg"] },
+      { name: "世界博览会.txt", path: "p1", py: ["sjbg"] },
     ];
     expect(typeAheadStep(mix, "sjb", "g", -1)?.idx).toBe(1);
   });
@@ -148,14 +148,14 @@ describe("拼音首字母中段匹配（文件名中间文字的首字母直达�
   it("重复字符与普通针同权：py 前缀与中段都可命中（循环移除后解禁）", () => {
     const rep = [
       { name: "b1.txt", path: "r0", py: null },
-      { name: "报表板.xlsx", path: "r1", py: ["bbb.xlsx"] },
+      { name: "报表板.xlsx", path: "r1", py: ["bbb"] },
       { name: "b2.txt", path: "r2", py: null },
     ];
     expect(typeAheadStep(rep, "", "b", -1)?.idx).toBe(0); // b1
     // "bb"：py 前缀命中 bbb.xlsx（tier1 首选前缀）
     expect(typeAheadStep(rep, "b", "b", 0)).toMatchObject({ idx: 1, needle: "bb", src: 0 });
     // "bb" 中段（名称以别的字开头）：年度报表板 → ndbbb 含 bb
-    const mid = [{ name: "年度报表板.xlsx", path: "m0", py: ["ndbbb.xlsx"] }];
+    const mid = [{ name: "年度报表板.xlsx", path: "m0", py: ["ndbbb"] }];
     expect(typeAheadStep(mid, "b", "b", -1)).toMatchObject({
       idx: 0,
       mode: "pymid",
@@ -218,8 +218,8 @@ import {
 
 describe("typeAheadCycle（Tab 命中集内循环，沿用生效针与档位）", () => {
   const cyc = [
-    { name: "报表1.xlsx", path: "c0", py: ["bb1.xlsx"] },
-    { name: "报表2.xlsx", path: "c1", py: ["bb2.xlsx"] },
+    { name: "报表1.xlsx", path: "c0", py: ["bb1"] },
+    { name: "报表2.xlsx", path: "c1", py: ["bb2"] },
     { name: "年度报表.docx", path: "c2", py: ["ndbb.docx"] }, // 中段命中档
   ];
   it("向后循环整缓冲命中集，环绕", () => {
@@ -277,7 +277,7 @@ describe("matchRangeOf（行内命中高亮的名称字符区间）", () => {
     expect(r).toEqual([7, 2]);
   });
   it("拼音前缀档命中 → 名称头部区间（按 py 对齐数）", () => {
-    expect(matchRangeOf("预算表.xlsx", ["ysb.xlsx"], "ys", "prefix")).toEqual([0, 2]);
+    expect(matchRangeOf("预算表.xlsx", ["ysb"], "ys", "prefix")).toEqual([0, 2]);
   });
   it("contains 命中名称 → 名称内区间", () => {
     expect(matchRangeOf("topzebra.txt", null, "zeb", "contains")).toEqual([3, 3]);
@@ -392,5 +392,25 @@ describe("名称中段字面子串", () => {
   });
   it("单字符不走名称中段（o 不跳 modules）", () => {
     expect(typeAheadStep(dir, "", "o", -1)).toBeNull();
+  });
+});
+
+// 主名定位（2026-11-05 定案：不对扩展名定位，只处理文件/文件夹名）
+describe("主名定位：扩展名不参与", () => {
+  it("xls/sx 不命中 xlsx 文件（py 与名称档都已剥扩展名）", () => {
+    const f = [{ name: "预算表.xlsx", path: "e0", py: ["ysb"] }];
+    expect(typeAheadStep(f, "x", "l", -1)).toBeNull();
+    expect(typeAheadStep(f, "s", "x", -1)).toBeNull();
+  });
+  it("文件夹名带点不剥：2.快报附件 敲 kb 命中快报段", () => {
+    // py = "2.kbfj"（点为 ASCII 原样透传），kb 命中 快报（下标 2 起）
+    const d = [{ name: "2.快报附件", path: "d0", isDir: true, py: ["2.kbfj"] }];
+    expect(typeAheadStep(d, "k", "b", -1)).toMatchObject({ idx: 0, needle: "kb" });
+    expect(matchRangeOf(d[0].name, d[0].py, "kb", "pymid", true)).toEqual([2, 2]);
+  });
+  it("文件主名带点仅剥最后段：archive.tar.gz 主名 archive.tar", () => {
+    const f = [{ name: "archive.tar.gz", path: "z0", py: ["archivetar"] }];
+    expect(typeAheadStep(f, "t", "a", -1)).toMatchObject({ idx: 0, needle: "ta", mode: "pymid" });
+    expect(typeAheadStep(f, "g", "z", -1)).toBeNull(); // gz 在扩展名段
   });
 });

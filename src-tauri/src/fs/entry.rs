@@ -81,7 +81,18 @@ pub fn dir_entry_to_file(dir: &str, entry: &std::fs::DirEntry) -> Option<FileEnt
     let raw = std::os::windows::fs::MetadataExt::file_attributes(&meta);
     #[cfg(not(windows))]
     let raw = 0u32;
-    let py = super::search::pinyin_initial_variants(&name, 32);
+    // 定位 py 串只覆盖主名（2026-11-05 用户定案：不对扩展名定位）——文件夹
+    // 整名即主名（"2.收子公司附件" 的点不是扩展名分隔）；首点文件
+    // （".gitignore"）无扩展名不剥
+    let stem: &str = if is_dir {
+        name.as_str()
+    } else {
+        match name.rfind('.') {
+            Some(i) if i > 0 && i + 1 < name.len() => &name[..i],
+            _ => name.as_str(),
+        }
+    };
+    let py = super::search::pinyin_initial_variants(stem, 32);
     Some(FileEntry {
         path: join_name(dir, &name),
         name,
@@ -111,7 +122,7 @@ mod tests {
         let e = rd.next().unwrap().unwrap();
         let fe = dir_entry_to_file(d.to_str().unwrap(), &e).unwrap();
         assert_eq!(fe.name, "预算表.xlsx");
-        assert_eq!(fe.py.as_deref(), Some(&["ysb.xlsx".to_string()][..]));
+        assert_eq!(fe.py.as_deref(), Some(&["ysb".to_string()][..])); // 主名定位：xlsx 扩展名不入 py
         std::fs::remove_dir_all(&d).unwrap();
     }
 }

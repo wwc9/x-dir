@@ -447,7 +447,16 @@ pub(crate) mod meta {
         let size = ((data.nFileSizeHigh as u64) << 32) | data.nFileSizeLow as u64;
         let is_dir = data.dwFileAttributes & 0x10 != 0;
         let name = crate::fs::path::file_name_of(path);
-        let py = crate::fs::search::pinyin_initial_variants(&name, 32);
+        // 定位 py 只覆盖主名（entry.rs 同款规则：文件夹整名、首点文件不剥）
+        let stem: String = if is_dir {
+            name.to_string()
+        } else {
+            match name.rfind('.') {
+                Some(i) if i > 0 && i + 1 < name.len() => name[..i].to_string(),
+                _ => name.to_string(),
+            }
+        };
+        let py = crate::fs::search::pinyin_initial_variants(&stem, 32);
         Some(FileEntry {
             name,
             path: path.to_string(),
