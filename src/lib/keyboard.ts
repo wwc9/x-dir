@@ -13,7 +13,7 @@ import { useLayout } from "../stores/layout";
 import { closePaneConfirmed, useUi } from "../stores/ui";
 import { useSettings } from "../stores/settings";
 import { pickStartIndex, usePreview } from "../stores/preview";
-import { typeAheadStep } from "./typeAhead";
+import { typeAheadCycle, typeAheadRematch, typeAheadStep, type TypeAheadMatch } from "./typeAhead";
 import { api } from "./ipc";
 
 type Dir = "up" | "down" | "left" | "right";
@@ -23,9 +23,13 @@ type Dir = "up" | "down" | "left" | "right";
 //    useUi.typeAhead 回显到活动窗格列表角落的定位 pill ──
 let taBuf = "";
 let taTimer: number | undefined;
+/** 最近一次生效匹配（含生效针/档位）：Tab 循环与 Backspace 重匹配的依据；
+ *  无命中为 null（此时 Tab 无集可循环） */
+let taMatch: TypeAheadMatch | null = null;
 
 function typeAheadReset(): void {
   taBuf = "";
+  taMatch = null;
   if (taTimer !== undefined) {
     clearTimeout(taTimer);
     taTimer = undefined;
@@ -193,6 +197,74 @@ export function onGlobalKeyDown(e: KeyboardEvent): void {
     return;
   }
 
+  // ── 定位激活期专用键（2026-11-05 定案，pill 未激活时各键保持原语义）：
+  //    Tab / Shift+Tab = 命中集内下一个 / 上一个（沿用产生命中时的生效针与档位）；
+  //    Backspace = 回删缓冲末位并重匹配（当前项仍命中则驻留原位只刷统计；
+  //    缓冲删空 = 清 pill 收场，本次不触发上级目录）──
+  if (
+    taBuf &&
+    !pv.queue.length &&
+    !useUi.getState().swapFrom &&
+    !ctrl &&
+    !e.altKey &&
+    !e.metaKey &&
+    (k === "Tab" || k === "Backspace") &&
+    list
+  ) {
+    const snap = list.getSnapshot();
+    if (snap.entries.length) {
+      if (taTimer !== undefined) clearTimeout(taTimer);
+      taTimer = window.setTimeout(typeAheadReset, DENSITY.typeAheadMs);
+      const curIdx = snap.entries.findIndex(
+        (en) => en.path === snap.selected[snap.selected.length - 1],
+      );
+      if (k === "Tab") {
+        if (taMatch) {
+          const r = typeAheadCycle(snap.entries, taMatch, curIdx, e.shiftKey ? -1 : 1);
+          if (r) {
+            taMatch = r;
+            list.revealEntry(snap.entries[r.idx].path);
+            useUi.getState().setTypeAhead({
+              buf: r.disp,
+              hit: snap.entries[r.idx].name,
+              pos: r.pos,
+              total: r.total,
+              needle: r.needle,
+              mode: r.mode,
+            });
+          }
+        }
+        e.preventDefault();
+        return;
+      }
+      // Backspace 回删
+      taBuf = taBuf.slice(0, -1);
+      if (!taBuf) {
+        typeAheadReset();
+        e.preventDefault();
+        return;
+      }
+      const r = typeAheadRematch(snap.entries, taBuf, curIdx);
+      if (r) {
+        taMatch = r;
+        taBuf = r.buf;
+        list.revealEntry(snap.entries[r.idx].path);
+      } else {
+        taMatch = null;
+      }
+      useUi.getState().setTypeAhead({
+        buf: r?.disp ?? taBuf,
+        hit: r ? snap.entries[r.idx].name : null,
+        pos: r?.pos,
+        total: r?.total,
+        needle: r?.needle,
+        mode: r?.mode,
+      });
+      e.preventDefault();
+      return;
+    }
+  }
+
   // ── 首字母跳转：无修饰键单字符（Space=预览、IME 组合 key="Process" 均被排除）。
   //    预览/交换窗格进行中不响应，避免浮层背后静默改选。──
   if (
@@ -214,11 +286,14 @@ export function onGlobalKeyDown(e: KeyboardEvent): void {
       const curIdx = snap.entries.findIndex(
         (en) => en.path === snap.selected[snap.selected.length - 1],
       );
-      // 匹配策略全在纯函数内（前缀/*包含/重复字母循环，TC 语义；配单测）
+      // 匹配策略全在纯函数内（前缀/*包含/重复字母循环/拼音中段，TC 语义；配单测）
       const r = typeAheadStep(snap.entries, prevBuf, k, curIdx);
       if (r) {
         taBuf = r.buf;
+        taMatch = r;
         list.revealEntry(snap.entries[r.idx].path);
+      } else {
+        taMatch = null;
       }
       useUi
         .getState()
@@ -228,6 +303,8 @@ export function onGlobalKeyDown(e: KeyboardEvent): void {
           hit: r ? snap.entries[r.idx].name : null,
           pos: r?.pos,
           total: r?.total,
+          needle: r?.needle,
+          mode: r?.mode,
         });
       e.preventDefault();
       return;

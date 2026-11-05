@@ -444,8 +444,8 @@ const EN: Record<string, string> = {
   "移动选择（配合 Shift 为范围选）": "Move selection (hold Shift for range select)",
   "翻页移动选择（配合 Shift 为范围选）": "Move selection by page (hold Shift for range select)",
   "跳到首项 / 末项（配合 Shift 为范围选）": "Jump to first / last item (hold Shift for range select)",
-  "输入字符跳转到匹配文件名（前缀或拼音首字母，支持名称中段；连击同键循环）":
-    "Type to jump to matching names (prefix or pinyin initials, mid-name supported; repeat a key to cycle)",
+  "输入字符跳转定位文件（前缀或拼音首字母含名称中段；Tab 在多个命中间循环，Backspace 回删重匹配）":
+    "Type to jump to matching files (prefix or pinyin initials incl. mid-name; Tab cycles matches, Backspace edits)",
   "先关闭窗格内搜索，再退视图过滤，最后清空选择": "Close in-pane search first, then exit view filter, then clear selection",
   "打开（文件夹进入 / 文件默认程序打开）": "Open (enter folders / open files with default app)",
   "就地重命名": "Rename in place",

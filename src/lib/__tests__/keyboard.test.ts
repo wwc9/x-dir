@@ -598,8 +598,9 @@ describe("首字母跳转（type-ahead）", () => {
       fire({ key: "a" });
       expect(h.revealEntry).toHaveBeenLastCalledWith("C:\\dir\\a.txt");
       // 输入缓冲与命中经 useUi.typeAhead 回显（列表角落定位 pill）；匹配集
-      // 多于 1 个时带序位统计（a* 共 2 项，命中第 1 项）
-      expect(useUi.getState().typeAhead).toEqual({
+      // 多于 1 个时带序位统计（a* 共 2 项，命中第 1 项）；2026-11-05 起 pill
+      // 额外携带 needle/mode（行内高亮消费），断言改子集匹配
+      expect(useUi.getState().typeAhead).toMatchObject({
         buf: "a",
         hit: "a.txt",
         pos: 1,
@@ -607,7 +608,7 @@ describe("首字母跳转（type-ahead）", () => {
       });
       fire({ key: "b" });
       expect(h.revealEntry).toHaveBeenLastCalledWith("C:\\dir\\ab.txt");
-      expect(useUi.getState().typeAhead).toEqual({
+      expect(useUi.getState().typeAhead).toMatchObject({
         buf: "ab",
         hit: "ab.txt",
         pos: 1,
@@ -618,7 +619,54 @@ describe("首字母跳转（type-ahead）", () => {
       expect(useUi.getState().typeAhead).toBeNull();
       fire({ key: "b" });
       expect(h.revealEntry).toHaveBeenLastCalledWith("C:\\dir\\b.md");
+      // 收尾再冲刷一次：模块级 taBuf/taMatch 跨用例存续，复位后交还干净状态
+      vi.advanceTimersByTime(DENSITY.typeAheadMs + 100);
       covered.add("type-ahead");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("type-ahead：Tab 命中集循环 / Backspace 回删（2026-11-05 定案）", () => {
+    vi.useFakeTimers();
+    try {
+      const entries = [
+        { ...FILE_A, name: "a.txt", path: "C:\\dir\\a.txt" },
+        { ...FILE_A, name: "ab.txt", path: "C:\\dir\\ab.txt" },
+      ];
+      h.getSnapshot.mockReturnValue({ entries, selected: [] });
+      fire({ key: "a" });
+      expect(h.revealEntry).toHaveBeenLastCalledWith("C:\\dir\\a.txt");
+      // 模拟选中已随 reveal 前进到 a.txt：Tab 循环到下一个 a 前缀命中
+      h.getSnapshot.mockReturnValue({ entries, selected: ["C:\\dir\\a.txt"] });
+      fire({ key: "Tab" });
+      expect(h.revealEntry).toHaveBeenLastCalledWith("C:\\dir\\ab.txt");
+      expect(useUi.getState().typeAhead).toMatchObject({
+        buf: "a",
+        pos: 2,
+        total: 2,
+        needle: "a",
+      });
+      // Shift+Tab 回到上一个
+      h.getSnapshot.mockReturnValue({ entries, selected: ["C:\\dir\\ab.txt"] });
+      fire({ key: "Tab", shift: true });
+      expect(h.revealEntry).toHaveBeenLastCalledWith("C:\\dir\\a.txt");
+      // 续输 b（当前在 a.txt）→ "ab" 唯一命中；Backspace 回删到 "a"：当前项仍命中 → 驻留刷新统计
+      h.getSnapshot.mockReturnValue({ entries, selected: ["C:\\dir\\a.txt"] });
+      fire({ key: "b" });
+      expect(useUi.getState().typeAhead).toMatchObject({ buf: "ab", pos: 1, total: 1 });
+      // 回删到 "a"：mock 选中停在 a.txt（桩不随 reveal 前进），其仍命中 → 驻留
+      fire({ key: "Backspace" });
+      expect(h.revealEntry).toHaveBeenLastCalledWith("C:\\dir\\a.txt");
+      expect(useUi.getState().typeAhead).toMatchObject({ buf: "a", pos: 1, total: 2 });
+      // 再回删 → 缓冲空 → pill 清空，且本次不触发上级目录
+      h.onBackspace.mockClear();
+      fire({ key: "Backspace" });
+      expect(useUi.getState().typeAhead).toBeNull();
+      expect(h.onBackspace).not.toHaveBeenCalled();
+      // pill 未激活时 Backspace 恢复上级目录语义
+      fire({ key: "Backspace" });
+      expect(h.onBackspace).toHaveBeenCalledOnce();
     } finally {
       vi.useRealTimers();
     }

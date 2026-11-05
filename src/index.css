@@ -1735,6 +1735,14 @@ body.np-col-resizing .np-menued-grip::after {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+/* 行内命中高亮（2026-11-05）：定位激活期间命中行名称的匹配段（lib/typeAhead
+   matchRangeOf 定位，TaName 分三段渲染）；accent 淡染底 + 加粗，选中行的
+   accent 文字上也辨得出。随 pill 超时/清空一并消失 */
+.np-ta-hit {
+  background: color-mix(in srgb, var(--np-accent) 22%, transparent);
+  border-radius: 3px;
+  font-weight: 600;
+}
 
 /* 地址栏面包屑（非聚焦态覆盖层）：层级段可点跳转，空白处点击进入编辑。
    :focus-within 隐藏覆盖层，输入框原生聚焦态（--np-ring 淡染）自然接管 */

@@ -65,7 +65,8 @@ import { pickStartIndex, usePreview } from "../stores/preview";
 import { composeTypeFilterQuery } from "../lib/searchStream";
 import { t } from "../lib/i18n";
 import { useSettings } from "../stores/settings";
-import { useUi, type MenuItem } from "../stores/ui";
+import { useUi, type MenuItem, type TypeAheadState } from "../stores/ui";
+import { matchRangeOf } from "../lib/typeAhead";
 import {
   COL_DEFAULTS,
   clampColWidth,
@@ -118,6 +119,31 @@ function driveEntries(drives: DriveInfo[]): FileEntry[] {
 }
 
 /** 着色规则匹配：*.ext 通配或名称子串（大小写不敏感），手动标记优先 */
+/** 首字母定位行内命中高亮（2026-11-05）：matchRangeOf 的字符区间把名称分三段，
+ *  匹配段包 np-ta-hit；未激活 / 未命中 / 对齐失败（罕见字符）原样渲染 */
+function TaName({
+  name,
+  py,
+  ta,
+}: {
+  name: string;
+  py?: string | null;
+  ta: TypeAheadState | null;
+}) {
+  if (!ta?.needle || !ta.mode) return <>{name}</>;
+  const range = matchRangeOf(name, py, ta.needle, ta.mode);
+  if (!range) return <>{name}</>;
+  const [start, len] = range;
+  const chars = Array.from(name);
+  return (
+    <>
+      {chars.slice(0, start).join("")}
+      <span className="np-ta-hit">{chars.slice(start, start + len).join("")}</span>
+      {chars.slice(start + len).join("")}
+    </>
+  );
+}
+
 function tagColorOf(entry: FileEntry): TagColor | null {
   const s = useSettings.getState();
   const manual = s.colorTags[entry.path];
@@ -1647,7 +1673,11 @@ export function FileList({
                       style={tag ? { color: `var(--np-tag-${tag})` } : undefined}
                     >
                       {tag && <span className="np-tagdot" style={{ background: `var(--np-tag-${tag})` }} />}
-                      {entry.name}
+                      <TaName
+                        name={entry.name}
+                        py={entry.py}
+                        ta={active && !searching ? typeAhead : null}
+                      />
                     </span>
                   );
 

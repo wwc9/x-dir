@@ -211,3 +211,82 @@ describe("序位统计（重复首字母回显 x/y）", () => {
     expect(typeAheadStep(items, "", "c", -1)).toMatchObject({ idx: 4, pos: 1, total: 1 });
   });
 });
+
+// ── Tab 循环 / Backspace 重匹配 / 行内高亮定位（2026-11-05 定案）──
+import {
+  matchRangeOf,
+  typeAheadCycle,
+  typeAheadRematch,
+} from "../typeAhead";
+
+describe("typeAheadCycle（Tab 命中集内循环，沿用生效针与档位）", () => {
+  const cyc = [
+    { name: "报表1.xlsx", path: "c0", py: "bb1.xlsx" },
+    { name: "报表2.xlsx", path: "c1", py: "bb2.xlsx" },
+    { name: "年度报表.docx", path: "c2", py: "ndbb.docx" }, // 中段命中档
+  ];
+  it("向后循环整缓冲命中集，环绕", () => {
+    const m = typeAheadStep(cyc, "b", "b", -1)!; // "bb" 前缀命中 报表1
+    expect(m).toMatchObject({ idx: 0, pos: 1, total: 2 });
+    const n1 = typeAheadCycle(cyc, m, 0, 1)!;
+    expect(n1).toMatchObject({ idx: 1, pos: 2, total: 2, needle: "bb", mode: "prefix" });
+    const n2 = typeAheadCycle(cyc, n1, 1, 1)!;
+    expect(n2.idx).toBe(0); // 环绕
+    const p1 = typeAheadCycle(cyc, n1, 1, -1)!;
+    expect(p1.idx).toBe(0); // 向前
+  });
+  it("拼音中段命中档循环不换档（sjbg 案例）", () => {
+    const mid = [
+      { name: "2026年度审计报告.pdf", path: "m0", py: "2026ndsjbg.pdf" },
+      { name: "集团审计报告.docx", path: "m1", py: "jtsjbg.docx" },
+    ];
+    const m = typeAheadStep(mid, "sjb", "g", -1)!; // 中段命中 m0
+    expect(m.mode).toBe("pymid");
+    const n = typeAheadCycle(mid, m, 0, 1)!;
+    expect(n).toMatchObject({ idx: 1, pos: 2, total: 2, mode: "pymid" });
+  });
+  it("集内唯一项循环原地驻留", () => {
+    const m = typeAheadStep(items, "", "c", -1)!; // c 唯一
+    expect(typeAheadCycle(items, m, 4, 1)?.idx).toBe(4);
+  });
+});
+
+describe("typeAheadRematch（Backspace 回删重匹配）", () => {
+  it("当前项在新缓冲下仍命中 → 驻留原位只刷新统计", () => {
+    const m = typeAheadStep(repItems, "b", "b", 0)!; // "bb" → bb.txt
+    const r = typeAheadRematch(repItems, "b", m.idx)!;
+    // "b" 前缀集 = 4 项，bb.txt 是第 2 项
+    expect(r).toMatchObject({ idx: 1, needle: "b", pos: 2, total: 4 });
+  });
+  it("回删后的缓冲当前项仍命中 → 驻留（预算表 y 档）", () => {
+    const m = typeAheadStep(cnItems, "y", "s", -1)!; // "ys" 命中 预算表
+    expect(m.idx).toBe(2);
+    const r = typeAheadRematch(cnItems, "y", 2)!; // 回删到 "y"：当前仍前缀命中 → 驻留
+    expect(r).toMatchObject({ idx: 2, needle: "y", pos: 1, total: 1 });
+  });
+  it("回删到空壳（裸 *）返回 null", () => {
+    expect(typeAheadRematch(items, "*", -1)).toBeNull();
+  });
+});
+
+describe("matchRangeOf（行内命中高亮的名称字符区间）", () => {
+  it("名称前缀命中 → 名称头部区间", () => {
+    expect(matchRangeOf("ab.txt", null, "ab", "prefix")).toEqual([0, 2]);
+  });
+  it("拼音中段命中 → 对齐回名称中段字符（省进 段）", () => {
+    // py "2026n9ysjckkb"：ASCII/数字各 1 字符、汉字各 1 首字母 → 逐字符对齐；
+    // 名称字符序：2 0 2 6 年 9 月 省 进 …（省 = 下标 7）
+    const r = matchRangeOf("2026年9月省进出口快报", "2026n9ysjckkb", "sj", "pymid");
+    expect(r).toEqual([7, 2]);
+  });
+  it("拼音前缀档命中 → 名称头部区间（按 py 对齐数）", () => {
+    expect(matchRangeOf("预算表.xlsx", "ysb.xlsx", "ys", "prefix")).toEqual([0, 2]);
+  });
+  it("contains 命中名称 → 名称内区间", () => {
+    expect(matchRangeOf("topzebra.txt", null, "zeb", "contains")).toEqual([3, 3]);
+  });
+  it("对不上（py 缺失 / 偏移错位）返回 null 不高亮", () => {
+    expect(matchRangeOf("省进", null, "sj", "pymid")).toBeNull();
+    expect(matchRangeOf("2026年9月省进出口快报", "对不上的串", "sj", "pymid")).toBeNull();
+  });
+});

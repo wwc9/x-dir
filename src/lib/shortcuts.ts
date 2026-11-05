@@ -111,8 +111,8 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { id: "select-all", keys: ["Ctrl+A"], label: "全选", scope: "global" },
       {
         id: "type-ahead",
-        keys: ["A-Z / 0-9"],
-        label: "输入字符跳转到匹配文件名（前缀或拼音首字母，支持名称中段；连击同键循环）",
+        keys: ["A-Z / 0-9", "Tab / Shift+Tab", "Backspace"],
+        label: "输入字符跳转定位文件（前缀或拼音首字母含名称中段；Tab 在多个命中间循环，Backspace 回删重匹配）",
         scope: "global",
       },
       { id: "sel-clear", keys: ["Esc"], label: "先关闭窗格内搜索，再退视图过滤，最后清空选择", scope: "global" },

@@ -126,6 +126,10 @@ export interface TypeAheadState {
   pos?: number;
   /** 匹配集总数 */
   total?: number;
+  /** 生效匹配针与档位（2026-11-05）：行内命中高亮随 pill 存续（lib/typeAhead
+   *  matchRangeOf 消费；Tab 循环 / Backspace 回删也在 pill 激活期生效） */
+  needle?: string;
+  mode?: "prefix" | "contains" | "pymid";
 }
 
 interface UiStore {
