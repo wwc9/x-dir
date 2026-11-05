@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>弹窗背景 方案 C · 聚光暗角</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #dfe4ec; margin: 0; padding: 32px 40px; color: #1c2430; }
+      h1 { font-size: 20px; margin: 0 0 6px; display: flex; align-items: center; gap: 10px; }
+      p.lead { font-size: 13px; color: #5a6572; max-width: 680px; line-height: 1.7; margin: 0 0 22px; }
+      .tag { font-size: 12px; padding: 2px 10px; border-radius: 99px; background: #dce4f0; color: #3574f0; font-weight: 600; }
+
+      /* ── 迷你应用窗口 ── */
+      .win { position: relative; width: 880px; height: 460px; border-radius: 10px; overflow: hidden;
+             background: #e9ecf1; border: 1px solid #c6cdd8; box-shadow: 0 18px 50px rgba(23,29,38,.22); }
+      .tbar { height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 10px; background: #e3e7ee; border-bottom: 1px solid #d3d9e2; }
+      .logo { width: 18px; height: 18px; border-radius: 3px; background: linear-gradient(135deg,#2447e8,#14cfdc); }
+      .tname { font-size: 12px; font-weight: 600; color: #3d4756; }
+      .body-row { display: flex; height: calc(100% - 36px - 26px); }
+      .side { width: 168px; background: #eef1f6; border-right: 1px solid #dde3ec; padding: 10px 8px; display: flex; flex-direction: column; gap: 6px; }
+      .side-item { height: 24px; border-radius: 4px; display: flex; align-items: center; padding: 0 8px; font-size: 12px; color: #3d4756; }
+      .side-item.on { background: rgba(53,116,240,.12); color: #3574f0; }
+      .list { flex: 1; padding: 8px 6px; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+      .row { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; border-radius: 4px; font-size: 13px; color: #171d26; }
+      .row.sel { background: rgba(53,116,240,.12); color: #3574f0; }
+      .ico { width: 15px; height: 15px; border-radius: 3px; background: linear-gradient(135deg,#4f8bff,#bae2fd); flex: 0 0 auto; }
+      .sbar { height: 26px; display: flex; align-items: center; padding: 0 12px; font-size: 11px; color: #7d8694; border-top: 1px solid #dde3ec; }
+
+      /* ── 弹窗与背景效果（方案差异点）── */
+      .ovl { position: absolute; inset: 0; opacity: 0; pointer-events: none; transition: opacity .24s ease;
+             display: flex; align-items: center; justify-content: center;
+             background: radial-gradient(120% 95% at 50% 44%, rgba(23,29,38,.05) 0%, rgba(23,29,38,.24) 52%, rgba(23,29,38,.5) 100%); }
+      .win.open .ovl { opacity: 1; pointer-events: auto; }
+      .dlg { width: 380px; background: #fff; border: 1px solid #d3d9e2; border-radius: 10px;
+             box-shadow: 0 24px 60px rgba(23,29,38,.3); transform: scale(.96); transition: transform .24s ease; overflow: hidden; }
+      .win.open .dlg { transform: scale(1); }
+      .dlg-h { padding: 14px 16px 6px; font-size: 14px; font-weight: 600; color: #171d26; }
+      .dlg-b { padding: 4px 16px 10px; }
+      .set-row { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #eef1f6; font-size: 13px; color: #171d26; }
+      .set-row span.k { color: #5a6572; font-size: 12px; }
+      .sw-ctl { width: 30px; height: 16px; border-radius: 99px; background: #3574f0; position: relative; }
+      .sw-ctl::after { content: ""; position: absolute; right: 2px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
+      .dlg-f { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 16px 14px; }
+      .btn { height: 24px; padding: 0 14px; border-radius: 5px; font-size: 12px; border: 1px solid #d3d9e2; background: #fff; color: #3d4756; }
+      .btn.pri { background: #3574f0; border-color: #3574f0; color: #fff; }
+
+      .ctrl { margin: 14px 0 0; }
+      .ctrl button { height: 28px; padding: 0 18px; border-radius: 6px; border: 1px solid #b9c2d0; background: #fff; font-size: 13px; color: #2a3340; cursor: pointer; }
+      .note { margin-top: 14px; font-size: 12px; color: #5a6572; line-height: 1.8; max-width: 680px; }
+      .note b { color: #3574f0; }
+    </style>
+  </head>
+  <body>
+    <h1><span class="tag">方案 C</span> 聚光暗角遮罩</h1>
+    <p class="lead">
+      遮罩不用均匀暗色，改用径向渐变暗角：弹窗周围一圈最透（列表仍可读），向四周渐次压暗——
+      「舞台聚光」把视线自然引向中央弹窗，边缘内容退后但不清失。比纯色遮罩层次感强，
+      比磨砂轻。点击窗口内任意处或按钮切换开关，感受过渡。
+    </p>
+
+    <div class="win open" id="win">
+      <div class="tbar"><span class="logo"></span><span class="tname">X-Dir</span></div>
+      <div class="body-row">
+        <div class="side">
+          <div class="side-item on">默认方案</div>
+          <div class="side-item">审计双栏</div>
+          <div class="side-item">三栏对照</div>
+          <div class="side-item">全屏预览</div>
+        </div>
+        <div class="list">
+          <div class="row"><span class="ico"></span>联晟电子2026年9月快报.xlsx</div>
+          <div class="row sel"><span class="ico"></span>2026年9月省进出口快报.docx</div>
+          <div class="row"><span class="ico"></span>子公司快报汇总.xlsx</div>
+          <div class="row"><span class="ico"></span>季度审计报告要点.pdf</div>
+          <div class="row"><span class="ico"></span>报表底稿</div>
+          <div class="row"><span class="ico"></span>readme.md</div>
+        </div>
+      </div>
+      <div class="sbar">12 项 · 选中 1 项</div>
+
+      <div class="ovl" id="ovl">
+        <div class="dlg">
+          <div class="dlg-h">设置</div>
+          <div class="dlg-b">
+            <div class="set-row"><span>删除前确认<span class="k">　弹窗可勾选关闭</span></span><span class="sw-ctl"></span></div>
+            <div class="set-row"><span>真实文件图标</span><span class="sw-ctl"></span></div>
+            <div class="set-row"><span>记忆目录选中集</span><span class="sw-ctl"></span></div>
+          </div>
+          <div class="dlg-f"><button class="btn">取消</button><button class="btn pri">确定</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ctrl"><button id="tg">切换弹窗开 / 关</button></div>
+    <div class="note">
+      <b>实现口径：</b>Blueprint 弹窗遮罩一条 CSS（radial-gradient 三停渐变），纯绘制无 backdrop-filter，
+      任何显卡零成本。<b>优点：</b>层次与聚焦感强于纯色淡染、性能最优；<b>代价：</b>暗角幅度需要拿捏，
+      过强会显脏（本档中心 5% → 边缘 50%），深色主题下中心透段需再调亮一档。
+    </div>
+
+    <script>
+      const win = document.getElementById("win");
+      const toggle = () => win.classList.toggle("open");
+      document.getElementById("tg").onclick = toggle;
+      document.getElementById("ovl").onclick = toggle;
+    </script>
+  </body>
+</html>
