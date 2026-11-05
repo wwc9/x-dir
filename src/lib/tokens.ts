@@ -24,8 +24,10 @@ export const DENSITY = {
   sideThumbLg: 28,
   // 快速预览文本直读上限（纯 JS 启发式，无同名 CSS token）：超过即截断提示"用默认程序打开"
   previewTextMaxBytes: 2_000_000,
-  // 首字母跳转缓冲超时（纯 JS 启发式，无同名 CSS token）：停顿超过即清空缓冲重新累积
-  typeAheadMs: 1000,
+  // 首字母跳转缓冲超时（纯 JS 启发式，无同名 CSS token）：停顿超过即清空缓冲重新累积。
+  // 2000ms（2026-11-05 调整，原 1000ms）：多字母拼音首字母串（如 sjbg 四键）对
+  // 非盲打用户节奏偏紧，超时过短会把后续输入误当新检索起点
+  typeAheadMs: 2000,
   // 功能库目录 scrollspy（纯 JS 启发式，无同名 CSS token）：滚动容器视口顶部
   // 触发高亮切换的下探阈值（px）；目录点击平滑跳转期间挂起 spy 的解锁时长（ms）
   libSpyThreshold: 24,

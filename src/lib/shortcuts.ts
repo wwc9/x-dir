@@ -109,7 +109,12 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { id: "sel-page", keys: ["PageUp / PageDown"], label: "翻页移动选择（配合 Shift 为范围选）", scope: "global" },
       { id: "sel-homeend", keys: ["Home / End"], label: "跳到首项 / 末项（配合 Shift 为范围选）", scope: "global" },
       { id: "select-all", keys: ["Ctrl+A"], label: "全选", scope: "global" },
-      { id: "type-ahead", keys: ["A-Z / 0-9"], label: "输入字符跳转到匹配文件名（连续输入累积前缀；中文按拼音首字母）", scope: "global" },
+      {
+        id: "type-ahead",
+        keys: ["A-Z / 0-9"],
+        label: "输入字符跳转到匹配文件名（前缀或拼音首字母，支持名称中段；连击同键循环）",
+        scope: "global",
+      },
       { id: "sel-clear", keys: ["Esc"], label: "先关闭窗格内搜索，再退视图过滤，最后清空选择", scope: "global" },
     ],
   },

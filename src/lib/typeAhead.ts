@@ -3,15 +3,21 @@
 // 文件名小写，或 Rust 下发的拼音首字母串 py（汉字取拼音首字母，如
 // "forge请下这个txt文件" → "forgeqxzgtxtwj"，敲 "qxzg" 即可跳到；名称优先于 py）。
 //
-// 匹配策略（对齐 TC 快速搜索，2026-11-01 调研定案）：
+// 匹配策略（对齐 TC 快速搜索，2026-11-01 调研定案；2026-11-05 增补中段首字母）：
 // 1. 缓冲以 "*" 开头 = 子串匹配（TC 原生语义，"*zeb" 命中 "topzebra.txt"）；
 //    否则前缀匹配。
+// 1b. 前缀整缓冲未命中（或只驻留当前项）→ 拼音首字母串中段匹配（py.includes）：
+//     支持用文件名中间文字的首字母定位（"2026年度审计报告" 敲 "sjbg" 直达"审计
+//     报告"段）。启用条件 = 缓冲 ≥2 字符且含 ≥2 个不同字符——单字符与重复单字
+//     字符（"b"/"bb"）不启用，保持 2 的同键循环语义不变（敲 "bb" 的意图更可能
+//     是循环下一个 b，而非找拼音含 bb 的文件）。仅 py 中段：名称中段匹配仍属
+//     "*" 显式子串语义，不自动启用（无法与循环区分，见 4）。
 // 2. 整缓冲无命中，或命中只是停驻在当前项（环绕后唯一匹配是自己）→ 立即回退
 //    为仅本次按键循环："b","b" 即在所有 b 开头条目间逐个循环。不停驻、不回跳
 //    （TC/Explorer 在"恰好存在 bb.txt"时会停驻一步甚至乒乓，此处为友好改进）。
 // 3. 回退后缓冲保留完整输入（"bbb" 不截断），下一次同键扩展 "bbbb" 仍无命中
 //    → 继续循环；显示取实际生效的匹配针（"bb"/"b"，disp 字段）。
-// 4. 故意不做「前缀失败自动子串回退」：无法与重复字母循环区分（敲 "bb" 到底
+// 4. 故意不做「前缀失败自动名称子串回退」：无法与重复字母循环区分（敲 "bb" 到底
 //    是想循环到下一个 b，还是想找名字含 bb 的文件？），TC 也不做——要子串
 //    匹配请显式敲 "*" 前缀。
 //
@@ -37,7 +43,7 @@ export interface TypeAheadMatch {
   total: number;
 }
 
-type Mode = "prefix" | "contains";
+type Mode = "prefix" | "contains" | "pymid";
 
 function matchOf(it: TypeAheadItem, needle: string, mode: Mode): boolean {
   const name = it.name.toLowerCase();
@@ -45,8 +51,18 @@ function matchOf(it: TypeAheadItem, needle: string, mode: Mode): boolean {
     if (name.startsWith(needle)) return true;
     return !!it.py && it.py.toLowerCase().startsWith(needle);
   }
-  if (name.includes(needle)) return true;
+  if (mode === "contains") {
+    if (name.includes(needle)) return true;
+    return !!it.py && it.py.toLowerCase().includes(needle);
+  }
+  // pymid = 仅拼音首字母串中段（文件名中间文字的首字母定位，策略 1b）
   return !!it.py && it.py.toLowerCase().includes(needle);
+}
+
+/** 中段首字母匹配启用条件（策略 1b）：非 "*" 模式 + 缓冲 ≥2 字符且含 ≥2 个
+ *  不同字符——单字符与重复单字符（"b"/"bb"）不启用，保持同键循环语义不变 */
+function pymidEligible(star: boolean, needle: string): boolean {
+  return !star && needle.length >= 2 && new Set(needle).size >= 2;
 }
 
 /** 从当前项之后环绕找下一个匹配项 */
@@ -113,6 +129,14 @@ export function typeAheadStep(
   if (h1 !== null && h1 !== curIdx) {
     const { pos, total } = statsOf(items, needle, h1, mode);
     return { idx: h1, buf: next, disp: dispOf(star, needle), pos, total };
+  }
+  // 1b) 前缀未命中（或驻留）→ 拼音首字母串中段（文件名中间文字的首字母直达）
+  if (pymidEligible(star, needle)) {
+    const h1b = findFrom(items, needle, curIdx, "pymid");
+    if (h1b !== null && h1b !== curIdx) {
+      const { pos, total } = statsOf(items, needle, h1b, "pymid");
+      return { idx: h1b, buf: next, disp: dispOf(star, needle), pos, total };
+    }
   }
   // 2) 回退为本次按键循环（"*" 语义随模式保留）；缓冲保留完整输入供接续
   const h2 = findFrom(items, ch, curIdx, mode);

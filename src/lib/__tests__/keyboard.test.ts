@@ -7,6 +7,7 @@ import { GLOBAL_SHORTCUT_IDS } from "../shortcuts";
 import { dfsPanes, mkPane } from "../layoutTree";
 import { onGlobalKeyDown } from "../keyboard";
 import { registerList } from "../listRegistry";
+import { DENSITY } from "../tokens";
 import type { FileEntry } from "../ipc";
 import { useLayout } from "../../stores/layout";
 import { usePanes } from "../../stores/panes";
@@ -612,8 +613,8 @@ describe("首字母跳转（type-ahead）", () => {
         pos: 1,
         total: 1,
       });
-      // 停顿超时：缓冲清空，单字符重新匹配
-      vi.advanceTimersByTime(1100);
+      // 停顿超时（跟随 DENSITY.typeAheadMs，调参时测试自适应）：缓冲清空，单字符重新匹配
+      vi.advanceTimersByTime(DENSITY.typeAheadMs + 100);
       expect(useUi.getState().typeAhead).toBeNull();
       fire({ key: "b" });
       expect(h.revealEntry).toHaveBeenLastCalledWith("C:\\dir\\b.md");
