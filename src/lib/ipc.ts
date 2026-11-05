@@ -28,8 +28,9 @@ export interface FileEntry {
   /** 创建时间（§7.3 属性对话框）；文件系统不支持时为 0 */
   ctimeMs: number;
   attrs: FileAttrs;
-  /** 拼音首字母匹配串（首字母跳转用；不含汉字为 null，前端回落名称前缀匹配） */
-  py: string | null;
+  /** 拼音首字母匹配变体（首字母跳转用；多音字全读音首字母组合、首选在前，
+   *  与 Rust pinyin_initial_variants 同源；不含汉字为 null，前端回落名称前缀匹配） */
+  py: string[] | null;
 }
 
 export interface DirPage {

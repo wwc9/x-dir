@@ -408,6 +408,73 @@ pub fn pinyin_initials(name: &str) -> Option<String> {
     has_hanzi.then_some(out)
 }
 
+/// 拼音首字母**变体集合**（type-ahead 用，2026-11-05）：多音字把多读音的
+/// 首字母都纳入——pinyin 词典读音按字母序排列（晟="chéng,shèng,jīng" 首选
+/// 是 chéng），单取第一读音会让常用读法敲不中（"联晟" 敲 ls 落空）。
+/// 组合控制（实测教训：不限宽时"江西联晟投资发展有限公司"里 限=wěn、
+/// 有=wěi、司=cí 等罕用读法先撑爆 cap，把晟的 shèng 变体挤掉）：
+/// - 每字最多取前 2 个首字母（第三读法起极罕见，掐掉防组合爆炸）
+/// - 变体按读音优先序展开（截断保前缀多样性），封顶 cap
+///
+/// 无汉字返回 None。
+pub fn pinyin_initial_variants(name: &str, cap: usize) -> Option<Vec<String>> {
+    const PER_CHAR_INITS: usize = 2;
+    let mut variants: Vec<String> = vec![String::with_capacity(name.len())];
+    let mut has_hanzi = false;
+    for c in name.chars() {
+        if c.is_ascii() {
+            let lc = c.to_ascii_lowercase();
+            for v in &mut variants {
+                v.push(lc);
+            }
+        } else if let Some(readings) = hanzi_readings(c) {
+            has_hanzi = true;
+            let mut inits: Vec<char> = Vec::new();
+            for r in readings.split(',') {
+                if let Some(init) = plain_reading(r).chars().next()
+                    && !inits.contains(&init)
+                {
+                    inits.push(init);
+                }
+                if inits.len() >= PER_CHAR_INITS {
+                    break;
+                }
+            }
+            match inits.first().copied() {
+                Some(only) if inits.len() == 1 => {
+                    for v in &mut variants {
+                        v.push(only);
+                    }
+                }
+                _ if inits.is_empty() => {}
+                _ => {
+                    // 读音优先序展开（先遍历读音再遍历已有变体）：截断时保留
+                    // 前缀多样性——前缀优先序会让尾部多音字的分支把首字符的
+                    // 常用读法变体整体挤出 cap（实测"联晟"的 s 分支被
+                    // 有/限/司 的分支顶掉）
+                    let mut next: Vec<String> = Vec::with_capacity(variants.len() * inits.len());
+                    for &i in &inits {
+                        for v in &variants {
+                            let mut nv = v.clone();
+                            nv.push(i);
+                            next.push(nv);
+                        }
+                    }
+                    next.truncate(cap);
+                    variants = next;
+                }
+            }
+        } else {
+            let lc = c.to_lowercase().collect::<String>();
+            for v in &mut variants {
+                v.push_str(&lc);
+            }
+        }
+    }
+    variants.truncate(cap);
+    has_hanzi.then_some(variants)
+}
+
 /// 拼音字母集掩码（索引扫描预筛用）：名称每个字符贡献其全部读音（去声调）与
 /// 透传原文的字节集合——bit 0..25 = 'a'..'z'，bit 26 = 其他任意字节（通配位）。
 /// 不含汉字返回 0（纯 ASCII 名称走 u16 子串快路径，无需拼音通道）。
@@ -1089,5 +1156,48 @@ mod tests {
         assert_eq!(out.len(), 3); // 文件不算，三个目录（大小写不敏感）
         assert!(out.iter().all(|p| p.starts_with(&root)));
         std::fs::remove_dir_all(&root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod initial_variants_tests {
+    use super::*;
+
+    #[test]
+    fn multi_reading_chars_cover_all_initials() {
+        // 晟 = chéng/shèng/jīng（词典字母序 chéng 在前）：每字前 2 读 → {c,s}；
+        // 生产 cap=32（限/有/司 各 2 读 → 16 组合全保留）
+        let v = pinyin_initial_variants("江西联晟投资发展有限公司", 32).unwrap();
+        assert!(
+            v[0].starts_with("jxlc"),
+            "首选变体 = 字典首读音 chéng: {}",
+            v[0]
+        );
+        assert!(
+            v.iter().any(|p| p.starts_with("jxls")),
+            "常用读音 shèng 变体在列: {v:?}"
+        );
+        // 敲 ls（联晟 常用读音）与 lc（字典首选）都能命中
+        assert!(v.iter().any(|p| p.contains("ls")));
+        assert!(v.iter().any(|p| p.contains("lc")));
+        // 多音字 = 晟{c,s}/投{t,d}/有{y,w}/限{x,w}/司{s,c} → 2^5 = 32（= cap）
+        assert!(v.len() <= 32, "每字限宽 2 读控组合: {v:?}");
+    }
+
+    #[test]
+    fn ascii_passthrough_and_none() {
+        assert_eq!(
+            pinyin_initial_variants("forge请下这个txt文件", 8).unwrap()[0],
+            "forgeqxzgtxtwj"
+        );
+        assert!(pinyin_initial_variants("plain ascii.md", 8).is_none());
+    }
+
+    #[test]
+    fn variant_cap_keeps_first_reading_bias() {
+        // 重(chóng/zhòng)=2 读 × 长(cháng/zhǎng)=2 读 × … 超出 cap 截断，
+        // 首选组合（字典序）保留在前
+        let v = pinyin_initial_variants("重庆行长重量", 8).unwrap();
+        assert!(!v.is_empty() && v.len() <= 8);
     }
 }

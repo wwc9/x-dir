@@ -145,23 +145,23 @@ describe("highlightParts", () => {
   });
   it("拼音首字母词标记对应汉字（py 命中）", () => {
     // 全串命中：wwc ↔ 王文铖
-    expect(highlightParts("13489_王文铖", "wwc", "13489_wwc")).toEqual([
+    expect(highlightParts("13489_王文铖", "wwc", ["13489_wwc"])).toEqual([
       { text: "13489_", hit: false },
       { text: "王文铖", hit: true },
     ]);
     // 部分命中：wc = 文铖（py 第 2~3 位）
-    expect(highlightParts("13489_王文铖", "wc", "13489_wwc")).toEqual([
+    expect(highlightParts("13489_王文铖", "wc", ["13489_wwc"])).toEqual([
       { text: "13489_王", hit: false },
       { text: "文铖", hit: true },
     ]);
     // 混排：ascii 前缀 py 透传，词命中汉字段
-    expect(highlightParts("forge请下这个txt文件", "qxz", "forgeqxzgtxtwj")).toEqual([
+    expect(highlightParts("forge请下这个txt文件", "qxz", ["forgeqxzgtxtwj"])).toEqual([
       { text: "forge", hit: false },
       { text: "请下这", hit: true },
       { text: "个txt文件", hit: false },
     ]);
     // 词已字面命中（13749 等）不再走拼音通道；py 不含该词也不额外标记
-    expect(highlightParts("王文铖", "文", "wwc")).toEqual([
+    expect(highlightParts("王文铖", "文", ["wwc"])).toEqual([
       { text: "王", hit: false },
       { text: "文", hit: true },
       { text: "铖", hit: false },

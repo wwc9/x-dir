@@ -127,7 +127,7 @@ function TaName({
   ta,
 }: {
   name: string;
-  py?: string | null;
+  py?: string[] | null;
   ta: TypeAheadState | null;
 }) {
   if (!ta?.needle || !ta.mode) return <>{name}</>;

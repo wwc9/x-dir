@@ -27,8 +27,8 @@
 export interface TypeAheadItem {
   name: string;
   path: string;
-  /** 拼音首字母匹配串（Rust 端随列表下发；不含汉字为 null） */
-  py?: string | null;
+  /** 拼音首字母匹配变体（Rust 端随列表下发，多音字全读音组合；不含汉字为 null） */
+  py?: string[] | null;
 }
 
 export interface TypeAheadMatch {
@@ -57,14 +57,14 @@ function matchOf(it: TypeAheadItem, needle: string, mode: Mode): boolean {
   const name = it.name.toLowerCase();
   if (mode === "prefix") {
     if (name.startsWith(needle)) return true;
-    return !!it.py && it.py.toLowerCase().startsWith(needle);
+    return !!it.py?.some((p) => p.toLowerCase().startsWith(needle));
   }
   if (mode === "contains") {
     if (name.includes(needle)) return true;
-    return !!it.py && it.py.toLowerCase().includes(needle);
+    return !!it.py?.some((p) => p.toLowerCase().includes(needle));
   }
   // pymid = 仅拼音首字母串中段（文件名中间文字的首字母定位，策略 1b）
-  return !!it.py && it.py.toLowerCase().includes(needle);
+  return !!it.py?.some((p) => p.toLowerCase().includes(needle));
 }
 
 /** 中段首字母匹配启用条件（策略 1b）：非 "*" 模式 + 缓冲 ≥2 字符且含 ≥2 个
@@ -233,7 +233,7 @@ export function typeAheadRematch(
  *  对齐失败或未命中返回 null（不高亮） */
 export function matchRangeOf(
   name: string,
-  py: string | null | undefined,
+  py: string[] | null | undefined,
   needle: string,
   mode: TaMode,
 ): [number, number] | null {
@@ -260,7 +260,17 @@ export function matchRangeOf(
     return [before, lenChars];
   }
   // 拼音档（pymid）或 contains/prefix 落到 py 通道：py 命中偏移 → 名称字符区间
-  if (!py) return null;
+  //（多变体：取首个能对齐成功的变体）
+  if (!py?.length) return null;
+  for (const variant of py) {
+    const r = pyRangeOf(name, variant, nd);
+    if (r) return r;
+  }
+  return null;
+}
+
+/** 单个 py 变体的命中偏移对齐（matchRangeOf 内部用） */
+function pyRangeOf(name: string, py: string, nd: string): [number, number] | null {
   const pyLower = py.toLowerCase();
   const p0 = pyLower.indexOf(nd);
   if (p0 < 0) return null;

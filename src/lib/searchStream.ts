@@ -167,7 +167,7 @@ function splitQueryTokens(query: string): string[] {
 export function highlightParts(
   name: string,
   query: string,
-  py?: string | null,
+  py?: string[] | null,
 ): NamePart[] {
   const terms = splitQueryTokens(query.toLowerCase()).flatMap((raw): string[] => {
     if (!raw || raw.startsWith("!") || ATTR_TERM_RE.test(raw)) return [];
@@ -192,11 +192,15 @@ export function highlightParts(
       for (let k = i; k < i + t.length; k++) marks[k] = true;
       from = i + Math.max(1, t.length);
     }
-    // 拼音首字母通道：字面未覆盖且 py 串含该词 → 标记对应汉字区间
-    if (!literal && py) {
-      const r = pinyinHighlightRange(name, py, t);
-      if (r) {
-        for (let k = r[0]; k < r[1]; k++) marks[k] = true;
+    // 拼音首字母通道：字面未覆盖且 py 变体含该词 → 标记对应汉字区间
+    //（多变体：2026-11-05 起随 Rust pinyin_initial_variants 下发，逐个试）
+    if (!literal && py?.length) {
+      for (const v of py) {
+        const r = pinyinHighlightRange(name, v, t);
+        if (r) {
+          for (let k = r[0]; k < r[1]; k++) marks[k] = true;
+          break;
+        }
       }
     }
   }

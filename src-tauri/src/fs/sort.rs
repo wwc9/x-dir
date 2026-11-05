@@ -131,7 +131,10 @@ pub fn name_filter_terms(query: &str) -> Vec<String> {
 
 pub fn entry_matches_terms(e: &FileEntry, terms: &[String]) -> bool {
     terms.iter().all(|t| {
-        e.name.to_lowercase().contains(t) || e.py.as_deref().is_some_and(|py| py.contains(t))
+        e.name.to_lowercase().contains(t)
+            || e.py
+                .as_ref()
+                .is_some_and(|ps| ps.iter().any(|py| py.contains(t)))
     })
 }
 
@@ -264,7 +267,7 @@ mod tests {
     #[test]
     fn name_filter_substring_and_pinyin() {
         let mut zh = e("凭证汇总.xlsx", false, 1);
-        zh.py = Some("pzhz".to_string());
+        zh.py = Some(vec!["pzhz".to_string()]);
         let entries = [zh, e("report.pdf", false, 1), e("docs", true, 0)];
 
         // 单词子串：命中名称或拼音首字母串

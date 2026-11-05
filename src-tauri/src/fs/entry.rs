@@ -30,8 +30,9 @@ pub struct FileEntry {
     /// 创建时间（§7.3 属性对话框）；文件系统不支持时为 0
     pub ctime_ms: u64,
     pub attrs: FileAttrs,
-    /// 拼音首字母匹配串（首字母跳转用；不含汉字为 None，前端回落名称前缀匹配）
-    pub py: Option<String>,
+    /// 拼音首字母匹配变体（首字母跳转用；多音字全读音首字母的组合，首选
+    /// 读音变体在前；不含汉字为 None，前端回落名称前缀匹配）
+    pub py: Option<Vec<String>>,
 }
 
 pub fn systemtime_to_unix_ms(t: SystemTime) -> u64 {
@@ -80,7 +81,7 @@ pub fn dir_entry_to_file(dir: &str, entry: &std::fs::DirEntry) -> Option<FileEnt
     let raw = std::os::windows::fs::MetadataExt::file_attributes(&meta);
     #[cfg(not(windows))]
     let raw = 0u32;
-    let py = super::search::pinyin_initials(&name);
+    let py = super::search::pinyin_initial_variants(&name, 32);
     Some(FileEntry {
         path: join_name(dir, &name),
         name,
@@ -110,7 +111,7 @@ mod tests {
         let e = rd.next().unwrap().unwrap();
         let fe = dir_entry_to_file(d.to_str().unwrap(), &e).unwrap();
         assert_eq!(fe.name, "预算表.xlsx");
-        assert_eq!(fe.py.as_deref(), Some("ysb.xlsx"));
+        assert_eq!(fe.py.as_deref(), Some(&["ysb.xlsx".to_string()][..]));
         std::fs::remove_dir_all(&d).unwrap();
     }
 }

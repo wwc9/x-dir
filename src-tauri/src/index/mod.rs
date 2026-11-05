@@ -447,7 +447,7 @@ pub(crate) mod meta {
         let size = ((data.nFileSizeHigh as u64) << 32) | data.nFileSizeLow as u64;
         let is_dir = data.dwFileAttributes & 0x10 != 0;
         let name = crate::fs::path::file_name_of(path);
-        let py = crate::fs::search::pinyin_initials(&name);
+        let py = crate::fs::search::pinyin_initial_variants(&name, 32);
         Some(FileEntry {
             name,
             path: path.to_string(),
