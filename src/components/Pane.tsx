@@ -99,6 +99,21 @@ const TOOL_TIER: Record<string, "always" | "mid-wide" | "only-wide"> = {
   openTerminal: "only-wide",
 };
 
+/** 工具栏按钮 → 快捷键键帽（2026-11-05）：np-tip 的 data-kbd 渲染为 chip，
+ *  取代此前内嵌文案的全角括号式（§4.8 快捷键统一走键帽）。
+ *  组合与 lib/shortcuts.ts 清单逐条对应：up=nav-up / newFolder=new-folder /
+ *  search=search-pane / refresh=refresh / view=view-cycle / splitH·V=pane-split，
+ *  改键位先改清单再同步本表 */
+const TOOL_KBD: Record<string, string> = {
+  up: "Backspace",
+  newFolder: "Ctrl+Shift+N",
+  search: "Ctrl+F",
+  refresh: "F5",
+  view: "F3",
+  splitH: "Ctrl+Shift+H",
+  splitV: "Ctrl+Shift+V",
+};
+
 export function Pane({ pane }: { pane: PaneNode }) {
   const active = useLayout((s) => s.activePaneId === pane.id);
   const swapFrom = useUi((s) => s.swapFrom);
@@ -431,12 +446,13 @@ export function Pane({ pane }: { pane: PaneNode }) {
   }, [searching]);
   const toolTitle = (key: string) => {
     switch (key) {
+      // 快捷键经 data-kbd 键帽展示（TOOL_KBD），文案不再内嵌括号式键位
       case "up":
-        return t("上一级（Backspace）");
+        return t("上一级");
       case "newFolder":
-        return t("新建文件夹（Ctrl+Shift+N）");
+        return t("新建文件夹");
       case "search":
-        return t("搜索当前文件夹（Ctrl+F）");
+        return t("搜索当前文件夹");
       case "swap":
         return t("交换窗格（点选目标窗格换位）");
       case "openTerminal":
@@ -674,6 +690,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
             active={searching}
             disabled={toolDisabled(key)}
             data-tip={`${toolTitle(key)}${t("（再点一次或 Esc 退出）")}`}
+            data-kbd={TOOL_KBD[key]}
             onClick={() => runTool(key)}
           />
         </div>
@@ -706,6 +723,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
               icon={ic(FN_ICONS[key] ?? List)}
               disabled={toolDisabled(key)}
               data-tip={toolTitle(key)}
+              data-kbd={TOOL_KBD[key]}
             />
           </PopoverNext>
         </div>
@@ -724,6 +742,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
           icon={ic(FN_ICONS[key] ?? List)}
           disabled={off}
           data-tip={`${toolTitle(key)}${ready ? "" : t("（启用条件未满足）")}`}
+          data-kbd={TOOL_KBD[key]}
           onClick={extra?.onClick}
         />
       );
@@ -1050,6 +1069,8 @@ export function Pane({ pane }: { pane: PaneNode }) {
           size="small"
           icon={ic(Plus)}
           aria-label={t("新建标签")}
+          data-tip={t("新建标签")}
+          data-kbd="Ctrl+T"
           onClick={() => useLayout.getState().newTab(pane.id)}
         />
       </div>

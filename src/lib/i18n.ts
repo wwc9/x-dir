@@ -61,10 +61,8 @@ const EN: Record<string, string> = {
     "Current scheme (click the save icon above to overwrite changes)",
   "点击切换到此布局": "Click to switch to this layout",
 
-  // ── 窗格工具提示（toolTitle 复合串）──
-  "上一级（Backspace）": "Up (Backspace)",
-  "新建文件夹（Ctrl+Shift+N）": "New folder (Ctrl+Shift+N)",
-  "搜索当前文件夹（Ctrl+F）": "Search current folder (Ctrl+F)",
+  // ── 窗格工具提示（toolTitle 复合串；快捷键经 data-kbd 键帽展示，
+  //    2026-11-05 起文案不再内嵌括号式键位，裸键见下方基础词条）──
   "交换窗格（点选目标窗格换位）": "Swap panes (click the target pane to swap)",
   "在终端打开当前文件夹": "Open current folder in terminal",
   "收藏当前文件夹": "Favorite this folder",
