@@ -358,3 +358,39 @@ describe("读音分层：罕用读音兜底排序", () => {
     expect(r).toMatchObject({ idx: 0, mode: "pymid", src: 1 });
   });
 });
+
+// 名称中段（2026-11-05 解禁）："du" → "modules"——纯 ASCII 名称无 py，
+// 此前名称中段须 "*" 显式，顾虑（与同键循环无法区分）随循环移除而消解
+describe("名称中段字面子串", () => {
+  const dir = [
+    { name: "readme.md", path: "n0", py: null },
+    { name: "modules", path: "n1", py: null },
+    { name: "tools.txt", path: "n2", py: null },
+  ];
+  it("du 中段命中 modules，独立匹配集 src=3", () => {
+    expect(typeAheadStep(dir, "d", "u", -1)).toMatchObject({
+      idx: 1,
+      mode: "contains",
+      src: 3,
+      needle: "du",
+    });
+    expect(matchRangeOf("modules", null, "du", "contains")).toEqual([2, 2]); // m-o-d(2)-u
+  });
+  it("名称中段排在变体前缀之后、变体中段之前", () => {
+    // ls：联晟电子（变体前缀档）先于 tools（名称中段档），无论显示顺序
+    const mixed = [
+      { name: "tools.txt", path: "x0", py: null },
+      { name: "联晟电子快报", path: "x1", py: ["lctzkb", "lstzkb"] },
+    ];
+    expect(typeAheadStep(mixed, "l", "s", -1)).toMatchObject({ idx: 1, mode: "prefix", src: 1 });
+    // 谷商（变体中段档）后于 tools（名称中段档）
+    const mixed2 = [
+      { name: "2026.9月快报（医药谷商业）", path: "y0", py: ["2026.9ykb（yyygs）", "2026.9ykb（yylsy）"] },
+      { name: "tools.txt", path: "y1", py: null },
+    ];
+    expect(typeAheadStep(mixed2, "l", "s", -1)).toMatchObject({ idx: 1, mode: "contains", src: 3 });
+  });
+  it("单字符不走名称中段（o 不跳 modules）", () => {
+    expect(typeAheadStep(dir, "", "o", -1)).toBeNull();
+  });
+});

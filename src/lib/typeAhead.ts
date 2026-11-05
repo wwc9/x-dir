@@ -10,9 +10,11 @@
 // 1b. 前缀整缓冲未命中（或只驻留当前项）→ 拼音首字母串中段匹配（py.includes）：
 //     支持用文件名中间文字的首字母定位（"2026年度审计报告" 敲 "sjbg" 直达"审计
 //     报告"段）。启用条件 = 缓冲 ≥2 字符（重复字符如 "ll"/"bb" 与普通针同权，
-//     2026-11-05 起不再排除）。仅 py 中段：名称中段匹配仍属 "*" 显式子串语义。
-// 1c/1d. 多音字变体兜底层（前缀 + 中段）：词典次读法（谷=lù / 晟=shèng）排在
+//     2026-11-05 起不再排除）。
+// 1c/1e. 多音字变体兜底层（前缀 + 中段）：词典次读法（谷=lù / 晟=shèng）排在
 //     全部首选读音命中之后，罕用读法只在无更好命中时兜底。
+// 1d. 名称中段（字面子串，≥2 字符）："du" → "modules"。旧策略要求 "*" 显式
+//     子串的原因是无法与同键循环区分——循环已于 2026-11-05 移除，顾虑不再。
 // 2.（已移除，2026-11-05 用户定案）不再有「重复按同一字母在同类间循环」的
 //    回退档——重复字母按普通缓冲累积（"ll" 即真针 ll），全档无命中 = 无匹配，
 //    由 Backspace 回删或超时重来；多命中间的移动一律 Tab/Shift+Tab。
@@ -52,17 +54,18 @@ export interface TypeAheadMatch {
 export type TaMode = "prefix" | "contains" | "pymid";
 
 /** 读音层：0 = 名称/首选读音串；1 = 多音字变体串；2 = 全部（同键循环等
- *  宽容场景用） */
-export type TaSrc = 0 | 1 | 2;
+ *  宽容场景用）；3 = 名称专属（不含 py——名称中段档的独立匹配集） */
+export type TaSrc = 0 | 1 | 2 | 3;
 
 type Mode = TaMode;
 
 /** 读音层取串：0 = py[0]（Rust 变体生成保证为全首选读音），1 = py[1..]
- *  （多音字变体），2 = 全部（同键循环等宽容场景） */
+ *  （多音字变体），2 = 全部（"*" 显式子串等宽容场景），3 = 名称专属 */
 function pysOf(it: TypeAheadItem, src: TaSrc): string[] {
   const py = it.py;
   if (!py?.length) return [];
   if (src === 2) return py;
+  if (src === 3) return [];
   return src === 0 ? py.slice(0, 1) : py.slice(1);
 }
 
@@ -197,7 +200,17 @@ function resolveFrom(
     const { pos, total } = statsOf(items, needle, h1c, mode, 1);
     return { idx: h1c, buf: next, disp: dispOf(star, needle), pos, total, needle, mode, src: 1 };
   }
-  // 1d) 变体兜底层：中段语义（"2026…--江西联晟…"，联晟居名中）
+  // 1d) 名称中段（字面子串，2026-11-05 解禁）："du" → "modules"——旧策略 4
+  //     「名称中段须 * 显式」的顾虑是与同键循环无法区分，循环已移除故解禁；
+  //     与中段族同门槛 ≥2 字符，独立匹配集（src 3 不含 py），Tab 循环不外溢
+  if (!star && needle.length >= 2) {
+    const h1n = findFrom(items, needle, curIdx, "contains", 3);
+    if (h1n !== null && h1n !== curIdx) {
+      const { pos, total } = statsOf(items, needle, h1n, "contains", 3);
+      return { idx: h1n, buf: next, disp: dispOf(star, needle), pos, total, needle, mode: "contains", src: 3 };
+    }
+  }
+  // 1e) 变体兜底层：中段语义（"2026…--江西联晟…"，联晟居名中）
   if (pymidEligible(star, needle)) {
     const h1d = findFrom(items, needle, curIdx, "pymid", 1);
     if (h1d !== null && h1d !== curIdx) {
@@ -237,12 +250,12 @@ export function typeAheadRematch(
   const star = buf.startsWith("*");
   const needle = (star ? buf.slice(1) : buf).toLowerCase();
   if (!needle || curIdx < 0 || curIdx >= items.length) return resolveFrom(items, buf, curIdx);
-  // 驻留判定按级联同序：首选前缀 → 首选中段 → 变体前缀 → 变体中段
-  //（同键循环档已移除，无单字符回退层）
+  // 驻留判定按级联同序：首选前缀 → 首选中段 → 变体前缀 → 名称中段 → 变体中段
   const tiers: [Mode, string, TaSrc][] = [
     [star ? "contains" : "prefix", needle, 0],
     ...((pymidEligible(star, needle) ? [["pymid", needle, 0] as [Mode, string, TaSrc]] : []) as [Mode, string, TaSrc][]),
     [star ? "contains" : "prefix", needle, 1],
+    ...((!star && needle.length >= 2 ? [["contains", needle, 3] as [Mode, string, TaSrc]] : []) as [Mode, string, TaSrc][]),
     ...((pymidEligible(star, needle) ? [["pymid", needle, 1] as [Mode, string, TaSrc]] : []) as [Mode, string, TaSrc][]),
   ];
   for (const [m, nd, s] of tiers) {
