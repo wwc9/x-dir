@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { t } from "../lib/i18n";
 import {
   Button,
+  Checkbox,
   Dialog,
   DialogBody,
   DialogFooter,
@@ -82,6 +83,9 @@ export function DialogHost() {
   const dialog = useUi((s) => s.dialog);
   const resolve = useUi((s) => s.resolveDialog);
   const close = () => resolve(null);
+  // 「以后不再确认」勾选态：随弹窗开合复位（dialog 对象每次 openDialog 新建）
+  const [remember, setRemember] = useState(false);
+  useEffect(() => setRemember(false), [dialog]);
   const kind: DialogKind =
     dialog && (dialog.type === "confirm" || dialog.type === "alert")
       ? (dialog.kind ?? "info")
@@ -169,6 +173,14 @@ export function DialogHost() {
         <>
           <DialogBody>
             <div className="np-dialog-muted">{dialog.message}</div>
+            {dialog.rememberLabel && (
+              <Checkbox
+                className="np-dialog-remember"
+                checked={remember}
+                onChange={(e) => setRemember(e.currentTarget.checked)}
+                label={dialog.rememberLabel}
+              />
+            )}
           </DialogBody>
           <DialogFooter
             actions={
@@ -179,7 +191,10 @@ export function DialogHost() {
                 <Button
                   size="small"
                   intent={kindIntent(kind)}
-                  onClick={() => resolve(true)}
+                  onClick={() => {
+                    if (remember && dialog.onRemember) dialog.onRemember();
+                    resolve(true);
+                  }}
                 >
                   {dialog.okText ?? "确定"}
                 </Button>

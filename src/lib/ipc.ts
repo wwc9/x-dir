@@ -439,7 +439,9 @@ export const DEFAULT_SETTINGS: Settings = {
   showHidden: false,
   defaultView: "details",
   defaultSort: { key: "name", dir: "asc" },
-  confirmDelete: true,
+  // 默认直删回收站（2026-11-05 定案）：回收站可还原无需默认打断；想要确认
+  // 的用户在设置打开，或在弹窗里永远不勾「以后不再确认」
+  confirmDelete: false,
   toolbarEntries: [],
   restoreLastSession: true,
   favorites: [],

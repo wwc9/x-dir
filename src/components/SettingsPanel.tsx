@@ -317,7 +317,10 @@ export function SettingsPanel() {
         )}
         {tab === "ops" && (
           <>
-            <SetRow label={t("删除前确认")} desc="删除到回收站前弹出确认框">
+            <SetRow
+              label={t("删除前确认")}
+              desc="删除到回收站前弹出确认框（默认直删；弹窗内勾选「以后不再确认」即关闭本开关）"
+            >
               <Switch
                 checked={s.confirmDelete}
                 onChange={(e) => s.update({ confirmDelete: e.currentTarget.checked })}

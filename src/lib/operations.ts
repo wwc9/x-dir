@@ -70,7 +70,8 @@ export async function deletePaths(
   permanent = false,
 ): Promise<void> {
   if (!paths.length) return;
-  // 永久删除不可恢复：无论"删除前确认"开关，一律 danger 确认
+  // 永久删除不可恢复：无论"删除前确认"开关，一律 danger 确认，且不提供
+  // "以后不再确认"（不可逆操作保留强制确认）；回收站删除可勾选直接关掉确认
   if (confirmDelete || permanent) {
     const ok = await confirmDialog(
       permanent
@@ -85,6 +86,8 @@ export async function deletePaths(
             message: `确定把选中的 ${paths.length} 项移入回收站吗？`,
             kind: "warn",
             okText: "移入回收站",
+            rememberLabel: "以后不再确认，直接移入回收站（可在设置 → 文件操作中恢复）",
+            onRemember: () => useSettings.getState().update({ confirmDelete: false }),
           },
     );
     if (!ok) return;

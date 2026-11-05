@@ -15,6 +15,10 @@ export type DialogSpec =
       kind?: DialogKind;
       okText?: string;
       cancelText?: string;
+      /** 可选「记住选择」勾选（2026-11-05）：勾选并按确定时触发——
+       *  删除确认用它落盘关闭「删除前确认」，替代用户进设置手动关 */
+      rememberLabel?: string;
+      onRemember?: () => void;
     }
   | {
       type: "alert";
@@ -68,13 +72,16 @@ export type DialogSpec =
 /** 提示弹窗语义级别：info=主操作、warn=警示、danger=不可逆/错误 */
 export type DialogKind = "info" | "warn" | "danger";
 
-/** 标准确认弹窗（取消/确定，Esc 或点遮罩 = 取消） */
+/** 标准确认弹窗（取消/确定，Esc 或点遮罩 = 取消）；rememberLabel/onRemember
+ *  = 可选「以后不再确认」勾选（勾选并确定时触发，见 DialogSpec confirm） */
 export function confirmDialog(opts: {
   title?: string;
   message: string;
   kind?: DialogKind;
   okText?: string;
   cancelText?: string;
+  rememberLabel?: string;
+  onRemember?: () => void;
 }): Promise<boolean | null> {
   return useUi.getState().openDialog<boolean | null>({ type: "confirm", ...opts });
 }

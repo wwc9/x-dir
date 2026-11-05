@@ -2294,6 +2294,14 @@ body.np-col-resizing * {
   color: var(--np-muted);
   margin-bottom: 6px;
 }
+/* 确认弹窗「以后不再确认」勾选（2026-11-05）：消息下方、小密度行高，
+   覆盖 .bp6-control 默认 line-height 30 / margin-bottom 8 的宽松节奏 */
+.np-dialog-remember {
+  margin: 4px 0 0;
+  line-height: 24px;
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+}
 .np-dialog-error {
   color: var(--np-danger);
   margin-top: 6px;
