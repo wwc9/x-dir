@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>首字母定位高亮 方案 B · 下划线记号</title>
+    <style>
+      :root {
+        --fg: #171d26; --accent: #3574f0; --hover: rgba(26,33,41,.055); --sel: rgba(53,116,240,.12);
+        --dfg: #e8eaed; --daccent: #5c9dff; --dsel: rgba(92,157,255,.16); --dsurface: #1b1e23;
+      }
+      body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #eef1f6; margin: 0; padding: 32px 40px; color: #1c2430; }
+      h1 { font-size: 20px; margin: 0 0 6px; display: flex; align-items: center; gap: 10px; }
+      h2 { font-size: 14px; color: #5a6572; margin: 30px 0 12px; font-weight: 600; }
+      p.lead { font-size: 13px; color: #5a6572; max-width: 660px; line-height: 1.7; margin: 0; }
+      .tag { font-size: 12px; padding: 2px 10px; border-radius: 99px; background: #dce4f0; color: #3574f0; font-weight: 600; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+      .panel { border-radius: 10px; overflow: hidden; border: 1px solid rgba(0,0,0,.1); }
+      .panel.light { background: #fff; }
+      .panel.dark { background: var(--dsurface); }
+      .pnl-title { font-size: 11px; padding: 6px 10px; color: #8a93a0; background: rgba(0,0,0,.04); }
+      .dark .pnl-title { color: #7d8694; background: rgba(255,255,255,.05); }
+      .row { display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 8px; font-size: 13px; margin: 0 2px; border-radius: 4px; }
+      .light .row { color: var(--fg); }
+      .dark .row { color: var(--dfg); }
+      .row.sel-l { background: var(--sel); color: var(--accent); }
+      .row.sel-d { background: var(--dsel); color: var(--daccent); }
+      .row .ico { width: 16px; height: 16px; border-radius: 3px; background: linear-gradient(135deg,#2447e8,#14cfdc); flex: 0 0 auto; }
+      .row .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .vs { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+      .vs .lbl { font-size: 11px; color: #5a6572; width: 64px; flex: 0 0 auto; }
+      .swatches { display: flex; gap: 14px; margin-top: 10px; }
+      .sw { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #3d4756; }
+      .sw i { width: 22px; height: 14px; border-radius: 3px; display: inline-block; border: 1px solid rgba(0,0,0,.12); }
+      mark.cur { background: rgba(53,116,240,.22); border-radius: 3px; font-weight: 600; color: inherit; padding: 1px 2px; }
+      mark.new { background: none; border-radius: 0; font-weight: 600; color: var(--accent); padding: 0 1px; box-shadow: inset 0 -2px 0 var(--accent); }
+      .dark mark.cur { background: rgba(92,157,255,.24); }
+      .dark mark.new { background: none; color: var(--daccent); box-shadow: inset 0 -2px 0 var(--daccent); }
+    </style>
+  </head>
+  <body>
+    <h1><span class="tag">方案 B</span> 下划线记号</h1>
+    <p class="lead">
+      命中文字改用 accent 颜色 + 2px 粗下划线（搜索引擎关键词记号的口径）。最轻量——不改底色、
+      不影响行底色节奏，普通行上一眼可见；代价是选中行文字本就是 accent 色，需靠下划线区分，
+      远距离扫视的醒目度中等。
+    </p>
+
+    <h2>四态对比（左：当前即本方案 · 右：同数据无高亮参照）</h2>
+    <div class="grid">
+      <div class="panel light">
+        <div class="pnl-title">浅色主题 · 普通 / 选中行</div>
+        <div class="vs"><span class="lbl">命中行</span><div class="row"><span class="ico"></span><span class="name">联晟电子2026年9月<mark class="new">快报</mark>.xlsx</span></div></div>
+        <div class="vs"><span class="lbl">选中命中</span><div class="row sel-l"><span class="ico"></span><span class="name">联晟电子2026年9月<mark class="new">快报</mark>.xlsx</span></div></div>
+        <div class="vs"><span class="lbl">中段命中</span><div class="row"><span class="ico"></span><span class="name">2026年9月省<mark class="new">进出口</mark>快报.docx</span></div></div>
+      </div>
+      <div class="panel dark">
+        <div class="pnl-title">深色主题 · 普通 / 选中行</div>
+        <div class="vs"><span class="lbl">命中行</span><div class="row"><span class="ico"></span><span class="name">联晟电子2026年9月<mark class="new">快报</mark>.xlsx</span></div></div>
+        <div class="vs"><span class="lbl">选中命中</span><div class="row sel-d"><span class="ico"></span><span class="name">联晟电子2026年9月<mark class="new">快报</mark>.xlsx</span></div></div>
+        <div class="vs"><span class="lbl">中段命中</span><div class="row"><span class="ico"></span><span class="name">2026年9月省<mark class="new">进出口</mark>快报.docx</span></div></div>
+      </div>
+    </div>
+
+    <h2>样式参数</h2>
+    <div class="swatches">
+      <span class="sw"><i style="background:none;box-shadow:inset 0 -2px 0 #3574f0"></i>浅色：accent 文字 + 2px 下划线</span>
+      <span class="sw"><i style="background:none;box-shadow:inset 0 -2px 0 #5c9dff"></i>深色同式</span>
+      <span class="sw">字重 600 · 无底色 · 选中行靠下划线区分</span>
+    </div>
+  </body>
+</html>
