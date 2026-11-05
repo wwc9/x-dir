@@ -1278,8 +1278,11 @@ body.np-col-resizing .np-menued-grip::after {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: var(--np-row-h);
-  padding: 0 8px;
+  /* 行高不锁死：短名单行 28px 与列表密度一致，长文件名自动长到两行
+     （2026-11-05 定案，min-height 取代 height；暂存区 ≤200 条全量渲染，
+     变高行不影响虚拟列表——此处本就不是虚拟滚动） */
+  min-height: var(--np-row-h);
+  padding: 2px 8px;
   border-radius: var(--np-radius);
   color: var(--np-fg);
   cursor: grab;
@@ -1291,9 +1294,15 @@ body.np-col-resizing .np-menued-grip::after {
 .np-shelf-name {
   flex: 1;
   min-width: 0;
+  /* 长文件名两行展示（超两行省略）：文件名无空格不可自然断行，
+     overflow-wrap: anywhere 只在装不下时才折行；行距 17px 紧凑两行 */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  line-height: 17px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .np-shelf-del {
   flex: 0 0 auto;
