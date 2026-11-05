@@ -1191,8 +1191,9 @@ export function FileList({
               forceBump,
             ),
         };
-      // 「新建」子菜单：文件夹 + 常用格式（0 字节文件与资源管理器 NullFile 同轨，
-      // Office/WPS 打开时按新文档处理）
+      // 「新建」子菜单：文件夹 + 常用格式（txt/md 为合法空文件 0 字节；docx/
+      // xlsx/pptx 由 Rust create_file 落盘最小合法 OOXML 模板——方案 A，
+      // 2026-11-05 定案，Office/WPS 干净打开不报修复）
       case "new":
         return {
           label: t("新建"),

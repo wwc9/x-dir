@@ -222,8 +222,153 @@ pub fn create_file(parent_dir: String, name: String) -> Result<String, AppError>
         ));
     }
     let p = join_name(&parent_dir, &name);
-    fs::File::create(to_extended(&p))?;
+    // 办公格式带最小合法模板落盘（方案 A，2026-11-05 定案）：0 字节的
+    // docx/xlsx/pptx 不是合法 OOXML（ZIP 容器缺 [Content_Types].xml 等部件），
+    // Office/WPS 打开报损坏；txt/md 空文件本就合法，维持 0 字节
+    if let Some(bytes) = office_template(&name) {
+        fs::write(to_extended(&p), bytes)?;
+    } else {
+        fs::File::create(to_extended(&p))?;
+    }
     Ok(p)
+}
+
+// ── 新建办公文档模板（最小合法 OOXML；与资源管理器 ShellNew 模板产物同级）──
+
+/// zip 容器打包（[Content_Types].xml 等部件按序写入，Deflated 压缩）
+fn zip_parts(parts: &[(&str, &str)]) -> Vec<u8> {
+    let mut cur = std::io::Cursor::new(Vec::new());
+    {
+        let mut w = zip::ZipWriter::new(&mut cur);
+        let opt = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        for (name, body) in parts {
+            w.start_file(*name, opt).expect("模板部件写入");
+            use std::io::Write;
+            w.write_all(body.as_bytes()).expect("模板部件内容");
+        }
+        w.finish().expect("模板 zip 收尾");
+    }
+    cur.into_inner()
+}
+
+/// 扩展名 → 最小合法模板字节（docx/pptx = zip 打包部件；xlsx = rust_xlsxwriter
+/// 空工作簿——项目唯一宽松协议 xlsx 写库，天然合法）；其余扩展名 None（0 字节）。
+/// OnceLock 惰性构建一次复用
+fn office_template(name: &str) -> Option<&'static [u8]> {
+    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
+    match ext.as_deref() {
+        Some("docx") => {
+            static T: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+            Some(T.get_or_init(|| {
+                zip_parts(&[
+                    (
+                        "[Content_Types].xml",
+                        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>"#,
+                    ),
+                    (
+                        "_rels/.rels",
+                        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>"#,
+                    ),
+                    (
+                        "word/document.xml",
+                        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body/></w:document>"#,
+                    ),
+                ])
+            }))
+        }
+        Some("xlsx") => {
+            static T: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+            Some(T.get_or_init(|| {
+                let mut wb = rust_xlsxwriter::Workbook::new();
+                wb.add_worksheet();
+                wb.save_to_buffer().expect("模板 xlsx 序列化")
+            }))
+        }
+        Some("pptx") => {
+            static T: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+            Some(T.get_or_init(|| {
+                // 最小演示文稿：presentation → slideMaster + theme + slide；
+                // master → layout + theme；slide → layout（PowerPoint 严格校验
+                // 引用链，缺任一环会弹修复框——部件齐备才干净打开）
+                const A: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
+                const R: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+                const P: &str = "http://schemas.openxmlformats.org/presentationml/2006/main";
+                const SP_TREE: &str = r#"<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>"#;
+                let theme = format!(
+                    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a:theme xmlns:a="{A}" name="Office"><a:themeElements><a:clrScheme name="Office"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="44546A"/></a:dk2><a:lt2><a:srgbClr val="E7E6E6"/></a:lt2><a:accent1><a:srgbClr val="4472C4"/></a:accent1><a:accent2><a:srgbClr val="ED7D31"/></a:accent2><a:accent3><a:srgbClr val="A5A5A5"/></a:accent3><a:accent4><a:srgbClr val="FFC000"/></a:accent4><a:accent5><a:srgbClr val="5B9BD5"/></a:accent5><a:accent6><a:srgbClr val="70AD47"/></a:accent6><a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme><a:fmtScheme name="Office"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>"#
+                );
+                let slide = format!(
+                    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="{A}" xmlns:r="{R}" xmlns:p="{P}"><p:cSld><p:spTree>{SP_TREE}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>"#
+                );
+                let layout = format!(
+                    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldLayout xmlns:a="{A}" xmlns:r="{R}" xmlns:p="{P}" type="blank" preserve="1"><p:cSld name="Blank"><p:spTree>{SP_TREE}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>"#
+                );
+                let master = format!(
+                    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldMaster xmlns:a="{A}" xmlns:r="{R}" xmlns:p="{P}"><p:cSld><p:spTree>{SP_TREE}</p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst></p:sldMaster>"#
+                );
+                let presentation = format!(
+                    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:presentation xmlns:a="{A}" xmlns:r="{R}" xmlns:p="{P}" saveSubsetFonts="1"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst><p:sldId id="256" r:id="rId2"/></p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>"#
+                );
+                // 关系部件：pairs = (关系类型, 目标)，Id 按序 rId1…rIdN
+                let rels = |pairs: &[(&str, String)]| {
+                    let built: String = pairs
+                        .iter()
+                        .enumerate()
+                        .map(|(i, (ty, target))| {
+                            format!(r#"<Relationship Id="rId{}" Type="{}" Target="{}"/>"#, i + 1, ty, target)
+                        })
+                        .collect();
+                    format!(
+                        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">{built}</Relationships>"#
+                    )
+                };
+                let rel_ty = |leaf: &str| format!("{R}/{leaf}");
+                zip_parts(&[
+                    (
+                        "[Content_Types].xml",
+                        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/><Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/><Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/><Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/></Types>"#,
+                    ),
+                    (
+                        "_rels/.rels",
+                        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>"#,
+                    ),
+                    (
+                        "ppt/presentation.xml",
+                        &presentation,
+                    ),
+                    (
+                        "ppt/_rels/presentation.xml.rels",
+                        &rels(&[
+                            (&rel_ty("slideMaster"), "slideMasters/slideMaster1.xml".into()),
+                            (&rel_ty("slide"), "slides/slide1.xml".into()),
+                            (&rel_ty("theme"), "theme/theme1.xml".into()),
+                        ]),
+                    ),
+                    ("ppt/slideMasters/slideMaster1.xml", &master),
+                    (
+                        "ppt/slideMasters/_rels/slideMaster1.xml.rels",
+                        &rels(&[
+                            (&rel_ty("slideLayout"), "../slideLayouts/slideLayout1.xml".into()),
+                            (&rel_ty("theme"), "../theme/theme1.xml".into()),
+                        ]),
+                    ),
+                    ("ppt/slideLayouts/slideLayout1.xml", &layout),
+                    (
+                        "ppt/slideLayouts/_rels/slideLayout1.xml.rels",
+                        &rels(&[(&rel_ty("slideMaster"), "../slideMasters/slideMaster1.xml".into())]),
+                    ),
+                    ("ppt/slides/slide1.xml", &slide),
+                    (
+                        "ppt/slides/_rels/slide1.xml.rels",
+                        &rels(&[(&rel_ty("slideLayout"), "../slideLayouts/slideLayout1.xml".into())]),
+                    ),
+                    ("ppt/theme/theme1.xml", &theme),
+                ])
+            }))
+        }
+        _ => None,
+    }
 }
 
 #[derive(Serialize)]
@@ -369,5 +514,94 @@ mod tests {
         let dir = tempdir();
         assert!(create_dirs_blocking(dir.clone(), vec![]).is_err());
         assert!(create_dirs_blocking(join_name(&dir, "不存在"), vec!["a".into()]).is_err());
+    }
+}
+
+#[cfg(test)]
+mod office_template_tests {
+    use super::*;
+    use calamine::Reader;
+
+    /// 解 zip 部件名清单（校验容器可读 + 关键部件在列）
+    fn zip_names(bytes: &[u8]) -> Vec<String> {
+        let cursor = std::io::Cursor::new(bytes.to_vec());
+        let mut z = zip::ZipArchive::new(cursor).expect("zip 可读");
+        (0..z.len())
+            .map(|i| z.by_index(i).unwrap().name().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn docx_template_is_valid_ooxml_zip() {
+        let b = office_template("新建 Word 文档.docx").expect("docx 模板");
+        assert_eq!(&b[..4], b"PK\x03\x04", "ZIP 魔数");
+        let names = zip_names(b);
+        for part in ["[Content_Types].xml", "_rels/.rels", "word/document.xml"] {
+            assert!(names.iter().any(|n| n == part), "缺部件 {part}: {names:?}");
+        }
+    }
+
+    #[test]
+    fn pptx_template_has_full_reference_chain() {
+        let b = office_template("演示文稿.PPTX").expect("pptx 模板（大写扩展名）");
+        assert_eq!(&b[..4], b"PK\x03\x04");
+        let names = zip_names(b);
+        for part in [
+            "[Content_Types].xml",
+            "_rels/.rels",
+            "ppt/presentation.xml",
+            "ppt/_rels/presentation.xml.rels",
+            "ppt/slideMasters/slideMaster1.xml",
+            "ppt/slideMasters/_rels/slideMaster1.xml.rels",
+            "ppt/slideLayouts/slideLayout1.xml",
+            "ppt/slideLayouts/_rels/slideLayout1.xml.rels",
+            "ppt/slides/slide1.xml",
+            "ppt/slides/_rels/slide1.xml.rels",
+            "ppt/theme/theme1.xml",
+        ] {
+            assert!(names.iter().any(|n| n == part), "缺部件 {part}: {names:?}");
+        }
+    }
+
+    #[test]
+    fn xlsx_template_loads_in_calamine() {
+        let b = office_template("新建 Excel 工作表.xlsx").expect("xlsx 模板");
+        assert_eq!(&b[..4], b"PK\x03\x04");
+        // calamine = 项目预览同源读取器：能开即合法（表格/sheet 可枚举）
+        let tmp = std::env::temp_dir().join("xdir_tpl_test.xlsx");
+        std::fs::write(&tmp, b).unwrap();
+        let mut wb: calamine::Xlsx<_> = calamine::open_workbook(&tmp).expect("calamine 可打开");
+        let sheets = wb.sheet_names().to_vec();
+        assert!(!sheets.is_empty(), "至少一个工作表: {sheets:?}");
+        std::fs::remove_file(&tmp).ok();
+    }
+
+    #[test]
+    fn txt_md_stay_zero_bytes() {
+        assert!(office_template("新建文本文档.txt").is_none());
+        assert!(office_template("笔记.md").is_none());
+        assert!(office_template("无扩展名").is_none());
+    }
+
+    #[test]
+    fn create_file_seeds_templates_on_disk() {
+        let d = std::env::temp_dir().join("xdir_tpl_create_test");
+        std::fs::create_dir_all(&d).unwrap();
+        for (name, expect_pk) in [
+            ("a.txt", false),
+            ("b.md", false),
+            ("c.docx", true),
+            ("d.xlsx", true),
+            ("e.pptx", true),
+        ] {
+            let p = create_file(d.to_string_lossy().into(), name.into()).unwrap();
+            let bytes = std::fs::read(&p).unwrap();
+            if expect_pk {
+                assert_eq!(&bytes[..4], b"PK\x03\x04", "{name} 应为 zip 容器");
+            } else {
+                assert!(bytes.is_empty(), "{name} 应为 0 字节");
+            }
+        }
+        std::fs::remove_dir_all(&d).unwrap();
     }
 }
