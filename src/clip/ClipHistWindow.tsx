@@ -509,6 +509,7 @@ export function ClipHistWindow() {
       <header
         className="np-cliptb"
         data-tauri-drag-region
+        data-tip-down=""
         onDoubleClick={(e) => {
           if ((e.target as HTMLElement).closest("button")) return;
           toggleMax();

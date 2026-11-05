@@ -171,6 +171,7 @@ export function TitleBar() {
     <header
       className="np-titlebar"
       data-tauri-drag-region
+      data-tip-down=""
       onMouseDown={(e) => {
         // 地址栏编辑态退出（Explorer 口径）：拖拽区按下会进入原生拖拽循环，
         // Pane 的 window 级外点失焦监听在部分路径下不可依赖——顶栏统一显式失焦兜底

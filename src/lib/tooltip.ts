@@ -3,9 +3,14 @@
 // （约 1s 延迟、系统样式不可控、快捷键无键帽质感）。内容截断场景
 // （np-ellipsis 单元格等）保留原生 title 不走此组件。App.tsx 挂载一次。
 // 行为：120ms 延迟淡入 + 轻微缩放；按钮下方居中、贴底自动上翻、视口钳制；
-// 容器标 data-tip-up（截图标注条，2026-10-30 定案）改为优先上方、贴顶翻
-// 下方；mousedown（含拖拽起始）/ Escape / 滚动 / 窗口缩放 / 指针离开文档
+// mousedown（含拖拽起始）/ Escape / 滚动 / 窗口缩放 / 指针离开文档
 // 即隐。
+// 展示方向（2026-11-05 定案）：默认按钮**上方**——光标贴着按钮，下方
+// tooltip 易挡住指针与下移视线；顶部工具区（标题栏 / 浮窗头，容器标
+// data-tip-down）优先**下方**（上方贴窗口上缘空间小，翻转抖动）；
+// 贴边自动向另一侧翻转。旧 data-tip-up（截图标注条 2026-10-30 的
+// 优先上方）已并入默认行为，属性退役。主窗口 / 剪贴板浮窗 / 截图族
+// 窗口统一本规则。
 let el: HTMLDivElement | null = null;
 let timer: number | null = null;
 let cur: Element | null = null;
@@ -52,12 +57,13 @@ function position(target: Element) {
   const r = target.getBoundingClientRect();
   const w = el.offsetWidth;
   const h = el.offsetHeight;
-  // data-tip-up 容器（截图标注条）优先上方展示，贴顶自动翻下方
-  const up = target.closest("[data-tip-up]") !== null;
+  // 方向：默认上方（见文件头 2026-11-05 定案）；data-tip-down 容器
+  // （标题栏/浮窗头等顶部工具区）优先下方；贴边向另一侧自动翻转
+  const down = target.closest("[data-tip-down]") !== null;
   let x = r.left + r.width / 2 - w / 2;
-  let y = up ? r.top - h - GAP : r.bottom + GAP;
-  if (up ? y < EDGE : y + h > window.innerHeight - EDGE) {
-    y = up ? r.bottom + GAP : r.top - h - GAP;
+  let y = down ? r.bottom + GAP : r.top - h - GAP;
+  if (down ? y + h > window.innerHeight - EDGE : y < EDGE) {
+    y = down ? r.top - h - GAP : r.bottom + GAP;
   }
   x = Math.max(EDGE, Math.min(x, window.innerWidth - w - EDGE));
   el.style.left = `${x}px`;

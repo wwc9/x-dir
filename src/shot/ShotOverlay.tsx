@@ -2183,7 +2183,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         <div
           ref={toolbarRef}
           className="np-shot-toolbar"
-          data-tip-up=""
           style={{
             visibility: tbPos ? "visible" : "hidden",
             left: tbPos?.left ?? -9999,
