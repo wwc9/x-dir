@@ -206,6 +206,12 @@ export function applyTheme(theme: Settings["theme"]) {
   document.documentElement.classList.toggle("dark", dark);
   // Blueprint 深色主题经由 bp6-dark 类生效
   document.documentElement.classList.toggle("bp6-dark", dark);
+  // 双锚点（2026-11-05 加固）：html 与 body 同时挂类。token 块选择器 `.dark`
+  // 匹配任意元素，body 自身成为 token/Blueprint 暗色类的第二挂载点——即使
+  // 异机上 html→body 的变量继承链被环境破坏（扩展注入重置样式/驱动异常），
+  // body 之下整棵应用树仍能解析到暗色 token；正常环境两条链同值幂等
+  document.body.classList.toggle("dark", dark);
+  document.body.classList.toggle("bp6-dark", dark);
   if (!themeFxInFlight) syncBorderColor();
 }
 

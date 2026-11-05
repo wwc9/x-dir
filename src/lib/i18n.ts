@@ -225,6 +225,7 @@ const EN: Record<string, string> = {
   "布局": "Layout",
   "开源地址": "Open source",
   "当前已是最新版本。": "You're on the latest version.",
+  "运行环境": "Runtime",
   "总大小": "Total size",
   "恢复默认工具栏排列（地址框保留常驻）": "Restore default toolbar (address bar stays)",
   "恢复默认菜单布局（七项基础功能保留）": "Restore default menu (seven basics kept)",

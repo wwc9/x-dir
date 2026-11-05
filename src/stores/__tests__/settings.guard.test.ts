@@ -47,6 +47,8 @@ vi.stubGlobal("document", {
     // load() 末尾 applyMetrics 写 CSS 变量（:root 内联覆写）：node 环境补桩
     style: { setProperty: () => undefined },
   },
+  // applyTheme 双锚点（2026-11-05 加固）在 body 镜像挂主题类：同步补桩
+  body: { classList: { toggle: () => {}, contains: () => false } },
 });
 
 describe("设置守卫：load 前不写盘", () => {

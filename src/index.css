@@ -2167,6 +2167,10 @@ body.np-col-resizing * {
   gap: 7px;
   margin: 0 2px;
   padding: 0 8px;
+  /* 行文字显式锚定（2026-11-05 加固）：不依赖 body 继承链——异机上 html→body
+     →行 的 color 继承被环境破坏时（旧驱动/注入样式），行内正文仍按当前主题
+     取值；选中行/is-sel 的 accent 覆写在下方声明同权重后者胜，不受影响 */
+  color: var(--np-fg);
   /* 行间细缝：上下 1px 透明边框占位 + background-clip: padding-box——
      底色纵向缩 1px（相邻选中行留极细空白），横向铺满整行
      （左侧超出图标一截、圆角完整；content-box 会连左右 padding 一起裁掉） */

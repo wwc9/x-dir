@@ -15,6 +15,18 @@ import { BrandLogo } from "./BrandLogo";
 const APP_INTRO =
   "轻量级多窗格文件管理器：单窗口自由分割出任意数量的窗格，支持 Everything 式全盘秒搜（拼音检索）、空格快速预览、批量重命名、PDF 与图片批处理等内置工具箱；绿色便携，免费开源。";
 
+/** 运行环境探针（2026-11-05 远程排障引入）：UA 里的 Edg/ 即 WebView2 运行时
+ *  版本（Evergreen 随系统更新，老版本是渲染异常的第一嫌疑项），Chrome/ 主版本
+ *  决定 CSS 特性可用面（color-mix/oklch 需 ≥111）。排查异机渲染问题时先看这里 */
+function engineInfo(): string {
+  const ua = navigator.userAgent;
+  const edg = /Edg\/([\d.]+)/.exec(ua)?.[1];
+  const chrome = /Chrome\/(\d+)/.exec(ua)?.[1];
+  if (edg && chrome) return `WebView2 ${edg} · Chromium ${chrome}`;
+  if (chrome) return `Chromium ${chrome}`;
+  return "未知";
+};
+
 export function AboutDialog() {
   const open = useUi((s) => s.aboutOpen);
   const check = useUi((s) => s.updateCheck);
@@ -124,6 +136,7 @@ export function AboutDialog() {
           <div className="np-props np-about-props">
             <AboutProp k="开发者" v="王文铖" />
             <AboutProp k="微信公众号" v="效率视界" />
+            <AboutProp k={t("运行环境")} v={engineInfo()} />
             <div className="np-prop-row">
               <span className="np-prop-key">{t("开源地址")}</span>
               <span className="np-prop-val np-about-srcs">

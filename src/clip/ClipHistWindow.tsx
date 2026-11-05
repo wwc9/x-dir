@@ -126,6 +126,9 @@ export function ClipHistWindow() {
         (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
       document.documentElement.classList.toggle("dark", dark);
       document.documentElement.classList.toggle("bp6-dark", dark);
+      // 双锚点同主窗 applyTheme（settings.ts 2026-11-05 加固）：body 镜像挂类
+      document.body.classList.toggle("dark", dark);
+      document.body.classList.toggle("bp6-dark", dark);
     };
     const onScheme = () => applyTheme("system");
     void api
