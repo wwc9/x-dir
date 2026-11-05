@@ -2260,6 +2260,11 @@ body.np-col-resizing * {
   outline: none;
   border-radius: var(--np-radius);
   box-shadow: var(--np-ring);
+  /* 行 .np-row 的 user-select:none 会继承进本输入框——Chromium 下继承 none
+     的 input 鼠标左键拖选文字失效（键盘 Shift+方向不受影响，2026-11-05 修复：
+     拖选部分文字改文件名前必须可用）；rowMouseDown 的 .np-rename 豁免只挡了
+     JS 层，CSS 继承这层在此显式恢复 */
+  user-select: text;
 }
 /* 编辑态放行裁剪：np-name 的 ellipsis overflow 会把激活描边左右两端削平 */
 .np-name:has(.np-rename) {
