@@ -9,7 +9,7 @@ X-Dir v0.1.0 · Copyright (c) 2026 wwwwwc · 本软件以 MIT 许可证发布（
 各条目按「名称 版本 — 许可证 — 仓库 — 版权人」列出；标准许可证全文统一收录于附录，
 条目不再逐个内嵌。非标准许可证（或未识别 SPDX）的条目在其下方内嵌原文。
 
-由 tools/gen-third-party-notices.mjs 生成于 2026-11-04；依赖变更后请重新生成。
+由 tools/gen-third-party-notices.mjs 生成于 2026-11-05；依赖变更后请重新生成。
 
 
 RUST CRATES（编译进 x-dir.exe）（408 项）
