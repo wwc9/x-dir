@@ -1385,9 +1385,14 @@ body.np-col-resizing .np-menued-grip::after {
   padding: 4px 16px 10px;
   overflow-y: auto;
 }
-/* 设置浮窗（Dialog）：宽屏双栏（导航 + 内容页），高度钳制防撑满全屏 */
+/* 设置浮窗（Dialog）：宽屏双栏（导航 + 内容页），高度钳制防撑满全屏。
+   本浮窗无 header/footer（TitleBar 齿轮唤起的轻量壳），四周留白全靠 body 自带：
+   左右 16px = Dialog 标准槽线（对齐 .bp6-dialog-header/.bp6-dialog-footer 的水平内边距），
+   上 8 + 下 14 与导航/内容页自身 padding 叠出上下呼吸空间；页面右侧只留 2px 微距，
+   外侧间距由本 body 统一供给（2026-11-05 修复：此前水平 0 导致导航贴左缘、
+   内容行距右缘仅 2px，四周无留白） */
 .np-settingsdlg .bp6-dialog-body {
-  padding: 4px 0 10px;
+  padding: 8px 16px 14px;
 }
 .np-settingsdlg .np-settings {
   height: min(520px, 66vh);
