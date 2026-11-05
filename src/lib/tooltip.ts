@@ -58,12 +58,20 @@ function position(target: Element) {
   const w = el.offsetWidth;
   const h = el.offsetHeight;
   // 方向：默认上方（见文件头 2026-11-05 定案）；data-tip-down 容器
-  // （标题栏/浮窗头等顶部工具区）优先下方；贴边向另一侧自动翻转
+  // （标题栏/浮窗头等顶部工具区）优先下方，贴边向另一侧自动翻转。
+  // 顶部工具区水平落位 = 下右侧/下左侧（2026-11-05 补充定案）：tip 左缘贴
+  // 按钮右缘侧向展开，视口右缘不足翻下左（tip 右缘贴按钮左缘）——tip 完全
+  // 避开按钮水平投影，光标从按钮垂直下移的路径永不被挡（居中或边对齐
+  // 都会被比按钮宽的 tip 横跨）
   const down = target.closest("[data-tip-down]") !== null;
   let x = r.left + r.width / 2 - w / 2;
   let y = down ? r.bottom + GAP : r.top - h - GAP;
   if (down ? y + h > window.innerHeight - EDGE : y < EDGE) {
     y = down ? r.top - h - GAP : r.bottom + GAP;
+  }
+  if (down) {
+    x = r.right + 4;
+    if (x + w > window.innerWidth - EDGE) x = r.left - w - 4;
   }
   x = Math.max(EDGE, Math.min(x, window.innerWidth - w - EDGE));
   el.style.left = `${x}px`;
