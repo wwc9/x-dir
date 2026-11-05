@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>X-Dir Logo 方案 B · 双色棋盘</title>
+    <style>
+      body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #eef1f6; margin: 0; padding: 32px 40px; color: #1c2430; }
+      h1 { font-size: 20px; margin: 0 0 6px; display: flex; align-items: center; gap: 10px; }
+      h2 { font-size: 14px; color: #5a6572; margin: 30px 0 12px; font-weight: 600; }
+      p.lead { font-size: 13px; color: #5a6572; max-width: 660px; line-height: 1.7; margin: 0; }
+      .tag { font-size: 12px; padding: 2px 10px; border-radius: 99px; background: #dce4f0; color: #3574f0; font-weight: 600; }
+      .row { display: flex; align-items: flex-end; gap: 24px; flex-wrap: wrap; }
+      .cell { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; color: #5a6572; }
+      .titlebar { display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px; border-radius: 8px; background: #e9ecf1; border: 1px solid #cfd6e0; }
+      .titlebar.dark { background: #202632; border-color: #2c3444; }
+      .appname { font-size: 12px; color: #3d4756; margin-left: 2px; font-weight: 600; }
+      .titlebar.dark .appname { color: #dfe6f0; }
+      .vs { display: flex; gap: 48px; align-items: center; flex-wrap: wrap; }
+      .pair { display: flex; align-items: center; gap: 10px; }
+      .pair .lbl { font-size: 11px; color: #5a6572; width: 46px; }
+      .swatches { display: flex; gap: 14px; margin-top: 10px; }
+      .sw { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #3d4756; }
+      .sw i { width: 22px; height: 22px; border-radius: 6px; display: inline-block; border: 1px solid rgba(0,0,0,0.12); }
+      svg { display: block; }
+    </style>
+  </head>
+  <body>
+    <h1><span class="tag">方案 B</span> 双色棋盘</h1>
+    <p class="lead">
+      放弃渐变、改走<b>图形化双色</b>：格子棋盘式交替「品牌深蓝 × 饱和青」，五个深格与四个亮格形成节奏。
+      对比最硬朗，16px 下轮廓与格子间隙都最清晰（微软式方块语言），深浅两套主题下都醒目；
+      代价是比渐变更「跳」，气质更年轻。
+    </p>
+
+    <h2>尺寸阶梯（16 为顶栏实际尺寸）</h2>
+    <div class="row" id="ladder"></div>
+
+    <h2>顶栏场景（浅色 / 深色）</h2>
+    <div class="vs">
+      <div class="titlebar" id="tb-light"></div>
+      <div class="titlebar dark" id="tb-dark"></div>
+    </div>
+
+    <h2>与现方案对比（左：现方案 亮蓝→天蓝→冰蓝）</h2>
+    <div class="row" id="compare"></div>
+
+    <h2>色标</h2>
+    <div class="swatches">
+      <span class="sw"><i style="background:#2e5ce6"></i>品牌深蓝 #2E5CE6（五格：四角 + 中心）</span>
+      <span class="sw"><i style="background:#2fc9e8"></i>饱和青 #2FC9E8（四格：边中）</span>
+    </div>
+
+    <script>
+      // 品牌几何同源（96 视窗 / G=[4,36,68] / CELL=26）；双色棋盘：行 i 列 j，(i+j)%2 决定色
+      const DARK = "#2e5ce6";
+      const LIGHT = "#2fc9e8";
+      const logo = (size) => {
+        const rects = [4, 36, 68]
+          .flatMap((y, i) =>
+            [4, 36, 68].map((x, j) => `<rect x="${x}" y="${y}" width="26" height="26" fill="${(i + j) % 2 === 0 ? DARK : LIGHT}"/>`),
+          )
+          .join("");
+        return `<svg width="${size}" height="${size}" viewBox="0 0 96 96">${rects}</svg>`;
+      };
+      const cell = (size, html, label) =>
+        `<div class="cell">${html ?? logo(size)}<span>${label ?? size + "px"}</span></div>`;
+      const curLogo = (size) => {
+        const rects = [4, 36, 68].flatMap((y) => [4, 36, 68].map((x) => `<rect x="${x}" y="${y}" width="26" height="26"/>`)).join("");
+        return `<svg width="${size}" height="${size}" viewBox="0 0 96 96"><defs><linearGradient id="cur${size}" gradientUnits="userSpaceOnUse" x1="4" y1="4" x2="94" y2="94"><stop offset="0" stop-color="#3574f0"/><stop offset="0.5" stop-color="#5c9dff"/><stop offset="1" stop-color="#bae2fd"/></linearGradient></defs><g fill="url(#cur${size})">${rects}</g></svg>`;
+      };
+      document.getElementById("ladder").innerHTML =
+        [16, 20, 24, 32, 48, 96, 192].map((s) => cell(s)).join("");
+      document.getElementById("tb-light").innerHTML = logo(16) + '<span class="appname">X-Dir</span>';
+      document.getElementById("tb-dark").innerHTML = logo(16) + '<span class="appname">X-Dir</span>';
+      document.getElementById("compare").innerHTML = [192, 48, 32, 16]
+        .map((s) => `<div class="pair"><span class="lbl">${s}px</span>${cell(s, curLogo(s))}${cell(s)}</div>`)
+        .join("");
+    </script>
+  </body>
+</html>
