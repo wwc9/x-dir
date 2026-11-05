@@ -46,25 +46,43 @@ export interface TypeAheadMatch {
   needle: string;
   /** 生效匹配档位（同上） */
   mode: TaMode;
+  /** 命中读音层（2026-11-05 精度修正）：0 = 名称/首选读音串（py[0]，Rust
+   *  变体生成保证 py[0] 为全首选读音），1 = 多音字变体串（py[1..]，罕用
+   *  读法如 谷=lù 只做兜底）——Tab 循环按本层冻结集合 */
+  src: TaSrc;
 }
 
 /** 匹配档位（pill 状态与行内高亮随行存储，见 TypeAheadState） */
 export type TaMode = "prefix" | "contains" | "pymid";
 
+/** 读音层：0 = 名称/首选读音串；1 = 多音字变体串；2 = 全部（同键循环等
+ *  宽容场景用） */
+export type TaSrc = 0 | 1 | 2;
+
 type Mode = TaMode;
 
-function matchOf(it: TypeAheadItem, needle: string, mode: Mode): boolean {
+/** 读音层取串：0 = py[0]（Rust 变体生成保证为全首选读音），1 = py[1..]
+ *  （多音字变体），2 = 全部（同键循环等宽容场景） */
+function pysOf(it: TypeAheadItem, src: TaSrc): string[] {
+  const py = it.py;
+  if (!py?.length) return [];
+  if (src === 2) return py;
+  return src === 0 ? py.slice(0, 1) : py.slice(1);
+}
+
+function matchOf(it: TypeAheadItem, needle: string, mode: Mode, src: TaSrc = 2): boolean {
   const name = it.name.toLowerCase();
+  const pys = pysOf(it, src).map((p) => p.toLowerCase());
   if (mode === "prefix") {
     if (name.startsWith(needle)) return true;
-    return !!it.py?.some((p) => p.toLowerCase().startsWith(needle));
+    return pys.some((p) => p.startsWith(needle));
   }
   if (mode === "contains") {
     if (name.includes(needle)) return true;
-    return !!it.py?.some((p) => p.toLowerCase().includes(needle));
+    return pys.some((p) => p.includes(needle));
   }
   // pymid = 仅拼音首字母串中段（文件名中间文字的首字母定位，策略 1b）
-  return !!it.py?.some((p) => p.toLowerCase().includes(needle));
+  return pys.some((p) => p.includes(needle));
 }
 
 /** 中段首字母匹配启用条件（策略 1b）：非 "*" 模式 + 缓冲 ≥2 字符且含 ≥2 个
@@ -79,8 +97,9 @@ function findFrom(
   needle: string,
   curIdx: number,
   mode: Mode,
+  src: TaSrc = 2,
 ): number | null {
-  return findDir(items, needle, curIdx, mode, 1);
+  return findDir(items, needle, curIdx, mode, 1, src);
 }
 
 /** 双向环绕查找（dir=1 向后 / dir=-1 向前；Tab 循环用 -1） */
@@ -90,11 +109,12 @@ function findDir(
   curIdx: number,
   mode: Mode,
   dir: 1 | -1,
+  src: TaSrc = 2,
 ): number | null {
   const n = items.length;
   for (let i = 1; i <= n; i++) {
     const idx = dir === 1 ? (curIdx + i) % n : (((curIdx - i) % n) + n) % n;
-    if (matchOf(items[idx], needle, mode)) return idx;
+    if (matchOf(items[idx], needle, mode, src)) return idx;
   }
   return null;
 }
@@ -105,11 +125,12 @@ function statsOf(
   needle: string,
   hitIdx: number,
   mode: Mode,
+  src: TaSrc = 2,
 ): { pos: number; total: number } {
   let pos = 0;
   let total = 0;
   for (let i = 0; i < items.length; i++) {
-    if (!matchOf(items[i], needle, mode)) continue;
+    if (!matchOf(items[i], needle, mode, src)) continue;
     total += 1;
     if (i <= hitIdx) pos += 1;
   }
@@ -142,7 +163,13 @@ export function typeAheadStep(
   return resolveFrom(items, next, curIdx);
 }
 
-/** 级联核心（step 与 rematch 共用）：对完整缓冲按 1→1b→2→3 档位解析 */
+/** 级联核心（step 与 rematch 共用）：对完整缓冲按 1→1b→1c→1d→2→3 档位解析。
+ *  读音分层（2026-11-05 精度修正，"罕用读音降级"定案的落地形态）：首选层
+ *  （名称 + py[0]，Rust 保证 py[0] 为全首选读音）的前缀与中段严格在前；
+ *  多音字变体层（py[1..]，词典字母序次读法）整体兜底在后——词典无词频
+ *  数据无法甄别 谷=lù（罕用）与 晟=shèng（常用但排序第二），故变体不删除
+ *  而是降级：所有首选读音命中（乃至变体前缀）永远先于变体中段，"谷商"
+ *  类假阳性只在整目录再无更好命中时才可能兜底出现 */
 function resolveFrom(
   items: TypeAheadItem[],
   next: string,
@@ -154,36 +181,50 @@ function resolveFrom(
   if (!needle) return null;
   const ch = needle[needle.length - 1];
 
-  // 1) 整缓冲匹配：命中且不驻留当前项（驻留 = 环绕后唯一匹配是自己，等价死端）
-  const h1 = findFrom(items, needle, curIdx, mode);
+  // 1) 首选层整缓冲：名称前缀 / py[0]（全首选读音）前缀；不驻留当前项
+  const h1 = findFrom(items, needle, curIdx, mode, 0);
   if (h1 !== null && h1 !== curIdx) {
-    const { pos, total } = statsOf(items, needle, h1, mode);
-    return { idx: h1, buf: next, disp: dispOf(star, needle), pos, total, needle, mode };
+    const { pos, total } = statsOf(items, needle, h1, mode, 0);
+    return { idx: h1, buf: next, disp: dispOf(star, needle), pos, total, needle, mode, src: 0 };
   }
-  // 1b) 前缀未命中（或驻留）→ 拼音首字母串中段（文件名中间文字的首字母直达）
+  // 1b) 首选层中段：拼音首字母串（py[0]）中段直达（文件名中间文字）
   if (pymidEligible(star, needle)) {
-    const h1b = findFrom(items, needle, curIdx, "pymid");
+    const h1b = findFrom(items, needle, curIdx, "pymid", 0);
     if (h1b !== null && h1b !== curIdx) {
-      const { pos, total } = statsOf(items, needle, h1b, "pymid");
-      return { idx: h1b, buf: next, disp: dispOf(star, needle), pos, total, needle, mode: "pymid" };
+      const { pos, total } = statsOf(items, needle, h1b, "pymid", 0);
+      return { idx: h1b, buf: next, disp: dispOf(star, needle), pos, total, needle, mode: "pymid", src: 0 };
+    }
+  }
+  // 1c) 变体兜底层（多音字次读法）：前缀语义（名称以次读法开头，如"联晟…"）
+  const h1c = findFrom(items, needle, curIdx, mode, 1);
+  if (h1c !== null && h1c !== curIdx) {
+    const { pos, total } = statsOf(items, needle, h1c, mode, 1);
+    return { idx: h1c, buf: next, disp: dispOf(star, needle), pos, total, needle, mode, src: 1 };
+  }
+  // 1d) 变体兜底层：中段语义（"2026…--江西联晟…"，联晟居名中）
+  if (pymidEligible(star, needle)) {
+    const h1d = findFrom(items, needle, curIdx, "pymid", 1);
+    if (h1d !== null && h1d !== curIdx) {
+      const { pos, total } = statsOf(items, needle, h1d, "pymid", 1);
+      return { idx: h1d, buf: next, disp: dispOf(star, needle), pos, total, needle, mode: "pymid", src: 1 };
     }
   }
   // 2) 回退为本次按键循环（"*" 语义随模式保留）；缓冲保留完整输入供接续
   const h2 = findFrom(items, ch, curIdx, mode);
   if (h2 !== null && h2 !== curIdx) {
     const { pos, total } = statsOf(items, ch, h2, mode);
-    return { idx: h2, buf: next, disp: dispOf(star, ch), pos, total, needle: ch, mode };
+    return { idx: h2, buf: next, disp: dispOf(star, ch), pos, total, needle: ch, mode, src: 2 };
   }
   // 3) 连单字符都只剩当前项：停驻显示（pill 告知当前即唯一匹配）；全无命中 = null
   if (h2 !== null) {
     const { pos, total } = statsOf(items, ch, h2, mode);
-    return { idx: h2, buf: next, disp: dispOf(star, ch), pos, total, needle: ch, mode };
+    return { idx: h2, buf: next, disp: dispOf(star, ch), pos, total, needle: ch, mode, src: 2 };
   }
   return null;
 }
 
 /** 命中集内循环（2026-11-05 定案：Tab / Shift+Tab）：沿用产生该命中时的
- *  生效针与档位（循环不换档），从当前项向前/向后环绕；集内唯一项 = 原地驻留 */
+ *  生效针、档位与读音层（循环不换档），从当前项向前/向后环绕；集内唯一项 = 原地驻留 */
 export function typeAheadCycle(
   items: TypeAheadItem[],
   prev: TypeAheadMatch,
@@ -191,7 +232,7 @@ export function typeAheadCycle(
   dir: 1 | -1,
 ): TypeAheadMatch | null {
   if (!items.length) return null;
-  const hit = findDir(items, prev.needle, curIdx, prev.mode, dir);
+  const hit = findDir(items, prev.needle, curIdx, prev.mode, dir, prev.src);
   if (hit === null) return null;
   const { pos, total } = statsOf(items, prev.needle, hit, prev.mode);
   return { ...prev, idx: hit, pos, total };
@@ -210,15 +251,18 @@ export function typeAheadRematch(
   const needle = (star ? buf.slice(1) : buf).toLowerCase();
   if (!needle || curIdx < 0 || curIdx >= items.length) return resolveFrom(items, buf, curIdx);
   const ch = needle[needle.length - 1];
-  const tiers: [Mode, string][] = [
-    [star ? "contains" : "prefix", needle],
-    ...(pymidEligible(star, needle) ? ([["pymid", needle] as [Mode, string]]) : []),
-    [star ? "contains" : "prefix", ch],
+  // 驻留判定按级联同序：首选前缀 → 首选中段 → 变体前缀 → 变体中段 → 单字符
+  const tiers: [Mode, string, TaSrc][] = [
+    [star ? "contains" : "prefix", needle, 0],
+    ...((pymidEligible(star, needle) ? [["pymid", needle, 0] as [Mode, string, TaSrc]] : []) as [Mode, string, TaSrc][]),
+    [star ? "contains" : "prefix", needle, 1],
+    ...((pymidEligible(star, needle) ? [["pymid", needle, 1] as [Mode, string, TaSrc]] : []) as [Mode, string, TaSrc][]),
+    [star ? "contains" : "prefix", ch, 2],
   ];
-  for (const [m, nd] of tiers) {
-    if (matchOf(items[curIdx], nd, m)) {
-      const { pos, total } = statsOf(items, nd, curIdx, m);
-      return { idx: curIdx, buf, disp: dispOf(star, nd), pos, total, needle: nd, mode: m };
+  for (const [m, nd, s] of tiers) {
+    if (matchOf(items[curIdx], nd, m, s)) {
+      const { pos, total } = statsOf(items, nd, curIdx, m, s);
+      return { idx: curIdx, buf, disp: dispOf(star, nd), pos, total, needle: nd, mode: m, src: s };
     }
   }
   return resolveFrom(items, buf, curIdx);

@@ -320,3 +320,44 @@ describe("多音字首字母变体", () => {
     expect(typeAheadStep(dup, "l", "c", -1)?.idx).toBe(0);
   });
 });
+
+// 读音分层精度（2026-11-05「罕用读音降级」定案）：谷=lù 类词典次读法只做
+// 兜底——首选层命中 > 变体前缀 > 变体中段，谷商类假阳性不再抢先
+describe("读音分层：罕用读音兜底排序", () => {
+  const guFile = {
+    name: "2026.9月快报 （江西国信医药谷商业运营管理有限公司）",
+    path: "g0",
+    py: ["2026.9ykb（jxgxyygsyyyglxgs）", "2026.9ykb（jxgxyyylsyyyglxgs）"], // 谷: g / l(变体)
+  };
+  const lianPrefix = {
+    name: "联晟电子2026年9月快报",
+    path: "l0",
+    py: ["lctz2026n9ykb", "lstz2026n9ykb"], // 晟: c(首选) / s(变体，居名称开头)
+  };
+  const lianMid = {
+    name: "2026年9月快报--江西联晟投资发展有限公司 (1)",
+    path: "l1",
+    py: ["2026n9ykb--jxlctzfzyxgs (1)", "2026n9ykb--jxlstzfzyxgs (1)"],
+  };
+  const primaryLs = { name: "乐事预算.xlsx", path: "p0", py: ["lsys.xlsx"] }; // 首选读音 ls
+
+  it("首选读音命中 > 变体命中：乐事先于联晟电子", () => {
+    const r = typeAheadStep([lianPrefix, primaryLs], "l", "s", -1)!;
+    expect(r).toMatchObject({ idx: 1, needle: "ls", mode: "prefix", src: 0 });
+  });
+  it("变体前缀 > 变体中段：联晟电子先于谷商（即使谷商排前）", () => {
+    const r = typeAheadStep([guFile, lianPrefix], "l", "s", -1)!;
+    expect(r).toMatchObject({ idx: 1, mode: "prefix", src: 1 });
+  });
+  it("变体中段兜底仍可达：联晟居名中的文件可定位（同级内按显示序）", () => {
+    // 谷商与联晟-居名中同为变体中段档（词典无词频无法再分），档内显示序先者胜
+    const r = typeAheadStep([guFile, lianMid], "l", "s", -1)!;
+    expect(r).toMatchObject({ idx: 0, mode: "pymid", src: 1 });
+    const r2 = typeAheadStep([lianMid, guFile], "l", "s", -1)!;
+    expect(r2).toMatchObject({ idx: 0, mode: "pymid", src: 1 });
+  });
+  it("目录仅有谷商类假阳性来源时才兜底命中（排最后）", () => {
+    const r = typeAheadStep([guFile], "l", "s", -1)!;
+    expect(r).toMatchObject({ idx: 0, mode: "pymid", src: 1 });
+  });
+});
