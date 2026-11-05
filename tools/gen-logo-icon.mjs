@@ -1,4 +1,4 @@
-// 品牌图标生成器：渲染 v9-4 号九宫格渐变 logo（亮蓝→天蓝→冰蓝 对角渐变，直角九宫格）
+// 品牌图标生成器：渲染 v9-4 号九宫格渐变 logo（深海曙光：靛蓝→亮蓝→饱和青 对角渐变，直角九宫格）
 // 并产出 src-tauri/icons/ 全套资产（PNG / ICO / ICNS）。
 // 运行：node tools/gen-logo-icon.mjs
 // 渲染为解析式（轴对齐矩形精确覆盖率抗锯齿），无外部依赖。
@@ -9,10 +9,12 @@ import { deflateSync } from "node:zlib";
 // ── 品牌几何（96 视框）与配色 ──
 const G = [4, 36, 68]; // 格子起点
 const CELL = 26; // 格子边长
+// 「深海曙光」（2026-11-05 定案，方案 A）：两端高饱和，小尺寸格子间色差可辨；
+// 与 gen-nsis-branding.mjs / src/components/BrandLogo.tsx 三处同源同步
 const STOPS = [
-  [0.0, [0x35, 0x74, 0xf0]], // 亮蓝（主色）
-  [0.5, [0x5c, 0x9d, 0xff]], // 天蓝（暗色主题强调）
-  [1.0, [0xba, 0xe2, 0xfd]], // 冰蓝
+  [0.0, [0x24, 0x47, 0xe8]], // 靛蓝
+  [0.5, [0x4f, 0x8b, 0xff]], // 亮蓝
+  [1.0, [0x14, 0xcf, 0xdc]], // 饱和青
 ];
 
 function grad(t) {

@@ -1,6 +1,6 @@
 // NSIS 安装器品牌图生成器：向导欢迎页左侧大图（sidebar 164×314）与内页顶部横幅
 // （header 150×57），BMP-24bit（NSIS MUI2 要求，无压缩无 alpha）。
-// 视觉与 src-tauri/icons 同源：九宫格渐变 logo（亮蓝→天蓝→冰蓝 对角渐变）的
+// 视觉与 src-tauri/icons 同源：九宫格渐变 logo（深海曙光：靛蓝→亮蓝→饱和青 对角渐变）的
 // 几何与配色逐字复用 tools/gen-logo-icon.mjs，底色为应用画布同族的浅蓝白渐变——
 // 安装向导默认视觉是 Tauri 官方 logo，此脚本产出 X-Dir 自己的品牌图交由
 // tauri.conf.json → bundle.windows.nsis.{headerImage,sidebarImage} 引用。
@@ -13,10 +13,11 @@ import { dirname, join } from "node:path";
 // ── 品牌几何与配色（与 gen-logo-icon.mjs 保持同源，改一处必须同步两处） ──────
 const G = [4, 36, 68]; // 九宫格起点（96 视窗）
 const CELL = 26; // 格子边长
+// 「深海曙光」（2026-11-05 定案，方案 A）；与 gen-logo-icon.mjs / BrandLogo.tsx 同源
 const STOPS = [
-  [0.0, [0x35, 0x74, 0xf0]], // 亮蓝（主色）
-  [0.5, [0x5c, 0x9d, 0xff]], // 天蓝
-  [1.0, [0xba, 0xe2, 0xfd]], // 冰蓝
+  [0.0, [0x24, 0x47, 0xe8]], // 靛蓝
+  [0.5, [0x4f, 0x8b, 0xff]], // 亮蓝
+  [1.0, [0x14, 0xcf, 0xdc]], // 饱和青
 ];
 function grad(t) {
   t = Math.min(1, Math.max(0, t));
