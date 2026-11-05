@@ -2256,6 +2256,13 @@ body.np-col-resizing * {
 .np-name:has(.np-rename) {
   overflow: visible;
 }
+/* 编辑态同样放行行的 overflow: hidden（图标格防叠压，仅影响本行）：行内 24px
+   控件在 28px 行居中（上下各余 1px + 1px 透明 border 占位），外扩 2px 的
+   --np-ring 上下恰被 padding-box 裁剪线削半——上下 1px / 左右 2px 线宽不一
+   （2026-11-05 修复）。ring 最外缘仍在本行盒内，不漏进相邻行 */
+.np-row:has(.np-rename) {
+  overflow: visible;
+}
 
 /* 状态条（融入背景，无分隔线） */
 .np-pstatus {
