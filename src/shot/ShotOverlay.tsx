@@ -63,6 +63,8 @@ import {
   handleAt,
   hitWindow,
   adjustShapeProp,
+  magnifierBox,
+  magnifierLayout,
   nextStepSeq,
   normalizeSel,
   resizeSel,
@@ -488,13 +490,137 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     ctx.drawImage(comp, 0, 0);
   }, [boot.mw, boot.mh, redrawComposite]);
 
-  /** live 层：遮罩（选区外）/ 窗口高亮 / 拖拽框与尺寸 / 绘制预览 */
-  const redrawLive = useCallback(() => {
+  /** live 层：遮罩（选区外）/ 窗口高亮 / 拖拽框与尺寸 / 绘制预览。
+   *  脏区重绘（2026-11-05 低配机优化）：pointermove 合帧路径传 dirty=true，
+   *  只清除并重绘「上一帧 ∪ 本帧」全部绘制物包围盒（canvas clip 多矩形并集），
+   *  4K 下每帧从整屏 clear + 全屏遮罩 4 填充（~5×830 万像素混合）降到孔缘
+   *  环带 / 十字线细带 / 放大镜小块；离散事件（按下/抬起/滚轮/键盘/状态
+   *  切换）仍走全量重绘兜底。正确性依据：move 帧间绘制物集合不变（仅坐标
+   *  移动或包围盒单调扩张），prev∪cur 并集覆盖新旧像素；集合变化都发生在
+   *  离散事件后的全量帧。包围盒全部取保守上界（宁大勿漏，漏了会留残影） */
+  const liveDirtyRef = useRef<{ x: number; y: number; w: number; h: number }[] | null>(null);
+  const redrawLive = useCallback((dirty = false) => {
     const live = liveRef.current;
     if (!live) return;
     const ctx = live.getContext("2d")!;
     const accent = accentRef.current;
-    ctx.clearRect(0, 0, boot.mw, boot.mh);
+    // ── 本帧绘制物包围盒（先算几何再落笔；全量帧也记录，供下一脏区帧取 prev）──
+    const gs = selRef.current;
+    const gdNow = dragRef.current;
+    const gmag = magRef.current;
+    const gmagVis = !!gmag && (followingRef.current || !!dragRef.current);
+    const ghole = gs ?? (gdNow ? normalizeSel(gdNow.x1, gdNow.y1, gdNow.x2, gdNow.y2, boot.mw, boot.mh, 1) : null);
+    const rects: { x: number; y: number; w: number; h: number }[] = [];
+    const PAD = 4 * scale + 8; // 手柄 4×scale + 边框线宽 + 余量
+    const push = (x: number, y: number, w: number, h: number, pad = PAD) =>
+      rects.push({ x: x - pad, y: y - pad, w: w + pad * 2, h: h + pad * 2 });
+    if (!ghole) push(0, 0, boot.mw, boot.mh); // 无孔 = 整屏遮罩
+    else push(ghole.x, ghole.y, ghole.w, ghole.h);
+    // 拖拽边框 + 尺寸标签（信息条被放大镜吸收时无独立标签）
+    const gdragR = gdNow ? normalizeSel(gdNow.x1, gdNow.y1, gdNow.x2, gdNow.y2, boot.mw, boot.mh, 1) : null;
+    if (gdNow && gdragR) {
+      push(gdragR.x, gdragR.y, gdragR.w, gdragR.h);
+      if (!gmagVis) {
+        const fsL = 12 * scale;
+        ctx.font = `${fsL}px "Segoe UI", sans-serif`;
+        const twL =
+          ctx.measureText(`${Math.round(Math.abs(gdNow.x2 - gdNow.x1))} × ${Math.round(Math.abs(gdNow.y2 - gdNow.y1))}`).width;
+        let lx = gdNow.x2 + 10 * scale;
+        let ly = gdNow.y2 + 14 * scale;
+        if (lx + twL + 12 * scale > boot.mw) lx = Math.max(4 * scale, gdNow.x2 - twL - 22 * scale);
+        if (ly > boot.mh - 10 * scale) ly = gdNow.y2 - 14 * scale;
+        push(lx, ly - fsL, twL + 12 * scale, fsL * 1.7);
+      }
+    }
+    // 阴影/边框预览（确认选区）：模糊扩散按 sbw 外扩
+    const gsbw = Math.round(shadowW * scale);
+    const gbbw = Math.round(borderW * scale);
+    if (gs && !followingRef.current && !gdNow && (gsbw || gbbw)) {
+      const ex = Math.round(gsbw * 1.5) + gbbw;
+      push(gs.x - ex, gs.y - ex, gs.w + ex * 2, gs.h + ex * 2);
+    }
+    // 全局十字线（跟随态）：水平/垂直各一条细带——单包围盒会并成整屏，必须拆两条
+    const glw = Math.max(1, Math.round(scale));
+    if (followingRef.current && !gdNow && gmag) {
+      push(0, gmag.y - glw, boot.mw, glw * 2 + 2, 2);
+      push(gmag.x - glw, 0, glw * 2 + 2, boot.mh, 2);
+    }
+    // 放大镜：方框 + 底部信息条（条宽按文本长度上界估计，宁宽勿漏）
+    if (gmag && gmagVis) {
+      const mb = magnifierBox(scale);
+      const ml = magnifierLayout(gmag.x, gmag.y, boot.mw, boot.mh, scale);
+      push(ml.boxX, ml.boxY, mb.box, mb.box);
+      push(ml.boxX, ml.barY, Math.min(boot.mw - ml.boxX, Math.max(mb.box, 480 * scale)), mb.barH);
+    }
+    // 进行中的标注预览（笔刷/打码外扩按线宽档留大余量）
+    const gdr = drawRef.current;
+    if (gdr && gs && gdr.type !== "text") {
+      const b = shapeBounds(gdr, scale);
+      push(gs.x + b.x, gs.y + b.y, b.w, b.h, 24 * scale);
+    }
+    // 悬停标记选中框
+    const ghov = hoverRef.current;
+    if (ghov !== null && gs && !followingRef.current && !gdNow) {
+      const hs = shapesRef.current[ghov];
+      if (hs) {
+        const b = shapeBounds(hs, scale);
+        push(gs.x + b.x - 3 * scale, gs.y + b.y - 3 * scale, b.w + 6 * scale, b.h + 6 * scale);
+      }
+    }
+    // 信息条（pill）：锚定优先级 选区外左上 → 选区外左下（仅预选/已确认）→
+    // 选区内左上；布局在包围盒段预计算（文本宽需 measureText，且包围盒必须
+    // 在裁剪前入列），绘制段直接复用
+    const pillAnchor = (
+      rc: { x: number; y: number; w: number; h: number },
+      pw: number,
+      ph: number,
+      allowBottom: boolean,
+    ) => {
+      const x = Math.max(8, Math.min(rc.x, boot.mw - pw - 8));
+      let y = rc.y - ph - 4;
+      if (y >= 8) return { x, y };
+      if (allowBottom) {
+        y = rc.y + rc.h + 4;
+        if (y + ph <= boot.mh - 8) return { x, y };
+      }
+      return { x: Math.max(8, Math.min(rc.x + 4, boot.mw - pw - 8)), y: rc.y + 4 };
+    };
+    const pillLayoutOf = (
+      text: string,
+      rc: { x: number; y: number; w: number; h: number },
+      allowBottom: boolean,
+    ) => {
+      const fs = Math.max(13, Math.round(14 * scale));
+      ctx.font = `${fs}px "Segoe UI", "Microsoft YaHei", sans-serif`;
+      const tw = ctx.measureText(text).width;
+      const padX = Math.round(13 * scale);
+      const pw = Math.round(tw + padX * 2);
+      const ph = Math.round(fs * 1.9);
+      return { ...pillAnchor(rc, pw, ph, allowBottom), pw, ph };
+    };
+    // 有选区即常驻：预选（含桌面兜底全屏）带「窗口」前缀，拖拽/已确认 =
+    // 选区原点+尺寸（截全屏同样可见）
+    const gPillRc = gdNow ? ghole : gs;
+    const gPillText = gPillRc
+      ? followingRef.current && !gdNow
+        ? `窗口 (${gPillRc.x}, ${gPillRc.y}) · ${gPillRc.w} × ${gPillRc.h}`
+        : `${gPillRc.x}, ${gPillRc.y}  ${gPillRc.w} × ${gPillRc.h} px`
+      : null;
+    const gPill =
+      gPillText && gPillRc ? pillLayoutOf(gPillText, gPillRc, !gdNow) : null;
+    if (gPill) push(gPill.x, gPill.y, gPill.pw, gPill.ph);
+    // ── 裁剪到脏区并清旧画（dirty=false 或首帧 = 整屏全量）──
+    const prevRects = liveDirtyRef.current;
+    const clips = dirty && prevRects ? [...prevRects, ...rects] : null;
+    ctx.save();
+    if (clips) {
+      ctx.beginPath();
+      for (const r of clips) ctx.rect(r.x, r.y, r.w, r.h);
+      ctx.clip();
+      for (const r of clips) ctx.clearRect(r.x, r.y, r.w, r.h);
+    } else {
+      ctx.clearRect(0, 0, boot.mw, boot.mh);
+    }
     const s = selRef.current;
     const dNow = dragRef.current;
     ctx.fillStyle = "rgba(0,0,0,0.32)";
@@ -532,69 +658,22 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         }
       }
     }
-    // 信息条（参考 PixPin，锚定选区左上角，有选区即常驻）：预选带「窗口」
-    // 前缀；拖拽/已确认 = 选区原点+尺寸。锚定优先级：选区外左上 → 选区外
-    // 左下（仅预选/已确认）→ 选区内左上
-    const pillRect = dNow ? hole : s;
-    const pillAnchor = (
-      rc: { x: number; y: number; w: number; h: number },
-      pw: number,
-      ph: number,
-      allowBottom: boolean,
-    ) => {
-      const x = Math.max(8, Math.min(rc.x, boot.mw - pw - 8));
-      let y = rc.y - ph - 4;
-      if (y >= 8) return { x, y };
-      if (allowBottom) {
-        y = rc.y + rc.h + 4;
-        if (y + ph <= boot.mh - 8) return { x, y };
-      }
-      return { x: Math.max(8, Math.min(rc.x + 4, boot.mw - pw - 8)), y: rc.y + 4 };
-    };
-    const drawPill = (
-      text: string,
-      rc: { x: number; y: number; w: number; h: number },
-      allowBottom: boolean,
-    ) => {
-      const fs = Math.max(13, Math.round(14 * scale));
-      ctx.font = `${fs}px "Segoe UI", "Microsoft YaHei", sans-serif`;
-      const tw = ctx.measureText(text).width;
-      const padX = Math.round(13 * scale);
-      const pw = Math.round(tw + padX * 2);
-      const ph = Math.round(fs * 1.9);
-      const p = pillAnchor(rc, pw, ph, allowBottom);
-      // 半透明黑色圆角胶囊（PixPin 参考口径）
+    // 信息条绘制（布局与包围盒已在几何段预计算 gPill；半透明黑色圆角胶囊）
+    if (gPill && gPillText) {
+      const r = gPill.ph / 2;
       ctx.fillStyle = "rgba(0,0,0,0.65)";
-      const r = ph / 2;
       ctx.beginPath();
-      ctx.moveTo(p.x + r, p.y);
-      ctx.arcTo(p.x + pw, p.y, p.x + pw, p.y + ph, r);
-      ctx.arcTo(p.x + pw, p.y + ph, p.x, p.y + ph, r);
-      ctx.arcTo(p.x, p.y + ph, p.x, p.y, r);
-      ctx.arcTo(p.x, p.y, p.x + pw, p.y, r);
+      ctx.moveTo(gPill.x + r, gPill.y);
+      ctx.arcTo(gPill.x + gPill.pw, gPill.y, gPill.x + gPill.pw, gPill.y + gPill.ph, r);
+      ctx.arcTo(gPill.x + gPill.pw, gPill.y + gPill.ph, gPill.x, gPill.y + gPill.ph, r);
+      ctx.arcTo(gPill.x, gPill.y + gPill.ph, gPill.x, gPill.y, r);
+      ctx.arcTo(gPill.x, gPill.y, gPill.x + gPill.pw, gPill.y, r);
       ctx.closePath();
       ctx.fill();
       ctx.fillStyle = "#fff";
       ctx.textBaseline = "middle";
       ctx.textAlign = "left";
-      ctx.fillText(text, p.x + padX, p.y + ph / 2);
-    };
-    // 有选区即常驻：预选（含桌面兜底全屏）带「窗口」前缀，拖拽/已确认 =
-    // 选区原点+尺寸（截全屏同样可见）
-    if (pillRect) {
-      if (followingRef.current && !dNow) {
-        drawPill(
-          `窗口 (${pillRect.x}, ${pillRect.y}) · ${pillRect.w} × ${pillRect.h}`,
-          pillRect,
-          true,
-        );
-      } else {
-        drawPill(
-          `${pillRect.x}, ${pillRect.y}  ${pillRect.w} × ${pillRect.h} px`,
-          pillRect,
-          !dNow,
-        );
-      }
+      ctx.fillText(gPillText, gPill.x + Math.round(13 * scale), gPill.y + gPill.ph / 2);
     }
     // 阴影/边框预览（已确认选区）：选区外围实时呈现导出效果
     const sbw = Math.round(shadowW * scale);
@@ -697,6 +776,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           origin: hole ? { x: hole.x, y: hole.y } : undefined,
         })?.rgba ?? null;
     }
+    ctx.restore();
+    // 记录本帧绘制物包围盒，供下一脏区帧取 prev 并集
+    liveDirtyRef.current = rects;
   }, [boot.mw, boot.mh, scale]);
 
   useEffect(() => {
@@ -766,13 +848,15 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   /** pointermove 高频路径的 rAF 合帧（2026-10-30 响应速度优化）：125Hz 指针
    *  流每帧至多重绘一次 live 层——旧实现逐事件整幅重绘（4K 下遮罩挖孔 +
    *  十字线 + 放大镜全套一帧画两遍）；离散事件（按下/抬起/滚轮/撤销）仍走
-   *  同步 redrawLive 即时反馈。重绘读的全是 ref，合帧不丢最终状态 */
+   *  同步 redrawLive 即时反馈。重绘读的全是 ref，合帧不丢最终状态。
+   *  2026-11-05 低配机优化：合帧路径走脏区重绘（redrawLive(true)）——
+   *  只清画/重绘 prev∪cur 包围盒并集，弱核显 4K 下拖动选区不再整屏混合 */
   const liveRafRef = useRef<number | null>(null);
   const scheduleLive = useCallback(() => {
     if (liveRafRef.current !== null) return;
     liveRafRef.current = requestAnimationFrame(() => {
       liveRafRef.current = null;
-      redrawLive();
+      redrawLive(true);
     });
   }, [redrawLive]);
   useEffect(
