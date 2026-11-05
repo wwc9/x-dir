@@ -3,26 +3,22 @@
 // 文件名小写，或 Rust 下发的拼音首字母串 py（汉字取拼音首字母，如
 // "forge请下这个txt文件" → "forgeqxzgtxtwj"，敲 "qxzg" 即可跳到；名称优先于 py）。
 //
-// 匹配策略（对齐 TC 快速搜索，2026-11-01 调研定案；2026-11-05 增补中段首字母）：
+// 匹配策略（2026-11-01 定案；2026-11-05 增补中段首字母 + 读音分层；同日用户
+// 定案移除同键循环）：
 // 1. 缓冲以 "*" 开头 = 子串匹配（TC 原生语义，"*zeb" 命中 "topzebra.txt"）；
 //    否则前缀匹配。
 // 1b. 前缀整缓冲未命中（或只驻留当前项）→ 拼音首字母串中段匹配（py.includes）：
 //     支持用文件名中间文字的首字母定位（"2026年度审计报告" 敲 "sjbg" 直达"审计
-//     报告"段）。启用条件 = 缓冲 ≥2 字符且含 ≥2 个不同字符——单字符与重复单字
-//     字符（"b"/"bb"）不启用，保持 2 的同键循环语义不变（敲 "bb" 的意图更可能
-//     是循环下一个 b，而非找拼音含 bb 的文件）。仅 py 中段：名称中段匹配仍属
-//     "*" 显式子串语义，不自动启用（无法与循环区分，见 4）。
-// 2. 整缓冲无命中，或命中只是停驻在当前项（环绕后唯一匹配是自己）→ 立即回退
-//    为仅本次按键循环："b","b" 即在所有 b 开头条目间逐个循环。不停驻、不回跳
-//    （TC/Explorer 在"恰好存在 bb.txt"时会停驻一步甚至乒乓，此处为友好改进）。
-// 3. 回退后缓冲保留完整输入（"bbb" 不截断），下一次同键扩展 "bbbb" 仍无命中
-//    → 继续循环；显示取实际生效的匹配针（"bb"/"b"，disp 字段）。
-// 4. 故意不做「前缀失败自动名称子串回退」：无法与重复字母循环区分（敲 "bb" 到底
-//    是想循环到下一个 b，还是想找名字含 bb 的文件？），TC 也不做——要子串
-//    匹配请显式敲 "*" 前缀。
+//     报告"段）。启用条件 = 缓冲 ≥2 字符（重复字符如 "ll"/"bb" 与普通针同权，
+//     2026-11-05 起不再排除）。仅 py 中段：名称中段匹配仍属 "*" 显式子串语义。
+// 1c/1d. 多音字变体兜底层（前缀 + 中段）：词典次读法（谷=lù / 晟=shèng）排在
+//     全部首选读音命中之后，罕用读法只在无更好命中时兜底。
+// 2.（已移除，2026-11-05 用户定案）不再有「重复按同一字母在同类间循环」的
+//    回退档——重复字母按普通缓冲累积（"ll" 即真针 ll），全档无命中 = 无匹配，
+//    由 Backspace 回删或超时重来；多命中间的移动一律 Tab/Shift+Tab。
 //
-// 统计 pos/total（当前命中在同匹配集中的 1 起序位/总数）：重复首字母文件多时
-// 回显 pill 显示 "2/7"，用户知道循环到第几个、还有多少个。
+// 统计 pos/total（当前命中在同匹配集中的 1 起序位/总数）：多命中时回显 pill
+// 显示 "2/7"，用户知道 Tab 会循环到第几个、还有多少个。
 
 export interface TypeAheadItem {
   name: string;
@@ -85,10 +81,11 @@ function matchOf(it: TypeAheadItem, needle: string, mode: Mode, src: TaSrc = 2):
   return pys.some((p) => p.includes(needle));
 }
 
-/** 中段首字母匹配启用条件（策略 1b）：非 "*" 模式 + 缓冲 ≥2 字符且含 ≥2 个
- *  不同字符——单字符与重复单字符（"b"/"bb"）不启用，保持同键循环语义不变 */
+/** 中段首字母匹配启用条件（策略 1b）：非 "*" 模式 + 缓冲 ≥2 字符。重复字符
+ *  （"ll"/"bb"）与普通针同权（2026-11-05 移除同键循环后解禁——此前排除
+ *  重复字符就是为给循环语义让位） */
 function pymidEligible(star: boolean, needle: string): boolean {
-  return !star && needle.length >= 2 && new Set(needle).size >= 2;
+  return !star && needle.length >= 2;
 }
 
 /** 从当前项之后环绕找下一个匹配项 */
@@ -179,7 +176,6 @@ function resolveFrom(
   const mode: Mode = star ? "contains" : "prefix";
   const needle = (star ? next.slice(1) : next).toLowerCase();
   if (!needle) return null;
-  const ch = needle[needle.length - 1];
 
   // 1) 首选层整缓冲：名称前缀 / py[0]（全首选读音）前缀；不驻留当前项
   const h1 = findFrom(items, needle, curIdx, mode, 0);
@@ -209,17 +205,8 @@ function resolveFrom(
       return { idx: h1d, buf: next, disp: dispOf(star, needle), pos, total, needle, mode: "pymid", src: 1 };
     }
   }
-  // 2) 回退为本次按键循环（"*" 语义随模式保留）；缓冲保留完整输入供接续
-  const h2 = findFrom(items, ch, curIdx, mode);
-  if (h2 !== null && h2 !== curIdx) {
-    const { pos, total } = statsOf(items, ch, h2, mode);
-    return { idx: h2, buf: next, disp: dispOf(star, ch), pos, total, needle: ch, mode, src: 2 };
-  }
-  // 3) 连单字符都只剩当前项：停驻显示（pill 告知当前即唯一匹配）；全无命中 = null
-  if (h2 !== null) {
-    const { pos, total } = statsOf(items, ch, h2, mode);
-    return { idx: h2, buf: next, disp: dispOf(star, ch), pos, total, needle: ch, mode, src: 2 };
-  }
+  // 全档无命中 = 无匹配（2026-11-05 用户定案移除同键循环回退档：重复字母按
+  // 普通缓冲累积、全档无命中即无匹配，多命中的移动一律 Tab/Shift+Tab）
   return null;
 }
 
@@ -250,14 +237,13 @@ export function typeAheadRematch(
   const star = buf.startsWith("*");
   const needle = (star ? buf.slice(1) : buf).toLowerCase();
   if (!needle || curIdx < 0 || curIdx >= items.length) return resolveFrom(items, buf, curIdx);
-  const ch = needle[needle.length - 1];
-  // 驻留判定按级联同序：首选前缀 → 首选中段 → 变体前缀 → 变体中段 → 单字符
+  // 驻留判定按级联同序：首选前缀 → 首选中段 → 变体前缀 → 变体中段
+  //（同键循环档已移除，无单字符回退层）
   const tiers: [Mode, string, TaSrc][] = [
     [star ? "contains" : "prefix", needle, 0],
     ...((pymidEligible(star, needle) ? [["pymid", needle, 0] as [Mode, string, TaSrc]] : []) as [Mode, string, TaSrc][]),
     [star ? "contains" : "prefix", needle, 1],
     ...((pymidEligible(star, needle) ? [["pymid", needle, 1] as [Mode, string, TaSrc]] : []) as [Mode, string, TaSrc][]),
-    [star ? "contains" : "prefix", ch, 2],
   ];
   for (const [m, nd, s] of tiers) {
     if (matchOf(items[curIdx], nd, m, s)) {

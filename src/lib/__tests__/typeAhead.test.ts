@@ -42,33 +42,25 @@ describe("typeAheadStep（前缀匹配，TC/Explorer 惯例）", () => {
   });
 });
 
-describe("重复首字母循环", () => {
-  it("重复按 b 在全部 b 开头条目间循环（不停驻、不乒乓）", () => {
-    expect(typeAheadStep(repItems, "", "b", -1)?.idx).toBe(0); // b1
-    // "bb" 前缀恰好命中 bb.txt：整缓冲命中且前进 → 跳过去（刻意输入 bb 仍有效）
-    expect(typeAheadStep(repItems, "b", "b", 0)).toMatchObject({ idx: 1, disp: "bb" });
-    // 已在 bb.txt：整缓冲 "bbb" 无命中 → 立即回退单字符循环 → b2
-    expect(typeAheadStep(repItems, "bb", "b", 1)).toMatchObject({ idx: 2, disp: "b" });
-    expect(typeAheadStep(repItems, "bbb", "b", 2)?.idx).toBe(3); // b3
-    expect(typeAheadStep(repItems, "bbbb", "b", 3)?.idx).toBe(0); // 回绕 b1
+describe("重复字母按普通缓冲累积（2026-11-05 移除同键循环）", () => {
+  it("重复字母即真针：bb 前缀命中 bb.txt", () => {
+    expect(typeAheadStep(repItems, "b", "b", -1)).toMatchObject({
+      idx: 1,
+      disp: "bb",
+      needle: "bb",
+    });
   });
-
-  it("缓冲保留完整输入供接续（回退不截断 buf）", () => {
-    expect(typeAheadStep(repItems, "bb", "b", 1)?.buf).toBe("bbb");
+  it("继续扩展无命中即无匹配（bbb → null，不回退单字符）", () => {
+    expect(typeAheadStep(repItems, "bb", "b", 1)).toBeNull();
   });
-
-  it("无 bb 干扰时重复键同样循环", () => {
+  it("无 bb 条目时 bb 同样无命中（不再循环 b 开头）", () => {
     const only = ["b1.txt", "b2.txt", "b3.txt"].map((name, i) => ({
       name,
-      path: `C:\\${name}-${i}`,
+      path: "C:\\dir\\" + name + "-" + i,
     }));
-    expect(typeAheadStep(only, "b", "b", 0)?.idx).toBe(1);
-    expect(typeAheadStep(only, "bb", "b", 1)?.idx).toBe(2);
-    expect(typeAheadStep(only, "bbb", "b", 2)?.idx).toBe(0);
+    expect(typeAheadStep(only, "b", "b", 0)).toBeNull();
   });
-
-  it("打错的缓冲回退单字符继续跳", () => {
-    // "a" 后敲 z：az 无命中 → 回退 z 单字符也无命中 → null
+  it("打错的缓冲无命中 → null（单字符回退档已移除）", () => {
     expect(typeAheadStep(items, "a", "z", -1)).toBeNull();
   });
 });
@@ -83,9 +75,8 @@ describe("* 前缀 = 子串匹配（TC 原生语义）", () => {
     expect(typeAheadStep(sub, "*", "z", -1)).toMatchObject({ idx: 0, disp: "*z" });
   });
 
-  it("* 重复字母在包含匹配间循环", () => {
-    // 当前在 zebra.md（1）继续敲 z：*zz 无包含命中 → 回退 *z 包含循环 → 回绕 topzebra
-    expect(typeAheadStep(sub, "*z", "z", 1)).toMatchObject({ idx: 0, disp: "*z" });
+  it("* 重复字母同式：*zz 无包含命中 → null（循环已移除）", () => {
+    expect(typeAheadStep(sub, "*z", "z", 1)).toBeNull();
   });
 
   it("裸 * 无意义返回 null", () => {
@@ -154,17 +145,23 @@ describe("拼音首字母中段匹配（文件名中间文字的首字母直达�
     expect(typeAheadStep(midItems, "", "g", -1)).toBeNull();
   });
 
-  it("重复单字符不走中段（同键循环语义不变）", () => {
+  it("重复字符与普通针同权：py 前缀与中段都可命中（循环移除后解禁）", () => {
     const rep = [
       { name: "b1.txt", path: "r0", py: null },
-      { name: "报表板.xlsx", path: "r1", py: ["bbb.xlsx"] }, // py 含 "bb" 中段
+      { name: "报表板.xlsx", path: "r1", py: ["bbb.xlsx"] },
       { name: "b2.txt", path: "r2", py: null },
     ];
     expect(typeAheadStep(rep, "", "b", -1)?.idx).toBe(0); // b1
-    // "bb"：py 前缀命中 bbb.xlsx（tier1，非中段）——刻意输入仍有效
-    expect(typeAheadStep(rep, "b", "b", 0)).toMatchObject({ idx: 1, disp: "bb" });
-    // "bbb"：tier1 驻留当前项 → 中段不启用（单字符重复）→ 回退单字符循环 → b2
-    expect(typeAheadStep(rep, "bb", "b", 1)).toMatchObject({ idx: 2, disp: "b" });
+    // "bb"：py 前缀命中 bbb.xlsx（tier1 首选前缀）
+    expect(typeAheadStep(rep, "b", "b", 0)).toMatchObject({ idx: 1, needle: "bb", src: 0 });
+    // "bb" 中段（名称以别的字开头）：年度报表板 → ndbbb 含 bb
+    const mid = [{ name: "年度报表板.xlsx", path: "m0", py: ["ndbbb.xlsx"] }];
+    expect(typeAheadStep(mid, "b", "b", -1)).toMatchObject({
+      idx: 0,
+      mode: "pymid",
+      needle: "bb",
+    });
+    expect(matchRangeOf(mid[0].name, mid[0].py, "bb", "pymid")).toEqual([2, 2]);
   });
 
   it("中段命中也参与序位统计", () => {
@@ -191,12 +188,12 @@ describe("序位统计（重复首字母回显 x/y）", () => {
       pos: 1,
       total: 4,
     });
-    // 循环到 b2 = 第 3 个；统计按生效单字符 needle 计
-    expect(typeAheadStep(repItems, "bb", "b", 1)).toMatchObject({
-      idx: 2,
-      pos: 3,
-      total: 4,
-    });
+    // "bb" 唯一前缀命中 bb.txt：1/1（bb 后再 b = "bbb" 无命中，循环已移除）
+    expect(typeAheadStep(repItems, "b", "b", 0)).toMatchObject({
+      idx: 1,
+      pos: 1,
+      total: 1,
+});
   });
 
   it("整缓冲命中的统计按整缓冲计（bb 唯一 → 1/1）", () => {
