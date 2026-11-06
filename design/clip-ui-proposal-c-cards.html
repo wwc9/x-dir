@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>方案 C · 卡片流 Cards · X-Dir 剪贴板界面候选</title>
+<style>
+/* ═══ 与 index.css 同源 token（浅/深两段，可平移）═══ */
+:root {
+  --surface:#ffffff; --surface2:#f0f2f5; --border:#d6dbe2; --hairline:rgba(16,24,40,.07);
+  --fg:#1a2129; --muted:#8b929c; --accent:#3574f0;
+  --sel:rgba(53,116,240,.10); --hover:rgba(26,33,41,.05);
+  --k-text:#8a93a0; --k-image:#4586f0; --k-files:#e07817;
+}
+html.dark {
+  --surface:#1b1e23; --surface2:#24282f; --border:#3a414b; --hairline:rgba(255,255,255,.07);
+  --fg:#e8eaed; --muted:#8b929c; --accent:#5C9DFF;
+  --sel:rgba(92,157,255,.14); --hover:rgba(255,255,255,.05);
+  --k-text:#8b929c; --k-image:#79a9ff; --k-files:#e5a922;
+}
+* { box-sizing:border-box; margin:0; }
+body { background:var(--surface2); color:var(--fg);
+  font:13px/1.5 system-ui,"Segoe UI","Microsoft YaHei",sans-serif; padding:28px 34px 48px; }
+.hd { max-width:620px; margin:0 auto 14px; }
+.hd h1 { font-size:17px; font-weight:600; }
+.hd .sub { color:var(--muted); font-size:12px; margin-top:4px; }
+.hd ul { margin:8px 0 0 18px; color:var(--muted); font-size:12px; }
+.hd li { margin:3px 0; }
+.hd b { color:var(--fg); font-weight:600; }
+.toggle { margin-top:10px; padding:3px 14px; border:1px solid var(--border); border-radius:999px;
+  background:var(--surface); color:var(--fg); cursor:pointer; font-size:12px; }
+
+/* ═══ 浮窗本体 ═══ */
+.win { max-width:620px; height:660px; margin:0 auto; display:flex; flex-direction:column;
+  background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden;
+  box-shadow:0 12px 40px rgba(16,24,40,.14); }
+.ic { width:14px; height:14px; flex:none; stroke:currentColor; fill:none;
+  stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.ic.xs { width:12px; height:12px; }
+
+/* 顶栏：accent 淡染图标章 + 标题，窗口钮右对齐 */
+.tb { display:flex; align-items:center; gap:10px; height:50px; padding:0 8px 0 14px; }
+.tb-logo { width:28px; height:28px; border-radius:8px; display:flex; align-items:center;
+  justify-content:center; background:color-mix(in srgb, var(--accent) 12%, transparent);
+  color:var(--accent); }
+.tb-logo .ic { width:15px; height:15px; }
+.tb-title { font-size:14px; font-weight:600; }
+.tb-count { font-size:11px; color:var(--muted); }
+.tb .sp { flex:1; }
+.wb { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px;
+  border-radius:6px; color:var(--muted); cursor:pointer; }
+.wb:hover { background:var(--hover); color:var(--fg); }
+.wb.is-on { color:var(--accent); }
+.wb.close:hover { background:#c42b1c; color:#fff; }
+
+/* 头部：34px 大圆角搜索 + 实心选中过滤 chips */
+.head { padding:2px 14px 10px; display:flex; flex-direction:column; gap:8px; }
+.search { display:flex; align-items:center; gap:8px; height:34px; padding:0 14px;
+  background:var(--surface2); border-radius:999px; color:var(--muted); }
+.search input { flex:1; min-width:0; border:none; outline:none; background:transparent;
+  color:var(--fg); font:inherit; }
+.search input::placeholder { color:var(--muted); }
+.search:focus-within { box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent); }
+.filters { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; }
+.filters::-webkit-scrollbar { display:none; }
+.fchip { flex:none; height:26px; padding:0 14px; border:1px solid var(--border); border-radius:999px;
+  background:none; font:inherit; font-size:12px; color:var(--muted); cursor:pointer; }
+.fchip:hover { background:var(--hover); color:var(--fg); }
+.fchip.on { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+html.dark .fchip.on { color:#0d1117; }
+
+/* 列表：卡片流 */
+.list { flex:1; overflow-y:auto; padding:2px 14px 10px; display:flex; flex-direction:column; gap:8px; }
+.card { position:relative; background:var(--surface2); border-radius:12px; padding:10px 12px 9px;
+  cursor:default; user-select:none; }
+.card:hover { background:color-mix(in srgb, var(--hover) 55%, var(--surface2)); }
+.card.sel { background:var(--sel); box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent); }
+.card.pinned { box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+.card.pick { box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent); }
+/* 右上角标存在时正文让位，防截断文字与角标重叠 */
+.card.pinned .c-top, .card.pick .c-top { padding-right:44px; }
+.c-top { display:flex; align-items:flex-start; gap:8px; }
+.c-txt { flex:1; min-width:0; font-size:13px; line-height:1.5; color:var(--fg);
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.card.sel .c-txt { color:var(--accent); }
+/* 类型 chip：淡染方角小标（类型色族） */
+.chip { flex:none; font-size:10px; line-height:1; padding:4px 8px; border-radius:6px;
+  background:color-mix(in srgb, var(--k-text) 14%, transparent); color:var(--k-text); font-weight:600; }
+.chip.image { background:color-mix(in srgb, var(--k-image) 14%, transparent); color:var(--k-image); }
+.chip.files { background:color-mix(in srgb, var(--k-files) 16%, transparent); color:var(--k-files); }
+/* 卡内图片：横幅式 */
+.c-banner { margin-top:8px; height:64px; border-radius:8px; object-fit:cover; width:100%;
+  border:1px solid var(--hairline); }
+.c-thumb { width:64px; height:42px; border-radius:8px; object-fit:cover; flex:none;
+  border:1px solid var(--hairline); }
+/* meta 行：时间 + 来源 + 动作 */
+.c-foot { display:flex; align-items:center; gap:8px; margin-top:7px; font-size:11px; color:var(--muted); }
+.c-foot .dot { width:3px; height:3px; border-radius:99px; background:currentColor; opacity:.55; }
+.c-foot .src { opacity:.85; }
+.c-acts { margin-left:auto; display:none; align-items:center; gap:2px; }
+.card:hover .c-acts, .card.sel .c-acts { display:flex; }
+.c-acts button { display:inline-flex; align-items:center; justify-content:center;
+  width:24px; height:24px; border:none; border-radius:7px; background:none;
+  color:var(--muted); cursor:pointer; }
+.c-acts button:hover { background:var(--hover); color:var(--fg); }
+.c-acts button.del:hover { color:#e5484d; }
+/* 置顶/收藏/勾选角标 */
+.badge { position:absolute; top:10px; right:10px; display:flex; align-items:center; gap:3px;
+  color:var(--accent); font-size:10px; font-weight:600; }
+.badge.pick { top:50%; right:12px; transform:translateY(-50%); width:20px; height:20px;
+  justify-content:center; border-radius:7px; background:var(--accent); color:#fff; }
+
+/* 页脚：悬浮胶囊条（不占满宽，内容居中） */
+.ft { display:flex; justify-content:center; padding:9px 14px 12px; }
+.ft-bar { display:inline-flex; align-items:center; gap:12px; height:30px; padding:0 8px 0 16px;
+  background:var(--surface2); border-radius:999px; font-size:11px; color:var(--muted);
+  box-shadow:0 1px 4px rgba(16,24,40,.08); }
+.ft-bar .kbd { display:inline-flex; align-items:center; height:17px; padding:0 5px;
+  border:1px solid var(--border); border-bottom-width:2px; border-radius:4px;
+  background:var(--surface); font-size:10px; color:var(--muted); font-family:inherit; }
+.ft-bar .clear { display:inline-flex; align-items:center; gap:4px; height:24px; padding:0 12px;
+  margin-left:2px; border:none; border-radius:999px; background:var(--surface);
+  color:var(--muted); font-size:11px; cursor:pointer; box-shadow:inset 0 0 0 1px var(--border); }
+.ft-bar .clear:hover { color:#e5484d; box-shadow:inset 0 0 0 1px #e5484d; }
+</style>
+</head>
+<body>
+<div class="hd">
+  <h1>方案 C · 卡片流 Cards</h1>
+  <div class="sub">条目即卡片——每条剪贴内容是一块独立软底卡片，内容边界清晰、图片有展示位，是最「现代化」的一档，信息密度略低于 A/B。</div>
+  <ul>
+    <li><b>条目卡片化</b>：surface-2 软底 + 12px 圆角 + 8px 间距，条目之间靠留白分隔（无发丝线无斑马纹）。</li>
+    <li><b>类型 = 淡染小 chip</b>：文本/图片/文件用类型色族淡染角标置于卡片右上，颜色语义与文件图标族一致。</li>
+    <li><b>图片条目横幅展示</b>：卡内 64px 高横幅缩略（视觉占比显著提高，找图更快）；文字条目仍两行省略。</li>
+    <li><b>过滤 chips 实心选中</b>：accent 实底白字（当前是描边勾选式），更接近主流现代应用的过滤观感。</li>
+    <li><b>选中/勾选 = accent 描边</b>：1.5px inset accent 描边替代整行淡染，卡片轮廓更立体。</li>
+    <li><b>页脚悬浮胶囊</b>：计数 + 键帽 + 清空收进一条居中悬浮 bar，与卡片语言呼应。</li>
+  </ul>
+  <button class="toggle" onclick="document.documentElement.classList.toggle('dark')">浅 / 深切换</button>
+</div>
+
+<div class="win">
+  <!-- 顶栏 -->
+  <div class="tb">
+    <span class="tb-logo"><svg class="ic" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg></span>
+    <div>
+      <div class="tb-title">剪贴板</div>
+      <div class="tb-count">共 486 条 · 今天 24 条</div>
+    </div>
+    <span class="sp"></span>
+    <span class="wb is-on" title="置顶常驻"><svg class="ic xs" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></span>
+    <span class="wb"><svg class="ic xs" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></span>
+    <span class="wb"><svg class="ic xs" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></span>
+    <span class="wb close"><svg class="ic xs" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span>
+  </div>
+
+  <!-- 搜索 + 过滤 chips -->
+  <div class="head">
+    <div class="search">
+      <svg class="ic xs" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input placeholder="搜索文本与文件路径…">
+    </div>
+    <div class="filters">
+      <button class="fchip on">全部</button>
+      <button class="fchip">文本</button>
+      <button class="fchip">图片</button>
+      <button class="fchip">文件</button>
+      <button class="fchip">文件夹</button>
+      <button class="fchip">收藏</button>
+    </div>
+  </div>
+
+  <div class="list">
+    <!-- 置顶卡片（选中演示） -->
+    <div class="card pinned sel">
+      <span class="badge"><svg class="ic" style="width:11px;height:11px" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>置顶</span>
+      <div class="c-top">
+        <div class="c-txt">X-Dir · 轻量级多窗格文件管理器：单窗口自由分割出任意数量的窗格，支持 Everything 式全盘秒搜（拼音检索）、空格快速预览、批量重命名…</div>
+      </div>
+      <div class="c-foot">
+        <span>周一 09:14</span>
+        <div class="c-acts">
+          <button title="取消置顶"><svg class="ic xs" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></button>
+          <button title="删除"><svg class="ic xs" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 多行文本卡片 -->
+    <div class="card">
+      <span class="chip">文本</span>
+      <div class="c-top">
+        <div class="c-txt">三、乙方应于本协议签署之日起 30 日内，向甲方一次性支付服务费用人民币壹拾贰万元整（¥120,000.00），逾期按日万分之五支付违约金…</div>
+      </div>
+      <div class="c-foot">
+        <span>14:32</span><span class="dot"></span><span class="src">WPS 文字</span>
+        <div class="c-acts">
+          <button title="收藏"><svg class="ic xs" viewBox="0 0 24 24"><path d="M11.5 3.6a.6.6 0 0 1 1 0l2.5 5.1 5.6.8a.6.6 0 0 1 .3 1l-4 4 .9 5.6a.6.6 0 0 1-.8.6l-5-2.7-5 2.7a.6.6 0 0 1-.8-.6l.9-5.6-4-4a.6.6 0 0 1 .3-1l5.6-.8z"/></svg></button>
+          <button title="置顶"><svg class="ic xs" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></button>
+          <button title="删除"><svg class="ic xs" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 图片卡片：横幅 -->
+    <div class="card">
+      <span class="chip image">图片</span>
+      <div class="c-top">
+        <div class="c-txt" style="color:var(--muted)">2560×1440 · 1.2 MB · X-Dir 截图</div>
+      </div>
+      <img class="c-banner" alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%234586f0'/%3E%3Cstop offset='1' stop-color='%237ac3e5'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='480' height='64' fill='url(%23g)'/%3E%3Ccircle cx='70' cy='24' r='12' fill='%23ffffff55'/%3E%3Cpath d='M0 46 L120 26 L210 42 L300 22 L480 42 L480 64 L0 64 Z' fill='%23ffffff44'/%3E%3C/svg%3E">
+      <div class="c-foot">
+        <span>13:58</span><span class="dot"></span><span class="src">X-Dir 截图</span>
+        <div class="c-acts">
+          <button title="OCR 取字"><svg class="ic xs" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg></button>
+          <button title="收藏"><svg class="ic xs" viewBox="0 0 24 24"><path d="M11.5 3.6a.6.6 0 0 1 1 0l2.5 5.1 5.6.8a.6.6 0 0 1 .3 1l-4 4 .9 5.6a.6.6 0 0 1-.8.6l-5-2.7-5 2.7a.6.6 0 0 1-.8-.6l.9-5.6-4-4a.6.6 0 0 1 .3-1l5.6-.8z"/></svg></button>
+          <button title="删除"><svg class="ic xs" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 文件卡片 -->
+    <div class="card">
+      <span class="chip files">文件 · 3 项</span>
+      <div class="c-top">
+        <div class="c-txt">D:\Reports\2026Q3审计报告.pdf · D:\Reports\2026Q3底稿.xlsx · D:\Reports\附注.xlsx</div>
+      </div>
+      <div class="c-foot">
+        <span>11:20</span><span class="dot"></span><span class="src">资源管理器</span>
+        <div class="c-acts">
+          <button title="粘贴到当前窗格"><svg class="ic xs" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><path d="M12 10v6"/><path d="m9 13 3 3 3-3"/></svg></button>
+          <button title="收藏"><svg class="ic xs" viewBox="0 0 24 24"><path d="M11.5 3.6a.6.6 0 0 1 1 0l2.5 5.1 5.6.8a.6.6 0 0 1 .3 1l-4 4 .9 5.6a.6.6 0 0 1-.8.6l-5-2.7-5 2.7a.6.6 0 0 1-.8-.6l.9-5.6-4-4a.6.6 0 0 1 .3-1l5.6-.8z"/></svg></button>
+          <button title="删除"><svg class="ic xs" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 勾选卡片（合并粘贴演示） -->
+    <div class="card pick">
+      <span class="badge pick"><svg class="ic" style="width:10px;height:10px" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>
+      <div class="c-top">
+        <div class="c-txt">开户行：中国工商银行北京分行营业部　账号：0200 0011 0900 6900 123（对公）</div>
+      </div>
+      <div class="c-foot">
+        <span>10:02</span><span class="dot"></span><span class="src">Excel</span>
+        <div class="c-acts">
+          <button title="取消勾选"><svg class="ic xs" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          <button title="删除"><svg class="ic xs" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 链接卡片 -->
+    <div class="card">
+      <span class="chip">链接</span>
+      <div class="c-top">
+        <div class="c-txt">https://gitee.com/wwc9/x-dir</div>
+      </div>
+      <div class="c-foot">
+        <span>昨天 22:47</span><span class="dot"></span><span class="src">Edge</span>
+        <div class="c-acts">
+          <button title="收藏"><svg class="ic xs" viewBox="0 0 24 24"><path d="M11.5 3.6a.6.6 0 0 1 1 0l2.5 5.1 5.6.8a.6.6 0 0 1 .3 1l-4 4 .9 5.6a.6.6 0 0 1-.8.6l-5-2.7-5 2.7a.6.6 0 0 1-.8-.6l.9-5.6-4-4a.6.6 0 0 1 .3-1l5.6-.8z"/></svg></button>
+          <button title="置顶"><svg class="ic xs" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></button>
+          <button title="删除"><svg class="ic xs" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 页脚：悬浮胶囊 -->
+  <div class="ft">
+    <div class="ft-bar">
+      <span>486 条</span>
+      <span><span class="kbd">↑↓</span> <span class="kbd">Enter</span> 粘贴</span>
+      <span><span class="kbd">1-9</span> 直取</span>
+      <span><span class="kbd">Space</span> 勾选</span>
+      <button class="clear">清空</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>
