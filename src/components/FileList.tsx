@@ -1395,8 +1395,10 @@ export function FileList({
           virtualizer.scrollToIndex(Math.floor(next / perRow), { align: "auto" });
         },
         onEnter: () => {
-          const es = selectedEntries();
-          if (es.length === 1) openEntry(es[0]);
+          // 多选全开（2026-11-06 用户定案，Explorer 同款）：文件逐个调默认
+          // 程序打开；文件夹逐个导航（多夹连续导航到最后一项，与 Explorer
+          // 连开多窗的可达性等价——窗格内导航语义只有「一个当前目录」）
+          for (const entry of selectedEntries()) openEntry(entry);
         },
         onBackspace: () => usePanes.getState().up(tabId),
         onDelete: (permanent) => deletePaths(selectedPaths(), confirmDelete, permanent),
