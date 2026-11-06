@@ -759,10 +759,32 @@ pub fn shot_scroll_launch(app: AppHandle) -> Result<(), String> {
         log::error!("滚动截图 launch 被拒绝：无待启动的会话载荷");
         return Err("无待启动的滚动会话".into());
     };
-    log::info!("滚动截图：第二段进场，150ms 后就位三窗并起循环");
+    log::info!("滚动截图：第二段进场，轮询蒙层停靠后起建三窗");
+    let t_launch = Instant::now();
     let app2 = app.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(150));
+        // 蒙层停靠确认（2026-11-06 启动提速）：旧实现固定睡 150ms（保守值），
+        // 实际停靠通常 30-80ms 到位——10ms 轮询 shot 窗 outer_position 到达
+        // 停靠区（≤-32000，park 常量 -32700）即续行；500ms 超时兜底照旧起建，
+        // 「蒙层在场时 build() 卡死」的防护语义不变（窗口已不在即视为安全）
+        let t0 = Instant::now();
+        loop {
+            let parked = match app2.get_webview_window("shot") {
+                Some(w) => w
+                    .outer_position()
+                    .map(|p| p.x <= -32000 && p.y <= -32000)
+                    .unwrap_or(false),
+                None => true, // 窗不存在（异常路径）= 无蒙层，直接续行
+            };
+            if parked || t0.elapsed() >= Duration::from_millis(500) {
+                log::info!(
+                    "滚动截图：蒙层停靠确认 parked={parked}，耗时 {:?}（旧固定等待 150ms）",
+                    t0.elapsed()
+                );
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
         // 三窗常驻（首场后 hide 不销毁）：boot/几何事件先行——页面在 webview
         // 线程换装，与主线程建窗/显示并行，无闪屏空窗期。首场窗尚不存在，
         // 事件落空无害（initialization_script 已带同款初始载荷）
@@ -784,7 +806,12 @@ pub fn shot_scroll_launch(app: AppHandle) -> Result<(), String> {
             "shot-bar-boot",
             serde_json::json!({ "w": geo.rw }),
         );
-        std::thread::sleep(Duration::from_millis(120));
+        // 换装等待（2026-11-06 提速）：三窗已存在（复用场）时页面早已活着，
+        // boot 事件换装很快，40ms 足够；首场建窗 webview 冷启动保留 120ms
+        let reuse = app2.get_webview_window("shot-frame").is_some()
+            && app2.get_webview_window("shot-scroll").is_some()
+            && app2.get_webview_window("shot-bar").is_some();
+        std::thread::sleep(Duration::from_millis(if reuse { 40 } else { 120 }));
         let runner = app2.clone();
         let dispatch = runner.run_on_main_thread(move || {
             // 框窗纯装饰，失败只记日志不流产；预览窗/控制条失败 = 会话流产
@@ -808,6 +835,10 @@ pub fn shot_scroll_launch(app: AppHandle) -> Result<(), String> {
                 dialog_error(&app2, &format!("滚动截图控制条创建失败：{e}（请重新截图）"));
                 return;
             }
+            log::info!(
+                "滚动截图：三窗就位，launch→show 总耗时 {:?}",
+                t_launch.elapsed()
+            );
             // 清掉装钩握手窗口期落进的滚轮标记（不属于本会话的有效滚动）
             WHEEL_DOWN.lock().unwrap_or_else(|e| e.into_inner()).take();
             LAST_CAPTURE

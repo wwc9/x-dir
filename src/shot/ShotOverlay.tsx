@@ -491,6 +491,87 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     ctx.drawImage(comp, 0, 0);
   }, [boot.mw, boot.mh, redrawComposite]);
 
+  /** base 区域重绘（2026-11-06 标注拖动提速）：拖已落标记时每帧只重画
+   *  「旧∪新 bbox」矩形并集——comp 侧定格帧局部贴回（抹掉旧位置标注）+
+   *  与区域相交的 shapes 保序重画，base 同区域局部 blit；live 层零操作
+   *  （标注在选区孔内，live 该区域本就透明）。旧实现每事件全屏
+   *  redrawComposite+blit（125Hz×2 遍全屏像素）是拖标注卡顿主因；
+   *  相交 shapes 全部重画保图层顺序（区域外的不动） */
+  const redrawBaseRegion = useCallback(
+    (rects: { x: number; y: number; w: number; h: number }[]) => {
+      const comp = compRef.current;
+      const img = imgRef.current;
+      const base = baseRef.current;
+      if (!comp || !img || !base || !rects.length) return;
+      const cctx = comp.getContext("2d")!;
+      cctx.save();
+      cctx.beginPath();
+      for (const r of rects) cctx.rect(r.x, r.y, r.w, r.h);
+      cctx.clip();
+      for (const r of rects) {
+        cctx.drawImage(img, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
+      }
+      const s = selRef.current;
+      if (s && !hiddenRef.current) {
+        cctx.save();
+        cctx.beginPath();
+        cctx.rect(s.x, s.y, s.w, s.h);
+        cctx.clip();
+        for (const sh of shapesRef.current) {
+          const b = shapeBounds(sh, scale);
+          const sx = s.x + b.x;
+          const sy = s.y + b.y;
+          if (
+            rects.some(
+              (r) => sx < r.x + r.w && sx + b.w > r.x && sy < r.y + r.h && sy + b.h > r.y,
+            )
+          ) {
+            drawShape(cctx, sh, s.x, s.y, scale);
+          }
+        }
+        cctx.restore();
+      }
+      cctx.restore();
+      const bctx = base.getContext("2d")!;
+      for (const r of rects) {
+        bctx.drawImage(comp, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
+      }
+    },
+    [boot.mw, boot.mh, scale],
+  );
+
+  /** 标注拖动的 rAF 合帧区域重绘：move 事件累积旧/新 bbox，每帧一次
+   *  redrawBaseRegion（与 scheduleLive 同款合帧模式） */
+  const markRafRef = useRef<number | null>(null);
+  const markRegionRef = useRef<{ x: number; y: number; w: number; h: number }[]>([]);
+  const scheduleMarkMove = useCallback(
+    (
+      prevB: { x: number; y: number; w: number; h: number } | null,
+      curB: { x: number; y: number; w: number; h: number } | null,
+    ) => {
+      const s = selRef.current;
+      const abs = (b: { x: number; y: number; w: number; h: number } | null) =>
+        s && b ? { x: s.x + b.x, y: s.y + b.y, w: b.w, h: b.h } : null;
+      for (const r of [abs(prevB), abs(curB)]) {
+        if (r) markRegionRef.current.push(r);
+      }
+      if (markRafRef.current !== null) return;
+      markRafRef.current = requestAnimationFrame(() => {
+        markRafRef.current = null;
+        const rects = markRegionRef.current;
+        markRegionRef.current = [];
+        redrawBaseRegion(rects);
+      });
+    },
+    [redrawBaseRegion],
+  );
+  useEffect(
+    () => () => {
+      if (markRafRef.current !== null) cancelAnimationFrame(markRafRef.current);
+    },
+    [],
+  );
+
   /** live 层：遮罩（选区外）/ 窗口高亮 / 拖拽框与尺寸 / 绘制预览。
    *  脏区重绘（2026-11-05 低配机优化）：pointermove 合帧路径传 dirty=true，
    *  只清除并重绘「上一帧 ∪ 本帧」全部绘制物包围盒（canvas clip 多矩形并集），
@@ -1526,7 +1607,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         return;
       }
       if (moveMarkRef.current && s) {
-        // 已落标记拖动移位：首帧记账（点住不动不进撤销栈），之后整形平移
+        // 已落标记拖动移位：首帧记账（点住不动不进撤销栈），之后整形平移。
+        // 2026-11-06 提速：只写 ref + rAF 区域重绘（旧∪新 bbox 的 comp/base
+        // 局部重画）——旧实现逐事件 setShapes = 125Hz 整树 React + 全屏
+        // redrawBase 两遍；React 状态推迟到 pointerup 一次提交
         const mm = moveMarkRef.current;
         const dx = px - mm.lastX;
         const dy = py - mm.lastY;
@@ -1537,10 +1621,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           }
           mm.lastX = px;
           mm.lastY = py;
+          const prevB = shapeBounds(shapesRef.current[mm.idx], scale);
           shapesRef.current = shapesRef.current.slice();
           shapesRef.current[mm.idx] = translateShape(shapesRef.current[mm.idx], dx, dy);
-          setShapes(shapesRef.current);
-          scheduleLive();
+          scheduleMarkMove(prevB, shapeBounds(shapesRef.current[mm.idx], scale));
         }
         return;
       }
@@ -1629,7 +1713,19 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     }
     // 已落标记拖动收场（未移动 = 一次普通点按，不记账）
     if (moveMarkRef.current) {
+      const moved = moveMarkRef.current.moved;
       moveMarkRef.current = null;
+      // 拖动期 ref 平移未入 React：抬起一次提交 + 全屏 redrawBase 收尾
+      //（覆盖区域重绘的任何边界情形；未移动的单击不触发无谓重绘）
+      if (moved) {
+        if (markRafRef.current !== null) {
+          cancelAnimationFrame(markRafRef.current);
+          markRafRef.current = null;
+        }
+        markRegionRef.current = [];
+        setShapes(shapesRef.current);
+        redrawBase();
+      }
       return;
     }
     if (resizeRef.current || moveRef.current) {
@@ -2073,7 +2169,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     on: boolean;
     onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   }[] = [
-    { id: "select", label: "选择 / 移动选区", icon: MousePointer2, on: tool === "select", onClick: () => setTool("select") },
+    { id: "select", label: "选择 / 移动选区", icon: MousePointer2, on: tool === "select", onClick: () => setTool("select"), },
     {
       id: "rect",
       label: "矩形（点击设置样式）",
