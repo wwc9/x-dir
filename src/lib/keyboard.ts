@@ -156,10 +156,12 @@ export function onGlobalKeyDown(e: KeyboardEvent): void {
   const lower = k.toLowerCase();
 
   // ── 快速预览（Quick Look 惯例）：Space 开/关；开着时 ↑/↓ 循环切换（选中态同步
-  //    由 QuickPreviewHost 统一处理），Enter = 用默认程序打开，Esc 关闭。──
+  //    由 QuickPreviewHost 统一处理），Enter = 用默认程序打开，Esc 关闭。
+  //    Space 忽略键盘自动重复（e.repeat）：长按只首次生效一次，不反复开关面板
+  //    （Explorer 同款）；↑/↓ 的重复保留——按住连续切换是预期行为 ──
   const pv = usePreview.getState();
   if (pv.queue.length) {
-    if (k === " ") {
+    if (k === " " && !e.repeat) {
       pv.close();
       e.preventDefault();
       return;
@@ -186,7 +188,7 @@ export function onGlobalKeyDown(e: KeyboardEvent): void {
       e.preventDefault();
       return;
     }
-  } else if (k === " " && !e.ctrlKey && !e.altKey && !e.metaKey) {
+  } else if (k === " " && !e.repeat && !e.ctrlKey && !e.altKey && !e.metaKey) {
     const snap = list?.getSnapshot();
     // 队列含文件夹：走文件夹元信息卡（子项数/体积，preview/PreviewBody 路由）
     const files = snap ? snap.entries : [];

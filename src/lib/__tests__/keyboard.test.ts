@@ -101,6 +101,8 @@ interface FireOpts {
   shift?: boolean;
   alt?: boolean;
   meta?: boolean;
+  /** 键盘自动重复（长按）标志：空格预览开关应忽略重复（2026-11-06 闪烁修复） */
+  repeat?: boolean;
   target?: { tagName?: string; blur?(): void };
 }
 
@@ -112,6 +114,7 @@ function fire(o: FireOpts): { prevented: boolean } {
     metaKey: o.meta ?? false,
     shiftKey: o.shift ?? false,
     altKey: o.alt ?? false,
+    repeat: o.repeat ?? false,
     preventDefault: () => {
       prevented = true;
     },
@@ -439,6 +442,29 @@ describe("快速预览", () => {
     covered.add("preview-cycle");
     covered.add("preview-open-file");
     covered.add("preview-close");
+  });
+
+  it("长按空格（键盘自动重复）不反复开关预览面板——闪烁修复", () => {
+    h.getSnapshot.mockReturnValue({
+      entries: [FILE_A],
+      selected: ["C:\\a.txt"],
+    });
+    // 首次按下开启
+    expect(fire({ key: " " }).prevented).toBe(true);
+    expect(usePreview.getState().queue).toHaveLength(1);
+    // 长按产生的自动重复 keydown（repeat: true）不得关闭 → 面板不闪烁
+    for (let i = 0; i < 5; i++) {
+      fire({ key: " ", repeat: true });
+    }
+    expect(usePreview.getState().queue).toHaveLength(1);
+    // 松开后再按一下（非重复）正常关闭
+    fire({ key: " " });
+    expect(usePreview.getState().queue).toEqual([]);
+    // 关闭态下长按（重复）也不得反复开启
+    for (let i = 0; i < 5; i++) {
+      fire({ key: " ", repeat: true });
+    }
+    expect(usePreview.getState().queue).toEqual([]);
   });
 
   it("preview-search：预览开着时 Ctrl+F 唤起预览内查找条", () => {
