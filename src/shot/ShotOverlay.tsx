@@ -342,6 +342,15 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const [shadowW, setShadowW] = useState(0);
   const [borderW, setBorderW] = useState(0);
   const [borderColor, setBorderColor] = useState("#000000");
+  // 设置镜像 ref（2026-11-06 stale 闭包修复）：redrawLive 的 useCallback deps
+  // 不含这些设置值——闭包捕获创建时的 state 初值 0，松手全量帧阴影恒不画
+  // （CDP 实测 sbw=0）；渲染期同步镜像进 ref，redrawLive 读 ref 取实时值
+  const shadowWRef = useRef(0);
+  const borderWRef = useRef(0);
+  const borderColorRef = useRef("#000000");
+  shadowWRef.current = shadowW;
+  borderWRef.current = borderW;
+  borderColorRef.current = borderColor;
   /** 标注偏好持久化：读自 settings.json（装饰三键 + 滚轮记忆五键），改动
    *  防抖 400ms 经 shot_save_prefs 白名单补丁写回（多次改动按键合并，
    *  只发最后一次）；收场动作前 flushPrefs 立即冲刷——防抖窗内退出应用
@@ -881,10 +890,13 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     // 再以 evenodd 裁剪合成到孔外——不能直接在 live 上 clip+fillRect+shadow：
     // 本体被 evenodd 裁空时 Chromium 不为裁空图形生成阴影（CDP 像素实测 alpha
     // 恒为纯遮罩 0.32）；离屏先成影后裁剪，所见即导出，孔内保持透出定格图
-    const sbw = Math.round(shadowW * scale);
-    const bbw = Math.round(borderW * scale);
+    const sbw = Math.round(shadowWRef.current * scale);
+    const bbw = Math.round(borderWRef.current * scale);
     if (s && !followingRef.current && !dNow && (sbw || bbw)) {
-      if (sbw) {
+      // dirty（拖拽/resize 合帧）跳过阴影：离屏 canvas + shadowBlur 光栅化
+      // 是拖动选区每帧最大开销（2026-11-06 拖帧修复）；边框仍画（便宜），
+      // 松手离散帧恢复完整预览
+      if (sbw && !dirty) {
         const m = Math.ceil(sbw * 1.4);
         const off = document.createElement("canvas");
         off.width = s.w + m * 2;
@@ -907,7 +919,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       }
       if (bbw) {
         ctx.save();
-        ctx.strokeStyle = borderColor;
+        ctx.strokeStyle = borderColorRef.current;
         ctx.lineWidth = bbw;
         ctx.strokeRect(s.x - bbw / 2, s.y - bbw / 2, s.w + bbw, s.h + bbw);
         ctx.restore();
@@ -1658,7 +1670,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       const s0 = selRef.current;
       if (followingRef.current) {
         el.style.cursor = "crosshair";
-      } else if (tool === "select" && s0) {
+      } else if (s0) {
+        // 手柄方向光标不依赖工具（2026-11-06 用户报：rect 等绘制工具下
+        // 边界可拖却恒显十字）——pointerdown 的手柄拖拽本就 tool 无关，
+        // 光标须与其一致
         const hd = handleAt(s0, px, py);
         const inside = px >= s0.x && px < s0.x + s0.w && py >= s0.y && py < s0.y + s0.h;
         el.style.cursor =
@@ -1831,8 +1846,16 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       resizeRef.current = null;
       moveRef.current = null;
       // 拖拽期未提交的选区几何一次性入 React（工具栏/快捷键面板/撤销快照
-      // 等消费方在拖拽中不重渲，抬起统一归位）
+      // 等消费方在拖拽中不重渲，抬起统一归位）；并补一次全量 live 帧——
+      // 拖拽帧跳过的阴影预览在离散帧恢复
       setSel(selRef.current);
+      // 取消 pending 的 dirty 合帧（rAF 在本帧后 flush 会以无阴影版本覆盖
+      // 下面的全量帧——up 全量帧必须最后落笔）
+      if (liveRafRef.current !== null) {
+        cancelAnimationFrame(liveRafRef.current);
+        liveRafRef.current = null;
+      }
+      redrawLive();
       return;
     }
     const s = selRef.current;
