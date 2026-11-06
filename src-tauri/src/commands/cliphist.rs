@@ -203,6 +203,15 @@ pub fn cliphist_hide(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// 开/关浮窗（顶栏剪贴板钮，2026-11-06）：与系统热键同入口——开 = 抓前台
+/// （= 主窗）为粘贴目标、光标显示器居中上屏聚焦；已开 = 收浮窗。
+/// toggle_clip_window 要求主线程：本命令为 sync 命令（同 cliphist_hide 模式）
+#[tauri::command]
+pub fn cliphist_toggle(app: AppHandle) -> Result<(), String> {
+    crate::cliphist::toggle_clip_window(&app);
+    Ok(())
+}
+
 /// 浮窗置顶常驻开关（置顶钮）：true = 失焦不自动收窗（Esc/热键仍收）
 #[tauri::command]
 pub fn cliphist_set_pinned(pinned: bool) -> Result<(), String> {

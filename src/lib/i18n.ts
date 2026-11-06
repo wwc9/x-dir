@@ -15,6 +15,8 @@ const EN: Record<string, string> = {
   "窗格布局预设": "Pane layout presets",
   "显示/隐藏导航树（所有窗格共用）": "Show/hide nav tree (shared across panes)",
   "全盘搜索": "Global search",
+  "截图": "Screenshot",
+  "剪贴板历史": "Clipboard history",
   "定制右键菜单与工具栏": "Customize context menu & toolbar",
   "设置": "Settings",
   "关于 X-Dir": "About X-Dir",

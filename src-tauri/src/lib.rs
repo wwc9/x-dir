@@ -302,6 +302,7 @@ pub fn run() {
             commands::cliphist::cliphist_delete,
             commands::cliphist::cliphist_clear,
             commands::cliphist::cliphist_hide,
+            commands::cliphist::cliphist_toggle,
             commands::cliphist::cliphist_set_pinned,
             commands::cliphist::cliphist_set_maximized,
             commands::cliphist::cliphist_open_settings,

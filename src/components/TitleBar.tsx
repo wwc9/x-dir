@@ -10,6 +10,8 @@ import {
 
 import { api, THIS_PC } from "../lib/ipc";
 import {
+  Camera,
+  ClipboardList,
   Copy,
   FolderOpen,
   FolderTree,
@@ -75,6 +77,10 @@ export function TitleBar() {
   const favorites = useSettings((s) => s.favorites);
   const uiZoom = useSettings((s) => s.uiZoom);
   const lang = useSettings((s) => s.lang);
+  // 截图/剪贴板热键键位（tooltip 键帽随设置实时跟随）
+  const shotEnabled = useSettings((s) => s.shotEnabled);
+  const shotHotkey = useSettings((s) => s.shotHotkey);
+  const cliphistHotkey = useSettings((s) => s.cliphistHotkey);
   const t = useT();
   // 更新检查结果（启动静默检查 / 关于浮窗写入）：有新版本时关于钮亮角标
   const updateCheck = useUi((s) => s.updateCheck);
@@ -412,6 +418,33 @@ export function TitleBar() {
             ? useUi.getState().closeGlobalSearch()
             : useUi.getState().openGlobalSearch()
         }
+      />
+
+      {/* 截图（2026-11-06）：与系统热键同效——定格光标所在显示器并打开覆盖窗；
+          按钮不受 shotEnabled 门控（热键可关，手动入口常开），键帽只在热键
+          启用时展示当前键位 */}
+      <Button
+        minimal
+        size="small"
+        icon={ic(Camera)}
+        aria-label={t("截图")}
+        data-tip={t("截图")} data-kbd={shotEnabled ? shotHotkey : undefined}
+        onClick={() => {
+          void api.shotBegin().catch((e) => useUi.getState().toast(String(e), "error"));
+        }}
+      />
+
+      {/* 剪贴板历史（2026-11-06）：与系统热键同入口的开/关浮窗；开 = 抓主窗
+          为粘贴目标、光标显示器居中上屏，已开 = 收浮窗 */}
+      <Button
+        minimal
+        size="small"
+        icon={ic(ClipboardList)}
+        aria-label={t("剪贴板历史")}
+        data-tip={t("剪贴板历史")} data-kbd={cliphistHotkey}
+        onClick={() => {
+          void api.cliphistToggle().catch((e) => useUi.getState().toast(String(e), "error"));
+        }}
       />
 
       <Button

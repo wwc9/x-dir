@@ -958,6 +958,8 @@ export const api = {
   cliphistClear: () => cmd<void>("cliphist_clear"),
   /** 剪贴板历史：收浮窗（Esc / 选中条目后；失焦自动收由 Rust 窗口事件处理） */
   cliphistHide: () => cmd<void>("cliphist_hide"),
+  /** 剪贴板历史：开/关浮窗（顶栏剪贴板钮，2026-11-06）——与系统热键同入口 */
+  cliphistToggle: () => cmd<void>("cliphist_toggle"),
   /** 剪贴板历史：浮窗置顶常驻开关（true = 失焦不自动收窗，Esc/热键仍收） */
   cliphistSetPinned: (pinned: boolean) => cmd<void>("cliphist_set_pinned", { pinned }),
   /** 剪贴板历史：浮窗最大化/还原（撑满所在显示器工作区，Rust 侧手动尺寸方案） */
