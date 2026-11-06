@@ -30,11 +30,20 @@ pub fn hotkeys_sync(app: AppHandle, hotkeys: Vec<HotkeySpec>) -> Result<(), Stri
             if event.state != ShortcutState::Pressed {
                 return;
             }
-            match id.as_str() {
-                "shot-open" => super::shot::begin_session(app),
-                "cliphist-toggle" => crate::cliphist::toggle_clip_window(app),
+            // 线程归位（2026-11-06 崩溃修复）：插件的事件 handler 在 global-hotkey
+            // 的热键线程执行（GlobalHotKeyEvent::set_event_handler），并非主
+            // 线程——此前直接调用，toggle_clip_window 的建窗（WebviewWindow
+            // Builder::build）与截图会话的窗口操作从非 GUI 线程执行，连续快速
+            // 按热键时偶发死锁/崩溃（用户实测"卡死退出"）；marshal 回主线程
+            // 串行执行，窗口操作全部归位（tauri 2 在主线程调用时同步执行，
+            // 命令入口同样安全）
+            let id2 = id.clone();
+            let app2 = app.clone();
+            let _ = app.run_on_main_thread(move || match id2.as_str() {
+                "shot-open" => super::shot::begin_session(&app2),
+                "cliphist-toggle" => crate::cliphist::toggle_clip_window(&app2),
                 other => log::debug!("未知全局热键 id：{other}"),
-            }
+            });
         })
         .map_err(|e| {
             // App.tsx 启动路径静默 catch，此处必须留痕可查（shot 同口径）

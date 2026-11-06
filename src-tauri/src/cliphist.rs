@@ -1199,21 +1199,32 @@ pub(crate) fn ensure_clip_window(app: &AppHandle) -> Result<(), String> {
 /// 收浮窗：停靠屏幕外（不销毁、不 SW_HIDE），复位开关。停靠的窗口仍持有
 /// 系统焦点——必须把焦点还给呼出前的窗口（paste_target），否则 Esc 关闭后
 /// 键盘输入会落进看不见的窗口里（2026-10-31 E2E 实测）；用户主动点了别的
-/// 窗口时焦点已不在本进程，SetForegroundWindow 会被系统拒绝，无副作用
+/// 窗口时焦点已不在本进程，SetForegroundWindow 会被系统拒绝，无副作用。
+/// 焦点归还延迟 200ms（2026-11-06 修复「快关快开浮窗无焦点不自动收」）：
+/// 立即归还会把前台权限转让给目标窗口，随后的重开受 Windows 前台锁定
+/// 拒绝 set_focus——浮窗显示着却无焦点，点击别处也不发失焦事件 = 永不
+/// 自动收；延迟窗内若已重开（CLIPHIST_OPEN 回 true）则跳过归还，前台
+/// 链从未断裂，重开聚焦稳定成功
 pub(crate) fn close_clip_window(app: &AppHandle) {
     park_clip_window(app);
-    // 焦点归还呼出前窗口
     #[cfg(windows)]
     {
         use windows::Win32::Foundation::HWND;
         use windows::Win32::UI::WindowsAndMessaging::{IsWindow, SetForegroundWindow};
         let state = app.state::<AppState>();
         let raw = state.cliphist.paste_target.load(Ordering::SeqCst);
-        if raw != 0 {
-            let hwnd = HWND(raw as *mut std::ffi::c_void);
-            if unsafe { IsWindow(Some(hwnd)) }.as_bool() {
-                let _ = unsafe { SetForegroundWindow(hwnd) };
-            }
+        if raw != 0 && unsafe { IsWindow(Some(HWND(raw as *mut std::ffi::c_void))) }.as_bool() {
+            // HWND 指针值跨线程传递：Send 由裸值承担（Win32 HWND 是纯句柄值）
+            struct SendHwnd(pub isize);
+            unsafe impl Send for SendHwnd {}
+            let target = SendHwnd(raw);
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                // 重开即取消归还（前台权限留给浮窗自己）
+                if !CLIPHIST_OPEN.load(Ordering::SeqCst) {
+                    let _ = unsafe { SetForegroundWindow(HWND(target.0 as *mut std::ffi::c_void)) };
+                }
+            });
         }
     }
 }
