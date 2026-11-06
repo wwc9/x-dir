@@ -641,9 +641,27 @@ input:where(:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
   bottom: 0;
   width: 1px;
 }
-body:has(.bp6-overlay-backdrop) .np-winedge {
-  background: linear-gradient(var(--np-overlay), var(--np-overlay)),
-    linear-gradient(var(--np-bg), var(--np-bg));
+/* 遮罩在场时的窗缘压暗（2026-11-06 重做同步）：拆到 ::after 层走 opacity 过渡
+   ——原实现 background 瞬切，但 Blueprint backdrop 退场有 200ms 淡出
+   （淡出期间元素仍在 DOM，body:has 持续匹配），窗缘条钉在满遮罩色直到
+   backdrop 移除瞬间才跳回常态 = 「顶栏灰条消失慢半拍不同步」（用户实测）。
+   现与 backdrop 同参数（200ms opacity / cubic-bezier(.4,1,.75,.9)，Blueprint
+   .bp6-overlay-backdrop 的 enter/exit-active 规则原文）双向同步：
+   显示条件排除退场类（exit / exit-active）——退场类出现的同帧（= backdrop
+   开始淡出）窗缘条同步开始同曲线渐隐；进场（appear）同理同步渐显 */
+.np-winedge::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(var(--np-overlay), var(--np-overlay));
+  opacity: 0;
+  transition: opacity 0.2s cubic-bezier(0.4, 1, 0.75, 0.9);
+}
+body:has(
+    .bp6-overlay-backdrop:not(.bp6-overlay-exit):not(.bp6-overlay-exit-active)
+  )
+  .np-winedge::after {
+  opacity: 1;
 }
 .np-shell {
   display: flex;
