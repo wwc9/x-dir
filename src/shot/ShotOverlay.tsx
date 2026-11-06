@@ -1670,10 +1670,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       const s0 = selRef.current;
       if (followingRef.current) {
         el.style.cursor = "crosshair";
-      } else if (s0) {
-        // 手柄方向光标不依赖工具（2026-11-06 用户报：rect 等绘制工具下
-        // 边界可拖却恒显十字）——pointerdown 的手柄拖拽本就 tool 无关，
-        // 光标须与其一致
+      } else if (tool === "select" && s0) {
+        // 方向光标仅「选择/移动选区」工具显示（2026-11-06 用户定案：绘制类
+        // 工具下主语义是画标注，恒显十字；手柄拖拽能力保留为备用交互——
+        // pointerdown 的手柄命中本就 tool 无关）
         const hd = handleAt(s0, px, py);
         const inside = px >= s0.x && px < s0.x + s0.w && py >= s0.y && py < s0.y + s0.h;
         el.style.cursor =
