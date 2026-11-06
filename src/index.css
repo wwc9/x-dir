@@ -5923,9 +5923,17 @@ body.np-col-resizing * {
   border: none;
   outline: none;
   background: transparent;
+  /* 压掉全局 input 聚焦规则（box-shadow ring + 底色切换）：ring 由
+     searchbar 容器 focus-within 单独承载，否则聚焦时两重描边 */
+  box-shadow: none;
+  border-radius: 0;
   padding: 0;
   font-size: var(--np-font-ui);
   color: var(--np-fg);
+}
+.np-cliptb .np-clip-search:focus {
+  background: transparent;
+  box-shadow: none;
 }
 .np-cliptb .np-clip-search::placeholder {
   color: var(--np-muted);
