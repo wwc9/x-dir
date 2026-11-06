@@ -18,7 +18,7 @@ import { formatElapsed, formatSize, formatTime } from "../lib/format";
 import { formatShortTime, selStats } from "../lib/selStats";
 import { extOf, fileIcon, typeName } from "../lib/fileIcons";
 import { DENSITY } from "../lib/tokens";
-import { isValidName, joinPath, parentPath } from "../lib/path";
+import { isValidName, joinPath, parentPath, samePathList } from "../lib/path";
 import { useUndo } from "../lib/undo";
 import { rectsIntersect, rowDropDest } from "../lib/hitTest";
 import { registerList } from "../lib/listRegistry";
@@ -1306,17 +1306,34 @@ export function FileList({
   }
 
   async function doPaste() {
-    let clip = useClipboard.getState().clip;
-    if (!clip) {
-      await useClipboard.getState().syncFromSystem();
-      clip = useClipboard.getState().clip;
-    }
-    if (!clip) {
+    // 系统剪贴板为准（2026-11-06 修复）：旧逻辑「缓存有值就直接用」导致
+    // 外部（Explorer）复制的新内容被应用内旧缓存压过——桌面复制 A、窗格
+    // 粘贴出的却是之前在窗格复制的 B。粘贴前读系统 CF_HDROP 比对：
+    // 与缓存同一集合 → 用缓存（cut/copy 语义准确 + cut 后清缓存）；
+    // 不一致 → 外部已换内容，以系统为准（cut 判定走 Preferred DropEffect）；
+    // 系统读不到（剪贴板被占用等）→ 回落缓存
+    const cur = useClipboard.getState().clip;
+    const sys = await api.getClipboardFiles().catch(() => null);
+    let mode: "copy" | "cut";
+    let paths: string[];
+    if (sys?.paths.length) {
+      if (cur && samePathList(sys.paths, cur.paths)) {
+        mode = cur.mode;
+        paths = cur.paths;
+      } else {
+        mode = sys.cut ? "cut" : "copy";
+        paths = sys.paths;
+        useClipboard.getState().setInternal({ mode, paths, fromSystem: true });
+      }
+    } else if (cur) {
+      mode = cur.mode;
+      paths = cur.paths;
+    } else {
       useUi.getState().toast("剪贴板里没有文件", "error");
       return;
     }
-    await transfer(clip.paths, path, clip.mode === "copy" ? "copy" : "move");
-    if (clip.mode === "cut") useClipboard.getState().clear();
+    await transfer(paths, path, mode === "copy" ? "copy" : "move");
+    if (mode === "cut") useClipboard.getState().clear();
   }
 
   function selectAll() {

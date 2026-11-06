@@ -32,3 +32,13 @@ export function driveRootOf(path: string): string | null {
 export function joinPath(dir: string, name: string): string {
   return dir.endsWith("\\") ? `${dir}${name}` : `${dir}\\${name}`;
 }
+
+/** 路径列表同集合判定（剪贴板粘贴校验，2026-11-06）：系统 CF_HDROP 与应用内
+ *  缓存比对——大小写不敏感（Windows 文件系统）、去尾反斜杠、顺序无关
+ *  （Explorer 重排 HDROP 顺序是合法行为），集合相等才算同一内容 */
+export function samePathList(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const norm = (p: string) => p.toLowerCase().replace(/[\\/]+$/, "");
+  const sa = new Set(a.map(norm));
+  return b.every((p) => sa.has(norm(p)));
+}

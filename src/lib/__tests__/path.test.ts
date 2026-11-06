@@ -1,7 +1,7 @@
 // lib/path.ts 纯函数回归测试：Windows 路径拆拼/命名合法性（与 Rust fs/path.rs 行为对齐）
 import { describe, expect, it } from "vitest";
 
-import { driveRootOf, fileNameOf, isValidName, joinPath, parentPath } from "../path";
+import { driveRootOf, fileNameOf, isValidName, joinPath, parentPath , samePathList } from "../path";
 
 describe("fileNameOf", () => {
   it("普通路径取末段", () => {
@@ -96,5 +96,18 @@ describe("joinPath", () => {
   });
   it("盘符根目录（已带尾反斜杠）不重复加", () => {
     expect(joinPath("E:\\", "b.txt")).toBe("E:\\b.txt");
+  });
+});
+
+// ── samePathList（剪贴板粘贴校验，2026-11-06）──
+describe("samePathList", () => {
+  it("同集合（顺序无关/大小写不敏感/尾反斜杠）判等", () => {
+    expect(samePathList(["C:\\a.txt", "D:\\B"], ["d:\\b\\", "c:\\A.TXT"])).toBe(true);
+    expect(samePathList(["C:\\a.txt"], ["C:\\a.txt"])).toBe(true);
+  });
+  it("不同集合 / 长度不同判不等", () => {
+    expect(samePathList(["C:\\a.txt"], ["C:\\b.txt"])).toBe(false);
+    expect(samePathList(["C:\\a.txt"], ["C:\\a.txt", "C:\\b.txt"])).toBe(false);
+    expect(samePathList([], [])).toBe(true);
   });
 });
