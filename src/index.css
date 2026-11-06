@@ -2503,6 +2503,15 @@ body.np-col-resizing * {
   flex-direction: column;
   gap: 10px;
 }
+/* 设备环境分区（2026-11-06）：与作者/开源信息用 hairline 分隔，accent 小标题
+   复用更新区块标题样式；内属性行沿用 np-props 键值布局 */
+.np-about-sys {
+  border-top: 1px solid var(--np-hairline);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 .np-about-head {
   display: flex;
   align-items: center;

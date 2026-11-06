@@ -228,6 +228,7 @@ const EN: Record<string, string> = {
   "开源地址": "Open source",
   "当前已是最新版本。": "You're on the latest version.",
   "运行环境": "Runtime",
+  "设备环境": "System",
   "操作系统": "OS",
   "处理器": "Processor",
   "内存": "Memory",

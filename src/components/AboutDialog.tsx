@@ -154,21 +154,10 @@ export function AboutDialog() {
             </div>
           )}
 
-          {/* 固定信息：作者 / 公众号 / 开源地址 / 运行环境与设备配置（完整 URL，可点直达仓库主页）。
-              设备区（2026-11-06）：OS/CPU/内存/GPU + 引擎——异机排障（渲染异常/
-              性能问题）先看这里判断配置档次；拉取失败静默隐藏（探针不阻塞主体） */}
+          {/* 固定信息：作者 / 公众号 / 开源地址（完整 URL，可点直达仓库主页） */}
           <div className="np-props np-about-props">
             <AboutProp k="开发者" v="王文铖" />
             <AboutProp k="微信公众号" v="效率视界" />
-            <AboutProp k={t("运行环境")} v={engineInfo()} />
-            {sys && (
-              <>
-                <AboutProp k={t("操作系统")} v={sys.os} />
-                <AboutProp k={t("处理器")} v={sys.cpu} />
-                <AboutProp k={t("内存")} v={`${sys.memoryGb} GB`} />
-                <AboutProp k={t("显卡")} v={sys.gpus.join(" · ")} />
-              </>
-            )}
             <div className="np-prop-row">
               <span className="np-prop-key">{t("开源地址")}</span>
               <span className="np-prop-val np-about-srcs">
@@ -189,6 +178,24 @@ export function AboutDialog() {
                   {REPO_URLS.github}
                 </button>
               </span>
+            </div>
+          </div>
+
+          {/* 设备环境（2026-11-06 独立分区）：引擎 + OS/CPU/内存/GPU——异机排障
+              （渲染异常/性能问题）先看这里判断配置档次；拉取失败静默隐藏整区
+              （探针不阻塞主体），仅剩引擎行 */}
+          <div className="np-about-sys">
+            <div className="np-about-update-title">{t("设备环境")}</div>
+            <div className="np-props np-about-props">
+              <AboutProp k={t("运行环境")} v={engineInfo()} />
+              {sys && (
+                <>
+                  <AboutProp k={t("操作系统")} v={sys.os} />
+                  <AboutProp k={t("处理器")} v={sys.cpu} />
+                  <AboutProp k={t("内存")} v={`${sys.memoryGb} GB`} />
+                  <AboutProp k={t("显卡")} v={sys.gpus.join(" · ")} />
+                </>
+              )}
             </div>
           </div>
         </div>
