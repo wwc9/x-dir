@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 
 import { api, type ClipHistItem, type Settings } from "../lib/ipc";
-import { clipKindMeta, pickDigit } from "../lib/cliphist";
+import { clipKindMeta, pickDigit, relTime } from "../lib/cliphist";
 import { AppIcon } from "../components/AppIcon";
 import { initTooltip } from "../lib/tooltip";
 import { DENSITY } from "../lib/tokens";
@@ -507,21 +507,36 @@ export function ClipHistWindow() {
 
   return (
     <div className="np-clip">
-      {/* 自绘顶栏：拖动区（data-tauri-drag-region，双击 = 最大化/还原）+
-          窗口四钮（置顶常驻/最小化/最大化/关闭，np-winbtn 统一配方） */}
+      {/* 自绘顶栏（2026-11-06 方案 C + 搜索上移）：logo 章 + 标题/计数副行 +
+          搜索框（胶囊填充式，顶栏主入口）+ 窗口五钮；拖动区 = data-tauri-drag-region
+          （双击 = 最大化/还原），窗口钮复用 np-winbtn 统一配方 */}
       <header
         className="np-cliptb"
         data-tauri-drag-region
         data-tip-down=""
         onDoubleClick={(e) => {
-          if ((e.target as HTMLElement).closest("button")) return;
+          if ((e.target as HTMLElement).closest("button, input")) return;
           toggleMax();
         }}
       >
-        <span className="np-cliptb-title" data-tauri-drag-region>
+        <span className="np-cliptb-logo" data-tauri-drag-region>
           <AppIcon icon={ClipboardList} size={DENSITY.iconSm} />
-          剪贴板
         </span>
+        <span className="np-cliptb-id" data-tauri-drag-region>
+          <span className="np-cliptb-title">剪贴板</span>
+          <span className="np-cliptb-sub">共 {total} 条</span>
+        </span>
+        <div className="np-clip-searchbar">
+          <AppIcon icon={Search} size={DENSITY.iconSm} />
+          <input
+            ref={inputRef}
+            className="np-clip-search"
+            value={query}
+            spellCheck={false}
+            placeholder="搜索文本与文件路径…"
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
         <button
           className="np-winbtn"
           data-tip="打开 X-Dir 设置（浮窗收起）"
@@ -562,17 +577,7 @@ export function ClipHistWindow() {
         </button>
       </header>
       <div className="np-clip-head">
-        <div className="np-clip-searchrow">
-          <AppIcon icon={Search} size={DENSITY.iconSm} />
-          <input
-            ref={inputRef}
-            className="np-clip-search"
-            value={query}
-            spellCheck={false}
-            placeholder="搜索剪贴板历史（文本与文件路径）"
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
+        {/* 过滤档（方案 C：实心选中 pill；搜索框已上移顶栏） */}
         <div className="np-clip-seg">
           {KIND_TABS.map((t) => (
             <button key={t.v} className={kind === t.v ? "is-on" : ""} onClick={() => setKind(t.v)}>
@@ -590,12 +595,15 @@ export function ClipHistWindow() {
           <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
             {virtualizer.getVirtualItems().map((vi) => {
               const it = items[vi.index];
+              const kMeta = clipKindMeta(it.kind);
+              // 类型色族：图片=蓝 文件夹/文件=橙 其余=灰（--np-icon-* 同源语义）
+              const kCls = it.kind === "image" ? "image" : it.kind === "files" || it.kind === "dirs" ? "files" : "text";
               return (
                 <div
                   key={it.id}
                   ref={virtualizer.measureElement}
                   data-index={vi.index}
-                  className={`np-clip-row ${vi.index % 2 === 1 ? "is-alt" : ""} ${
+                  className={`np-clip-row ${
                     vi.index === sel ? "is-sel" : ""
                   } ${picked.has(it.id) ? "is-pick" : ""}`}
                   style={{
@@ -621,14 +629,6 @@ export function ClipHistWindow() {
                   ) : (
                     <span className="np-clip-idx">{vi.index + 1}</span>
                   )}
-                  {/* 类型图标（2026-10-31 用户终案）：纯灰线性，无底板无角标，
-                      类型信息由 meta 文字标签承载 */}
-                  <span
-                    className="np-clip-kind"
-                    data-tip={it.source ? `来源：${it.source}` : undefined}
-                  >
-                    <AppIcon icon={clipKindMeta(it.kind).icon} size={DENSITY.iconSm} />
-                  </span>
                   {it.thumb ? (
                     <img
                       className="np-clip-thumb"
@@ -641,73 +641,84 @@ export function ClipHistWindow() {
                       }}
                     />
                   ) : null}
-                  <span className="np-clip-preview">{it.preview}</span>
-                  {it.fav && (
-                    <span className="np-clip-favmark" data-tip="已收藏">
-                      <AppIcon icon={Star} size={DENSITY.iconXs} />
-                    </span>
-                  )}
-                  {it.pinned && (
-                    <span className="np-clip-pinmark" data-tip="已置顶">
-                      <AppIcon icon={Pin} size={DENSITY.iconXs} />
-                    </span>
-                  )}
-                  {/* 右侧固定宽操作列：meta 与悬停动作钮列内切换（不跳宽） */}
-                  <span className="np-clip-right">
-                    <span className="np-clip-meta">{clipKindMeta(it.kind).label}</span>
-                    <span className="np-clip-actions">
-                      <button
-                        data-tip={it.fav ? "取消收藏" : "收藏（永久保留，排最前）"}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          favItem(it);
-                        }}
-                      >
-                        <AppIcon icon={Star} size={DENSITY.iconXs} />
-                      </button>
-                      <button
-                        data-tip={it.pinned ? "取消置顶" : "置顶（豁免清理）"}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          pinItem(it);
-                        }}
-                      >
-                        <AppIcon icon={it.pinned ? PinOff : Pin} size={DENSITY.iconXs} />
-                      </button>
-                      {it.kind === "image" && (
-                      <button
-                        data-tip="OCR 取字（识别文字进剪贴板）"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          ocrItem(it);
-                        }}
-                      >
-                        <AppIcon icon={ScanText} size={DENSITY.iconXs} />
-                      </button>
-                    )}
-                    {(it.kind === "files" || it.kind === "dirs") && (
+                  <div className="np-clip-body">
+                    <div className="np-clip-crow">
+                      <span className="np-clip-preview">{it.preview}</span>
+                      {it.pinned && (
+                        <span className="np-clip-pinmark" data-tip="已置顶">
+                          <AppIcon icon={Pin} size={DENSITY.iconXs} />
+                        </span>
+                      )}
+                      {it.fav && (
+                        <span className="np-clip-favmark" data-tip="已收藏">
+                          <AppIcon icon={Star} size={DENSITY.iconXs} />
+                        </span>
+                      )}
+                      <span className={`np-clip-chip k-${kCls}`}>{kMeta.label}</span>
+                    </div>
+                    {/* meta 行：相对时间 + 来源应用（方案 C 新信息位）+ 悬停动作组 */}
+                    <div className="np-clip-meta">
+                      <span>{relTime(it.createdAt)}</span>
+                      {it.source && (
+                        <>
+                          <span className="np-clip-dot" />
+                          <span className="np-clip-src">{it.source}</span>
+                        </>
+                      )}
+                      <span className="np-clip-actions">
                         <button
-                          data-tip="粘贴到当前窗格（主窗活动目录）"
+                          data-tip={it.fav ? "取消收藏" : "收藏（永久保留，排最前）"}
                           onClick={(e) => {
                             e.stopPropagation();
-                            pasteToPane(it);
+                            favItem(it);
                           }}
                         >
-                          <AppIcon icon={FolderInput} size={DENSITY.iconXs} />
+                          <AppIcon icon={Star} size={DENSITY.iconXs} />
                         </button>
-                      )}
-                      <button
-                        className="np-clip-del"
-                        data-tip="删除"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          delItem(it);
-                        }}
-                      >
-                        <AppIcon icon={Trash2} size={DENSITY.iconXs} />
-                      </button>
-                    </span>
-                  </span>
+                        <button
+                          data-tip={it.pinned ? "取消置顶" : "置顶（豁免清理）"}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            pinItem(it);
+                          }}
+                        >
+                          <AppIcon icon={it.pinned ? PinOff : Pin} size={DENSITY.iconXs} />
+                        </button>
+                        {it.kind === "image" && (
+                          <button
+                            data-tip="OCR 取字（识别文字进剪贴板）"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              ocrItem(it);
+                            }}
+                          >
+                            <AppIcon icon={ScanText} size={DENSITY.iconXs} />
+                          </button>
+                        )}
+                        {(it.kind === "files" || it.kind === "dirs") && (
+                          <button
+                            data-tip="粘贴到当前窗格（主窗活动目录）"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              pasteToPane(it);
+                            }}
+                          >
+                            <AppIcon icon={FolderInput} size={DENSITY.iconXs} />
+                          </button>
+                        )}
+                        <button
+                          className="np-clip-del"
+                          data-tip="删除"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            delItem(it);
+                          }}
+                        >
+                          <AppIcon icon={Trash2} size={DENSITY.iconXs} />
+                        </button>
+                      </span>
+                    </div>
+                  </div>
                 </div>
               );
             })}
@@ -720,33 +731,30 @@ export function ClipHistWindow() {
           <span className="np-clip-viewer-tip">点击任意处或按 Esc 关闭</span>
         </div>
       )}
+      {/* 页脚悬浮胶囊（方案 C）：计数 + 清空 + 完整快捷键清单（2026-10-31
+          定案保留），flash 回执占位同高 */}
       <div className="np-clip-foot">
         {flash ? (
           <span className="np-clip-flash">{flash}</span>
         ) : (
-          <>
-            <div className="np-clip-foot-row">
-              <span className="np-clip-count">{total} 条</span>
-              <button
-                className="np-clip-clear"
-                data-tip="清空全部未置顶条目（两击确认）"
-                onClick={onClear}
-              >
-                <AppIcon icon={Trash2} size={DENSITY.iconXs} />
-                {clearArmed ? "确认清空？" : "清空"}
-              </button>
-              <span className="np-clip-keys">
-                {picked.size > 0
-                  ? `已勾选 ${picked.size} 条 · Enter 合并粘贴 · Space 续选 · Esc 取消`
-                  : winPinned
-                    ? "↑↓/WS 选择 · Enter 复制（常驻中） · 1-9 取条 · Space 勾选"
-                    : "↑↓/WS 选择 · Enter 粘贴 · 1-9 取条 · Space 勾选"}
-              </span>
-            </div>
-            <div className="np-clip-foot-row">
-              <span className="np-clip-keys">Ctrl+P 置顶 · Del 删除 · Esc 关闭</span>
-            </div>
-          </>
+          <div className="np-clip-footbar">
+            <span className="np-clip-count">{total} 条</span>
+            <button
+              className="np-clip-clear"
+              data-tip="清空全部未置顶条目（两击确认）"
+              onClick={onClear}
+            >
+              <AppIcon icon={Trash2} size={DENSITY.iconXs} />
+              {clearArmed ? "确认清空？" : "清空"}
+            </button>
+            <span className="np-clip-keys">
+              {picked.size > 0
+                ? `已勾选 ${picked.size} 条 · Enter 合并粘贴 · Space 续选 · Esc 取消`
+                : winPinned
+                  ? "↑↓/WS 选择 · Enter 复制（常驻中） · 1-9 取条 · Space 勾选 · Ctrl+P 置顶 · Del 删除 · Esc 关闭"
+                  : "↑↓/WS 选择 · Enter 粘贴 · 1-9 取条 · Space 勾选 · Ctrl+P 置顶 · Del 删除 · Esc 关闭"}
+            </span>
+          </div>
         )}
       </div>
     </div>

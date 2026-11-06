@@ -5556,35 +5556,19 @@ body.np-col-resizing * {
   display: flex;
   flex-direction: column;
   gap: var(--np-gap);
-  padding: var(--np-gap) var(--np-gutter) 0 var(--np-gutter);
+  padding: 0 var(--np-gutter);
 }
-.np-clip-searchrow {
-  display: flex;
-  align-items: center;
-  gap: var(--np-gap);
-  min-height: var(--np-ctl-h);
-  /* 搜索框上下各加 4px 呼吸间隔（2026-10-31 用户反馈） */
-  padding-block: var(--np-gap);
-  color: var(--np-muted);
-}
-.np-clip-search {
-  flex: 1;
-  min-width: 0;
-  height: var(--np-ctl-h);
-  padding: 0 var(--np-gap);
-  font-size: var(--np-font-ui);
-}
-/* 类型分段 = np-seg 配方平移（描边勾选 chip，2026-10-24 方案 A）；
-   轻量窗不加载 Blueprint，原生 button 复刻同一视觉 */
+/* 过滤档 = 方案 C 实心选中 pill（2026-11-06）：未选描边、选中 accent 实底 */
 .np-clip-seg {
   display: flex;
   flex-wrap: wrap;
   row-gap: var(--np-gap);
   gap: var(--np-gutter);
+  padding-block: var(--np-gap);
 }
 .np-clip-seg button {
   min-height: var(--np-ctl-h);
-  padding: 1px var(--np-gutter);
+  padding: 1px 12px;
   border: 1px solid var(--np-border);
   border-radius: var(--np-radius-pill);
   background: transparent;
@@ -5598,15 +5582,10 @@ body.np-col-resizing * {
   color: var(--np-fg);
 }
 .np-clip-seg button.is-on {
-  background-color: var(--np-sel);
+  background-color: var(--np-accent);
   border-color: var(--np-accent);
-  color: var(--np-accent);
+  color: var(--np-accent-fg);
   font-weight: 600;
-}
-.np-clip-seg button.is-on::before {
-  content: "✓";
-  font-size: var(--np-font-sm);
-  margin-right: var(--np-gap);
 }
 .np-clip-list {
   flex: 1;
@@ -5615,66 +5594,137 @@ body.np-col-resizing * {
   margin-top: var(--np-gap);
   padding: 0;
 }
-/* 行悬停/选中对齐文件列表 np-row 口径（sel 淡染底 + accent 文字）；
-   行内 gap 7px = np-row 同源；margin 0 2px 悬停底缩进 + padding 左右 6px
-   → 内容基线 2+6=8px，与顶栏/搜索框/页脚的 gutter 基线严格对齐 */
+/* ── 列表 = 方案 C 卡片流（2026-11-06 用户选定）：每条一张 surface-2 软底
+   卡片，条目间靠留白分隔（无斑马纹无分隔线）；选中/勾选 = accent inset
+   描边；类型 = 淡染小 chip 右上；meta 行 = 相对时间 · 来源应用 + 悬停动作 */
 .np-clip-row {
   display: flex;
   align-items: center;
-  gap: 7px;
-  margin: 0 2px;
-  padding: 3px 6px;
-  /* 预览自适应行数（最多 3 行）：单条兜底行高，多行按内容撑开，
-     实际行高由虚拟列表 measureElement 量测 */
-  min-height: var(--np-row-h);
-  border-radius: var(--np-radius);
+  gap: 10px;
+  padding: 8px 10px;
+  margin: 0 var(--np-gap) var(--np-gap);
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius-pane);
   cursor: default;
   user-select: none;
   overflow: hidden;
   color: var(--np-fg);
 }
-/* 斑马纹：按数据序号奇偶挂类（虚拟列表 nth-child 随滚动翻转会闪烁）；
-   置于 hover/is-sel 之前，同权重下悬停/选中后声明覆盖 */
-.np-clip-row.is-alt {
-  background-color: var(--np-stripe);
-}
-/* 悬停 = 主题蓝淡染（2026-10-31 用户定案，同选中底色；选中态另有 accent
-   文字可区分）。仅换底色，不加减边框/阴影——行高纹丝不动 */
+/* 悬停：hover 半透明叠染 surface-2（保底色，等价预览 color-mix 公式） */
 .np-clip-row:hover {
-  background-color: var(--np-sel);
+  background: color-mix(in srgb, var(--np-hover) 55%, var(--np-surface-2));
 }
+/* 键盘选中：sel 淡染 + accent 描边，预览文字转 accent */
 .np-clip-row.is-sel {
-  background-color: var(--np-sel);
+  background: var(--np-sel);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--np-accent) 55%, transparent);
   color: var(--np-accent);
 }
-.np-clip-row.is-sel .np-clip-meta {
+.np-clip-row.is-sel .np-clip-preview {
   color: var(--np-accent);
-  opacity: 0.85;
+}
+/* 多选勾选（T1-4）：accent 描边（无底染，与键盘选中区分靠底色缺失） */
+.np-clip-row.is-pick {
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--np-accent) 55%, transparent);
 }
 .np-clip-idx {
   flex: none;
-  /* 24px 容纳 4 位数（容量上限 10000），居中对齐（2026-10-31 用户定案）；
-     与类型图标收紧到 3px（2026-10-31 用户反馈：行 gap 7px - 4px 负边距） */
-  width: calc(var(--np-gap) * 6);
-  margin-right: -4px;
+  /* 18px 序号位：1-9 取条直取的可见序号（卡片左缘窄列） */
+  width: calc(var(--np-gap) * 4.5);
   text-align: center;
   font-size: var(--np-font-sm);
   color: var(--np-muted);
   font-variant-numeric: tabular-nums;
 }
-/* 图片条目缩略图 = 3 行文本等高（calc(row-h×2) ≈ 56px，与三行文本行视觉
-   等高）；宽度随纵横比自适应、限宽 45% 保住预览文字空间（超宽横幅） */
-/* 类型图标（2026-10-31 用户终案：纯灰线性，无底板无角标——方案 10 色点
-   试用后撤）：类型信息由 meta 文字标签承载；风格对照留档
-   design/clip-icons-preview.html */
-.np-clip-kind {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+/* 卡片主体：右上类型 chip 行 + meta 行（时间 · 来源 · 悬停动作） */
+.np-clip-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.np-clip-crow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.np-clip-preview {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--np-font-ui);
+  line-height: 1.45;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+/* 类型 chip：类型色族淡染小标（图=蓝 文件=橙 其余=灰，--np-icon-* 语义同源） */
+.np-clip-chip {
   flex: none;
-  width: var(--np-realicon);
-  height: var(--np-realicon);
+  font-size: 10px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: var(--np-radius);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--np-icon-generic) 14%, transparent);
+  color: var(--np-icon-generic);
+}
+.np-clip-chip.k-image {
+  background: color-mix(in srgb, var(--np-icon-image) 14%, transparent);
+  color: var(--np-icon-image);
+}
+.np-clip-chip.k-files {
+  background: color-mix(in srgb, var(--np-icon-folder) 16%, transparent);
+  color: var(--np-icon-folder);
+}
+/* 置顶/收藏标记：chip 左侧 accent 小图标（行内，不占独立角标位） */
+.np-clip-favmark {
+  display: inline-flex;
+  flex: none;
+  align-self: center;
+  color: var(--np-accent);
+}
+.np-clip-pinmark {
+  display: inline-flex;
+  flex: none;
+  align-self: center;
+  color: var(--np-accent);
+}
+/* meta 行：相对时间 · 来源应用 + 悬停动作组（margin-left auto） */
+.np-clip-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--np-font-sm);
   color: var(--np-muted);
+  font-variant-numeric: tabular-nums;
+}
+.np-clip-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: var(--np-radius-pill);
+  background: currentColor;
+  opacity: 0.55;
+}
+.np-clip-src {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+/* 图片条目缩略图（方案 C 大展示位）：96×64 圆角——原始缩略 ≤128px
+   （THUMB_EDGE 防发虚定案），此尺寸内缩放显示不发糊；点击放大看原图 */
+.np-clip-thumb {
+  height: calc(var(--np-row-h) * 2.4);
+  width: calc(var(--np-row-h) * 3.4);
+  object-fit: cover;
+  border-radius: calc(var(--np-radius-pane) - 2px);
+  background: var(--np-surface);
+  border: 1px solid var(--np-hairline);
+  flex: none;
 }
 /* 图片放大预览覆盖层（T2-1）：全窗覆盖、点击/Esc 关闭 */
 .np-clip-viewer {
@@ -5703,79 +5753,24 @@ body.np-col-resizing * {
   font-size: var(--np-font-sm);
   color: var(--np-muted);
 }
-/* 多选勾选态（T1-4）：accent 淡染底 + 序号位换 ✓ 标记 */
-.np-clip-row.is-pick {
-  background-color: var(--np-sel);
-}
-.np-clip-row.is-pick.is-alt {
-  background-color: var(--np-sel);
-}
+/* 多选勾选态（T1-4）：序号位换 ✓ 标记（描边态见 .is-pick） */
 .np-clip-idxpick {
   color: var(--np-accent);
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
-.np-clip-thumb {
-  height: calc(var(--np-row-h) * 2);
-  width: auto;
-  max-width: 45%;
-  object-fit: contain;
-  border-radius: var(--np-radius);
-  background: var(--np-surface-2);
-  flex: none;
-}
-.np-clip-preview {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--np-font-ui);
-  line-height: 1.45;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-/* 置顶标记 = accent Pin 图标（颜色由类承载，AppIcon 继承不传 colorVar） */
-.np-clip-favmark {
-  display: inline-flex;
-  flex: none;
-  color: var(--np-accent);
-}
-.np-clip-pinmark {
-  display: inline-flex;
-  flex: none;
-  color: var(--np-accent);
-}
-.np-clip-meta {
-  font-size: var(--np-font-sm);
-  color: var(--np-muted);
-  font-variant-numeric: tabular-nums;
-}
-/* 右侧固定宽操作列（2026-10-31 用户反馈）：宽度按悬停态动作钮组（2×ctl-h
-   + gap）预留，meta 与 actions 列内切换——悬停/选中不再引起预览文字跳宽 */
-.np-clip-right {
-  flex: none;
-  /* 92px = 4×20px 动作钮（OCR/粘贴到窗格/收藏·置顶·删除按需出现）+ 3×gap */
-  width: calc(var(--np-gap) * 23);
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-}
-/* 行内动作（置顶/删除）：悬停或选中行常显（键盘 ↑↓ 浏览时可见），常驻位
-   与 meta 互换（meta 隐藏避免挤压省略号） */
+/* 行内动作组（收藏/置顶/OCR/粘贴/删除）：meta 行右端，悬停或选中行常显
+   （键盘 ↑↓ 浏览时可见）；meta 信息（时间/来源）与动作共存不互换 */
 .np-clip-actions {
   display: none;
   flex: none;
   gap: var(--np-gap);
+  margin-left: auto;
 }
 .np-clip-row:hover .np-clip-actions,
 .np-clip-row.is-sel .np-clip-actions {
   display: inline-flex;
-}
-.np-clip-row:hover .np-clip-meta,
-.np-clip-row.is-sel .np-clip-meta {
-  display: none;
 }
 /* 动作钮 20px（gap×5）：24px 悬停态会把单行行高从 28 撑到 30（悬停/选中
  * 换显时内容高度跳变，2026-10-31 用户实测反馈）——缩到 20 后单行内容
@@ -5805,28 +5800,31 @@ body.np-col-resizing * {
   padding: var(--np-gutter) var(--np-gutter) 10px;
   text-align: center;
 }
-/* 底栏两行（2026-10-31 用户定案）：上行 计数+清空+主操作键，下行 其余键，
-   快捷键清单完整展示；flash 回执跨两行居中 */
+/* 底栏悬浮胶囊（方案 C，2026-11-06）：surface-2 胶囊条承载 计数+清空+
+   完整快捷键清单（2026-10-31 定案保留）；flash 回执占位同高不跳 */
 .np-clip-foot {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   flex: 0 0 auto;
-  border-top: 1px solid var(--np-hairline);
+  padding: var(--np-gap) var(--np-gutter) calc(var(--np-gap) * 2);
   font-size: var(--np-font-sm);
   color: var(--np-muted);
 }
-.np-clip-foot-row {
+.np-clip-footbar {
   display: flex;
   align-items: center;
   gap: var(--np-gap);
-  height: var(--np-status-h);
-  padding: 0 var(--np-gutter);
+  min-height: calc(var(--np-ctl-h) + var(--np-gap));
+  padding: 0 14px;
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius-pill);
 }
 .np-clip-flash {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: calc(var(--np-status-h) * 2);
+  min-height: calc(var(--np-ctl-h) + var(--np-gap) + var(--np-gap));
 }
 .np-clip-count {
   flex: none;
@@ -5857,28 +5855,80 @@ body.np-col-resizing * {
   background: var(--np-hover);
   color: var(--np-fg);
 }
-/* 自绘顶栏（2026-10-31 用户需求）：拖动区 + 窗口四钮（置顶常驻/最小化/
-   最大化/关闭）。窗口钮复用全局 np-winbtn 配方；置顶开态 = accent（§4.5 激活档） */
+/* 自绘顶栏（2026-10-31 用户需求；2026-11-06 方案 C 改版）：logo 章 +
+   标题/计数副行 + 搜索胶囊（顶栏主入口）+ 窗口五钮。窗口钮复用全局
+   np-winbtn 配方；置顶开态 = accent（§4.5 激活档） */
 .np-cliptb {
   display: flex;
   align-items: center;
-  gap: var(--np-gap);
+  gap: var(--np-gutter);
   flex: 0 0 auto;
-  height: var(--np-nav-h);
-  /* 右侧窗口钮距边 6px = 主窗口顶栏口径；左缘 8px = 页面内容基线 */
-  padding: 0 6px 0 var(--np-gutter);
+  /* 加高容两行标题区 + 搜索胶囊：row-h(28) + 上下 gap×2(8) = 44px 基准 */
+  min-height: calc(var(--np-row-h) + var(--np-gap) * 4);
+  padding: var(--np-gap) 6px;
   border-bottom: 1px solid var(--np-hairline);
   user-select: none;
 }
-.np-cliptb-title {
+/* logo 章：accent 12% 淡染方章（方案 C 顶栏视觉锚点） */
+.np-cliptb-logo {
   display: inline-flex;
   align-items: center;
-  gap: var(--np-gap);
-  flex: 1;
+  justify-content: center;
+  flex: none;
+  width: calc(var(--np-ctl-h) + var(--np-gap));
+  height: calc(var(--np-ctl-h) + var(--np-gap));
+  border-radius: calc(var(--np-radius-pane) - 2px);
+  background: color-mix(in srgb, var(--np-accent) 12%, transparent);
+  color: var(--np-accent);
+}
+/* 标题/计数副行（竖排两行） */
+.np-cliptb-id {
+  display: flex;
+  flex-direction: column;
+  flex: none;
   min-width: 0;
+}
+.np-cliptb-title {
   font-size: var(--np-font-ui);
+  font-weight: 600;
   color: var(--np-fg);
   white-space: nowrap;
+}
+.np-cliptb-sub {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* 搜索胶囊（方案 C 上移顶栏）：surface-2 填充 + pill 圆角 + 聚焦 ring */
+.np-cliptb .np-clip-searchbar {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+  height: var(--np-ctl-h);
+  padding: 0 12px;
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius-pill);
+  color: var(--np-muted);
+}
+.np-cliptb .np-clip-searchbar:focus-within {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--np-accent) 45%, transparent);
+}
+.np-cliptb .np-clip-search {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 0;
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+}
+.np-cliptb .np-clip-search::placeholder {
+  color: var(--np-muted);
 }
 .np-cliptb .np-winbtn.is-on,
 .np-cliptb .np-winbtn.is-on:hover {
