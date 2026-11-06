@@ -15,9 +15,17 @@ let el: HTMLDivElement | null = null;
 let timer: number | null = null;
 let cur: Element | null = null;
 let downEl: Element | null = null;
+/** 触发时的鼠标 X（mouseover clientX）：顶部工具区侧向落位以光标为锚
+ *  （2026-11-06 用户报「tip 距鼠标远」——原锚按钮右缘，灵动岛等宽按钮
+ *  时 tip 被推离光标整个按钮宽度）。键盘 focusin 触发无坐标为 null，
+ *  落位回落按钮边缘锚 */
+let anchorX: number | null = null;
 const DELAY = 120;
 const GAP = 6;
 const EDGE = 8;
+/** 侧向落位与光标的横向间隙：tip 紧邻光标出现又不覆盖光标正下方的
+ *  垂直移动路径 */
+const SIDE = 12;
 
 function hide() {
   if (timer !== null) {
@@ -59,10 +67,12 @@ function position(target: Element) {
   const h = el.offsetHeight;
   // 方向：默认上方（见文件头 2026-11-05 定案）；data-tip-down 容器
   // （标题栏/浮窗头等顶部工具区）优先下方，贴边向另一侧自动翻转。
-  // 顶部工具区水平落位 = 下右侧/下左侧（2026-11-05 补充定案）：tip 左缘贴
-  // 按钮右缘侧向展开，视口右缘不足翻下左（tip 右缘贴按钮左缘）——tip 完全
-  // 避开按钮水平投影，光标从按钮垂直下移的路径永不被挡（居中或边对齐
-  // 都会被比按钮宽的 tip 横跨）
+  // 顶部工具区水平落位 = 光标右侧/左侧（2026-11-06 修订）：tip 左缘贴
+  // 光标 +12px 侧向展开，视口右缘不足翻左侧（tip 右缘贴光标 -12px）——
+  // tip 紧邻光标且完全避开光标的水平位置，垂直下移路径永不被挡
+  // （初版 2026-11-05 锚按钮右缘：灵动岛等宽按钮时 tip 被推离光标整个
+  // 按钮宽度，用户报「距鼠标远」；光标锚在 enter 时记录，同元素内移动
+  // 不更新——tip 位置稳定不跳动）
   const down = target.closest("[data-tip-down]") !== null;
   let x = r.left + r.width / 2 - w / 2;
   let y = down ? r.bottom + GAP : r.top - h - GAP;
@@ -70,8 +80,9 @@ function position(target: Element) {
     y = down ? r.top - h - GAP : r.bottom + GAP;
   }
   if (down) {
-    x = r.right + 4;
-    if (x + w > window.innerWidth - EDGE) x = r.left - w - 4;
+    const ax = anchorX ?? r.right;
+    x = ax + SIDE;
+    if (x + w > window.innerWidth - EDGE) x = ax - w - SIDE;
   }
   x = Math.max(EDGE, Math.min(x, window.innerWidth - w - EDGE));
   el.style.left = `${x}px`;
@@ -91,12 +102,19 @@ function enter(target: Element) {
 export function initTooltip(): () => void {
   const over = (e: Event) => {
     const t = (e.target as Element | null)?.closest?.("[data-tip]") ?? null;
-    if (t) enter(t);
-    else hide();
+    if (t) {
+      // 光标锚随最新 mouseover 刷新：tip 未显示时以最后位置为锚；
+      // 已显示的 tip 不重新落位（位置稳定）
+      anchorX = (e as MouseEvent).clientX;
+      enter(t);
+    } else hide();
   };
   const focus = (e: FocusEvent) => {
     const t = (e.target as Element | null)?.closest?.("[data-tip]") ?? null;
-    if (t) enter(t);
+    if (t) {
+      anchorX = null; // 键盘触发无光标：侧向落位回落按钮边缘锚
+      enter(t);
+    }
   };
   const down = (e: MouseEvent) => {
     downEl = (e.target as Element | null)?.closest?.("[data-tip]") ?? null;
