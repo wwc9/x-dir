@@ -136,13 +136,18 @@ export function AboutDialog() {
             <div className="np-about-sys">
               <div className="np-about-update-title">{t("设备环境")}</div>
               <div className="np-props np-about-props">
-                <AboutProp k={t("运行环境")} v={engineInfo()} />
+                <AboutProp k={t("运行环境")} v={engineInfo()} wrap />
                 {sys && (
                   <>
-                    <AboutProp k={t("操作系统")} v={sys.os} />
-                    <AboutProp k={t("处理器")} v={sys.cpu} />
-                    <AboutProp k={t("内存")} v={`${sys.memoryGb} GB`} />
-                    <AboutProp k={t("显卡")} v={sys.gpus.join(" · ")} />
+                    <AboutProp k={t("操作系统")} v={sys.os} wrap />
+                    <AboutProp k={t("处理器")} v={sys.cpu} wrap />
+                    <AboutProp k={t("内存")} v={`${sys.memoryGb} GB`} wrap />
+                    {/* 显卡逐行展示（多卡各占一行），不省略 */}
+                    <AboutProp
+                      k={t("显卡")}
+                      v={sys.gpus.map((g) => <div key={g}>{g}</div>)}
+                      wrap
+                    />
                   </>
                 )}
               </div>
@@ -231,12 +236,17 @@ export function AboutDialog() {
   );
 }
 
-/** 信息行：复用属性对话框的 np-prop-* 布局（键定宽辅助色、值正文色） */
-function AboutProp({ k, v }: { k: string; v: ReactNode }) {
+/** 信息行：复用属性对话框的 np-prop-* 布局（键定宽辅助色、值正文色）；
+ *  wrap = 值折行完整展示不省略（设备环境排障信息截断即失效，2026-11-06） */
+function AboutProp({ k, v, wrap }: { k: string; v: ReactNode; wrap?: boolean }) {
   return (
     <div className="np-prop-row">
       <span className="np-prop-key">{k}</span>
-      <span className="np-prop-val np-ellipsis">{v}</span>
+      {wrap ? (
+        <div className="np-prop-val np-about-valwrap">{v}</div>
+      ) : (
+        <span className="np-prop-val np-ellipsis">{v}</span>
+      )}
     </div>
   );
 }

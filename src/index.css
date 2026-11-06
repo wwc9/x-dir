@@ -2567,6 +2567,15 @@ body.np-col-resizing * {
   flex-direction: column;
   gap: 6px;
 }
+/* 设备环境值完整展示（2026-11-06 用户反馈）：排障分区截断即失效，
+   折行不省略；显卡多卡逐行（子 div 各占一行） */
+.np-about-valwrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.45;
+  overflow-wrap: break-word;
+}
 .np-about-head {
   display: flex;
   align-items: center;
