@@ -477,12 +477,19 @@ export function selHandles(s: Sel): { id: HandleId; x: number; y: number }[] {
   ];
 }
 
-/** 手柄命中测试（tol = 物理像素容差） */
+/** 边界命中测试（tol = 物理像素容差）：四条边整线可命中，非手柄中点的
+ *  位置同样返回边 id（n/s/e/w），角区组合成角 id（nw/ne/se/sw）——
+ *  光标方向提示与 pointerdown 的 resize 启动共用同一判定，边界恒可拖 */
 export function handleAt(s: Sel, px: number, py: number, tol = 10): HandleId | null {
-  for (const h of selHandles(s)) {
-    if (Math.abs(px - h.x) <= tol && Math.abs(py - h.y) <= tol) return h.id;
-  }
-  return null;
+  const r = s.x + s.w;
+  const b = s.y + s.h;
+  const nearY = Math.abs(py - s.y) <= tol ? "n" : Math.abs(py - b) <= tol ? "s" : "";
+  const nearX = Math.abs(px - s.x) <= tol ? "w" : Math.abs(px - r) <= tol ? "e" : "";
+  // 命中的边须覆盖另一轴范围（含容差），选区旁侧的延伸线上不误命中
+  const inX = px >= s.x - tol && px <= r + tol;
+  const inY = py >= s.y - tol && py <= b + tol;
+  const id = (inX ? nearY : "") + (inY ? nearX : "");
+  return id ? (id as HandleId) : null;
 }
 
 /** 拖手柄调整选区（钳制屏内，保持 ≥ 最小尺寸） */

@@ -472,6 +472,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const hudDragTimer = useRef<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  /** 选区宽高调整进行中（resize 手柄拖拽期）：标记条/快捷键清单暂隐
+   *  （2026-11-06 用户定案——拖拽中两面板停在旧位置遮视线），pointerup
+   *  随 sel 一起提交恢复并归位到新选区 */
+  const [resizing, setResizing] = useState(false);
   /** 事件线程直读的镜像（React state 更新是异步的，指针流需要即时值） */
   const selRef = useRef<Sel | null>(null);
   const shapesRef = useRef<Shape[]>([]);
@@ -1537,6 +1541,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         const hd = handleAt(s, px, py);
         if (hd) {
           resizeRef.current = hd;
+          setResizing(true);
           return;
         }
         const inside = px >= s.x && px < s.x + s.w && py >= s.y && py < s.y + s.h;
@@ -1845,6 +1850,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     if (resizeRef.current || moveRef.current) {
       resizeRef.current = null;
       moveRef.current = null;
+      setResizing(false);
       // 拖拽期未提交的选区几何一次性入 React（工具栏/快捷键面板/撤销快照
       // 等消费方在拖拽中不重渲，抬起统一归位）；并补一次全量 live 帧——
       // 拖拽帧跳过的阴影预览在离散帧恢复
@@ -2440,7 +2446,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           ref={toolbarRef}
           className="np-shot-toolbar"
           style={{
-            visibility: tbPos ? "visible" : "hidden",
+            visibility: tbPos && !resizing ? "visible" : "hidden",
             left: tbPos?.left ?? -9999,
             top: tbPos?.top ?? -9999,
           }}
@@ -2911,12 +2917,13 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         </div>
       )}
       {/* 快捷键清单：贴选区四周外围（keysSide 右→左→上→下；未定位时隐藏
-          渲染供测量）；画布覆盖层语义 = 半透明黑底白字（同信息条 pill 口径，
+          渲染供测量）；resize 拖拽中暂隐（复用 measure 类，2026-11-06）；
+          画布覆盖层语义 = 半透明黑底白字（同信息条 pill 口径，
           非 UI token 体系） */}
       {sel && !following && !busy && (
         <div
           ref={keysRef}
-          className={`np-shot-keys ${keysPos ? "" : "np-shot-keys-measure"}`}
+          className={`np-shot-keys ${keysPos && !resizing ? "" : "np-shot-keys-measure"}`}
           style={keysPos ? { left: keysPos.x, top: keysPos.y } : undefined}
         >
           {KEY_HINTS.map(([k, t]) => (

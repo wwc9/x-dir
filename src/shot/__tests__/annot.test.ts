@@ -72,6 +72,20 @@ describe("handleAt / resizeSel", () => {
     expect(handleAt(sel, 150, 150)).toBeNull(); // 选区中心不是手柄
   });
 
+  it("边界整线命中（非手柄中点同样可拖，2026-11-06）", () => {
+    expect(handleAt(sel, 150, 100)).toBe("n"); // 上边线非中点
+    expect(handleAt(sel, 100, 150)).toBe("w"); // 左边线非中点
+    expect(handleAt(sel, 260, 200)).toBe("s"); // 下边线非中点
+    expect(handleAt(sel, 300, 130)).toBe("e"); // 右边线非中点
+    expect(handleAt(sel, 140, 140)).toBeNull(); // 内部近角但不在边界容差内
+  });
+
+  it("边界命中容差与范围守卫", () => {
+    expect(handleAt(sel, 150, 88)).toBeNull(); // 距上边 12px 超容差
+    expect(handleAt(sel, 320, 100)).toBeNull(); // 上边延伸线但 x 超出选区范围
+    expect(handleAt(sel, 100, 260)).toBeNull(); // 左边延伸线但 y 超出选区范围
+  });
+
   it("拖角手柄调整并钳制", () => {
     expect(resizeSel(sel, "se", 400, 300, 1920, 1080)).toEqual({
       x: 100,
