@@ -8,6 +8,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { Download, Info, Link2, RefreshCw } from "lucide-react";
 
 import { RELEASE_URLS, REPO_URLS, checkForUpdate, isUpdateAvailable } from "../lib/update";
+import { api, type SystemInfo } from "../lib/ipc";
 import { useUi } from "../stores/ui";
 import { ic } from "./AppIcon";
 import { BrandLogo } from "./BrandLogo";
@@ -25,6 +26,26 @@ function engineInfo(): string {
   if (edg && chrome) return `WebView2 ${edg} · Chromium ${chrome}`;
   if (chrome) return `Chromium ${chrome}`;
   return "未知";
+}
+
+/** 设备配置（2026-11-06）：关于弹窗打开时拉一次——弱核显/内存紧张/老系统
+ *  是渲染与性能类反馈的第一判断依据（截图卡顿/文字消失等案例的排障入口） */
+function useSystemInfo(open: boolean): SystemInfo | null {
+  const [info, setInfo] = useState<SystemInfo | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    api
+      .systemInfo()
+      .then((r) => {
+        if (alive) setInfo(r);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [open]);
+  return info;
 };
 
 export function AboutDialog() {
@@ -33,6 +54,7 @@ export function AboutDialog() {
   const [busy, setBusy] = useState(false);
   // 打开瞬间若尚未检查过（启动检查未跑完/失败残留 null），自动补一次
   const autoRan = useRef(false);
+  const sys = useSystemInfo(open);
 
   const runCheck = () => {
     if (busy) return;
@@ -132,11 +154,21 @@ export function AboutDialog() {
             </div>
           )}
 
-          {/* 固定信息：作者 / 公众号 / 开源地址（完整 URL，可点直达仓库主页） */}
+          {/* 固定信息：作者 / 公众号 / 开源地址 / 运行环境与设备配置（完整 URL，可点直达仓库主页）。
+              设备区（2026-11-06）：OS/CPU/内存/GPU + 引擎——异机排障（渲染异常/
+              性能问题）先看这里判断配置档次；拉取失败静默隐藏（探针不阻塞主体） */}
           <div className="np-props np-about-props">
             <AboutProp k="开发者" v="王文铖" />
             <AboutProp k="微信公众号" v="效率视界" />
             <AboutProp k={t("运行环境")} v={engineInfo()} />
+            {sys && (
+              <>
+                <AboutProp k={t("操作系统")} v={sys.os} />
+                <AboutProp k={t("处理器")} v={sys.cpu} />
+                <AboutProp k={t("内存")} v={`${sys.memoryGb} GB`} />
+                <AboutProp k={t("显卡")} v={sys.gpus.join(" · ")} />
+              </>
+            )}
             <div className="np-prop-row">
               <span className="np-prop-key">{t("开源地址")}</span>
               <span className="np-prop-val np-about-srcs">

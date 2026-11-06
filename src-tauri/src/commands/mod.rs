@@ -19,6 +19,7 @@ pub mod search;
 pub mod shot;
 pub mod shot_dxgi;
 pub mod shot_scroll;
+pub mod system_info;
 pub mod terminal;
 pub mod text_cmds;
 pub mod update;

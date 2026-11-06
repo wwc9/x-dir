@@ -256,6 +256,18 @@ export interface AppError {
  *  job-done 的 failed[].reason 下发，inUse 触发「解除占用」对话框 */
 export type FailReason = "inUse" | "accessDenied" | "missing";
 
+/** 设备与运行环境（Rust commands/system_info.rs 镜像，关于弹窗展示） */
+export interface SystemInfo {
+  /** "Windows 11 专业版 (build 22631)" */
+  os: string;
+  /** "12th Gen Intel Core i7-12700 · 20 线程" */
+  cpu: string;
+  /** 物理内存总量 GB（1 位小数） */
+  memoryGb: number;
+  /** 显卡型号（硬件适配器，主卡在前，软件渲染器已滤除） */
+  gpus: string[];
+}
+
 /** 占用进程（Rust locks::LockingProcess 镜像） */
 export interface LockingProcess {
   pid: number;
@@ -959,6 +971,9 @@ export const api = {
   /** 剪贴板历史：收浮窗（Esc / 选中条目后；失焦自动收由 Rust 窗口事件处理） */
   cliphistHide: () => cmd<void>("cliphist_hide"),
   /** 剪贴板历史：开/关浮窗（顶栏剪贴板钮，2026-11-06）——与系统热键同入口 */
+  /** 设备与运行环境信息（关于弹窗，2026-11-06）：OS/CPU/内存/GPU 静态配置 */
+  systemInfo: () =>
+    cmd<SystemInfo>("system_info"),
   cliphistToggle: () => cmd<void>("cliphist_toggle"),
   /** 剪贴板历史：浮窗置顶常驻开关（true = 失焦不自动收窗，Esc/热键仍收） */
   cliphistSetPinned: (pinned: boolean) => cmd<void>("cliphist_set_pinned", { pinned }),
