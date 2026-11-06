@@ -1665,15 +1665,15 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     // 放大镜锚点（跟随/拖拽态显示，确认选区即隐）
     magRef.current =
       followingRef.current || dragRef.current ? { x: px, y: py } : null;
-      // 光标形态（跟随模式恒十字准星；确认后才区分手柄/移动）
+      // 光标形态（跟随模式恒十字准星；确认后：边界手柄 = 方向 resize 光标
+      //（任何工具——边界可拖是既有能力，与工具无关）；选区内部 = 仅
+      // 「选择/移动选区」工具显示 move 抓手（绘制类工具下主语义是画标注，
+      // 恒显十字，2026-11-06 两轮定案合并））
       const el = e.currentTarget as HTMLElement;
       const s0 = selRef.current;
       if (followingRef.current) {
         el.style.cursor = "crosshair";
-      } else if (tool === "select" && s0) {
-        // 方向光标仅「选择/移动选区」工具显示（2026-11-06 用户定案：绘制类
-        // 工具下主语义是画标注，恒显十字；手柄拖拽能力保留为备用交互——
-        // pointerdown 的手柄命中本就 tool 无关）
+      } else if (s0) {
         const hd = handleAt(s0, px, py);
         const inside = px >= s0.x && px < s0.x + s0.w && py >= s0.y && py < s0.y + s0.h;
         el.style.cursor =
@@ -1685,7 +1685,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                 ? "nwse-resize"
                 : hd === "ne" || hd === "sw"
                   ? "nesw-resize"
-                  : inside
+                  : tool === "select" && inside
                     ? "move"
                     : "crosshair";
       } else {
