@@ -83,120 +83,126 @@ export function AboutDialog() {
       icon={ic(Info)}
       canOutsideClickClose
       className="np-dialog"
-      style={{ width: "var(--np-dialog-w)" }}
+      style={{ width: "min(680px, 92vw)" }}
     >
       <DialogBody>
+        {/* 左右分栏（2026-11-06 用户需求）：左 = 身份/简介/固定信息/设备环境，
+            右 = 更新区块——更新日志再长也只在右栏内滚动，不再撑爆弹窗高度 */}
         <div className="np-about">
-          <div className="np-about-head">
-            <span className="np-logo">
-              <BrandLogo />
-            </span>
-            <div className="np-about-id">
-              <span className="np-about-name">X-Dir</span>
-              <span className="np-about-ver">
-                {check?.current ? `v${check.current}` : "版本信息获取中…"}
+          <div className="np-about-main">
+            <div className="np-about-head">
+              <span className="np-logo">
+                <BrandLogo />
               </span>
+              <div className="np-about-id">
+                <span className="np-about-name">X-Dir</span>
+                <span className="np-about-ver">
+                  {check?.current ? `v${check.current}` : "版本信息获取中…"}
+                </span>
+              </div>
+            </div>
+            <div className="np-dialog-muted">{APP_INTRO}</div>
+
+            {/* 固定信息：作者 / 公众号 / 开源地址（完整 URL，可点直达仓库主页） */}
+            <div className="np-props np-about-props">
+              <AboutProp k="开发者" v="王文铖" />
+              <AboutProp k="微信公众号" v="效率视界" />
+              <div className="np-prop-row">
+                <span className="np-prop-key">{t("开源地址")}</span>
+                <span className="np-prop-val np-about-srcs">
+                  <button
+                    type="button"
+                    className="np-linkbtn is-url"
+                    data-tip={`在浏览器打开：${REPO_URLS.gitee}`}
+                    onClick={() => void openUrl(REPO_URLS.gitee)}
+                  >
+                    {REPO_URLS.gitee}
+                  </button>
+                  <button
+                    type="button"
+                    className="np-linkbtn is-url"
+                    data-tip={`在浏览器打开：${REPO_URLS.github}`}
+                    onClick={() => void openUrl(REPO_URLS.github)}
+                  >
+                    {REPO_URLS.github}
+                  </button>
+                </span>
+              </div>
+            </div>
+
+            {/* 设备环境（2026-11-06 独立分区）：引擎 + OS/CPU/内存/GPU——异机排障
+                （渲染异常/性能问题）先看这里判断配置档次；拉取失败静默隐藏整区
+                （探针不阻塞主体），仅剩引擎行 */}
+            <div className="np-about-sys">
+              <div className="np-about-update-title">{t("设备环境")}</div>
+              <div className="np-props np-about-props">
+                <AboutProp k={t("运行环境")} v={engineInfo()} />
+                {sys && (
+                  <>
+                    <AboutProp k={t("操作系统")} v={sys.os} />
+                    <AboutProp k={t("处理器")} v={sys.cpu} />
+                    <AboutProp k={t("内存")} v={`${sys.memoryGb} GB`} />
+                    <AboutProp k={t("显卡")} v={sys.gpus.join(" · ")} />
+                  </>
+                )}
+              </div>
             </div>
           </div>
-          <div className="np-dialog-muted">{APP_INTRO}</div>
 
           {/* 更新区块：检查中 / 已最新 / 检查失败 / 发现新版本（四态） */}
-          {busy && <div className="np-dialog-muted">{t("正在检查更新…")}</div>}
-          {!busy && !manifest && check !== null && (
-            <div className="np-about-fail">
-              <div>{t("检查更新失败（双源均不可达）：")}</div>
-              <div className="np-about-errors">
-                {(check.errors.length ? check.errors : ["原因未知"]).map((e) => (
-                  <div key={e}>· {e}</div>
-                ))}
-              </div>
-              <div className="np-dialog-muted">
-                {t("可点下方开源地址在浏览器验证网络后重试。")}
-              </div>
-            </div>
-          )}
-          {!busy && manifest && !hasNew && (
-            <div className="np-dialog-muted">{t("当前已是最新版本。")}</div>
-          )}
-          {!busy && manifest && hasNew && (
-            <div className="np-about-update">
-              <div className="np-about-update-title">
-                发现新版本 v{manifest.version}
-                {manifest.pubDate ? `（${manifest.pubDate} 发布）` : ""}
-              </div>
-              {!!manifest.notes?.length && (
-                <ul className="np-about-notes">
-                  {manifest.notes.map((n, i) => (
-                    <li key={i}>{n}</li>
+          <div className="np-about-side">
+            {busy && <div className="np-dialog-muted">{t("正在检查更新…")}</div>}
+            {!busy && !manifest && check !== null && (
+              <div className="np-about-fail">
+                <div>{t("检查更新失败（双源均不可达）：")}</div>
+                <div className="np-about-errors">
+                  {(check.errors.length ? check.errors : ["原因未知"]).map((e) => (
+                    <div key={e}>· {e}</div>
                   ))}
-                </ul>
-              )}
-              <div className="np-dialog-muted">
-                {t("Gitee 在国内网络环境下访问与下载更快，建议优先选择。")}
+                </div>
+                <div className="np-dialog-muted">
+                  {t("可点左侧开源地址在浏览器验证网络后重试。")}
+                </div>
               </div>
-              <div className="np-about-actions">
-                <Button
-                  size="small"
-                  intent="primary"
-                  icon={ic(Download)}
-                  onClick={() => void openUrl(RELEASE_URLS.gitee)}
-                >
-                  {t("前往 Gitee 下载")}
-                </Button>
-                <Button
-                  size="small"
-                  icon={ic(Link2)}
-                  onClick={() => void openUrl(RELEASE_URLS.github)}
-                >
-                  {t("前往 GitHub 下载")}
-                </Button>
+            )}
+            {!busy && manifest && !hasNew && (
+              <div className="np-dialog-muted">{t("当前已是最新版本。")}</div>
+            )}
+            {!busy && manifest && hasNew && (
+              <div className="np-about-update">
+                <div className="np-about-update-title">
+                  发现新版本 v{manifest.version}
+                  {manifest.pubDate ? `（${manifest.pubDate} 发布）` : ""}
+                </div>
+                {!!manifest.notes?.length && (
+                  <ul className="np-about-notes">
+                    {manifest.notes.map((n, i) => (
+                      <li key={i}>{n}</li>
+                    ))}
+                  </ul>
+                )}
+                <div className="np-dialog-muted">
+                  {t("Gitee 在国内网络环境下访问与下载更快，建议优先选择。")}
+                </div>
+                <div className="np-about-actions">
+                  <Button
+                    size="small"
+                    intent="primary"
+                    icon={ic(Download)}
+                    onClick={() => void openUrl(RELEASE_URLS.gitee)}
+                  >
+                    {t("前往 Gitee 下载")}
+                  </Button>
+                  <Button
+                    size="small"
+                    icon={ic(Link2)}
+                    onClick={() => void openUrl(RELEASE_URLS.github)}
+                  >
+                    {t("前往 GitHub 下载")}
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
-
-          {/* 固定信息：作者 / 公众号 / 开源地址（完整 URL，可点直达仓库主页） */}
-          <div className="np-props np-about-props">
-            <AboutProp k="开发者" v="王文铖" />
-            <AboutProp k="微信公众号" v="效率视界" />
-            <div className="np-prop-row">
-              <span className="np-prop-key">{t("开源地址")}</span>
-              <span className="np-prop-val np-about-srcs">
-                <button
-                  type="button"
-                  className="np-linkbtn is-url"
-                  data-tip={`在浏览器打开：${REPO_URLS.gitee}`}
-                  onClick={() => void openUrl(REPO_URLS.gitee)}
-                >
-                  {REPO_URLS.gitee}
-                </button>
-                <button
-                  type="button"
-                  className="np-linkbtn is-url"
-                  data-tip={`在浏览器打开：${REPO_URLS.github}`}
-                  onClick={() => void openUrl(REPO_URLS.github)}
-                >
-                  {REPO_URLS.github}
-                </button>
-              </span>
-            </div>
-          </div>
-
-          {/* 设备环境（2026-11-06 独立分区）：引擎 + OS/CPU/内存/GPU——异机排障
-              （渲染异常/性能问题）先看这里判断配置档次；拉取失败静默隐藏整区
-              （探针不阻塞主体），仅剩引擎行 */}
-          <div className="np-about-sys">
-            <div className="np-about-update-title">{t("设备环境")}</div>
-            <div className="np-props np-about-props">
-              <AboutProp k={t("运行环境")} v={engineInfo()} />
-              {sys && (
-                <>
-                  <AboutProp k={t("操作系统")} v={sys.os} />
-                  <AboutProp k={t("处理器")} v={sys.cpu} />
-                  <AboutProp k={t("内存")} v={`${sys.memoryGb} GB`} />
-                  <AboutProp k={t("显卡")} v={sys.gpus.join(" · ")} />
-                </>
-              )}
-            </div>
+            )}
           </div>
         </div>
       </DialogBody>

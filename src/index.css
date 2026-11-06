@@ -2542,12 +2542,21 @@ body.np-col-resizing * {
   min-width: 0;
 }
 
-/* ── 关于浮窗（components/AboutDialog.tsx）：简介 + 更新检查 + 作者信息 ──
-   开源信息固定三行复用 np-prop-* 布局；更新卡片走 surface-2 凹陷层级（§4.7） */
+/* ── 关于浮窗（components/AboutDialog.tsx）：左右分栏 + 更新检查 + 作者信息 ──
+   左栏 = 身份/简介/固定信息/设备环境，右栏 = 更新区块（日志限高内滚，
+   2026-11-06 用户定案防长更新日志撑爆高度）；更新卡片走 surface-2 凹陷层级（§4.7） */
 .np-about {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+.np-about-main,
+.np-about-side {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
 }
 /* 设备环境分区（2026-11-06）：与作者/开源信息用 hairline 分隔，accent 小标题
    复用更新区块标题样式；内属性行沿用 np-props 键值布局 */
@@ -2595,6 +2604,9 @@ body.np-col-resizing * {
   gap: 2px;
   color: var(--np-muted);
   font-size: var(--np-font-sm);
+  /* 长更新日志限高内滚（2026-11-06 分栏定案），不撑爆弹窗 */
+  max-height: 300px;
+  overflow-y: auto;
 }
 /* 检查失败块（2026-10-20）：逐源原因列表 + 指引 */
 .np-about-fail {
@@ -2608,6 +2620,8 @@ body.np-col-resizing * {
   gap: 2px;
   color: var(--np-muted);
   font-size: var(--np-font-sm);
+  max-height: 200px;
+  overflow-y: auto;
 }
 /* 检查源行：完整 URL 可点验，长地址折行不省略 */
 .np-about-srcs {

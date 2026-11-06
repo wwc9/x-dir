@@ -24,7 +24,7 @@ pub struct SystemInfo {
     pub os: String,
     /// "12th Gen Intel Core i7-12700 · 20 线程"
     pub cpu: String,
-    /// 物理内存总量 GB（1 位小数，向下取——装机容量语义）
+    /// 物理内存总量 GB（整数标称容量——48/16 等装机口径）
     pub memory_gb: f64,
     /// 显卡型号列表（DXGI 硬件适配器，过滤软件渲染器；主卡在前）
     pub gpus: Vec<String>,
@@ -86,7 +86,9 @@ fn cpu_info() -> String {
     }
 }
 
-/// 物理内存总量（GB，1 位小数）
+/// 物理内存总量（GB，整数标称容量）：GlobalMemoryStatusEx 报告值恒低于
+/// 装机标称（硬件保留 + 核显动态预留可达 1–2GB，48GB 机器常报 47.x），
+/// 简单四舍五入会把 47.2 显示成 47——改为市场容量阶梯吸附（见 nominal_gb）
 fn memory_total_gb() -> f64 {
     let mut m = MEMORYSTATUSEX {
         dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,
@@ -95,7 +97,29 @@ fn memory_total_gb() -> f64 {
     if !unsafe { GlobalMemoryStatusEx(&mut m) }.is_ok() {
         return 0.0;
     }
-    (m.ullTotalPhys as f64 / 1024.0 / 1024.0 / 1024.0 * 10.0).floor() / 10.0
+    nominal_gb(m.ullTotalPhys as f64 / 1024.0 / 1024.0 / 1024.0)
+}
+
+/// 报告容量 → 装机标称容量：主流内存总容量阶梯（4/8/16/24/32/48/64/96/
+/// 128/192/256/384/512/768/1024 GB——现代内存条全是 8/16/24/48 的组合）
+/// 中 ±10% 内取最近档；不在任何档附近的旧奇数配置（如 4+8=12、8+2=10）
+/// 回落最近偶数 GB
+fn nominal_gb(reported: f64) -> f64 {
+    const LADDER: [f64; 15] = [
+        4.0, 8.0, 16.0, 24.0, 32.0, 48.0, 64.0, 96.0, 128.0, 192.0, 256.0, 384.0, 512.0, 768.0,
+        1024.0,
+    ];
+    let mut best: Option<(f64, f64)> = None; // (|报告-档位|/档位, 档位)
+    for &cap in LADDER.iter() {
+        let rel = (reported - cap).abs() / cap;
+        if rel <= 0.10 && best.is_none_or(|(b, _)| rel < b) {
+            best = Some((rel, cap));
+        }
+    }
+    if let Some((_, cap)) = best {
+        return cap;
+    }
+    (reported / 2.0).round() * 2.0
 }
 
 /// 显卡型号（DXGI 枚举硬件适配器；"Microsoft Basic Render Driver" 等软件
@@ -222,7 +246,29 @@ mod tests {
         let c = cpu_info();
         assert!(!c.contains("未知"), "actual: {c}");
         assert!(c.contains("线程"), "actual: {c}");
-        assert!(memory_total_gb() > 0.0);
+        let mem = memory_total_gb();
+        assert!(mem > 0.0);
+        // 整数标称容量口径（2026-11-06）：48/16 等装机容量，不显示 47
+        assert_eq!(mem, mem.round(), "actual: {mem}");
+    }
+
+    /// 报告值 → 标称容量吸附：核显预留大的 48GB 机器报 47.2 也必须是 48
+    #[test]
+    fn nominal_memory_ladder() {
+        // 阶梯档位吸附（±10% 内）
+        assert_eq!(nominal_gb(47.2), 48.0); // 本机实测口径（核显预留 ~0.8GB）
+        assert_eq!(nominal_gb(47.87), 48.0); // 常规硬件保留 ~0.13GB
+        assert_eq!(nominal_gb(15.7), 16.0);
+        assert_eq!(nominal_gb(31.9), 32.0);
+        assert_eq!(nominal_gb(63.5), 64.0);
+        assert_eq!(nominal_gb(95.8), 96.0);
+        assert_eq!(nominal_gb(127.4), 128.0);
+        assert_eq!(nominal_gb(3.7), 4.0);
+        assert_eq!(nominal_gb(23.6), 24.0);
+        // 阶梯外旧配置回落最近偶数
+        assert_eq!(nominal_gb(9.7), 10.0); // 8+2 混插
+        assert_eq!(nominal_gb(11.8), 12.0); // 4+8 混插
+        assert_eq!(nominal_gb(19.9), 20.0); // 4+16 混插
     }
 
     #[test]
