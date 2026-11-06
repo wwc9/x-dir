@@ -66,17 +66,29 @@ impl WatchManager {
         drop(map);
 
         // 回调收到原始显示路径（dir-changed 事件前端按原始路径匹配窗格）；
-        // 引用计数与 map 键用归一化形式
+        // 引用计数与 map 键用归一化形式。
+        // 冷却不丢事件（2026-11-06 修订）：旧实现冷却期后 try_recv 清空积压——
+        // 冷却窗口（700ms）内到达的变更被静默丢弃，极端时序（上一轮触发刚过、
+        // 用户随即放入新文件）下该变更永远不产生 dir-changed，前端列表不刷。
+        // 现冷却结束检查积压：有则开新一轮聚合再触发一次，变更必达
         let p = path.to_string();
         std::thread::spawn(move || {
-            while rx.recv().is_ok() {
-                let deadline = Instant::now() + Duration::from_millis(DEBOUNCE_MAX_MS);
-                while Instant::now() < deadline
-                    && rx.recv_timeout(Duration::from_millis(DEBOUNCE_MS)).is_ok()
-                {}
-                on_change(&p);
-                std::thread::sleep(Duration::from_millis(COOLDOWN_MS));
-                while rx.try_recv().is_ok() {}
+            'outer: while rx.recv().is_ok() {
+                'burst: loop {
+                    let deadline = Instant::now() + Duration::from_millis(DEBOUNCE_MAX_MS);
+                    while Instant::now() < deadline
+                        && rx.recv_timeout(Duration::from_millis(DEBOUNCE_MS)).is_ok()
+                    {
+                    }
+                    on_change(&p);
+                    std::thread::sleep(Duration::from_millis(COOLDOWN_MS));
+                    // 冷却结束：无积压回外层阻塞等新事件；有积压（消费一条
+                    // 作信号）进入下一轮聚合——事件不丢、聚合仍防抖
+                    if rx.try_recv().is_err() {
+                        continue 'outer;
+                    }
+                    continue 'burst;
+                }
             }
         });
         Ok(())
@@ -149,6 +161,28 @@ mod tests {
         assert_eq!(m.count(&format!("{dir}\\")), 1);
         m.unwatch(&upper);
         assert_eq!(m.count(&dir), 0);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// 冷却期内到达的变更不得丢弃（2026-11-06 修订回归）：首轮触发后的
+    /// 700ms 冷却窗口内再写入，必须还有第二次回调——旧实现 try_recv 清空
+    /// 积压把这类变更静默吞掉，前端列表永不刷新
+    #[test]
+    fn event_during_cooldown_still_fires() {
+        let m = WatchManager::new();
+        let dir = tempdir("cool");
+        let (tx, rx) = std::sync::mpsc::channel();
+        m.watch(&dir, move |_| {
+            let _ = tx.send(());
+        })
+        .unwrap();
+        let f = std::path::Path::new(&dir).join("a.txt");
+        std::fs::write(&f, "1").unwrap();
+        rx.recv_timeout(Duration::from_secs(3)).expect("首轮回调");
+        // 冷却中段（首轮触发后约 200ms < 700ms 冷却）再写
+        std::fs::write(&f, "2").unwrap();
+        let second = rx.recv_timeout(Duration::from_secs(3));
+        assert!(second.is_ok(), "冷却期内的变更必须再触发一次回调");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
