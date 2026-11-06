@@ -311,13 +311,21 @@ export function Sidebar() {
   const t = useT();
   const [items, setItems] = useState<Scheme[]>([]);
   // 显示顺序（2026-11-06 拖动排序）：settings.workspaceOrder 重排，新方案
-  // 字典序追加尾；拖动中本地乐观重排（跟手），松手落 settings
+  // 字典序追加尾；松手落 settings。拖拽用指针事件手写（HTML5 dnd 在主窗被
+  // tauri 原生拖放接收接管而无法启动——Windows 上 dragDropEnabled 默认开启
+  // 会吞页面内 dragstart，而原生接收是外部文件拖入的依赖不能关），与侧栏
+  // 宽度拖拽同款 mousedown+move 会话模式
   const order = useSettings((s) => s.workspaceOrder);
   const [dragName, setDragName] = useState<string | null>(null);
-  /** 同步镜像（dragstart 后紧跟的首个 dragover 可能先于 React 状态刷新到达，
-   *  守卫读 ref 才不漏；快速真实拖拽同样存在该窗口） */
   const dragNameRef = useRef<string | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
+  /** 指针拖拽会话：down 起点 → 位移超阈值进入拖拽态；ref 全程同步可读 */
+  const dragSessionRef = useRef<{
+    name: string;
+    startX: number;
+    startY: number;
+    moved: boolean;
+  } | null>(null);
   const ordered = useMemo(
     () => orderWorkspaces(items.map((i) => i.name), order),
     [items, order],
@@ -374,6 +382,59 @@ export function Sidebar() {
     window.addEventListener("xdir-workspaces-changed", onImported);
     return () => window.removeEventListener("xdir-workspaces-changed", onImported);
   }, [refresh]);
+
+  // 指针拖拽排序会话（2026-11-06）：down 记起点（卡片 onPointerDown 写入
+  // dragSessionRef），move 超 4px 阈值进入拖拽态——源卡半透明 + 指针下目标卡
+  // 上缘 accent 指示线（elementsFromPoint 命中 [data-ws-name]）；up 落位
+  // （moveWorkspace → settings.workspaceOrder）或未激活则还原为点击语义。
+  // 命中元素经 pointer-events 顶层的 tooltip 层不受影响（tooltip 无 data-ws-name）
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const ss = dragSessionRef.current;
+      if (!ss) return;
+      if (!ss.moved && Math.hypot(e.clientX - ss.startX, e.clientY - ss.startY) < 4) return;
+      if (!ss.moved) {
+        ss.moved = true;
+        dragNameRef.current = ss.name;
+        setDragName(ss.name);
+      }
+      const hit = document
+        .elementsFromPoint(e.clientX, e.clientY)
+        .find((el) => el instanceof HTMLElement && el.dataset.wsName) as HTMLElement | undefined;
+      const overName = hit?.dataset.wsName ?? null;
+      const idx = overName ? ordered.indexOf(overName) : -1;
+      setOverIdx(idx >= 0 && overName !== ss.name ? idx : null);
+    };
+    const onUp = () => {
+      const ss = dragSessionRef.current;
+      dragSessionRef.current = null;
+      if (ss?.moved) {
+        // overIdx 经 setState 异步——落位目标在 onMove 里同步算不出，这里
+        // 从最终指示态取：直接读 React 最新渲染前的 overIdx 闭包值可能滞后
+        // 一帧，改为在 onMove 同步镜像一份 ref
+        const target = overIdxRef.current;
+        if (target !== null) {
+          const from = ordered.indexOf(ss.name);
+          if (from >= 0 && target !== from) {
+            useSettings
+              .getState()
+              .update({ workspaceOrder: moveWorkspace(ordered, from, target) });
+          }
+        }
+      }
+      dragNameRef.current = null;
+      setDragName(null);
+      setOverIdx(null);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [ordered]);
+  const overIdxRef = useRef<number | null>(null);
+  overIdxRef.current = overIdx;
 
   function applyDefault() {
     useLayout.getState().init(defaultTree ?? DEFAULT_TREE);
@@ -614,36 +675,27 @@ export function Sidebar() {
           return (
             <div
               key={it.name}
+              data-ws-name={it.name}
               className={`np-side-item${current === it.name ? " on" : ""}${
                 dragName === it.name ? " dragging" : ""
               }${overIdx === idx && dragName && dragName !== it.name ? " drag-over" : ""}`}
-              draggable
-              onDragStart={(e) => {
-                dragNameRef.current = it.name;
-                setDragName(it.name);
-                e.dataTransfer.effectAllowed = "move";
-                e.dataTransfer.setData("text/plain", it.name);
+              onPointerDown={(e) => {
+                // 左键且非删除钮/链路上才进入潜在拖拽会话；点击语义由 onClick
+                // 承担（位移未超阈值时会话不激活，click 照常）
+                if (e.button !== 0) return;
+                dragSessionRef.current = {
+                  name: it.name,
+                  startX: e.clientX,
+                  startY: e.clientY,
+                  moved: false,
+                };
               }}
-              onDragEnd={() => {
-                dragNameRef.current = null;
-                setDragName(null);
-                setOverIdx(null);
-              }}
-              onDragOver={(e) => {
-                if (!dragNameRef.current || dragNameRef.current === it.name) return;
-                e.preventDefault();
-                e.dataTransfer.dropEffect = "move";
-                setOverIdx(idx);
-              }}
-              onDrop={(e) => {
-                if (!dragNameRef.current || dragNameRef.current === it.name) return;
-                e.preventDefault();
-                const from = ordered.indexOf(dragNameRef.current);
-                useSettings
-                  .getState()
-                  .update({ workspaceOrder: moveWorkspace(ordered, from, idx) });
-                setDragName(null);
-                setOverIdx(null);
+              onClickCapture={(e) => {
+                // 拖拽已发生时吞掉落点 click（up 后浏览器补发的 click 不应切换方案）
+                if (dragSessionRef.current?.moved) {
+                  e.stopPropagation();
+                  e.preventDefault();
+                }
               }}
               onClick={() => void apply(it.name)}
               data-tip={
