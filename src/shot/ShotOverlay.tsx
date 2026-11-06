@@ -874,24 +874,44 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         }
       }
     }
-    // 阴影/边框预览（已确认选区）：选区外围实时呈现导出效果
+    // 阴影/边框预览（已确认选区）：选区外围实时呈现导出效果。
+    // 阴影改 shadowBlur 高斯（2026-11-06 用户报「不是渐变的边缘模糊」）：旧实现
+    // 宽描边+blur(sbw/3) 的环带中段大段实色 = 硬边。新实现 = 离屏生成（与导出侧
+    // 同参数：白底矩形 + shadowBlur=sbw / Y 偏移 0.25 / 0.45 黑，四边真·渐变），
+    // 再以 evenodd 裁剪合成到孔外——不能直接在 live 上 clip+fillRect+shadow：
+    // 本体被 evenodd 裁空时 Chromium 不为裁空图形生成阴影（CDP 像素实测 alpha
+    // 恒为纯遮罩 0.32）；离屏先成影后裁剪，所见即导出，孔内保持透出定格图
     const sbw = Math.round(shadowW * scale);
     const bbw = Math.round(borderW * scale);
     if (s && !followingRef.current && !dNow && (sbw || bbw)) {
-      ctx.save();
       if (sbw) {
-        ctx.filter = `blur(${Math.round(sbw / 3)}px)`;
-        ctx.strokeStyle = "rgba(0,0,0,0.45)";
-        ctx.lineWidth = sbw;
-        ctx.strokeRect(s.x - sbw / 2, s.y - sbw / 2, s.w + sbw, s.h + sbw);
-        ctx.filter = "none";
+        const m = Math.ceil(sbw * 1.4);
+        const off = document.createElement("canvas");
+        off.width = s.w + m * 2;
+        off.height = s.h + m * 2;
+        const octx = off.getContext("2d");
+        if (octx) {
+          octx.shadowColor = "rgba(0,0,0,0.45)";
+          octx.shadowBlur = sbw;
+          octx.shadowOffsetY = Math.round(sbw * 0.25);
+          octx.fillStyle = "#000";
+          octx.fillRect(m, m, s.w, s.h);
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(s.x - m, s.y - m, s.w + m * 2, s.h + m * 2);
+          ctx.rect(s.x, s.y, s.w, s.h);
+          ctx.clip("evenodd");
+          ctx.drawImage(off, s.x - m, s.y - m);
+          ctx.restore();
+        }
       }
       if (bbw) {
+        ctx.save();
         ctx.strokeStyle = borderColor;
         ctx.lineWidth = bbw;
         ctx.strokeRect(s.x - bbw / 2, s.y - bbw / 2, s.w + bbw, s.h + bbw);
+        ctx.restore();
       }
-      ctx.restore();
     }
     // 放大镜/取色器已 DOM 合成层化（2026-11-06，updateFollowDom）：
     // 跟随态与拖拽态显示、取样合成画布（所见即所得）
