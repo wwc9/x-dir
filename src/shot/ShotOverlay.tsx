@@ -56,10 +56,10 @@ import {
   arrowWingsAt,
   arrowBaseAt,
   arrowCurveCtrl,
-  drawCrosshair,
-  drawMagnifier,
   drawShape,
   formatMagColor,
+  formatMagCoords,
+  MAGNIFIER_SRC,
   handleAt,
   hitWindow,
   adjustShapeProp,
@@ -288,6 +288,18 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
 
   const baseRef = useRef<HTMLCanvasElement>(null);
   const liveRef = useRef<HTMLCanvasElement>(null);
+  // ── DOM 跟随层 refs（2026-11-06 合成层化）：十字线/放大镜/胶囊直写 DOM，
+  // 不入 React 渲染（高频路径零 React、零 canvas 光栅化）
+  const xhHRef = useRef<HTMLDivElement>(null);
+  const xhVRef = useRef<HTMLDivElement>(null);
+  const magBoxRef = useRef<HTMLDivElement>(null);
+  const magCvRef = useRef<HTMLCanvasElement>(null);
+  const magGridRef = useRef<HTMLCanvasElement>(null);
+  const magPanelRef = useRef<HTMLDivElement>(null);
+  const magPosRef = useRef<HTMLSpanElement>(null);
+  const magHexRef = useRef<HTMLSpanElement>(null);
+  const magSwatchRef = useRef<HTMLSpanElement>(null);
+  const pillRef = useRef<HTMLDivElement>(null);
   const compRef = useRef<HTMLCanvasElement | null>(null);
   /** 定格帧画布（RGBA 直绘，语义等同旧 img 元素，供 comp 底图拷贝） */
   const imgRef = useRef<CanvasImageSource | null>(null);
@@ -580,6 +592,172 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
    *  切换）仍走全量重绘兜底。正确性依据：move 帧间绘制物集合不变（仅坐标
    *  移动或包围盒单调扩张），prev∪cur 并集覆盖新旧像素；集合变化都发生在
    *  离散事件后的全量帧。包围盒全部取保守上界（宁大勿漏，漏了会留残影） */
+  /** DOM 跟随层统一更新（2026-11-06 合成层化）：十字线/放大镜/信息胶囊的
+   *  高频几何全部走 DOM 直写——pointermove 同步调用（不经 rAF，合成器属性
+   *  变换下一渲染帧即生效，跟手性最优）；redrawLive 尾部也调（低频离散
+   *  状态：窗口切换/选区确认/工具切换）。文本与色块值变才写（避免布局
+   *  抖动），几何一律 transform（不触发布局） */
+  const updateFollowDom = useCallback(() => {
+    const mag = magRef.current;
+    const following = followingRef.current;
+    const dNow = dragRef.current;
+    const s = selRef.current;
+    // —— 十字线：仅跟随态（按下/确认后隐藏）——
+    const xhShow = following && !dNow && !!mag;
+    const xhH = xhHRef.current;
+    const xhV = xhVRef.current;
+    if (xhH && xhV && mag) {
+      xhH.style.opacity = xhShow ? "1" : "0";
+      xhV.style.opacity = xhShow ? "1" : "0";
+      if (xhShow) {
+        const cx = mag.x / scale;
+        const cy = mag.y / scale;
+        xhH.style.transform = `translate3d(0,${cy}px,0)`;
+        xhV.style.transform = `translate3d(${cx}px,0,0)`;
+      }
+    }
+    // —— 放大镜：跟随态与拖拽态 ——
+    const magShow = !!mag && (following || !!dNow);
+    const box2 = magBoxRef.current;
+    if (box2) {
+      box2.style.opacity = magShow ? "1" : "0";
+      if (magShow && mag) {
+        const mb = magnifierBox(scale);
+        const ml = magnifierLayout(mag.x, mag.y, boot.mw, boot.mh, scale);
+        const cv = magCvRef.current;
+        if (cv) {
+          // 尺寸随 scale 变（窗口换屏）；容器 CSS 尺寸同步
+          const grid = magGridRef.current;
+          if (cv.width !== mb.box) {
+            cv.width = mb.box;
+            cv.height = mb.box;
+            // 网格层重渲染（几何静态，尺寸/scale 变化才画一次）：
+            // 24 条淡 accent 网格 + 中心像素高亮 + 发丝十字 + 内白外黑描边
+            if (grid) {
+              grid.width = mb.box;
+              grid.height = mb.box;
+              const g = grid.getContext("2d")!;
+              const zb = mb.box / MAGNIFIER_SRC;
+              const acc = accentRef.current;
+              g.strokeStyle = acc;
+              g.globalAlpha = 0.25;
+              g.lineWidth = 1;
+              g.beginPath();
+              for (let i = 1; i < MAGNIFIER_SRC; i++) {
+                const q = Math.round(i * zb) + 0.5;
+                g.moveTo(q, 0);
+                g.lineTo(q, mb.box);
+                g.moveTo(0, q);
+                g.lineTo(mb.box, q);
+              }
+              g.stroke();
+              g.globalAlpha = 1;
+              const half = (MAGNIFIER_SRC - 1) / 2;
+              const cx0 = half * zb;
+              g.fillStyle = acc;
+              g.globalAlpha = 0.35;
+              g.fillRect(cx0, cx0, zb, zb);
+              g.globalAlpha = 1;
+              g.strokeRect(cx0 + 0.5, cx0 + 0.5, zb - 1, zb - 1);
+              g.strokeStyle = "#fff";
+              g.strokeRect(0.5, 0.5, mb.box - 1, mb.box - 1);
+              g.strokeStyle = "#000";
+              g.strokeRect(-0.5, -0.5, mb.box + 1, mb.box + 1);
+            }
+          }
+          box2.style.width = `${mb.box / scale}px`;
+          box2.style.height = `${mb.box / scale}px`;
+          box2.style.transform = `translate3d(${ml.boxX / scale}px,${ml.boxY / scale}px,0)`;
+          const cctx = cv.getContext("2d")!;
+          cctx.imageSmoothingEnabled = false;
+          const half = (MAGNIFIER_SRC - 1) / 2;
+          cctx.fillStyle = "#000";
+          cctx.fillRect(0, 0, mb.box, mb.box);
+          const src = compRef.current;
+          if (src) {
+            cctx.drawImage(
+              src,
+              mag.x - half,
+              mag.y - half,
+              MAGNIFIER_SRC,
+              MAGNIFIER_SRC,
+              0,
+              0,
+              mb.box,
+              mb.box,
+            );
+          }
+          cctx.imageSmoothingEnabled = true;
+          // 取色（comp 是 willReadFrequently CPU 画布，1×1 回读便宜）
+          let rgba: [number, number, number, number] = [0, 0, 0, 255];
+          const sctx = src?.getContext("2d");
+          if (sctx) {
+            const d = sctx.getImageData(mag.x, mag.y, 1, 1).data;
+            rgba = [d[0], d[1], d[2], d[3]];
+          }
+          magColorRef.current = rgba;
+          // 面板：位置贴放大镜下沿（原 barY 口径）；文本值变才写
+          const panel = magPanelRef.current;
+          if (panel) {
+            panel.style.transform = `translate3d(0,${(ml.barY - ml.boxY) / scale}px,0)`;
+            const posText =
+              formatMagCoords(
+                mag.x,
+                mag.y,
+                coordRelRef.current ? "relative" : "global",
+                s ? { x: s.x, y: s.y } : undefined,
+              ) +
+              (dNow
+                ? `  ${Math.round(Math.abs(dNow.x2 - dNow.x1))} × ${Math.round(Math.abs(dNow.y2 - dNow.y1))}`
+                : "");
+            if (magPosRef.current?.textContent !== posText) {
+              if (magPosRef.current) magPosRef.current.textContent = posText;
+            }
+            const hexText = formatMagColor(rgba, colorFmtRef.current);
+            if (magHexRef.current?.textContent !== hexText) {
+              if (magHexRef.current) magHexRef.current.textContent = hexText;
+            }
+            if (magSwatchRef.current) {
+              const bg = `rgb(${rgba[0]},${rgba[1]},${rgba[2]})`;
+              if (magSwatchRef.current.style.background !== bg) {
+                magSwatchRef.current.style.background = bg;
+              }
+            }
+          }
+        }
+      }
+    }
+    // —— 信息胶囊（pill）：跟随/拖拽/确认三态文本 + 锚定 ——
+    const pill = pillRef.current;
+    if (pill) {
+      const rc = dNow
+        ? normalizeSel(dNow.x1, dNow.y1, dNow.x2, dNow.y2, boot.mw, boot.mh, 1)
+        : s;
+      const text = rc
+        ? following && !dNow
+          ? `窗口 (${rc.x}, ${rc.y}) · ${rc.w} × ${rc.h}`
+          : `${rc.x}, ${rc.y}  ${rc.w} × ${rc.h} px`
+        : null;
+      pill.style.opacity = text ? "1" : "0";
+      if (text && rc) {
+        if (pill.textContent !== text) pill.textContent = text;
+        // 锚定：选区外左上 → 左下（非拖拽）→ 选区内左上（物理坐标除 scale 入 CSS）
+        const pw = pill.offsetWidth;
+        const ph = pill.offsetHeight;
+        let x = Math.max(8, Math.min(rc.x, boot.mw - pw * scale - 8));
+        let y = rc.y - ph * scale - 4;
+        const px2 = x / scale;
+        if (y < 8 && !dNow) {
+          y = rc.y + rc.h + 4;
+          if (y + ph * scale > boot.mh - 8) y = rc.y + 4;
+        } else if (y < 8) {
+          y = rc.y + 4;
+        }
+        pill.style.transform = `translate3d(${px2}px,${y / scale}px,0)`;
+      }
+    }
+  }, [boot.mw, boot.mh, scale]);
+
   // 孔单独携带（2026-11-06 环带化）：rects = 其余绘制物 bbox；孔走 holeRingRects
   const liveDirtyRef = useRef<{
     rects: { x: number; y: number; w: number; h: number }[];
@@ -625,19 +803,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       const ex = Math.round(gsbw * 1.5) + gbbw;
       push(gs.x - ex, gs.y - ex, gs.w + ex * 2, gs.h + ex * 2);
     }
-    // 全局十字线（跟随态）：水平/垂直各一条细带——单包围盒会并成整屏，必须拆两条
-    const glw = Math.max(1, Math.round(scale));
-    if (followingRef.current && !gdNow && gmag) {
-      push(0, gmag.y - glw, boot.mw, glw * 2 + 2, 2);
-      push(gmag.x - glw, 0, glw * 2 + 2, boot.mh, 2);
-    }
-    // 放大镜：方框 + 底部信息条（条宽按文本长度上界估计，宁宽勿漏）
-    if (gmag && gmagVis) {
-      const mb = magnifierBox(scale);
-      const ml = magnifierLayout(gmag.x, gmag.y, boot.mw, boot.mh, scale);
-      push(ml.boxX, ml.boxY, mb.box, mb.box);
-      push(ml.boxX, ml.barY, Math.min(boot.mw - ml.boxX, Math.max(mb.box, 480 * scale)), mb.barH);
-    }
+    // 十字线/放大镜/胶囊已 DOM 合成层化（2026-11-06）：不再入 canvas 脏区
     // 进行中的标注预览（笔刷/打码外扩按线宽档留大余量）
     const gdr = drawRef.current;
     if (gdr && gs && gdr.type !== "text") {
@@ -653,48 +819,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         push(gs.x + b.x - 3 * scale, gs.y + b.y - 3 * scale, b.w + 6 * scale, b.h + 6 * scale);
       }
     }
-    // 信息条（pill）：锚定优先级 选区外左上 → 选区外左下（仅预选/已确认）→
-    // 选区内左上；布局在包围盒段预计算（文本宽需 measureText，且包围盒必须
-    // 在裁剪前入列），绘制段直接复用
-    const pillAnchor = (
-      rc: { x: number; y: number; w: number; h: number },
-      pw: number,
-      ph: number,
-      allowBottom: boolean,
-    ) => {
-      const x = Math.max(8, Math.min(rc.x, boot.mw - pw - 8));
-      let y = rc.y - ph - 4;
-      if (y >= 8) return { x, y };
-      if (allowBottom) {
-        y = rc.y + rc.h + 4;
-        if (y + ph <= boot.mh - 8) return { x, y };
-      }
-      return { x: Math.max(8, Math.min(rc.x + 4, boot.mw - pw - 8)), y: rc.y + 4 };
-    };
-    const pillLayoutOf = (
-      text: string,
-      rc: { x: number; y: number; w: number; h: number },
-      allowBottom: boolean,
-    ) => {
-      const fs = Math.max(13, Math.round(14 * scale));
-      ctx.font = `${fs}px "Segoe UI", "Microsoft YaHei", sans-serif`;
-      const tw = ctx.measureText(text).width;
-      const padX = Math.round(13 * scale);
-      const pw = Math.round(tw + padX * 2);
-      const ph = Math.round(fs * 1.9);
-      return { ...pillAnchor(rc, pw, ph, allowBottom), pw, ph };
-    };
-    // 有选区即常驻：预选（含桌面兜底全屏）带「窗口」前缀，拖拽/已确认 =
-    // 选区原点+尺寸（截全屏同样可见）
-    const gPillRc = gdNow ? ghole : gs;
-    const gPillText = gPillRc
-      ? followingRef.current && !gdNow
-        ? `窗口 (${gPillRc.x}, ${gPillRc.y}) · ${gPillRc.w} × ${gPillRc.h}`
-        : `${gPillRc.x}, ${gPillRc.y}  ${gPillRc.w} × ${gPillRc.h} px`
-      : null;
-    const gPill =
-      gPillText && gPillRc ? pillLayoutOf(gPillText, gPillRc, !gdNow) : null;
-    if (gPill) push(gPill.x, gPill.y, gPill.pw, gPill.ph);
     // ── 裁剪到脏区并清旧画（dirty=false 或首帧 = 整屏全量）──
     // 孔环带：P∖内缩交集 的边缘带（prev/cur 任一缺或不相交退化为整屏/整孔）
     const prevFrame = liveDirtyRef.current;
@@ -750,23 +874,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         }
       }
     }
-    // 信息条绘制（布局与包围盒已在几何段预计算 gPill；半透明黑色圆角胶囊）
-    if (gPill && gPillText) {
-      const r = gPill.ph / 2;
-      ctx.fillStyle = "rgba(0,0,0,0.65)";
-      ctx.beginPath();
-      ctx.moveTo(gPill.x + r, gPill.y);
-      ctx.arcTo(gPill.x + gPill.pw, gPill.y, gPill.x + gPill.pw, gPill.y + gPill.ph, r);
-      ctx.arcTo(gPill.x + gPill.pw, gPill.y + gPill.ph, gPill.x, gPill.y + gPill.ph, r);
-      ctx.arcTo(gPill.x, gPill.y + gPill.ph, gPill.x, gPill.y, r);
-      ctx.arcTo(gPill.x, gPill.y, gPill.x + gPill.pw, gPill.y, r);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "#fff";
-      ctx.textBaseline = "middle";
-      ctx.textAlign = "left";
-      ctx.fillText(gPillText, gPill.x + Math.round(13 * scale), gPill.y + gPill.ph / 2);
-    }
     // 阴影/边框预览（已确认选区）：选区外围实时呈现导出效果
     const sbw = Math.round(shadowW * scale);
     const bbw = Math.round(borderW * scale);
@@ -786,17 +893,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       }
       ctx.restore();
     }
-    // 全局十字线（启动后定位/水平对比）：跟随态过光标整幅发丝线随光标移动
-    // （预选跟随态 sel 恒非空，不能以 !s 为条件），按下拖拽/确认选区后即隐
-    // ——此时选区边框 + 尺寸信息接管。颜色 = 主题 accent（与选区边框同色）
-    const mag0 = magRef.current;
-    if (followingRef.current && !dNow && mag0) {
-      drawCrosshair(ctx, mag0.x, mag0.y, boot.mw, boot.mh, scale, accentRef.current);
-    }
-    // 放大镜/取色器（PixPin 惯例）：跟随态与拖拽态显示，确认选区后隐藏；
-    // 取样合成画布，已画标注同样可见（所见即所得）
-    const mag = magRef.current;
-    const magVisible = !!mag && (followingRef.current || !!dragRef.current);
+    // 放大镜/取色器已 DOM 合成层化（2026-11-06，updateFollowDom）：
+    // 跟随态与拖拽态显示、取样合成画布（所见即所得）
+
     // 拖拽中的选区边框（区域内部已在遮罩挖孔中透出定格图，不再叠 8% 着色）；
     // 尺寸并入放大镜信息条（PixPin 同款），无放大镜才单画 pill
     const d = dragRef.current;
@@ -806,21 +905,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         ctx.strokeStyle = accent;
         ctx.lineWidth = Math.max(1, Math.round(scale));
         ctx.strokeRect(r.x, r.y, r.w, r.h);
-      }
-      if (!magVisible) {
-        const label = `${Math.round(Math.abs(d.x2 - d.x1))} × ${Math.round(Math.abs(d.y2 - d.y1))}`;
-        const fs = 12 * scale;
-        ctx.font = `${fs}px "Segoe UI", sans-serif`;
-        const tw = ctx.measureText(label).width;
-        let lx = d.x2 + 10 * scale;
-        let ly = d.y2 + 14 * scale;
-        if (lx + tw + 12 * scale > boot.mw) lx = Math.max(4 * scale, d.x2 - tw - 22 * scale);
-        if (ly > boot.mh - 10 * scale) ly = d.y2 - 14 * scale;
-        ctx.fillStyle = "rgba(0,0,0,0.75)";
-        ctx.fillRect(lx, ly - fs, tw + 12 * scale, fs * 1.7);
-        ctx.fillStyle = "#fff";
-        ctx.textBaseline = "alphabetic";
-        ctx.fillText(label, lx + 6 * scale, ly + fs * 0.35);
       }
     }
     // 进行中的标注预览（坐标相对选区，clip 内）。马赛克/模糊采样 comp 层——
@@ -855,23 +939,13 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         ctx.restore();
       }
     }
-    if (mag && magVisible) {
-      const sizeLabel = d
-        ? `${Math.round(Math.abs(d.x2 - d.x1))} × ${Math.round(Math.abs(d.y2 - d.y1))}`
-        : undefined;
-      magColorRef.current =
-        drawMagnifier(ctx, compRef.current, mag.x, mag.y, boot.mw, boot.mh, scale, {
-          sizeLabel,
-          color: accentRef.current,
-          colorFormat: colorFmtRef.current,
-          coordMode: coordRelRef.current ? "relative" : "global",
-          origin: hole ? { x: hole.x, y: hole.y } : undefined,
-        })?.rgba ?? null;
-    }
     ctx.restore();
     // 记录本帧绘制物包围盒 + 孔，供下一脏区帧取 prev（孔走环带差集）
     liveDirtyRef.current = { rects, hole: ghole ? { ...ghole } : null };
-  }, [boot.mw, boot.mh, scale]);
+    // DOM 跟随层对齐本帧状态（窗口切换/确认/拖拽起止等离散帧）
+    updateFollowDom();
+  }, [boot.mw, boot.mh, scale, updateFollowDom]);
+  // DOM 跟随层跟随每次重绘对齐（离散帧：窗口切换/确认/工具切换等）
 
   useEffect(() => {
     let dead = false;
@@ -958,6 +1032,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     },
     [],
   );
+
 
   // ── 完成动作 ─────────────────────────────────────────────────────────────
   const closeWindow = useCallback(() => {
@@ -1585,6 +1660,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       if (dragRef.current) {
         dragRef.current.x2 = px;
         dragRef.current.y2 = py;
+        updateFollowDom(); // 放大镜/胶囊同步跟手（canvas 脏区走 rAF 合帧）
         scheduleLive();
         return;
       }
@@ -1675,7 +1751,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           scheduleLive();
         }
       }
-      // 预选跟随：选中框实时切到鼠标下窗口（面积最小者优先）；无窗口则空选区
+      // 预选跟随：选中框实时切到鼠标下窗口（面积最小者优先）；无窗口则空选区。
+      // 十字线/放大镜/胶囊 DOM 同步直写（跟手）；live canvas 仅在孔变化
+      //（窗口切换）时重绘——同窗口内移动 live 完全静止（2026-11-06 合成层化）
       if (followingRef.current) {
         const hw = hitWindow(boot.windows, px, py);
         const cur = selRef.current;
@@ -1685,8 +1763,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         if (!same) {
           setSel(hw);
           selRef.current = hw;
+          scheduleLive();
         }
-        scheduleLive();
+        updateFollowDom();
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2270,6 +2349,29 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     >
       <canvas ref={baseRef} />
       <canvas ref={liveRef} />
+      {/* 高频跟随层（2026-11-06 DOM 合成层化）：十字线/放大镜/信息胶囊从
+          live canvas 拆出——transform 由 pointermove 同步直写（不经 rAF，
+          合成器动画零光栅化），跟随态 live 层每帧静止；量化依据：放大镜全套
+          canvas 重画占跟随态每帧 84%（CDP 实测），弱核显 4K 下是卡顿主因 */}
+      <div ref={xhHRef} className="np-shot-xh np-shot-xh-h" aria-hidden />
+      <div ref={xhVRef} className="np-shot-xh np-shot-xh-v" aria-hidden />
+      <div ref={magBoxRef} className="np-shot-mag" aria-hidden>
+        <canvas ref={magCvRef} className="np-shot-mag-cv" />
+        <canvas ref={magGridRef} className="np-shot-mag-grid" />
+        <div ref={magPanelRef} className="np-shot-mag-panel">
+          <div>
+            <span ref={magPosRef} />
+          </div>
+          <div>
+            <span ref={magSwatchRef} className="np-shot-mag-swatch" />
+            <span ref={magHexRef} />
+          </div>
+          <div className="np-shot-mag-keys">
+            单击取色 · 滚轮切换格式 · 拖拽选区 · Esc 退出
+          </div>
+        </div>
+      </div>
+      <div ref={pillRef} className="np-shot-pill" aria-hidden />
       {editing && sel && (
         <textarea
           className="np-shot-text"
