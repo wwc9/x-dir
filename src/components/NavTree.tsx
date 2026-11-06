@@ -144,6 +144,7 @@ export function NavTree() {
     const startX = e.clientX;
     const startW = useSettings.getState().navTreeWidth;
     handle.classList.add("np-side-resizing");
+    let raf = 0; // rAF 节流（2026-11-06，消除拖宽长帧露底黑条，见 Sidebar）
     const move = (ev: MouseEvent) => {
       // 拖拽中仅本地状态实时反馈，松手才写入 settings.json
       const latest = Math.min(
@@ -151,9 +152,15 @@ export function NavTree() {
         Math.max(TREE_W_MIN, startW + ev.clientX - startX),
       );
       dragWRef.current = latest;
-      setDragW(latest);
+      if (!raf) {
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          setDragW(dragWRef.current);
+        });
+      }
     };
     const up = () => {
+      if (raf) cancelAnimationFrame(raf);
       handle.classList.remove("np-side-resizing");
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 
 import { api, DEFAULT_SETTINGS, THIS_PC, type Settings } from "../lib/ipc";
@@ -212,6 +213,13 @@ export function applyTheme(theme: Settings["theme"]) {
   // body 之下整棵应用树仍能解析到暗色 token；正常环境两条链同值幂等
   document.body.classList.toggle("dark", dark);
   document.body.classList.toggle("bp6-dark", dark);
+  // 窗口原生底色随主题 = 画布色（2026-11-06）：拖拽调宽等高频重排的长帧里
+  // WebView 合成器来不及绘制的新区域会露出窗口底色（默认黑——用户实测
+  // 侧栏拖宽时右缘黑条）；钉成画布色后即使露底也与界面同色不可见。
+  // ?. 防御：guard 测试桩的 getCurrentWindow 不含本方法
+  getCurrentWindow()
+    .setBackgroundColor?.(dark ? "#131519" : "#e9ecf1")
+    .catch(() => undefined);
   if (!themeFxInFlight) syncBorderColor();
 }
 

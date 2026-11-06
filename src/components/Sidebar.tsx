@@ -437,12 +437,22 @@ export function Sidebar() {
     const startX = e.clientX;
     const startW = useSettings.getState().sidebarWidth;
     handle.classList.add("np-side-resizing");
+    // rAF 节流（2026-11-06）：mousemove 直连 setState 的高频重排在长帧里
+    // 让 WebView 合成器来不及绘制新区域（配合窗口底色=画布色双保险，
+    // 消除拖宽时右缘露底黑条）；松手提交仍用 ref 内最新值
+    let raf = 0;
     const move = (ev: MouseEvent) => {
       const latest = Math.min(W_MAX, Math.max(W_MIN, startW + ev.clientX - startX));
       dragWRef.current = latest;
-      setDragW(latest);
+      if (!raf) {
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          setDragW(dragWRef.current);
+        });
+      }
     };
     const up = () => {
+      if (raf) cancelAnimationFrame(raf);
       handle.classList.remove("np-side-resizing");
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
@@ -463,15 +473,22 @@ export function Sidebar() {
     const rect = asideRef.current?.getBoundingClientRect();
     if (!rect || rect.height <= 0) return;
     handle.classList.add("np-side-resizing");
+    let raf = 0; // rAF 节流，同上（2026-11-06）
     const move = (ev: MouseEvent) => {
       const r = Math.min(
         SPLIT_MAX,
         Math.max(SPLIT_MIN, (ev.clientY - rect.top) / rect.height),
       );
       dragRatioRef.current = r;
-      setDragRatio(r);
+      if (!raf) {
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          setDragRatio(dragRatioRef.current);
+        });
+      }
     };
     const up = () => {
+      if (raf) cancelAnimationFrame(raf);
       handle.classList.remove("np-side-resizing");
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);

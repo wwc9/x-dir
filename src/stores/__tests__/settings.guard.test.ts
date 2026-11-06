@@ -27,7 +27,11 @@ vi.mock("@tauri-apps/api/webview", () => ({
   getCurrentWebview: () => ({ setZoom: () => Promise.resolve() }),
 }));
 vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({ metadata: { label: "main" } }),
+  // setBackgroundColor 为 applyTheme 窗口底色跟随（2026-11-06）补桩
+  getCurrentWindow: () => ({
+    metadata: { label: "main" },
+    setBackgroundColor: () => Promise.resolve(),
+  }),
 }));
 vi.stubGlobal("window", {
   ...globalThis.window,
