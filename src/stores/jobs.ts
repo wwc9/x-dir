@@ -61,12 +61,16 @@ interface JobProgressPayload {
   currentPath: string;
 }
 
-/** Rust JobDone 镜像（同上；reason = 删除失败的结构化归因，可缺省） */
+/** Rust JobDone 镜像（同上；reason = 删除失败的结构化归因，可缺省）。
+ *  items = 传输类（copy/move）成功项的精确路径对（2026-11-06 撤销精确化）：
+ *  from 源原路径 / to 实际落点（rename 策略含 "(2)" 后缀）；native 分支与
+ *  其他任务类型不下发（undefined）——撤销栈据此跳过入栈防误删 */
 interface JobDonePayload {
   jobId: number;
   ok: boolean;
   cancelled: boolean;
   failed: { path: string; message: string; reason?: FailReason }[];
+  items?: { from: string; to: string }[];
 }
 
 interface JobsStore {
@@ -76,13 +80,18 @@ interface JobsStore {
   expanded: boolean;
   toggleExpanded(): void;
   init(): Promise<() => void>;
-  /** onDone：任务终态回调（ok/cancelled/failed），撤销栈用它在任务成功后入栈 */
+  /** onDone：任务终态回调（ok/cancelled/items），撤销栈用它在任务成功后入栈
+   *  （items = 传输成功项路径对，非传输任务为 undefined） */
   register(
     jobId: number,
     mode: JobMode,
     destDir: string | null,
     sourceParents: string[],
-    onDone?: (d: { ok: boolean; cancelled: boolean }) => void,
+    onDone?: (d: {
+      ok: boolean;
+      cancelled: boolean;
+      items?: { from: string; to: string }[];
+    }) => void,
     deletePermanent?: boolean,
   ): void;
   cancel(jobId: number): void;
@@ -128,7 +137,7 @@ export const useJobs = create<JobsStore>()((set, get) => ({
       const hook = doneHooks.get(d.jobId);
       if (hook) {
         doneHooks.delete(d.jobId);
-        hook({ ok: d.ok, cancelled: d.cancelled });
+        hook({ ok: d.ok, cancelled: d.cancelled, items: d.items });
       }
       let info = get().jobs[d.jobId];
       set((s) => {
@@ -227,7 +236,7 @@ export const useJobs = create<JobsStore>()((set, get) => ({
       const hook = doneHooks.get(jobId);
       if (hook) {
         doneHooks.delete(jobId);
-        hook({ ok: d.ok, cancelled: d.cancelled });
+        hook({ ok: d.ok, cancelled: d.cancelled, items: d.items });
       }
       const info = get().jobs[jobId];
       if (info) {
@@ -292,8 +301,12 @@ function offerUnlock(failed: JobDonePayload["failed"], permanent: boolean) {
 /** done 事件先于 register 到达时的暂存（极快完成的小任务） */
 const lateDone = new Map<number, JobDonePayload>();
 
-/** 任务终态钩子（撤销栈消费）：jobId → onDone，触发即删，保证只回调一次 */
-const doneHooks = new Map<number, (d: { ok: boolean; cancelled: boolean }) => void>();
+/** 任务终态钩子（撤销栈消费）：jobId → onDone，触发即删，保证只回调一次；
+ *  items = 传输成功项路径对（非传输任务为 undefined） */
+const doneHooks = new Map<
+  number,
+  (d: { ok: boolean; cancelled: boolean; items?: { from: string; to: string }[] }) => void
+>();
 
 function bumpAffectedOf(info: JobInfo) {
   const dirs = [

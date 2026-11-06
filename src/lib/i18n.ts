@@ -453,7 +453,7 @@ const EN: Record<string, string> = {
   "删除到回收站（可设删除前确认）": "Move to Recycle Bin (confirm-before-delete optional)",
   "永久删除（强制确认，不可恢复）": "Delete permanently (forced confirm, unrecoverable)",
   "应用内剪贴板：复制 / 剪切 / 粘贴": "App clipboard: copy / cut / paste",
-  "撤销：回收站删除还原 / 重命名改回 / 移动移回 / 新建移入回收站": "Undo: restore from Recycle Bin / revert rename / move back / send new items to Recycle Bin",
+  "撤销：回收站删除还原 / 重命名改回 / 移动移回 / 复制删副本 / 新建移入回收站": "Undo: restore from Recycle Bin / revert rename / move back / remove copies / send new items to Recycle Bin",
   "重做：再执行一遍刚撤销的操作": "Redo: re-apply the operation just undone",
   "呼出选中项右键菜单": "Open the context menu for the selection",
   "地址栏：前往": "Address bar: go",

@@ -51,13 +51,31 @@ export async function transfer(
     const sourceParents = sources
       .map((s) => parentPath(s))
       .filter((p): p is string => !!p);
-    // 移动可逆（移回原父目录）；复制是派生副本，不入撤销栈
-    const onDone =
-      mode === "move"
-        ? ({ ok, cancelled }: { ok: boolean; cancelled: boolean }) => {
-            if (ok && !cancelled) useUndo.getState().push({ kind: "move", sources, destDir });
-          }
-        : undefined;
+    // 撤销入栈（2026-11-06 精确化）：job-done 的 items 携带成功项的精确
+    // from→to 路径对（rename 策略 "(2)" 落点名、skip 排除项都对得上）——
+    // copy 撤销 = 删除 to 副本、move 撤销 = to 移回 from 父目录；native
+    // （IFileOperation）与部分成功无 items 时不入栈：宁可不可撤销不可错撤销
+    const onDone = ({
+      ok,
+      cancelled,
+      items,
+    }: {
+      ok: boolean;
+      cancelled: boolean;
+      items?: { from: string; to: string }[];
+    }) => {
+      if (!ok || cancelled || !items?.length) return;
+      if (mode === "copy") {
+        useUndo.getState().push({
+          kind: "copy",
+          sources,
+          destDir,
+          copies: items.map((i) => i.to),
+        });
+      } else {
+        useUndo.getState().push({ kind: "move", destDir, pairs: items });
+      }
+    };
     useJobs.getState().register(jobId, mode, destDir, sourceParents, onDone);
   } catch (e) {
     useUi.getState().toast(`操作失败：${String(e)}`, "error");
@@ -541,6 +559,8 @@ export async function applyRenames(
   items: { path: string; newName: string }[],
   onDone: () => void,
 ): Promise<void> {
+  // 撤销记录：整批成功项合并为一个条目（一次 Ctrl+Z 全撤，编辑器惯例）
+  const ops: { from: string; to: string }[] = [];
   let okCount = 0;
   for (const it of items) {
     try {
@@ -548,13 +568,14 @@ export async function applyRenames(
       okCount += 1;
       const parent = parentPath(it.path);
       if (parent) {
-        useUndo.getState().push({ kind: "rename", from: it.path, to: joinPath(parent, it.newName) });
+        ops.push({ from: it.path, to: joinPath(parent, it.newName) });
       }
     } catch (e) {
       useUi.getState().toast(`重命名"${fileNameOf(it.path)}"失败：${String(e)}`, "error");
     }
   }
   if (okCount) {
+    if (ops.length) useUndo.getState().push({ kind: "rename", ops });
     useUi.getState().toast(`已重命名 ${okCount} 项`);
     onDone();
   }

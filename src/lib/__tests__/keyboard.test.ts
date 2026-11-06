@@ -554,7 +554,10 @@ describe("文件操作", () => {
 
   it("undo：Ctrl+Z 弹出撤销栈并执行逆操作", async () => {
     const { useUndo } = await import("../undo");
-    useUndo.getState().push({ kind: "rename", from: "C:\\dir\\a.txt", to: "C:\\dir\\b.txt" });
+    useUndo.getState().push({
+      kind: "rename",
+      ops: [{ from: "C:\\dir\\a.txt", to: "C:\\dir\\b.txt" }],
+    });
     fire({ key: "z", ctrl: true });
     await Promise.resolve();
     expect(api.renameItem as unknown as Mock).toHaveBeenCalledWith("C:\\dir\\b.txt", "a.txt");
@@ -564,7 +567,10 @@ describe("文件操作", () => {
 
   it("redo：Ctrl+Y / Ctrl+Shift+Z 按原方向重做刚撤销的操作", async () => {
     const { useUndo } = await import("../undo");
-    useUndo.getState().push({ kind: "rename", from: "C:\\dir\\a.txt", to: "C:\\dir\\b.txt" });
+    useUndo.getState().push({
+      kind: "rename",
+      ops: [{ from: "C:\\dir\\a.txt", to: "C:\\dir\\b.txt" }],
+    });
     fire({ key: "z", ctrl: true });
     await Promise.resolve();
     (api.renameItem as unknown as Mock).mockClear();

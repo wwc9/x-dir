@@ -1,5 +1,7 @@
-// 撤销栈（lib/undo）单测：入栈/LIFO/容量上限、四类条目的逆操作分派。
+// 撤销栈（lib/undo）单测：入栈/LIFO/容量上限、五类条目的逆操作分派。
 // ipc 模块替换为 spy（Tauri invoke node 不可用），ui store 替身避开 Blueprint DOM。
+// 2026-11-06 精确化：move 携带 from→to 精确对（"(2)" 落点名可撤回）、
+// copy 撤销删副本（进回收站）、rename 批量整批一条（一次 Ctrl+Z 全撤）。
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 const apiSpies = vi.hoisted(() => new Map<string, ReturnType<typeof vi.fn>>());
@@ -44,7 +46,7 @@ beforeEach(() => {
 
 describe("撤销栈（undo）", () => {
   it("push/LIFO：栈顶先撤销，peekLabel 反映下一项", () => {
-    useUndo.getState().push({ kind: "rename", from: "C:\\a.txt", to: "C:\\b.txt" });
+    useUndo.getState().push({ kind: "rename", ops: [{ from: "C:\\a.txt", to: "C:\\b.txt" }] });
     useUndo.getState().push({ kind: "newfolder", path: "C:\\新建文件夹" });
     expect(useUndo.getState().peekLabel()).toBe('新建 "新建文件夹"');
     useUndo.getState().undo();
@@ -61,10 +63,28 @@ describe("撤销栈（undo）", () => {
   });
 
   it("rename：改回原名", async () => {
-    useUndo.getState().push({ kind: "rename", from: "C:\\d\\a.txt", to: "C:\\d\\b.txt" });
+    useUndo.getState().push({
+      kind: "rename",
+      ops: [{ from: "C:\\d\\a.txt", to: "C:\\d\\b.txt" }],
+    });
     await useUndo.getState().undo();
     expect(spy("renameItem")).toHaveBeenCalledWith("C:\\d\\b.txt", "a.txt");
     expect(useUndo.getState().stack).toEqual([]);
+  });
+
+  it("rename 批量：一次撤销逆序全部改回", async () => {
+    useUndo.getState().push({
+      kind: "rename",
+      ops: [
+        { from: "C:\\d\\1.txt", to: "C:\\d\\一.txt" },
+        { from: "C:\\d\\2.txt", to: "C:\\d\\二.txt" },
+      ],
+    });
+    expect(useUndo.getState().peekLabel()).toBe("重命名 2 项");
+    await useUndo.getState().undo();
+    expect(spy("renameItem")).toHaveBeenCalledWith("C:\\d\\一.txt", "1.txt");
+    expect(spy("renameItem")).toHaveBeenCalledWith("C:\\d\\二.txt", "2.txt");
+    expect(spy("renameItem")).toHaveBeenCalledTimes(2);
   });
 
   it("trash：调 restoreFromTrash 并回报恢复数", async () => {
@@ -74,17 +94,45 @@ describe("撤销栈（undo）", () => {
     expect(spy("restoreFromTrash")).toHaveBeenCalledWith(["C:\\a", "C:\\b", "C:\\c"]);
   });
 
-  it("move：按原父目录分组移回，冲突自动改名", async () => {
+  it("move：按 from 父目录分组把精确落点移回（含 (2) 落点名）", async () => {
     spy("moveItems").mockResolvedValue({ jobId: 7 });
     useUndo.getState().push({
       kind: "move",
-      sources: ["C:\\src1\\a.txt", "C:\\src2\\b.txt"],
       destDir: "C:\\dest",
+      pairs: [
+        { from: "C:\\src1\\a.txt", to: "C:\\dest\\a.txt" },
+        { from: "C:\\src2\\b.txt", to: "C:\\dest\\b (2).txt" },
+      ],
     });
     await useUndo.getState().undo();
-    // 两组父目录 → 两次 moveItems（destDir\name → 原父目录）
+    // 精确落点（"(2)" 原样移回），各按 from 的父目录分组
     expect(spy("moveItems")).toHaveBeenCalledWith(["C:\\dest\\a.txt"], "C:\\src1", "rename", false);
-    expect(spy("moveItems")).toHaveBeenCalledWith(["C:\\dest\\b.txt"], "C:\\src2", "rename", false);
+    expect(spy("moveItems")).toHaveBeenCalledWith(["C:\\dest\\b (2).txt"], "C:\\src2", "rename", false);
+  });
+
+  it("copy：副本移入回收站（可再救回），源不动", async () => {
+    spy("deleteItems").mockResolvedValue({ jobId: 8 });
+    useUndo.getState().push({
+      kind: "copy",
+      sources: ["C:\\src\\a.txt"],
+      destDir: "C:\\dest",
+      copies: ["C:\\dest\\a (2).txt"],
+    });
+    expect(useUndo.getState().peekLabel()).toBe('复制 "a (2).txt"');
+    await useUndo.getState().undo();
+    // 只删精确副本（skip 策略下目标旧文件不在 copies 里，绝不误删）
+    expect(spy("deleteItems")).toHaveBeenCalledWith(["C:\\dest\\a (2).txt"], false);
+    expect(spy("moveItems")).not.toHaveBeenCalled();
+  });
+
+  it("copy 多项 label 计数", () => {
+    useUndo.getState().push({
+      kind: "copy",
+      sources: ["C:\\s\\a", "C:\\s\\b"],
+      destDir: "C:\\d",
+      copies: ["C:\\d\\a", "C:\\d\\b"],
+    });
+    expect(useUndo.getState().peekLabel()).toBe("复制 2 项");
   });
 
   it("newfolder：移入回收站（可再还原）", async () => {
@@ -108,7 +156,7 @@ describe("重做栈（redo）", () => {
   });
 
   it("undo 弹出的条目进重做栈；peekRedoLabel 反映原方向语义", async () => {
-    useUndo.getState().push({ kind: "rename", from: "C:\\a.txt", to: "C:\\b.txt" });
+    useUndo.getState().push({ kind: "rename", ops: [{ from: "C:\\a.txt", to: "C:\\b.txt" }] });
     expect(useUndo.getState().peekRedoLabel()).toBeNull();
     await useUndo.getState().undo();
     expect(useUndo.getState().redoStack).toHaveLength(1);
@@ -116,7 +164,10 @@ describe("重做栈（redo）", () => {
   });
 
   it("redo rename：按原方向改到新名并压回撤销栈（可往复）", async () => {
-    useUndo.getState().push({ kind: "rename", from: "C:\\d\\a.txt", to: "C:\\d\\b.txt" });
+    useUndo.getState().push({
+      kind: "rename",
+      ops: [{ from: "C:\\d\\a.txt", to: "C:\\d\\b.txt" }],
+    });
     await useUndo.getState().undo();
     spy("renameItem").mockClear();
     await useUndo.getState().redo();
@@ -152,8 +203,37 @@ describe("重做栈（redo）", () => {
     expect(useUndo.getState().redoStack).toEqual([]);
   });
 
+  it("redo copy：重新复制（压回由 onDone items 门控）", async () => {
+    spy("copyItems").mockResolvedValue({ jobId: 4 });
+    useUndo.getState().push({
+      kind: "copy",
+      sources: ["C:\\s\\a.txt"],
+      destDir: "C:\\d",
+      copies: ["C:\\d\\a.txt"],
+    });
+    await useUndo.getState().undo();
+    spy("copyItems").mockClear();
+    await useUndo.getState().redo();
+    expect(spy("copyItems")).toHaveBeenCalledWith(["C:\\s\\a.txt"], "C:\\d", "rename", false);
+    expect(useUndo.getState().redoStack).toEqual([]);
+  });
+
+  it("redo move：从撤销后位置重新移向 destDir（压回由 onDone items 门控）", async () => {
+    spy("moveItems").mockResolvedValue({ jobId: 5 });
+    useUndo.getState().push({
+      kind: "move",
+      destDir: "C:\\d",
+      pairs: [{ from: "C:\\s\\a.txt", to: "C:\\d\\a.txt" }],
+    });
+    await useUndo.getState().undo();
+    spy("moveItems").mockClear();
+    await useUndo.getState().redo();
+    expect(spy("moveItems")).toHaveBeenCalledWith(["C:\\s\\a.txt"], "C:\\d", "rename", false);
+    expect(useUndo.getState().redoStack).toEqual([]);
+  });
+
   it("新操作入栈清空重做分支", async () => {
-    useUndo.getState().push({ kind: "rename", from: "C:\\a.txt", to: "C:\\b.txt" });
+    useUndo.getState().push({ kind: "rename", ops: [{ from: "C:\\a.txt", to: "C:\\b.txt" }] });
     await useUndo.getState().undo();
     expect(useUndo.getState().redoStack).toHaveLength(1);
     useUndo.getState().push({ kind: "newfolder", path: "C:\\x" });

@@ -1334,10 +1334,13 @@ export function FileList({
     }
     try {
       await api.renameItem(entry.path, newName);
-      // 重命名可逆：撤销 = 改回原名（Ctrl+Z）
+      // 重命名可逆：撤销 = 改回原名（Ctrl+Z；单条也走批量结构）
       const parent = parentPath(entry.path);
       if (parent) {
-        useUndo.getState().push({ kind: "rename", from: entry.path, to: joinPath(parent, newName) });
+        useUndo.getState().push({
+          kind: "rename",
+          ops: [{ from: entry.path, to: joinPath(parent, newName) }],
+        });
       }
       forceBump();
     } catch (e) {

@@ -46,6 +46,20 @@ pub struct JobDone {
     pub ok: bool,
     pub cancelled: bool,
     pub failed: Vec<FailItem>,
+    /// 传输类（copy/move）成功项的精确路径对（2026-11-06 撤销精确化）：
+    /// from = 源原路径，to = 实际落点（rename 策略下含 "(2)" 后缀）。
+    /// 前端据此建撤销记录——复制撤销删 to（skip 策略下绝不误删目标旧文件）、
+    /// 移动撤销把 to 移回 from 父目录。native（IFileOperation）分支由系统 UI
+    /// 承担冲突、无逐项回报，保持为空 = 前端不入撤销栈（宁可不可撤销不可错撤销）
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<TransferPair>,
+}
+
+/// 传输成功项的路径对（JobDone.items 元素，camelCase 序列化）
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct TransferPair {
+    pub from: String,
+    pub to: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -316,6 +330,7 @@ impl JobManager {
                                 ok: true,
                                 cancelled: true,
                                 failed: vec![],
+                                items: vec![],
                             },
                         );
                         cancels.lock().unwrap().remove(&id);
@@ -343,6 +358,8 @@ impl JobManager {
                     current_path: String::new(),
                 };
                 let mut failed: Vec<FailItem> = Vec::new();
+                // 传输类成功项路径对（JobDone.items；见 struct 注释）
+                let mut items: Vec<TransferPair> = Vec::new();
                 let mut dirty_dirs: Vec<String> = Vec::new();
                 match &kind {
                     JobKind::Delete { permanent } => {
@@ -401,6 +418,7 @@ impl JobManager {
                                 &mut prog,
                                 &mut em,
                                 &mut failed,
+                                &mut items,
                             );
                         }
                     }
@@ -764,6 +782,7 @@ impl JobManager {
                         ok: failed.is_empty(),
                         cancelled,
                         failed,
+                        items,
                     },
                 );
                 // 后端快照同步失效，前端收到 job-done 后重拉当前页（§6.7）
@@ -788,6 +807,7 @@ impl JobManager {
                             message: "任务内部错误（panic，详见日志）".into(),
                             reason: None,
                         }],
+                        items: vec![],
                     },
                 );
                 cancels_h.lock().unwrap().remove(&id);
@@ -1093,7 +1113,7 @@ fn run_delete(
     }
 }
 
-#[allow(clippy::too_many_arguments)] // 任务上下文（进度/事件/失败表）贯穿引擎全链路
+#[allow(clippy::too_many_arguments)] // 任务上下文（进度/事件/失败表/items）贯穿引擎全链路
 fn run_transfer(
     is_move: bool,
     sources: &[String],
@@ -1103,6 +1123,7 @@ fn run_transfer(
     prog: &mut JobProgress,
     em: &mut EmitterState,
     failed: &mut Vec<FailItem>,
+    items: &mut Vec<TransferPair>,
 ) {
     let mut total_files = 0u64;
     let mut total_bytes = 0u64;
@@ -1126,9 +1147,14 @@ fn run_transfer(
         let name = file_name_of(src);
         let target = join_name(dest, &name);
         let Some(target) = resolve_conflict(&target, policy) else {
-            continue; // Skip：跳过该冲突项
+            continue; // Skip：跳过该冲突项（未产生新物，不记 items）
         };
-        copy_or_move_path(is_move, src, &target, policy, cancel, prog, em, failed);
+        if copy_or_move_path(is_move, src, &target, policy, cancel, prog, em, failed) {
+            items.push(TransferPair {
+                from: src.clone(),
+                to: target.clone(),
+            });
+        }
     }
 }
 
@@ -1148,6 +1174,10 @@ fn resolve_conflict(target: &str, policy: Policy) -> Option<String> {
     }
 }
 
+/// 单项复制/移动。返回该项是否「完全成功」——完全 = 目标已产生且（移动时）
+/// 源已删除；据此决定是否记入 JobDone.items（撤销映射）。no-op / 跳过 / 部分
+/// 完成（复制到但删源失败，文件在两处）一律 false：撤销不得凭空删除源。
+/// copy_dir 的子项调用忽略返回值——items 只记顶层对
 #[allow(clippy::too_many_arguments)] // 同上：任务上下文贯穿
 fn copy_or_move_path(
     is_move: bool,
@@ -1158,13 +1188,13 @@ fn copy_or_move_path(
     prog: &mut JobProgress,
     em: &mut EmitterState,
     failed: &mut Vec<FailItem>,
-) {
+) -> bool {
     // 源即目标（粘贴/拖放到原处 + Overwrite）：必须 no-op——
     // 继续执行会先 remove 目标（= 源本身）再改名失败，文件被永久删除
     if src.eq_ignore_ascii_case(target) {
         prog.done_files += 1;
         em.progress(prog);
-        return;
+        return false;
     }
     // 目录联接不搬内容：记为跳过失败项（move 据此不删源，用户可感知）
     if is_reparse_dir(src) {
@@ -1173,7 +1203,7 @@ fn copy_or_move_path(
             message: "已跳过目录联接（防止联接环导致无限复制）".to_string(),
             reason: None,
         });
-        return;
+        return false;
     }
     let is_dir = std::fs::metadata(to_extended(src))
         .map(|m| m.is_dir())
@@ -1186,10 +1216,13 @@ fn copy_or_move_path(
             // 同卷目录移动：原子 rename
             if let Err(e) = std::fs::rename(to_extended(src), to_extended(target)) {
                 push_fail(failed, src, &e);
+                prog.done_files += 1;
+                em.progress(prog);
+                return false;
             }
             prog.done_files += 1;
             em.progress(prog);
-            return;
+            return true;
         }
         // 目录复制 / 跨卷移动 / 同卷覆盖合并：递归复制
         copy_dir(src, target, policy, cancel, prog, em, failed);
@@ -1200,7 +1233,7 @@ fn copy_or_move_path(
                 push_fail(failed, src, &e);
             }
         }
-        return;
+        return !is_move && failed.len() == fail_before && !is_cancelled(cancel);
     }
 
     // 文件
@@ -1218,12 +1251,18 @@ fn copy_or_move_path(
                     Err(first)
                 }
             });
-        match renamed {
-            Ok(()) => prog.done_files += 1,
-            Err(e) => push_fail(failed, src, &e),
-        }
+        let ok = match renamed {
+            Ok(()) => {
+                prog.done_files += 1;
+                true
+            }
+            Err(e) => {
+                push_fail(failed, src, &e);
+                false
+            }
+        };
         em.progress(prog);
-        return;
+        return ok;
     }
     // 大文件分块复制：字节级进度（限频上报），块间可响应取消/暂停——
     // 单个大文件（如数 GB 的 zip）否则全程 0% 直到 100% 跳变
@@ -1241,13 +1280,17 @@ fn copy_or_move_path(
             Err(e) => Err(e),
         }
     };
+    let mut ok = false;
     match copy_result {
         Ok(()) => {
             prog.done_files += 1;
-            // 复制已成功、删源失败 ≠ 操作失败（文件已到位）：共享冲突短重试
+            ok = true;
+            // 复制已成功、删源失败 ≠ 操作失败（文件已到位）：共享冲突短重试；
+            // 但移动语义要求源消失——残留时不算完全成功（撤销不得删源）
             if is_move && let Err(e) = with_sharing_retry(|| std::fs::remove_file(to_extended(src)))
             {
                 push_fail(failed, src, &e);
+                ok = false;
             }
         }
         // 用户取消：半成品已清理，不计失败（取消也是终态，§6.7）
@@ -1255,6 +1298,7 @@ fn copy_or_move_path(
         Err(e) => push_fail(failed, src, &e),
     }
     em.progress(prog);
+    ok
 }
 
 /// 分块复制的尺寸阈值：低于此值 std::fs::copy 一步到位（调用次数更少）
