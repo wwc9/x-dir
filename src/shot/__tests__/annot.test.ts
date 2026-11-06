@@ -29,8 +29,7 @@ import {
   stepBadgeSize,
   translateShape,
   keysSide,
-  type Shape,
-} from "../annot";
+  type Shape, rectSubtract, holeRingRects } from "../annot";
 
 describe("normalizeSel", () => {
   it("负向拖拽翻正为包围盒", () => {
@@ -610,5 +609,54 @@ describe("strokeExtent 笔迹跨度（双击误触残点门槛）", () => {
       { x: 1.2, y: 0.3 },
     ];
     expect(strokeExtent(jitter)).toBeLessThan(2);
+  });
+});
+
+// ── 挖孔环带几何（2026-11-06 二轮性能）：拖整块选区脏区从整孔降环带 ──
+describe("holeRingRects / rectSubtract", () => {
+  const R = (x: number, y: number, w: number, h: number) => ({ x, y, w, h });
+  const area = (rs: { w: number; h: number }[]) =>
+    rs.reduce((a, r) => a + r.w * r.h, 0);
+
+  it("rectSubtract：不相交返回自身；包含返回空；相交 ≤4 条带", () => {
+    expect(rectSubtract(R(0, 0, 10, 10), R(20, 20, 5, 5))).toEqual([R(0, 0, 10, 10)]);
+    expect(rectSubtract(R(0, 0, 10, 10), R(0, 0, 10, 10))).toEqual([]);
+    expect(rectSubtract(R(0, 0, 10, 10), R(0, 0, 10, 4))).toEqual([R(0, 4, 10, 6)]);
+    const parts = rectSubtract(R(0, 0, 10, 10), R(3, 3, 4, 4));
+    // 面积守恒：a∖b 面积 = a - 交集
+    expect(area(parts)).toBe(100 - 16);
+    // 并回 b 恰好覆盖 a（无漏无重）
+    expect(area(parts) + 16).toBe(100);
+  });
+
+  it("holeRingRects：平移小步 → 环带面积远小于整孔", () => {
+    const p = R(100, 100, 800, 600);
+    const c = R(106, 103, 800, 600); // 拖 6,3
+    const ring = holeRingRects(p, c, 1920, 1080, 12);
+    // 整孔方案 = 2×(824×624) ≈ 103 万；环带应显著更小（< 1/3）
+    expect(area(ring)).toBeLessThan((824 * 624 * 2) / 3);
+    expect(ring.length).toBeGreaterThan(0);
+  });
+
+  it("holeRingRects：不相交/任一为空 → 保守退化", () => {
+    // 快速跨大距离：两整孔（同旧实现）
+    const far = holeRingRects(R(0, 0, 100, 100), R(500, 500, 100, 100), 1920, 1080, 8);
+    expect(far.length).toBe(2);
+    // 无孔 → 有孔：整屏 + 孔（遮罩从全屏变为挖孔，波及整屏）
+    const fromNone = holeRingRects(null, R(10, 10, 100, 100), 1920, 1080, 8);
+    expect(fromNone.some((r) => r.w === 1920 && r.h === 1080)).toBe(true);
+  });
+
+  it("holeRingRects：环带覆盖两孔边缘带（平移后旧孔边缘与新孔边缘都在脏区内）", () => {
+    const p = R(100, 100, 300, 200);
+    const c = R(130, 100, 300, 200); // 纯水平拖 30
+    const ring = holeRingRects(p, c, 1920, 1080, 6);
+    // 采样旧孔左缘线 (100,200) 与新孔右缘线 (430,200) 均被某矩形覆盖
+    const covers = (x: number, y: number) =>
+      ring.some((r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h);
+    expect(covers(100, 200)).toBe(true);
+    expect(covers(430, 200)).toBe(true);
+    // 中部不变亮区（交集内部收缩带）不进脏区
+    expect(covers(280, 200)).toBe(false);
   });
 });

@@ -74,6 +74,7 @@ import {
   keysSide,
   translateShape,
   type ShotTool,
+  holeRingRects,
 } from "./annot";
 
 export interface ShotBoot {
@@ -498,7 +499,11 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
    *  切换）仍走全量重绘兜底。正确性依据：move 帧间绘制物集合不变（仅坐标
    *  移动或包围盒单调扩张），prev∪cur 并集覆盖新旧像素；集合变化都发生在
    *  离散事件后的全量帧。包围盒全部取保守上界（宁大勿漏，漏了会留残影） */
-  const liveDirtyRef = useRef<{ x: number; y: number; w: number; h: number }[] | null>(null);
+  // 孔单独携带（2026-11-06 环带化）：rects = 其余绘制物 bbox；孔走 holeRingRects
+  const liveDirtyRef = useRef<{
+    rects: { x: number; y: number; w: number; h: number }[];
+    hole: { x: number; y: number; w: number; h: number } | null;
+  } | null>(null);
   const redrawLive = useCallback((dirty = false) => {
     const live = liveRef.current;
     if (!live) return;
@@ -514,8 +519,8 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     const PAD = 4 * scale + 8; // 手柄 4×scale + 边框线宽 + 余量
     const push = (x: number, y: number, w: number, h: number, pad = PAD) =>
       rects.push({ x: x - pad, y: y - pad, w: w + pad * 2, h: h + pad * 2 });
-    if (!ghole) push(0, 0, boot.mw, boot.mh); // 无孔 = 整屏遮罩
-    else push(ghole.x, ghole.y, ghole.w, ghole.h);
+    // 孔不入 rects（环带化：孔脏区经 holeRingRects 单独构造，拖整块平移
+    // 从整孔两块降到边缘环带）；无孔 = 整屏遮罩仍走 rects 保守全量
     // 拖拽边框 + 尺寸标签（信息条被放大镜吸收时无独立标签）
     const gdragR = gdNow ? normalizeSel(gdNow.x1, gdNow.y1, gdNow.x2, gdNow.y2, boot.mw, boot.mh, 1) : null;
     if (gdNow && gdragR) {
@@ -610,8 +615,14 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       gPillText && gPillRc ? pillLayoutOf(gPillText, gPillRc, !gdNow) : null;
     if (gPill) push(gPill.x, gPill.y, gPill.pw, gPill.ph);
     // ── 裁剪到脏区并清旧画（dirty=false 或首帧 = 整屏全量）──
-    const prevRects = liveDirtyRef.current;
-    const clips = dirty && prevRects ? [...prevRects, ...rects] : null;
+    // 孔环带：P∖内缩交集 的边缘带（prev/cur 任一缺或不相交退化为整屏/整孔）
+    const prevFrame = liveDirtyRef.current;
+    const holeClips =
+      dirty && prevFrame
+        ? holeRingRects(prevFrame.hole, ghole, boot.mw, boot.mh, PAD)
+        : [];
+    const clips =
+      dirty && prevFrame ? [...prevFrame.rects, ...rects, ...holeClips] : null;
     ctx.save();
     if (clips) {
       ctx.beginPath();
@@ -777,8 +788,8 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         })?.rgba ?? null;
     }
     ctx.restore();
-    // 记录本帧绘制物包围盒，供下一脏区帧取 prev 并集
-    liveDirtyRef.current = rects;
+    // 记录本帧绘制物包围盒 + 孔，供下一脏区帧取 prev（孔走环带差集）
+    liveDirtyRef.current = { rects, hole: ghole ? { ...ghole } : null };
   }, [boot.mw, boot.mh, scale]);
 
   useEffect(() => {
@@ -844,6 +855,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   useEffect(() => {
     if (ready) redrawLive();
   }, [ready, redrawLive]);
+
 
   /** pointermove 高频路径的 rAF 合帧（2026-10-30 响应速度优化）：125Hz 指针
    *  流每帧至多重绘一次 live 层——旧实现逐事件整幅重绘（4K 下遮罩挖孔 +
@@ -1496,20 +1508,20 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         return;
       }
       if (resizeRef.current && s) {
+        // 合帧化（2026-11-06 二轮性能）：move/resize 期间只写 ref + rAF 重绘
+        // live——base（定格图+标注）内容与选区无关，旧实现每事件同步
+        // redrawBase + setSel（useEffect 再补一次 redrawBase）= 每鼠标事件
+        // 4 遍全屏像素 + 125Hz 整树 React 渲染（弱核显机拖选区卡顿主因）；
+        // React 状态推迟到 pointerup 一次提交（工具栏/快捷键面板归位）
         const ns = resizeSel(s, resizeRef.current, px, py, boot.mw, boot.mh);
-        setSel(ns);
         selRef.current = ns;
-        redrawBase();
         scheduleLive();
         return;
       }
       if (moveRef.current && s) {
         const nx = Math.max(0, Math.min(px - moveRef.current.dx, boot.mw - s.w));
         const ny = Math.max(0, Math.min(py - moveRef.current.dy, boot.mh - s.h));
-        const ns = { ...s, x: nx, y: ny };
-        setSel(ns);
-        selRef.current = ns;
-        redrawBase();
+        selRef.current = { ...s, x: nx, y: ny };
         scheduleLive();
         return;
       }
@@ -1623,6 +1635,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     if (resizeRef.current || moveRef.current) {
       resizeRef.current = null;
       moveRef.current = null;
+      // 拖拽期未提交的选区几何一次性入 React（工具栏/快捷键面板/撤销快照
+      // 等消费方在拖拽中不重渲，抬起统一归位）
+      setSel(selRef.current);
       return;
     }
     const s = selRef.current;

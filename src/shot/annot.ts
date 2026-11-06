@@ -1106,3 +1106,79 @@ export function drawShape(
   }
   ctx.restore();
 }
+
+// ── 挖孔遮罩环带几何（2026-11-06 二轮性能：拖整块选区脏区从整孔降环带）──
+// 纯函数：孔平移时 live 层真正变化的区域 = 两孔并包络减去「交集收缩带」——
+// 覆盖旧孔边框/手柄带、新孔边框/手柄带与平移扫过区，不含中间不变亮区；
+// 大选区慢速平移每帧脏面积从 ~2×孔面积 降到 ~2×(w·|dy|+h·|dx|)+边缘带
+
+export interface RingRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** 矩形差集 a∖b（不相交 = a 自身；内含 = 空），带状分解 ≤4 条 */
+export function rectSubtract(
+  a: RingRect,
+  b: RingRect,
+): RingRect[] {
+  const x2 = Math.max(a.x, b.x);
+  const y2 = Math.max(a.y, b.y);
+  const x1 = Math.min(a.x + a.w, b.x + b.w);
+  const y1 = Math.min(a.y + a.h, b.y + b.h);
+  if (x2 >= x1 || y2 >= y1) return [a]; // 不相交
+  const out: RingRect[] = [];
+  if (a.y < y2) out.push({ x: a.x, y: a.y, w: a.w, h: y2 - a.y }); // 上带
+  if (a.y + a.h > y1)
+    out.push({ x: a.x, y: y1, w: a.w, h: a.y + a.h - y1 }); // 下带
+  const cy = Math.max(a.y, y2);
+  const ch = Math.min(a.y + a.h, y1) - cy;
+  if (a.x < x2) out.push({ x: a.x, y: cy, w: x2 - a.x, h: ch }); // 左带
+  if (a.x + a.w > x1)
+    out.push({ x: x1, y: cy, w: a.x + a.w - x1, h: ch }); // 右带
+  return out;
+}
+
+/**
+ * 孔从 P 平移/缩放到 C 的脏区矩形集（pad = 边框/手柄外扩）：
+ * - 任一为空（无孔↔有孔，或首帧）：整屏外扩保守
+ * - 不相交（快速跨大距离拖动）：两孔各自外扩（同旧实现的整孔，退化安全）
+ * - 相交：union(P,C) ∖ shrink(intersect(P,C), pad) 的环带（≤4 条）
+ */
+export function holeRingRects(
+  prev: RingRect | null,
+  cur: RingRect | null,
+  screenW: number,
+  screenH: number,
+  pad: number,
+): RingRect[] {
+  if (!prev && !cur) return [{ x: 0, y: 0, w: screenW, h: screenH }];
+  const ex = (r: RingRect): RingRect => ({
+    x: r.x - pad,
+    y: r.y - pad,
+    w: r.w + pad * 2,
+    h: r.h + pad * 2,
+  });
+  if (!prev || !cur) {
+    const only = prev ?? cur!;
+    // 无孔帧的遮罩是整屏——有孔侧出现/消失波及整屏遮罩，保守全量
+    return [{ x: 0, y: 0, w: screenW, h: screenH }, ex(only)];
+  }
+  const ix2 = Math.min(prev.x + prev.w, cur.x + cur.w);
+  const iy2 = Math.min(prev.y + prev.h, cur.y + cur.h);
+  const ix1 = Math.max(prev.x, cur.x);
+  const iy1 = Math.max(prev.y, cur.y);
+  if (ix1 >= ix2 || iy1 >= iy2) return [ex(prev), ex(cur)];
+  const u = {
+    x: Math.min(prev.x, cur.x) - pad,
+    y: Math.min(prev.y, cur.y) - pad,
+    w: Math.max(prev.x + prev.w, cur.x + cur.w) - Math.min(prev.x, cur.x) + pad * 2,
+    h: Math.max(prev.y + prev.h, cur.y + cur.h) - Math.min(prev.y, cur.y) + pad * 2,
+  };
+  const iw = (ix2 - ix1) - pad * 2;
+  const ih = (iy2 - iy1) - pad * 2;
+  if (iw <= 0 || ih <= 0) return [u]; // 交集太薄：退化为并包络整块
+  return rectSubtract(u, { x: ix1 + pad, y: iy1 + pad, w: iw, h: ih });
+}
