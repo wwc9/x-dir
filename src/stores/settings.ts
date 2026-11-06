@@ -42,6 +42,7 @@ function toPlain(s: SettingsStore): Settings {  return {
     defaultView: s.defaultView,
     defaultSort: s.defaultSort,
     stagingMode: s.stagingMode,
+    workspaceOrder: s.workspaceOrder,
     confirmDelete: s.confirmDelete,
     toolbarEntries: s.toolbarEntries,
     restoreLastSession: s.restoreLastSession,

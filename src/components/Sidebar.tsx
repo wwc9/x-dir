@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Copy,
   FolderInput,
@@ -23,6 +23,7 @@ import { extOf, fileIcon } from "../lib/fileIcons";
 import { fileNameOf } from "../lib/path";
 import { shelfEntryIsDir } from "../lib/shelf";
 import { randomSchemeName } from "../lib/schemeName";
+import { moveWorkspace, orderWorkspaces } from "../lib/workspaceOrder";
 import { DENSITY } from "../lib/tokens";
 import { useDnd } from "../stores/dnd";
 import { useIcons } from "../stores/icons";
@@ -309,6 +310,22 @@ function Shelf() {
 export function Sidebar() {
   const t = useT();
   const [items, setItems] = useState<Scheme[]>([]);
+  // 显示顺序（2026-11-06 拖动排序）：settings.workspaceOrder 重排，新方案
+  // 字典序追加尾；拖动中本地乐观重排（跟手），松手落 settings
+  const order = useSettings((s) => s.workspaceOrder);
+  const [dragName, setDragName] = useState<string | null>(null);
+  /** 同步镜像（dragstart 后紧跟的首个 dragover 可能先于 React 状态刷新到达，
+   *  守卫读 ref 才不漏；快速真实拖拽同样存在该窗口） */
+  const dragNameRef = useRef<string | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
+  const ordered = useMemo(
+    () => orderWorkspaces(items.map((i) => i.name), order),
+    [items, order],
+  );
+  const itemOf = useMemo(() => {
+    const m = new Map(items.map((i) => [i.name, i]));
+    return (n: string) => m.get(n);
+  }, [items]);
   const [current, setCurrent] = useState<string | null>(DEFAULT_SCHEME);
   /** 已保存的默认方案树；null = 未保存过（应用/显示出厂 2×2） */
   const [defaultTree, setDefaultTree] = useState<LayoutNode | null>(null);
@@ -591,35 +608,69 @@ export function Sidebar() {
           <span className="np-side-name">{t(DEFAULT_SCHEME)}</span>
         </div>
 
-        {items.map((it) => (
-          <div
-            key={it.name}
-            className={`np-side-item${current === it.name ? " on" : ""}`}
-            onClick={() => void apply(it.name)}
-            data-tip={
-            current === it.name
-              ? t("当前方案（改动后点上方保存图标覆盖）")
-              : t("点击切换到此布局")
-          }
-          >
-            {it.tree && (
-              <span className="np-side-thumb">
-                <MiniTreeSvg node={it.tree} size={DENSITY.sideThumbMd} />
-              </span>
-            )}
-            <span className="np-side-name">{it.name}</span>
-            <button
-              className="np-side-del"
-              data-tip={t("删除方案")}
-              onClick={(e) => {
-                e.stopPropagation();
-                void remove(it.name);
+        {ordered.map((name, idx) => {
+          const it = itemOf(name);
+          if (!it) return null;
+          return (
+            <div
+              key={it.name}
+              className={`np-side-item${current === it.name ? " on" : ""}${
+                dragName === it.name ? " dragging" : ""
+              }${overIdx === idx && dragName && dragName !== it.name ? " drag-over" : ""}`}
+              draggable
+              onDragStart={(e) => {
+                dragNameRef.current = it.name;
+                setDragName(it.name);
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", it.name);
               }}
+              onDragEnd={() => {
+                dragNameRef.current = null;
+                setDragName(null);
+                setOverIdx(null);
+              }}
+              onDragOver={(e) => {
+                if (!dragNameRef.current || dragNameRef.current === it.name) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                setOverIdx(idx);
+              }}
+              onDrop={(e) => {
+                if (!dragNameRef.current || dragNameRef.current === it.name) return;
+                e.preventDefault();
+                const from = ordered.indexOf(dragNameRef.current);
+                useSettings
+                  .getState()
+                  .update({ workspaceOrder: moveWorkspace(ordered, from, idx) });
+                setDragName(null);
+                setOverIdx(null);
+              }}
+              onClick={() => void apply(it.name)}
+              data-tip={
+                current === it.name
+                  ? t("当前方案（改动后点上方保存图标覆盖）")
+                  : t("点击切换 · 拖动调整顺序")
+              }
             >
-              <AppIcon icon={X} size={DENSITY.iconXs} />
-            </button>
-          </div>
-        ))}
+              {it.tree && (
+                <span className="np-side-thumb">
+                  <MiniTreeSvg node={it.tree} size={DENSITY.sideThumbMd} />
+                </span>
+              )}
+              <span className="np-side-name">{it.name}</span>
+              <button
+                className="np-side-del"
+                data-tip={t("删除方案")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void remove(it.name);
+                }}
+              >
+                <AppIcon icon={X} size={DENSITY.iconXs} />
+              </button>
+            </div>
+          );
+        })}
         {items.length === 0 && (
           <div className="np-side-empty">
             {t("还没有自定义方案。")}

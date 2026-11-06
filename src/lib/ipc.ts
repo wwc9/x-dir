@@ -351,6 +351,9 @@ export interface Settings {
   rememberSelection: boolean;
   /** 暂存区（侧边栏下半）：临时拖放的文件/文件夹路径，跨会话保留；去重与上限见 lib/shelf.ts */
   staging: string[];
+  /** 布局方案显示顺序（2026-11-06 拖动排序）：方案名列表；不在表中的新方案
+   *  按文件名字典序追加尾部，表中的已删方案自然失效（读取时过滤） */
+  workspaceOrder: string[];
   /** 暂存区拖出语义（暂存区标题切换钮）：move = 落窗格即移动并移出暂存；
    *  copy = 复制到目标窗格、条目保留 */
   stagingMode: "move" | "copy";
@@ -483,6 +486,7 @@ export const DEFAULT_SETTINGS: Settings = {
   recentSearches: [],
   rememberSelection: true,
   staging: [],
+  workspaceOrder: [],
   stagingMode: "move",
   nameIndex: { enabled: false },
   shotEnabled: true,

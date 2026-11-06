@@ -1136,6 +1136,13 @@ body.np-col-resizing .np-menued-grip::after {
   cursor: default;
   user-select: none;
 }
+/* 拖动排序态（2026-11-06）：拖影半透明 + 目标位上缘指示线 */
+.np-side-item.dragging {
+  opacity: 0.45;
+}
+.np-side-item.drag-over {
+  box-shadow: 0 -2px 0 0 var(--np-accent);
+}
 .np-side-item:hover {
   background: var(--np-hover);
 }
