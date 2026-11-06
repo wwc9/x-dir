@@ -2277,9 +2277,48 @@ body.np-col-resizing * {
   flex: 0 0 auto;
 }
 .np-list-error {
-  padding: 12px;
-  font-size: var(--np-font-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 16px;
+}
+.np-list-error-title {
+  font-size: var(--np-font-ui);
+  font-weight: 600;
   color: var(--np-danger);
+}
+/* 路径与说明：单行省略（悬停原生 title 看全文，§4.8 截断例外） */
+.np-list-error-path,
+.np-list-error-msg {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-list-error-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+/* 逃生口按钮：np-pv-btn 同款配方（surface-2 填充 + hover） */
+.np-list-error-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--np-ctl-h);
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--np-radius);
+  background: var(--np-surface-2);
+  color: var(--np-fg);
+  font-size: var(--np-font-sm);
+  cursor: pointer;
+}
+.np-list-error-btn:hover {
+  background: var(--np-hover);
 }
 .np-list-empty {
   padding: 16px;

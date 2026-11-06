@@ -536,12 +536,42 @@ export interface HotkeySpec {
   hotkey: string;
 }
 
+/** 后端命令错误（Rust AppError 序列化为 {code,message}；Err(String) 命令
+ *  reject 裸串）。cmd() 在源头归一为该形状：String(e) 直接得到用户可读
+ *  文案（toString 定制，不带 Error: 前缀）——此前调用点 String(e) 对对象
+ *  reject 渲染出 [object Object]（2026-11-06 窗格报错修复时全局收敛） */
+export interface CmdError {
+  code: string | null;
+  message: string;
+  /** String(e) 直接得到 message（不带 Error: 前缀） */
+  toString(): string;
+}
+
+function normCmdError(e: unknown): CmdError {
+  let code: string | null = null;
+  let msg: string;
+  if (e && typeof e === "object") {
+    const o = e as { code?: unknown; message?: unknown };
+    if (typeof o.code === "string") code = o.code;
+    if (typeof o.message === "string") msg = o.message;
+    else if (e instanceof Error) msg = e.message;
+    else msg = JSON.stringify(e);
+  } else if (typeof e === "string") {
+    msg = e;
+  } else {
+    msg = String(e);
+  }
+  return { code, message: msg, toString: () => msg };
+}
+
 function cmd<T>(
   name: string,
   args?: Record<string, unknown> | Uint8Array,
 ): Promise<T> {
   // Uint8Array 请求体 = tauri 原始通道（InvokeBody::Raw），运行时直传字节
-  return invoke<T>(name, args as Record<string, unknown>);
+  return invoke<T>(name, args as Record<string, unknown>).catch((e) => {
+    throw normCmdError(e);
+  });
 }
 
 /** 原始直传帧体：[w u32 LE][h u32 LE][x i32 LE][y i32 LE][RGBA...]。invoke

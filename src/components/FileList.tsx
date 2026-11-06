@@ -6,6 +6,7 @@ import {
   api,
   PAGE_SIZE,
   THIS_PC,
+  type CmdError,
   type DriveInfo,
   type FileEntry,
   type SearchBatchEvent,
@@ -77,6 +78,7 @@ import {
   type ColWidths,
 } from "../lib/columns";
 import { AppIcon } from "./AppIcon";
+import { HardDrive, Monitor } from "lucide-react";
 import { ColGrip, colDragClickGuard, type ColResizeCtl } from "./ColGrip";
 
 const DND_MIME = "application/x-xdir";
@@ -293,7 +295,7 @@ export function FileList({
   const [pages, setPages] = useState(new Map<number, FileEntry[]>());
   const [drives, setDrives] = useState<DriveInfo[] | null>(null);
   const [total, setTotal] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<CmdError | null>(null);
   const [free, setFree] = useState<number | null>(null);
   const [width, setWidth] = useState(600);
   const dndPoint = useDnd((s) => s.point);
@@ -409,7 +411,7 @@ export function FileList({
         })
         .catch((e) => {
           if (loadGenRef.current !== gen) return;
-          setError(String(e));
+          setError(e);
           setLoaded(true);
         });
       return;
@@ -440,7 +442,7 @@ export function FileList({
       })
       .catch((e) => {
         if (loadGenRef.current !== gen) return;
-        setError(String(e));
+        setError(e);
         setLoaded(true);
         usePanes.getState().setError(tabId, String(e));
       });
@@ -516,7 +518,7 @@ export function FileList({
         .catch((e) => {
           if (stale || searchReqRef.current !== reqId) return;
           searchReqRef.current = null;
-          setError(String(e));
+          setError(e);
           setSearchRes({ entries: [], truncated: false, scanned: 0, elapsedMs: 0, engine: "scan" });
         });
     }, 250);
@@ -643,7 +645,7 @@ export function FileList({
           fetched.current.delete(p); // 允许下次滚动重试
           if (loadGenRef.current !== gen) return;
           // 与首页加载同语义：状态条与地址栏都要感知错误
-          setError(String(e));
+          setError(e);
           usePanes.getState().setError(tabId, String(e));
         });
     }
@@ -1495,6 +1497,16 @@ export function FileList({
       : parent;
   };
 
+  // 错误态逃生口（2026-11-06 用户需求）：目录打不开时给两条一键去处——
+  // 桌面路径经 getKnownFolder 取真实位置（OneDrive 重定向也正确）
+  const goDesktop = () => {
+    api
+      .getKnownFolder("desktop")
+      .then((p) => usePanes.getState().navigate(tabId, p))
+      .catch((e) => useUi.getState().toast(String(e), "error"));
+  };
+  const goThisPc = () => usePanes.getState().navigate(tabId, THIS_PC);
+
   return (
     <div
       className="relative flex min-h-0 flex-1 flex-col"
@@ -1627,7 +1639,39 @@ export function FileList({
         }}
       >
         {error ? (
-          <div className="np-list-error">{error}</div>
+          <div className="np-list-error">
+            <div className="np-list-error-title">
+              {error.code === "E_NOT_FOUND" ? "文件夹不存在" : "无法打开此位置"}
+            </div>
+            <div className="np-list-error-path" title={path}>
+              {path}
+            </div>
+            <div className="np-list-error-msg">
+              {error.code === "E_NOT_FOUND"
+                ? "可能已被移动、重命名或删除，也可能路径输入有误。"
+                : error.code === "E_PERM"
+                  ? "没有访问此位置的权限。"
+                  : error.message}
+            </div>
+            <div className="np-list-error-actions">
+              <button
+                className="np-list-error-btn"
+                data-tip="跳转到桌面文件夹"
+                onClick={goDesktop}
+              >
+                <AppIcon icon={Monitor} size={DENSITY.iconSm} />
+                打开桌面
+              </button>
+              <button
+                className="np-list-error-btn"
+                data-tip="跳转到驱动器列表"
+                onClick={goThisPc}
+              >
+                <AppIcon icon={HardDrive} size={DENSITY.iconSm} />
+                打开此电脑
+              </button>
+            </div>
+          </div>
         ) : count === 0 ? (
           <div className="np-list-empty">
             {isThisPc
