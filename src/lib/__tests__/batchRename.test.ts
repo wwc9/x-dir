@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { newOp, pickRenames, planRenames, type RenameOp } from "../batchRename";
+import {
+  describeOp,
+  diffFragments,
+  illegalChars,
+  newOp,
+  pickRenames,
+  planRenames,
+  REN_TEMPLATES,
+  type RenameOp,
+} from "../batchRename";
 
 const f = (name: string, mtimeMs?: number) => ({
   path: `C:\\d\\${name}`,
@@ -138,7 +147,7 @@ describe("批量重命名规则链（planRenames）", () => {
     expect(items[1].changed).toBe(false);
     expect(items[1].error).toBeNull();
     expect(items[3].newName).toBe("dup.bin");
-    expect(items[3].error).toBe("目标重名");
+    expect(items[3].error).toBe("改完后会与第 3 行重名");
     expect(pickRenames(items)).toEqual([]);
   });
 
@@ -150,5 +159,58 @@ describe("批量重命名规则链（planRenames）", () => {
     const picked = new Set([items[0].path]);
     expect(pickRenames(items, picked)).toEqual([{ path: items[0].path, newName: "Pa.txt" }]);
     expect(pickRenames(items)).toHaveLength(2);
+  });
+});
+
+describe("人话描述 / diff / 非法字符 / 模板（2026-11-07 易用性批）", () => {
+  it("describeOp 各类型人话效果（参数实时反映）", () => {
+    expect(describeOp(newOp({ type: "remove", find: "备份" }))).toBe("删除名称里所有的「备份」");
+    expect(describeOp(newOp({ type: "replace", find: "2026审计", replace: "审计" }))).toBe("把「2026审计」替换为「审计」");
+    expect(describeOp(newOp({ type: "replace", find: "x", replace: "", regex: true }))).toBe("查找正则「x」删除");
+    expect(describeOp(newOp({ type: "prefix", text: "X-Dir_" }))).toBe("在最前面加「X-Dir_」");
+    expect(describeOp(newOp({ type: "suffix", text: "-s" }))).toBe("在扩展名前加「-s」");
+    expect(describeOp(newOp({ type: "insert", text: "前-", position: "start" }))).toBe("在名称开头插入「前-」");
+    expect(describeOp(newOp({ type: "trim", head: 2, tail: 3 }))).toBe("去掉开头 2 个、末尾 3 个字符");
+    expect(describeOp(newOp({ type: "number", position: "end", start: 1, pad: 3, separator: "-" }))).toBe(
+      "在扩展名前加编号「-001」「-002」…",
+    );
+    expect(describeOp(newOp({ type: "case", mode: "lower" }))).toBe("把英文字母全部改为小写");
+    expect(describeOp(newOp({ type: "date", format: "ymd", position: "start", separator: "_" }))).toContain("加文件修改日期");
+  });
+
+  it("diffFragments 取最长公共前后缀，中间为变更片段", () => {
+    expect(diffFragments("底稿.docx", "底稿-001.docx")).toEqual({ pre: "底稿", mid: "-001", post: ".docx" });
+    // 大小写差异在首字母：后缀 "g...png" 9 字符相同，mid = 新名前 3 字符
+    expect(diffFragments("IMG_0001.png", "img_0001.png")).toEqual({ pre: "", mid: "img", post: "_0001.png" });
+    expect(diffFragments("same.txt", "same.txt")).toEqual({ pre: "same.txt", mid: "", post: "" });
+  });
+
+  it("illegalChars 定位 Windows 非法字符（去重保序）", () => {
+    expect(illegalChars("a?:b<c|.txt")).toEqual(["?", ":", "<", "|"]);
+    expect(illegalChars("正常名称.txt")).toEqual([]);
+  });
+
+  it("错误人话：重名指出冲突行号，非法列出具体字符", () => {
+    const items = planRenames([f("a copy.txt"), f("b.txt"), f("a?.txt")], ops(newOp({ type: "remove", find: " copy" })));
+    // a copy.txt → a.txt（无冲突）；第三行 a?.txt 未变更不判错
+    expect(items[0].error).toBeNull();
+    // 构造重名：copy 删除后两行同名
+    const items2 = planRenames(
+      [f("a copy.txt"), f("a.txt")],
+      ops(newOp({ type: "remove", find: " copy" })),
+    );
+    // a copy.txt → a.txt 撞上批内未变更的 a.txt（磁盘现有文件，执行必失败）
+    expect(items2[0].error).toBe("改完后会与第 2 行重名");
+    const items3 = planRenames([f("a?.txt")], ops(newOp({ type: "replace", find: "a", replace: "b" })));
+    expect(items3[0].error).toBe("含有不允许的字符「?」");
+  });
+
+  it("常用任务模板：build 生成的规则链可直接出有效计划", () => {
+    for (const tp of REN_TEMPLATES) {
+      const items = planRenames([f("演示 File.TXT", 1e12)], tp.build());
+      expect(items.every((i) => typeof i.newName === "string")).toBe(true);
+    }
+    const numbered = planRenames([f("a.txt"), f("b.txt")], REN_TEMPLATES[0].build());
+    expect(numbered.map((i) => i.newName)).toEqual(["a-01.txt", "b-02.txt"]);
   });
 });

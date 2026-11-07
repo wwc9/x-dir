@@ -189,18 +189,124 @@ export function planRenames(
       error: null,
     };
   });
-  const countByName = new Map<string, number>();
-  for (const it of items) {
+  const byName = new Map<string, number[]>();
+  for (const [i, it] of items.entries()) {
     const k = it.newName.toLowerCase();
-    countByName.set(k, (countByName.get(k) ?? 0) + 1);
+    const list = byName.get(k);
+    if (list) list.push(i);
+    else byName.set(k, [i]);
   }
-  for (const it of items) {
+  for (const [i, it] of items.entries()) {
     if (!it.changed) continue;
-    if (!isValidName(it.newName)) it.error = "名称非法";
-    else if ((countByName.get(it.newName.toLowerCase()) ?? 0) > 1) it.error = "目标重名";
+    if (!isValidName(it.newName)) it.error = `含有不允许的字符「${illegalChars(it.newName).join(" ")}」`;
+    else {
+      const same = byName.get(it.newName.toLowerCase())?.filter((j) => j !== i) ?? [];
+      // 与批内任何其他行同名即冲突：撞「改后行」= 互相冲突，撞「未变更行」=
+      // 与磁盘现有文件同名（执行必失败），统一提前报告（2026-11-07 人话升级）
+      if (same.length > 0) it.error = `改完后会与第 ${same[0] + 1} 行重名`;
+    }
   }
   return items;
 }
+
+/** 找出名称中 Windows 不允许的字符（去重保序；供错误人话提示） */
+export function illegalChars(name: string): string[] {
+  const bad = name.match(/[\\/:*?"<>|]/g);
+  return bad ? [...new Set(bad)] : [];
+}
+
+/** 旧名 → 新名的变更片段（最长公共前缀/后缀取中间变更段；供预览 diff 高亮）。
+ *  无变更时 mid = "" */
+export function diffFragments(
+  oldName: string,
+  newName: string,
+): { pre: string; mid: string; post: string } {
+  let pre = 0;
+  const min = Math.min(oldName.length, newName.length);
+  while (pre < min && oldName[pre] === newName[pre]) pre++;
+  let suf = 0;
+  while (
+    suf < min - pre &&
+    oldName[oldName.length - 1 - suf] === newName[newName.length - 1 - suf]
+  )
+    suf++;
+  return {
+    pre: newName.slice(0, pre),
+    mid: newName.slice(pre, newName.length - suf),
+    post: newName.slice(newName.length - suf),
+  };
+}
+
+/** 单条规则的人话效果描述（规则卡效果行；参数实时生成） */
+export function describeOp(op: RenameOp): string {
+  switch (op.type) {
+    case "replace": {
+      const what = op.regex ? `查找正则「${op.find}」` : `把「${op.find}」`;
+      return op.replace ? `${what}替换为「${op.replace}」` : `${what}删除`;
+    }
+    case "remove":
+      return op.find ? `删除名称里所有的「${op.find}」` : "未填写要删除的文字";
+    case "insert":
+      return `${op.position === "start" ? "在名称开头" : "在名称末尾"}插入「${op.text}」`;
+    case "prefix":
+      return `在最前面加「${op.text}」`;
+    case "suffix":
+      return `在扩展名前加「${op.text}」`;
+    case "trim":
+      return `去掉开头 ${op.head} 个、末尾 ${op.tail} 个字符`;
+    case "number": {
+      const n = String(op.start).padStart(Math.min(Math.max(op.pad, 1), 6), "0");
+      const n2 = String(op.start + 1).padStart(Math.min(Math.max(op.pad, 1), 6), "0");
+      const sep = op.separator || "";
+      return `在扩展名前加编号「${sep}${n}」「${sep}${n2}」…`;
+    }
+    case "case":
+      return op.mode === "upper" ? "把英文字母全部改为大写" : op.mode === "lower" ? "把英文字母全部改为小写" : "每个词首字母改为大写";
+    case "date":
+      return `${op.position === "start" ? "在名称开头" : "在扩展名前"}加文件修改日期（${fmtDate(Date.now(), op.format)}${op.separator ? ` 分隔符「${op.separator}」` : ""}）`;
+  }
+}
+
+/** 常用任务模板（一键生成整条规则链；空态与任务 chips 共用） */
+export interface RenameTemplate {
+  id: string;
+  label: string;
+  desc: string;
+  build: () => RenameOp[];
+}
+
+export const REN_TEMPLATES: RenameTemplate[] = [
+  {
+    id: "number",
+    label: "批量编号",
+    desc: "在名称末尾加 01、02、03…",
+    build: () => [newOp({ type: "number", position: "end", start: 1, pad: 2, separator: "-" })],
+  },
+  {
+    id: "nospace",
+    label: "去空格",
+    desc: "删除名称中所有空格",
+    build: () => [newOp({ type: "remove", find: " " })],
+  },
+  {
+    id: "date",
+    label: "加日期前缀",
+    desc: "名称前加修改日期 2026-11-07_",
+    build: () => [newOp({ type: "date", format: "ymd", position: "start", separator: "_" })],
+  },
+  {
+    id: "lower",
+    label: "全部小写",
+    desc: "英文字母转小写",
+    build: () => [newOp({ type: "case", mode: "lower" })],
+  },
+  {
+    id: "ext",
+    label: "换扩展名",
+    desc: "如批量 jpg → png（填写查找替换）",
+    build: () => [newOp({ type: "replace", find: "jpg", replace: "png", scope: "ext" })],
+  },
+];
 
 /** 从计划中取可执行子集（已变更且无错误；picked = 预览行勾选集，空集 = 全部参与） */
 export function pickRenames(

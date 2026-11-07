@@ -4684,9 +4684,11 @@ body.np-col-resizing * {
   align-items: center;
   gap: var(--np-gap);
   min-width: 0;
+  flex: 1;
 }
 .np-rchain-params .bp6-input-group {
-  width: 110px;
+  width: 96px;
+  min-width: 0;
 }
 .np-rchain-empty {
   padding: calc(var(--np-gutter) * 2);
@@ -4695,6 +4697,87 @@ body.np-col-resizing * {
   font-size: var(--np-font-sm);
   color: var(--np-muted);
   text-align: center;
+}
+/* ── 规则卡两行紧凑布局（2026-11-07 易用性批）──
+   行1 = np-rchain-top（序号+类型+作用域+参数+操作钮），行2 = 人话效果行 */
+/* ① 常用任务 chips（预览列顶部；与空态模板共用 REN_TEMPLATES） */
+.np-bren-tasks {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+  flex-wrap: wrap;
+  margin-bottom: var(--np-gutter);
+}
+.np-bren-tasks-lab {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  flex: none;
+}
+.np-bren-chip {
+  height: var(--np-ctl-h);
+  padding: 0 11px;
+  border: 1px solid var(--np-border);
+  border-radius: var(--np-radius-pill);
+  background: var(--np-surface);
+  color: var(--np-fg);
+  font-size: var(--np-font-ui);
+  cursor: pointer;
+}
+.np-bren-chip:hover {
+  background: var(--np-hover);
+}
+/* 预览 diff 高亮：新名中实际被改动的片段（④） */
+.np-bren-diff {
+  background: color-mix(in srgb, var(--np-accent) 18%, transparent);
+  border-radius: 3px;
+  padding: 0 1px;
+  font-weight: 600;
+}
+/* 行2 人话效果行（describeOp 实时生成，②） */
+.np-rchain-plain {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+  min-width: 0;
+  font-size: var(--np-font-sm);
+  color: var(--np-accent);
+  background: color-mix(in srgb, var(--np-accent) 8%, transparent);
+  border-radius: var(--np-radius);
+  padding: 2px var(--np-gutter);
+}
+.np-rchain-plain span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* ⑦ 空态模板按钮 */
+.np-rchain-tpl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--np-gutter);
+  margin-top: var(--np-gutter);
+}
+.np-rchain-tpl-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: var(--np-gutter) calc(var(--np-gutter) + 2px);
+  border: 1px solid var(--np-border);
+  border-radius: var(--np-radius);
+  background: var(--np-surface);
+  color: var(--np-fg);
+  font-size: var(--np-font-ui);
+  cursor: pointer;
+  text-align: left;
+}
+.np-rchain-tpl-btn:hover {
+  background: var(--np-hover);
+}
+.np-rchain-tpl-d {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
 }
 
 /* 批量新建文件夹的多行名单（2026-10-17）：统一填充式输入配方——

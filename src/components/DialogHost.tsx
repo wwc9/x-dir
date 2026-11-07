@@ -12,12 +12,30 @@ import {
   Switch,
   type Intent,
 } from "@blueprintjs/core";
-import { ArrowRight, ChevronDown, ChevronUp, Info, OctagonAlert, TriangleAlert, X } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronDown,
+  ChevronUp,
+  CircleCheck,
+  Info,
+  OctagonAlert,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 
 import { formatBytes, formatSize, formatTime } from "../lib/format";
 import { typeName } from "../lib/fileIcons";
 import { api, type FileEntry, type FileLocks } from "../lib/ipc";
-import { compileRegex, newOp, pickRenames, planRenames, type RenameOp } from "../lib/batchRename";
+import {
+  compileRegex,
+  describeOp,
+  diffFragments,
+  newOp,
+  pickRenames,
+  planRenames,
+  REN_TEMPLATES,
+  type RenameOp,
+} from "../lib/batchRename";
 import { enqueueDelete } from "../lib/operations";
 import { AppIcon, ic } from "./AppIcon";
 import {
@@ -619,10 +637,11 @@ const OP_TYPE_ITEMS: { type: RenameOp["type"]; label: string }[] = [
   { type: "date", label: "文件日期" },
 ];
 
+/* ③ 作用域口语化（下拉项带副标题解释，title 即下拉项 tooltip） */
 const R_SCOPE_OPTS = [
-  { value: "name", label: "主名" },
-  { value: "nameExt", label: "整名" },
-  { value: "ext", label: "扩展名" },
+  { value: "name", label: "只改主名", title: "保留 .docx 等扩展名不动" },
+  { value: "nameExt", label: "整个名称", title: "主名和扩展名一起改" },
+  { value: "ext", label: "只改扩展名", title: "如批量 jpg → png" },
 ] as const;
 
 const R_CASE_OPTS = [
@@ -874,6 +893,20 @@ function BatchRenameDialog({
       <DialogBody>
         <div className="np-bren2">
           <div className="np-bren-preview2">
+            {/* ① 常用任务 chips：一键生成整条规则链（参数可在卡上继续微调） */}
+            <div className="np-bren-tasks">
+              <span className="np-bren-tasks-lab">{t("常用任务：")}</span>
+              {REN_TEMPLATES.map((tp) => (
+                <button
+                  key={tp.id}
+                  className="np-bren-chip"
+                  data-tip={tp.desc}
+                  onClick={() => setOpsList(tp.build())}
+                >
+                  {t(tp.label)}
+                </button>
+              ))}
+            </div>
             <div className="np-bren-head">
               <input
                 type="checkbox"
@@ -883,7 +916,7 @@ function BatchRenameDialog({
                 data-tip={t("全选 / 全不选")}
               />
               <span className="np-bren-old">{t("原名")}</span>
-              <span className="np-bren-new">{t("新名")}</span>
+              <span className="np-bren-new">{t("新名（改动片段高亮）")}</span>
               <Switch
                 checked={onlyChanged}
                 label={t("只看变更")}
@@ -891,7 +924,9 @@ function BatchRenameDialog({
               />
             </div>
             <div className="np-bren-list">
-              {shown.slice(0, 200).map((i) => (
+              {shown.slice(0, 200).map((i) => {
+                const frag = i.changed && !i.error ? diffFragments(i.oldName, i.newName) : null;
+                return (
                 <div key={i.path} className={`np-bren-row ${picked.has(i.path) ? "" : "is-skip"}`}>
                   <input
                     type="checkbox"
@@ -909,10 +944,20 @@ function BatchRenameDialog({
                     }`}
                     title={i.error ?? i.newName}
                   >
-                    {i.error ?? i.newName}
+                    {i.error ??
+                      (frag ? (
+                        <>
+                          {frag.pre}
+                          {frag.mid && <span className="np-bren-diff">{frag.mid}</span>}
+                          {frag.post}
+                        </>
+                      ) : (
+                        i.newName
+                      ))}
                   </span>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
           <div className="np-rchain">
@@ -935,12 +980,27 @@ function BatchRenameDialog({
             </div>
             {opsList.length === 0 ? (
               <div className="np-rchain-empty">
-                {t("还没有规则——点「添加规则」开始，规则按从上到下顺序生效。")}
+                <div>{t("还没有规则——点「添加规则」开始，规则按从上到下顺序生效。也可从常用任务开始：")}</div>
+                <div className="np-rchain-tpl">
+                  {REN_TEMPLATES.slice(0, 4).map((tp) => (
+                    <button
+                      key={tp.id}
+                      className="np-rchain-tpl-btn"
+                      data-tip={tp.desc}
+                      onClick={() => setOpsList(tp.build())}
+                    >
+                      <span>{t(tp.label)}</span>
+                      <span className="np-rchain-tpl-d">{t(tp.desc)}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : (
               <div className="np-rchain-list">
                 {opsList.map((op, idx) => (
                   <div key={op.id} className="np-rchain-item">
+                    {/* 两行紧凑布局：行1 = 序号+类型+作用域+参数+操作钮；
+                        行2 = 人话效果（describeOp 实时生成） */}
                     <div className="np-rchain-top">
                       <span className="np-rchain-idx">{idx + 1}</span>
                       <NpSelect
@@ -950,9 +1010,26 @@ function BatchRenameDialog({
                       />
                       <NpSelect
                         value={op.scope}
-                        options={R_SCOPE_OPTS.map((x) => ({ value: x.value, label: x.label }))}
+                        options={R_SCOPE_OPTS.map((x) => ({ value: x.value, label: x.label, title: x.title }))}
                         onChange={(scope) => patchOp(op.id, { scope } as Partial<RenameOp>)}
                       />
+                      <div className="np-rchain-params">
+                        {opParams(op)}
+                        {op.type === "replace" && op.regex && (
+                          <NpSelect
+                            value={"__rx__"}
+                            options={[
+                              { value: "__rx__", label: t("常用示例 ▾") },
+                              { value: "\\s+", label: t("去空格（\\s+）") },
+                              { value: "\\(.*?\\)", label: t("去括号内容（\\(.*?\\)）") },
+                              { value: "^\\d+[._-]", label: t("去序号前缀（^\\d+[._-]）") },
+                            ]}
+                            onChange={(v) => {
+                              if (v !== "__rx__") patchOp(op.id, { find: v } as Partial<RenameOp>);
+                            }}
+                          />
+                        )}
+                      </div>
                       <span className="np-rchain-sp" />
                       <button
                         className="np-rchain-btn"
@@ -974,7 +1051,10 @@ function BatchRenameDialog({
                         <AppIcon icon={X} size={DENSITY.iconXs} />
                       </button>
                     </div>
-                    <div className="np-rchain-params">{opParams(op)}</div>
+                    <div className="np-rchain-plain">
+                      <AppIcon icon={CircleCheck} size={DENSITY.iconXs} />
+                      <span>{describeOp(op)}</span>
+                    </div>
                   </div>
                 ))}
               </div>
