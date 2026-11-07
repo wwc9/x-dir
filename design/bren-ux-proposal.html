@@ -84,27 +84,37 @@ body { background:var(--surface2); color:var(--fg);
 .addbtn .ic { color:var(--accent); }
 .rc-count { font-size:11px; color:var(--muted); }
 /* ② 规则卡：人话效果行 */
-.card { background:var(--surface2); border-radius:10px; padding:8px 10px; display:flex; flex-direction:column; gap:6px; }
-.card-top { display:flex; align-items:center; gap:6px; }
+.card { background:var(--surface2); border-radius:10px; padding:6px 8px; display:flex; flex-direction:column; gap:4px; }
+/* 两行紧凑布局：行1 = 序号+类型+参数+操作钮；行2 = 人话效果+作用域 */
+.card-top { display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
+.card-sub { display:flex; align-items:center; gap:6px; padding-left:18px; }
+.card-sub .plain { flex:1; min-width:0; }
+.card-sub .sel { flex:none; height:20px; font-size:11px; padding:0 7px; }
 .idx { width:18px; text-align:center; font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; }
-.sel { height:24px; padding:0 10px; border-radius:6px; background:var(--surface);
-  box-shadow:inset 0 0 0 1px var(--border); font-size:12px; display:inline-flex; align-items:center; gap:5px; }
+.sel { height:22px; padding:0 8px; border-radius:6px; background:var(--surface);
+  box-shadow:inset 0 0 0 1px var(--border); font-size:12px; display:inline-flex; align-items:center; gap:4px;
+  max-width:104px; overflow:hidden; white-space:nowrap; flex:none; }
 .sel.on { background:var(--sel); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
   color:var(--accent); font-weight:600; }
 .sp { flex:1; }
-.mini { width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center;
-  border-radius:5px; color:var(--muted); }
+.mini { width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center;
+  border-radius:5px; color:var(--muted); flex:none; }
 .mini:hover { background:var(--hover); color:var(--fg); }
 .mini.dis { opacity:.35; }
-.params { display:flex; align-items:center; gap:5px; flex-wrap:wrap; min-width:0; }
+.params { display:flex; align-items:center; gap:3px; flex-wrap:wrap; min-width:0; flex:1; }
 .params .k { font-size:11px; color:var(--muted); flex:none; }
-.inp { height:24px; padding:0 8px; border-radius:6px; background:var(--surface);
-  box-shadow:inset 0 0 0 1px var(--border); font-size:12px; color:var(--muted);
-  display:inline-flex; align-items:center; min-width:0; }
+.plain { font-size:11px; color:var(--accent); background:color-mix(in srgb, var(--accent) 8%, transparent);
+  border-radius:6px; padding:2px 7px; display:inline-flex; align-items:center; gap:4px; }
+.plain .ic { width:11px; height:11px; flex:none; }
+.inp { height:22px; padding:0 6px; border-radius:5px; background:var(--surface);
+  box-shadow:inset 0 0 0 1px var(--border); font-size:11px; color:var(--muted);
+  display:inline-flex; align-items:center; min-width:0; flex:none; }
+.params .inp.real { flex:1 1 74px; }
+.params .inp[style] { flex:0 1 34px; }
 .inp.real { color:var(--fg); }
 .seg { display:inline-flex; }
-.seg span { height:22px; padding:0 9px; display:inline-flex; align-items:center;
-  font-size:11px; color:var(--muted); border:1px solid var(--border); background:var(--surface); cursor:pointer; }
+.seg span { height:20px; padding:0 7px; display:inline-flex; align-items:center;
+  font-size:11px; color:var(--muted); border:1px solid var(--border); background:var(--surface); cursor:pointer; flex:none; }
 .seg span:first-child { border-radius:5px 0 0 5px; }
 .seg span:last-child { border-radius:0 5px 5px 0; }
 .seg span.on { background:var(--sel); border-color:color-mix(in srgb, var(--accent) 55%, transparent);
@@ -141,7 +151,7 @@ body { background:var(--surface2); color:var(--fg);
 .btn.primary { background:var(--accent); color:#fff; font-weight:600; }
 .btn.primary.off { opacity:.5; }
 /* 正则帮助 */
-.rx-help { display:inline-flex; align-items:center; gap:4px; font-size:10px; color:var(--muted);
+.rx-help { display:inline-flex; align-items:center; gap:3px; font-size:10px; color:var(--muted); flex:none;
   border:1px dashed var(--border); border-radius:5px; padding:1px 6px; cursor:pointer; }
 .rx-help:hover { color:var(--accent); border-color:var(--accent); }
 .note { max-width:980px; margin:16px auto 0; font-size:12px; color:var(--muted); }
@@ -234,19 +244,17 @@ body { background:var(--surface2); color:var(--fg);
         <div class="card-top">
           <span class="idx">1</span>
           <span class="sel">删除文字 <svg class="ic" style="width:10px;height:10px" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
-          <span class="sel on" title="只改主名（保留 .docx 等扩展名）">只改主名</span>
+          <div class="params">
+            <span class="inp real">备份</span>
+          </div>
           <span class="sp"></span>
           <span class="mini"><svg class="ic xs" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></svg></span>
           <span class="mini dis"><svg class="ic xs" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
           <span class="mini"><svg class="ic xs" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span>
         </div>
-        <div class="params">
-          <span class="inp real">备份 </span>
-          <span style="font-size:11px;color:var(--muted)">← 要删除的文字（所有出现）</span>
-        </div>
-        <div class="plain">
-          <svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 12 2 2 4-4"/></svg>
-          这条规则会：删除名称里所有的「备份」
+        <div class="card-sub">
+          <span class="plain"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 12 2 2 4-4"/></svg>会：删除名称里所有的「备份」</span>
+          <span class="sel" title="只改主名（保留 .docx 等扩展名）">只改主名 <svg class="ic" style="width:9px;height:9px" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
         </div>
       </div>
 
@@ -255,22 +263,21 @@ body { background:var(--surface2); color:var(--fg);
         <div class="card-top">
           <span class="idx">2</span>
           <span class="sel">查找替换 <svg class="ic" style="width:10px;height:10px" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
-          <span class="sel">只改主名</span>
+          <div class="params">
+            <span class="seg"><span class="on">字面</span><span>正则</span></span>
+            <span class="inp real">2026审计</span>
+            <span class="k">→</span>
+            <span class="inp real">审计</span>
+          </div>
           <span class="sp"></span>
           <span class="mini"><svg class="ic xs" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></svg></span>
           <span class="mini"><svg class="ic xs" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
           <span class="mini"><svg class="ic xs" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span>
         </div>
-        <div class="params">
-          <span class="seg"><span class="on">字面</span><span>正则</span></span>
-          <span class="inp real">2026审计</span>
-          <span style="color:var(--muted)">→</span>
-          <span class="inp real">审计</span>
+        <div class="card-sub">
+          <span class="plain"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 12 2 2 4-4"/></svg>会：把「2026审计」替换为「审计」</span>
           <span class="rx-help">常用示例 ▾</span>
-        </div>
-        <div class="plain">
-          <svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 12 2 2 4-4"/></svg>
-          这条规则会：把「2026审计」替换为「审计」（仅第一处）
+          <span class="sel" title="只改主名（保留扩展名）">只改主名 <svg class="ic" style="width:9px;height:9px" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
         </div>
       </div>
 
@@ -279,23 +286,21 @@ body { background:var(--surface2); color:var(--fg);
         <div class="card-top">
           <span class="idx">3</span>
           <span class="sel">编号 <svg class="ic" style="width:10px;height:10px" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
-          <span class="sel" title="只改主名（保留扩展名）">只改主名 <svg class="ic" style="width:10px;height:10px" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+          <div class="params">
+            <span class="seg"><span>加在最前</span><span class="on">加在末尾</span></span>
+            <span class="k">从</span>
+            <span class="inp real" style="min-width:24px">1</span>
+            <span class="k">3 位数</span>
+            <span class="inp real" style="min-width:24px">-</span>
+          </div>
           <span class="sp"></span>
           <span class="mini"><svg class="ic xs" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></svg></span>
           <span class="mini"><svg class="ic xs" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
           <span class="mini"><svg class="ic xs" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span>
         </div>
-        <div class="params">
-          <span class="seg"><span>加在最前</span><span class="on">加在末尾</span></span>
-          <span class="k">从</span>
-          <span class="inp real" style="min-width:26px">1</span>
-          <span class="k">3 位数</span>
-          <span class="k">分隔符</span>
-          <span class="inp real" style="min-width:24px">-</span>
-        </div>
-        <div class="plain">
-          <svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 12 2 2 4-4"/></svg>
-          这条规则会：在扩展名前加「-001」起的编号（-002、-003…）
+        <div class="card-sub">
+          <span class="plain"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 12 2 2 4-4"/></svg>会：在扩展名前加编号 -001、-002…</span>
+          <span class="sel" title="只改主名（保留扩展名）">只改主名 <svg class="ic" style="width:9px;height:9px" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
         </div>
       </div>
     </div>
