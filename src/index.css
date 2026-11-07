@@ -4548,6 +4548,154 @@ body.np-col-resizing * {
 .np-bren-new.is-same {
   color: var(--np-muted);
 }
+/* ── 规则链布局（2026-11-07 方案重构，Smart File Renamer 同范式）：
+   左大预览表（行级勾选参与 + 只看变更），右规则链（可堆叠/排序/删除） ── */
+.np-bren2 {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+.np-bren-preview2 {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* 预览列表：surface-2 凹陷内滚；行勾选 checkbox 用 accent 色 */
+.np-bren-list {
+  flex: 1;
+  min-height: 0;
+  max-height: 430px;
+  overflow-y: auto;
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius-pane);
+  padding: var(--np-gutter);
+}
+.np-bren-head input[type="checkbox"],
+.np-bren-list input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--np-accent);
+  cursor: pointer;
+}
+/* 取消勾选的行（不参与改名）整行淡显 */
+.np-bren-row.is-skip {
+  opacity: 0.45;
+}
+.np-bren-num {
+  width: 52px;
+  height: var(--np-ctl-h);
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--np-radius);
+  background: var(--np-surface-2);
+  color: var(--np-fg);
+  font-size: var(--np-font-ui);
+  outline: none;
+}
+.np-bren-num:focus {
+  background: var(--np-surface);
+  box-shadow: var(--np-ring);
+}
+/* 右侧规则链 */
+.np-rchain {
+  width: 400px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--np-gutter);
+  min-height: 0;
+}
+.np-rchain-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gutter);
+}
+.np-rchain-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--np-gutter);
+  overflow-y: auto;
+  min-height: 0;
+  max-height: 430px;
+  padding-right: 2px;
+}
+.np-rchain-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--np-gutter);
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius-pane);
+  padding: var(--np-gutter) calc(var(--np-gutter) + 2px);
+}
+.np-rchain-top {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+}
+.np-rchain-idx {
+  flex: none;
+  width: 18px;
+  text-align: center;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  font-variant-numeric: tabular-nums;
+}
+.np-rchain-top .np-select {
+  flex: none;
+  min-width: 0;
+  max-width: 118px;
+}
+.np-rchain-top .np-select span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.np-rchain-sp {
+  flex: 1;
+}
+/* 行尾小图标钮（上移/下移/删除）：20px 紧凑（同 np-clip-actions 口径） */
+.np-rchain-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--np-gap) * 5);
+  height: calc(var(--np-gap) * 5);
+  border: none;
+  background: transparent;
+  border-radius: var(--np-radius);
+  color: var(--np-muted);
+  cursor: pointer;
+  flex: none;
+}
+.np-rchain-btn:hover:not(:disabled) {
+  background: var(--np-hover);
+  color: var(--np-fg);
+}
+.np-rchain-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.np-rchain-params {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--np-gap);
+  min-width: 0;
+}
+.np-rchain-params .bp6-input-group {
+  width: 110px;
+}
+.np-rchain-empty {
+  padding: calc(var(--np-gutter) * 2);
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius-pane);
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  text-align: center;
+}
 
 /* 批量新建文件夹的多行名单（2026-10-17）：统一填充式输入配方——
    surface-2 凹陷常态无描边、聚焦 surface + ring，同 np-nav / np-gsearch-input */

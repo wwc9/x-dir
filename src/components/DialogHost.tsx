@@ -12,12 +12,12 @@ import {
   Switch,
   type Intent,
 } from "@blueprintjs/core";
-import { ArrowRight, Info, OctagonAlert, TriangleAlert } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronUp, Info, OctagonAlert, TriangleAlert, X } from "lucide-react";
 
 import { formatBytes, formatSize, formatTime } from "../lib/format";
 import { typeName } from "../lib/fileIcons";
 import { api, type FileEntry, type FileLocks } from "../lib/ipc";
-import { compileRegex, DEFAULT_RULE, pickRenames, planRenames, type RenameRule } from "../lib/batchRename";
+import { compileRegex, newOp, pickRenames, planRenames, type RenameOp } from "../lib/batchRename";
 import { enqueueDelete } from "../lib/operations";
 import { AppIcon, ic } from "./AppIcon";
 import {
@@ -163,11 +163,14 @@ export function DialogHost() {
       canOutsideClickClose
       className="np-dialog"
       style={{
-        width: WIDE_TYPES.has(dialog?.type ?? "")
-          ? "min(680px, 92vw)"
-          : dialog?.type === "unlock"
-            ? "min(560px, 92vw)"
-            : "var(--np-dialog-w)",
+        width:
+          dialog?.type === "batchRename"
+            ? "min(980px, 92vw)"
+            : WIDE_TYPES.has(dialog?.type ?? "")
+              ? "min(680px, 92vw)"
+              : dialog?.type === "unlock"
+                ? "min(560px, 92vw)"
+                : "var(--np-dialog-w)",
       }}
     >
       {dialog?.type === "confirm" && (
@@ -604,19 +607,42 @@ function UnlockDialog({
   return <>{size === null ? "计算中…" : formatBytes(size)}</>;
 }
 
-const SEQ_PAD_OPTS = [1, 2, 3, 4].map((n) => ({ value: n, label: `${n} 位` }));
+const OP_TYPE_ITEMS: { type: RenameOp["type"]; label: string }[] = [
+  { type: "replace", label: "替换（字面/正则）" },
+  { type: "remove", label: "删除文本" },
+  { type: "insert", label: "插入文本" },
+  { type: "prefix", label: "添加前缀" },
+  { type: "suffix", label: "添加后缀" },
+  { type: "trim", label: "修剪首尾" },
+  { type: "number", label: "加序号" },
+  { type: "case", label: "大小写" },
+  { type: "date", label: "文件日期" },
+];
 
-const CASE_MODE_OPTS = [
-  { value: "keep", label: t("保持原样") },
-  { value: "upper", label: t("全部大写") },
-  { value: "lower", label: t("全部小写") },
-  { value: "title", label: t("首字母大写") },
+const R_SCOPE_OPTS = [
+  { value: "name", label: "主名" },
+  { value: "nameExt", label: "整名" },
+  { value: "ext", label: "扩展名" },
 ] as const;
 
-/** 批量重命名：替换（字面/正则）+ 前后缀 + 序号 + 大小写 + 作用域，实时预览。
- *  规则区按 §4.9 三段式分组小节；正则非法内联红字；预览支持「只看变更」
- *  （规则引擎在 lib/batchRename，2026-11-07 市场对齐批：PowerRename/
- *  Advanced Renamer 的正则/大小写/作用域/只看变更四项核心能力） */
+const R_CASE_OPTS = [
+  { value: "upper", label: "全部大写" },
+  { value: "lower", label: "全部小写" },
+  { value: "title", label: "首字母大写" },
+] as const;
+
+const R_DATE_OPTS = [
+  { value: "ymd", label: "2026-11-07" },
+  { value: "ymdCompact", label: "20261107" },
+  { value: "ymdHms", label: "2026-11-07_140509" },
+] as const;
+
+const R_PAD_OPTS = [1, 2, 3, 4, 5, 6].map((n) => ({ value: n, label: `${n} 位` }));
+
+/** 批量重命名（2026-11-07 用户定案参考 Smart File Renamer 布局）：
+ *  左 = 大预览表（行级勾选参与 + 只看变更），右 = 规则链（9 种规则类型
+ *  可堆叠/排序/删除/独立作用域，按序生效实时预览）。规则引擎在
+ *  lib/batchRename.ts（planRenames op 链式范式，同 Advanced Renamer） */
 function BatchRenameDialog({
   dialog,
   onDone,
@@ -624,157 +650,345 @@ function BatchRenameDialog({
   dialog: Extract<DialogSpec, { type: "batchRename" }>;
   onDone(v: { path: string; newName: string }[] | null): void;
 }) {
-  const [rule, setRule] = useState<RenameRule>(DEFAULT_RULE);
+  const [opsList, setOpsList] = useState<RenameOp[]>([]);
   const [onlyChanged, setOnlyChanged] = useState(false);
-  const plan = useMemo(() => planRenames(dialog.entries, rule), [dialog.entries, rule]);
-  const todo = pickRenames(plan);
+  // 预览行勾选：显式全选集（打开时全部参与；取消勾选的行不被应用）
+  const [picked, setPicked] = useState<Set<string>>(
+    () => new Set(dialog.entries.map((e) => e.path)),
+  );
+  const plan = useMemo(() => planRenames(dialog.entries, opsList), [dialog.entries, opsList]);
+  const todo = useMemo(() => pickRenames(plan, picked), [plan, picked]);
   const errorCount = plan.filter((i) => i.changed && i.error).length;
   const changedCount = plan.filter((i) => i.changed).length;
   const shown = onlyChanged ? plan.filter((i) => i.changed) : plan;
-  const regexInvalid = rule.regex && !!rule.find && !compileRegex(rule.find);
-  const patch = (p: Partial<RenameRule>) => setRule((r) => ({ ...r, ...p }));
+  const regexInvalid = opsList.some(
+    (o) => o.enabled && o.type === "replace" && o.regex && !!o.find && !compileRegex(o.find),
+  );
+  const allSel = plan.length > 0 && plan.every((i) => picked.has(i.path));
+  const toggleAll = () =>
+    setPicked(allSel ? new Set<string>() : new Set(plan.map((i) => i.path)));
+  const togglePick = (path: string) =>
+    setPicked((s) => {
+      const n = new Set(s);
+      if (n.has(path)) n.delete(path);
+      else n.add(path);
+      return n;
+    });
+  const addOp = (type: RenameOp["type"]) =>
+    setOpsList((l) => [...l, newOp({ type, ...(type === "case" ? { mode: "upper" as const } : {}) })]);
+  const patchOp = (id: string, p: Partial<RenameOp>) =>
+    setOpsList((l) => l.map((o) => (o.id === id ? ({ ...o, ...p } as RenameOp) : o)));
+  const removeOp = (id: string) => setOpsList((l) => l.filter((o) => o.id !== id));
+  const moveOp = (id: string, dir: -1 | 1) =>
+    setOpsList((l) => {
+      const i = l.findIndex((o) => o.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= l.length) return l;
+      const c = [...l];
+      [c[i], c[j]] = [c[j], c[i]];
+      return c;
+    });
+  /** 类型切换 = 换新默认参数（旧类型参数不迁移），保留作用域 */
+  const changeType = (id: string, type: RenameOp["type"]) => {
+    const cur = opsList.find((o) => o.id === id);
+    if (!cur || cur.type === type) return;
+    patchOp(id, newOp({ type, scope: cur.scope }) as Partial<RenameOp>);
+  };
+
+  /** 单条规则的参数控件（随类型变化；紧凑行内布局） */
+  const opParams = (op: RenameOp) => {
+    switch (op.type) {
+      case "replace":
+        return (
+          <>
+            <Seg
+              value={op.regex ? "regex" : "literal"}
+              options={[
+                { value: "literal", label: t("字面") },
+                { value: "regex", label: t("正则"), title: "替换串支持 $1 捕获组" },
+              ]}
+              onChange={(v) => patchOp(op.id, { regex: v === "regex" } as Partial<RenameOp>)}
+            />
+            <InputGroup
+              size="small"
+              value={op.find}
+              placeholder={t("查找")}
+              spellCheck={false}
+              onChange={(e) => patchOp(op.id, { find: e.target.value } as Partial<RenameOp>)}
+            />
+            <InputGroup
+              size="small"
+              value={op.replace}
+              placeholder={op.regex ? t("$1 = 第 1 组") : t("替换为")}
+              spellCheck={false}
+              onChange={(e) => patchOp(op.id, { replace: e.target.value } as Partial<RenameOp>)}
+            />
+          </>
+        );
+      case "remove":
+        return (
+          <InputGroup
+            size="small"
+            value={op.find}
+            placeholder={t("要删除的文本")}
+            spellCheck={false}
+            onChange={(e) => patchOp(op.id, { find: e.target.value } as Partial<RenameOp>)}
+          />
+        );
+      case "insert":
+        return (
+          <>
+            <InputGroup
+              size="small"
+              value={op.text}
+              placeholder={t("要插入的文本")}
+              spellCheck={false}
+              onChange={(e) => patchOp(op.id, { text: e.target.value } as Partial<RenameOp>)}
+            />
+            <Seg
+              value={op.position}
+              options={[
+                { value: "start", label: t("开头") },
+                { value: "end", label: t("末尾") },
+              ]}
+              onChange={(v) => patchOp(op.id, { position: v } as Partial<RenameOp>)}
+            />
+          </>
+        );
+      case "prefix":
+        return (
+          <InputGroup
+            size="small"
+            value={op.text}
+            placeholder={t("前缀文本")}
+            spellCheck={false}
+            onChange={(e) => patchOp(op.id, { text: e.target.value } as Partial<RenameOp>)}
+          />
+        );
+      case "suffix":
+        return (
+          <InputGroup
+            size="small"
+            value={op.text}
+            placeholder={t("后缀文本")}
+            spellCheck={false}
+            onChange={(e) => patchOp(op.id, { text: e.target.value } as Partial<RenameOp>)}
+          />
+        );
+      case "trim":
+        return (
+          <>
+            <span className="np-bren-k">{t("去首")}</span>
+            <input
+              className="np-bren-num"
+              type="number"
+              min={0}
+              value={op.head}
+              onChange={(e) =>
+                patchOp(op.id, { head: Math.max(0, Math.floor(Number(e.target.value) || 0)) } as Partial<RenameOp>)
+              }
+            />
+            <span className="np-bren-k">{t("去尾")}</span>
+            <input
+              className="np-bren-num"
+              type="number"
+              min={0}
+              value={op.tail}
+              onChange={(e) =>
+                patchOp(op.id, { tail: Math.max(0, Math.floor(Number(e.target.value) || 0)) } as Partial<RenameOp>)
+              }
+            />
+            <span className="np-bren-k">{t("个字符")}</span>
+          </>
+        );
+      case "number":
+        return (
+          <>
+            <Seg
+              value={op.position}
+              options={[
+                { value: "start", label: t("开头") },
+                { value: "end", label: t("末尾") },
+              ]}
+              onChange={(v) => patchOp(op.id, { position: v } as Partial<RenameOp>)}
+            />
+            <span className="np-bren-k">{t("起始")}</span>
+            <input
+              className="np-bren-num"
+              type="number"
+              min={0}
+              value={op.start}
+              onChange={(e) =>
+                patchOp(op.id, { start: Math.max(0, Math.floor(Number(e.target.value) || 0)) } as Partial<RenameOp>)
+              }
+            />
+            <span className="np-bren-k">{t("位数")}</span>
+            <NpSelect value={op.pad} options={R_PAD_OPTS} onChange={(pad) => patchOp(op.id, { pad } as Partial<RenameOp>)} />
+            <InputGroup
+              size="small"
+              value={op.separator}
+              placeholder={t("分隔符")}
+              spellCheck={false}
+              onChange={(e) => patchOp(op.id, { separator: e.target.value } as Partial<RenameOp>)}
+            />
+          </>
+        );
+      case "case":
+        return (
+          <NpSelect
+            value={op.mode}
+            options={[...R_CASE_OPTS]}
+            onChange={(mode) => patchOp(op.id, { mode } as Partial<RenameOp>)}
+          />
+        );
+      case "date":
+        return (
+          <>
+            <NpSelect
+              value={op.format}
+              options={[...R_DATE_OPTS]}
+              onChange={(format) => patchOp(op.id, { format } as Partial<RenameOp>)}
+            />
+            <Seg
+              value={op.position}
+              options={[
+                { value: "start", label: t("开头") },
+                { value: "end", label: t("末尾") },
+              ]}
+              onChange={(v) => patchOp(op.id, { position: v } as Partial<RenameOp>)}
+            />
+            <InputGroup
+              size="small"
+              value={op.separator}
+              placeholder={t("分隔符")}
+              spellCheck={false}
+              onChange={(e) => patchOp(op.id, { separator: e.target.value } as Partial<RenameOp>)}
+            />
+          </>
+        );
+    }
+  };
+
   return (
     <>
       <DialogBody>
-        <div className="np-bren-sect">{t("替换")}</div>
-        <div className="np-bren-form">
-          <span className="np-bren-field">
-            <span className="np-bren-k">{t("查找")}</span>
-            <InputGroup
-              size="small"
-              value={rule.find}
-              placeholder={t("留空 = 不替换")}
-              spellCheck={false}
-              onChange={(e) => patch({ find: e.target.value })}
-            />
-            <Seg
-              value={rule.regex ? "regex" : "literal"}
-              options={[
-                { value: "literal", label: t("字面"), title: "按普通文本查找" },
-                { value: "regex", label: t("正则"), title: "按正则表达式查找，替换串支持 $1 捕获组" },
-              ]}
-              onChange={(v) => patch({ regex: v === "regex" })}
-            />
-          </span>
-          <span className="np-bren-field">
-            <span className="np-bren-k">{t("替换为")}</span>
-            <InputGroup
-              size="small"
-              value={rule.replace}
-              placeholder={rule.regex ? "$1 = 第 1 组" : undefined}
-              spellCheck={false}
-              onChange={(e) => patch({ replace: e.target.value })}
-            />
-          </span>
-        </div>
-        {regexInvalid && (
-          <div className="np-dialog-error">正则表达式无效，请修正后重试。</div>
-        )}
-        <div className={`np-bren-sect ${rule.extOnly ? "is-off" : ""}`}>{t("前后缀与序号")}</div>
-        <div className="np-bren-form">
-          <span className={`np-bren-field ${rule.extOnly ? "is-off" : ""}`}>
-            <span className="np-bren-k">{t("前缀")}</span>
-            <InputGroup
-              size="small"
-              value={rule.prefix}
-              disabled={rule.extOnly}
-              spellCheck={false}
-              onChange={(e) => patch({ prefix: e.target.value })}
-            />
-          </span>
-          <span className={`np-bren-field ${rule.extOnly ? "is-off" : ""}`}>
-            <span className="np-bren-k">{t("后缀")}</span>
-            <InputGroup
-              size="small"
-              value={rule.suffix}
-              disabled={rule.extOnly}
-              spellCheck={false}
-              onChange={(e) => patch({ suffix: e.target.value })}
-            />
-          </span>
-          <span className={`np-bren-field ${rule.extOnly ? "is-off" : ""}`}>
-            {/* Switch v6 无 small 档，默认即紧凑（AGENTS §4.4） */}
-            <Switch
-              checked={rule.useSeq && !rule.extOnly}
-              disabled={rule.extOnly}
-              label={t("加序号")}
-              onChange={(e) => patch({ useSeq: e.currentTarget.checked })}
-            />
-          </span>
-          <span className={`np-bren-field ${rule.extOnly || !rule.useSeq ? "is-off" : ""}`}>
-            <span className="np-bren-k">{t("起始")}</span>
-            <InputGroup
-              size="small"
-              value={String(rule.seqStart)}
-              disabled={!rule.useSeq || rule.extOnly}
-              spellCheck={false}
-              onChange={(e) => {
-                const n = Number(e.target.value);
-                patch({ seqStart: Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 1 });
-              }}
-            />
-          </span>
-          <span className={`np-bren-field ${rule.extOnly || !rule.useSeq ? "is-off" : ""}`}>
-            <span className="np-bren-k">{t("位数")}</span>
-            <NpSelect
-              value={rule.seqPad}
-              options={SEQ_PAD_OPTS}
-              onChange={(seqPad) => patch({ seqPad })}
-            />
-          </span>
-        </div>
-        <div className="np-bren-sect">{t("大小写与作用域")}</div>
-        <div className="np-bren-form">
-          <span className="np-bren-field">
-            <span className="np-bren-k">{t("大小写")}</span>
-            <NpSelect
-              value={rule.caseMode}
-              options={[...CASE_MODE_OPTS]}
-              onChange={(caseMode) => patch({ caseMode: caseMode as RenameRule["caseMode"] })}
-            />
-          </span>
-          <span className="np-bren-field">
-            <span className="np-bren-k">{t("作用域")}</span>
-            <Seg
-              value={rule.extOnly ? "ext" : "stem"}
-              options={[
-                { value: "stem", label: t("主名"), title: "仅修改主名，扩展名原样保留" },
-                { value: "ext", label: t("仅扩展名"), title: "仅修改扩展名段（前后缀与序号不参与）" },
-              ]}
-              onChange={(v) => patch({ extOnly: v === "ext" })}
-            />
-          </span>
-        </div>
-        <div className="np-bren-head">
-          <span className="np-bren-old">{t("原名")}</span>
-          <span className="np-bren-new">{t("新名")}</span>
-          <Switch
-            checked={onlyChanged}
-            label={t("只看变更")}
-            onChange={(e) => setOnlyChanged(e.currentTarget.checked)}
-          />
-        </div>
-        <div className="np-bren-preview">
-          {shown.slice(0, 200).map((i) => (
-            <div key={i.path} className="np-bren-row">
-              <span className="np-bren-old np-ellipsis">{i.oldName}</span>
-              <AppIcon
-                icon={ArrowRight}
-                size={DENSITY.iconXs}
-                className="np-bren-arrow"
+        <div className="np-bren2">
+          <div className="np-bren-preview2">
+            <div className="np-bren-head">
+              <input
+                type="checkbox"
+                checked={allSel}
+                onChange={toggleAll}
+                aria-label={t("全选")}
+                data-tip={t("全选 / 全不选")}
               />
-              <span
-                className={`np-bren-new np-ellipsis ${
-                  i.error ? "is-err" : i.changed ? "is-chg" : "is-same"
-                }`}
-              >
-                {i.error ?? i.newName}
+              <span className="np-bren-old">{t("原名")}</span>
+              <span className="np-bren-new">{t("新名")}</span>
+              <Switch
+                checked={onlyChanged}
+                label={t("只看变更")}
+                onChange={(e) => setOnlyChanged(e.currentTarget.checked)}
+              />
+            </div>
+            <div className="np-bren-list">
+              {shown.slice(0, 200).map((i) => (
+                <div key={i.path} className={`np-bren-row ${picked.has(i.path) ? "" : "is-skip"}`}>
+                  <input
+                    type="checkbox"
+                    checked={picked.has(i.path)}
+                    onChange={() => togglePick(i.path)}
+                    aria-label={t("参与改名")}
+                  />
+                  <span className="np-bren-old np-ellipsis" title={i.oldName}>
+                    {i.oldName}
+                  </span>
+                  <AppIcon icon={ArrowRight} size={DENSITY.iconXs} className="np-bren-arrow" />
+                  <span
+                    className={`np-bren-new np-ellipsis ${
+                      i.error ? "is-err" : i.changed ? "is-chg" : "is-same"
+                    }`}
+                    title={i.error ?? i.newName}
+                  >
+                    {i.error ?? i.newName}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="np-rchain">
+            <div className="np-rchain-bar">
+              {/* 添加规则 = NpSelect 选类型即追加（PopoverNext 直包 Button 在
+                  Dialog 内不弹，§4.7 用已验证的 NpSelect 封装） */}
+              <NpSelect
+                value={"__add__"}
+                options={[
+                  { value: "__add__", label: t("＋ 添加规则") },
+                  ...OP_TYPE_ITEMS.map((x) => ({ value: x.type, label: x.label })),
+                ]}
+                onChange={(type) => {
+                  if (type !== "__add__") addOp(type as RenameOp["type"]);
+                }}
+              />
+              <span className="np-dialog-muted">
+                {opsList.length} {t("条规则")}
               </span>
             </div>
-          ))}
+            {opsList.length === 0 ? (
+              <div className="np-rchain-empty">
+                {t("还没有规则——点「添加规则」开始，规则按从上到下顺序生效。")}
+              </div>
+            ) : (
+              <div className="np-rchain-list">
+                {opsList.map((op, idx) => (
+                  <div key={op.id} className="np-rchain-item">
+                    <div className="np-rchain-top">
+                      <span className="np-rchain-idx">{idx + 1}</span>
+                      <NpSelect
+                        value={op.type}
+                        options={OP_TYPE_ITEMS.map((x) => ({ value: x.type, label: x.label }))}
+                        onChange={(type) => changeType(op.id, type)}
+                      />
+                      <NpSelect
+                        value={op.scope}
+                        options={R_SCOPE_OPTS.map((x) => ({ value: x.value, label: x.label }))}
+                        onChange={(scope) => patchOp(op.id, { scope } as Partial<RenameOp>)}
+                      />
+                      <span className="np-rchain-sp" />
+                      <button
+                        className="np-rchain-btn"
+                        data-tip="上移"
+                        disabled={idx === 0}
+                        onClick={() => moveOp(op.id, -1)}
+                      >
+                        <AppIcon icon={ChevronUp} size={DENSITY.iconXs} />
+                      </button>
+                      <button
+                        className="np-rchain-btn"
+                        data-tip="下移"
+                        disabled={idx === opsList.length - 1}
+                        onClick={() => moveOp(op.id, 1)}
+                      >
+                        <AppIcon icon={ChevronDown} size={DENSITY.iconXs} />
+                      </button>
+                      <button className="np-rchain-btn" data-tip="删除规则" onClick={() => removeOp(op.id)}>
+                        <AppIcon icon={X} size={DENSITY.iconXs} />
+                      </button>
+                    </div>
+                    <div className="np-rchain-params">{opParams(op)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
+        {regexInvalid && (
+          <div className="np-dialog-error">
+            {t("正则表达式无效，请修正后重试（无效规则暂被跳过）。")}
+          </div>
+        )}
         <div className="np-dialog-muted">
           已变更 {changedCount} / 共 {dialog.entries.length} 项
+          {picked.size < dialog.entries.length && `，${dialog.entries.length - picked.size} 项已取消勾选`}
           {errorCount > 0 && `，${errorCount} 项冲突或非法（红色标出）`}
           {plan.length > 200 && "（仅预览前 200 行）"}
         </div>
