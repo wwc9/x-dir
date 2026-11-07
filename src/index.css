@@ -5611,7 +5611,11 @@ body.np-col-resizing * {
   /* 间隔只走 底+左右 三边（顶 0）：相邻卡视觉间隔 = 前卡底 border 8px 恰好
      一档；border-box rect 看不出透明 border（量测口径为外沿） */
   border-width: 0 calc(var(--np-gap) * 2) calc(var(--np-gap) * 2);
-  background: var(--np-surface-2);
+  /* 底色一律 background-color（禁止简写）：简写会重置下方 clip 回 border-box，
+     选中/hover 态底色填进透明 border 区 → 选中卡比普通卡左右各宽 8px、
+     圆角画在外沿一档（2026-11-07 用户报「选中条更长/圆角不符设置」根因）；
+     卡片底色区恒 = padding box，圆角恒随设置 --np-radius-pane */
+  background-color: var(--np-surface-2);
   background-clip: padding-box;
   border-radius: var(--np-radius-pane);
   cursor: default;
@@ -5621,11 +5625,11 @@ body.np-col-resizing * {
 }
 /* 悬停：hover 半透明叠染 surface-2（保底色，等价预览 color-mix 公式） */
 .np-clip-row:hover {
-  background: color-mix(in srgb, var(--np-hover) 55%, var(--np-surface-2));
+  background-color: color-mix(in srgb, var(--np-hover) 55%, var(--np-surface-2));
 }
 /* 键盘选中：sel 淡染 + accent 描边，预览文字转 accent */
 .np-clip-row.is-sel {
-  background: var(--np-sel);
+  background-color: var(--np-sel);
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--np-accent) 55%, transparent);
   color: var(--np-accent);
 }
