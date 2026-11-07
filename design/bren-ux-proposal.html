@@ -96,7 +96,8 @@ body { background:var(--surface2); color:var(--fg);
   border-radius:5px; color:var(--muted); }
 .mini:hover { background:var(--hover); color:var(--fg); }
 .mini.dis { opacity:.35; }
-.params { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+.params { display:flex; align-items:center; gap:5px; flex-wrap:wrap; min-width:0; }
+.params .k { font-size:11px; color:var(--muted); flex:none; }
 .inp { height:24px; padding:0 8px; border-radius:6px; background:var(--surface);
   box-shadow:inset 0 0 0 1px var(--border); font-size:12px; color:var(--muted);
   display:inline-flex; align-items:center; min-width:0; }
@@ -273,21 +274,12 @@ body { background:var(--surface2); color:var(--fg);
         </div>
       </div>
 
-      <!-- 卡 3：编号 + 作用域下拉展开示意 -->
-      <div class="card" style="outline:1.5px solid color-mix(in srgb, var(--accent) 55%, transparent)">
+      <!-- 卡 3：编号（参数紧凑行） -->
+      <div class="card">
         <div class="card-top">
           <span class="idx">3</span>
           <span class="sel">编号 <svg class="ic" style="width:10px;height:10px" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
-          <span class="scope-open">
-            <span class="sel">只改主名 <svg class="ic" style="width:10px;height:10px" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
-            <div class="dropdown">
-              <div class="dd-item on"><svg class="ic xs" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
-                <div><span class="t">只改主名</span><span class="d">保留 .docx 等扩展名不动</span></div>
-              </div>
-              <div class="dd-item"><div><span class="t">整个名称</span><span class="d">主名和扩展名一起改</span></div></div>
-              <div class="dd-item"><div><span class="t">只改扩展名</span><span class="d">如批量 jpg → png</span></div></div>
-            </div>
-          </span>
+          <span class="sel" title="只改主名（保留扩展名）">只改主名 <svg class="ic" style="width:10px;height:10px" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
           <span class="sp"></span>
           <span class="mini"><svg class="ic xs" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></svg></span>
           <span class="mini"><svg class="ic xs" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
@@ -295,11 +287,11 @@ body { background:var(--surface2); color:var(--fg);
         </div>
         <div class="params">
           <span class="seg"><span>加在最前</span><span class="on">加在末尾</span></span>
-          <span style="font-size:11px;color:var(--muted)">从</span>
-          <span class="inp real">1</span>
-          <span style="font-size:11px;color:var(--muted)">3 位数</span>
-          <span style="font-size:11px;color:var(--muted)">分隔符</span>
-          <span class="inp real">-</span>
+          <span class="k">从</span>
+          <span class="inp real" style="min-width:26px">1</span>
+          <span class="k">3 位数</span>
+          <span class="k">分隔符</span>
+          <span class="inp real" style="min-width:24px">-</span>
         </div>
         <div class="plain">
           <svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 12 2 2 4-4"/></svg>
@@ -316,16 +308,30 @@ body { background:var(--surface2); color:var(--fg);
   </div>
 </div>
 
-<!-- 空态模板库示意 -->
-<div class="note">
-  <b>⑦ 空态即模板库（未加规则时，规则栏显示）：</b>
-  <div class="tgrid" style="max-width:410px;margin-top:8px">
-    <div class="tpl"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7v10"/><path d="M8 7v10"/><path d="m14 8 4 8"/><circle cx="19" cy="16" r="1"/></svg><div>批量编号<span class="d">在名称末尾加 01、02、03…</span></div></div>
-    <div class="tpl"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 8 8 8"/><path d="m16 8-8 8"/></svg><div>去掉空格<span class="d">删除名称中所有空格</span></div></div>
-    <div class="tpl"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4"/><path d="M16 2v4"/><path d="M3 10h18"/></svg><div>加日期前缀<span class="d">名称前加修改日期 2026-11-07_</span></div></div>
-    <div class="tpl"><svg class="ic" viewBox="0 0 24 24"><path d="m9 15-4 4a2 2 0 0 1-3-3l4-4"/><path d="m15 9 4-4a2 2 0 0 0-3-3l-4 4"/></svg><div>全部小写<span class="d">英文字母转小写</span></div></div>
+<!-- ③ 作用域下拉展开态 + ⑦ 空态模板库（独立展示区，不遮挡规则卡） -->
+<div class="note" style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+  <div style="flex:0 0 300px">
+    <b>③ 作用域下拉展开态（带副标题解释）：</b>
+    <div class="dropdown" style="position:static;margin-top:8px">
+      <div class="dd-item on"><svg class="ic xs" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+        <div><span class="t">只改主名</span><span class="d">保留 .docx 等扩展名不动</span></div>
+      </div>
+      <div class="dd-item"><div><span class="t">整个名称</span><span class="d">主名和扩展名一起改</span></div></div>
+      <div class="dd-item"><div><span class="t">只改扩展名</span><span class="d">如批量 jpg → png</span></div></div>
+    </div>
   </div>
-  <ul style="margin-top:14px">
+  <div style="flex:1;min-width:340px">
+    <b>⑦ 空态即模板库（未加规则时，规则栏显示）：</b>
+    <div class="tgrid" style="margin-top:8px">
+      <div class="tpl"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7v10"/><path d="M8 7v10"/><path d="m14 8 4 8"/><circle cx="19" cy="16" r="1"/></svg><div>批量编号<span class="d">在名称末尾加 01、02、03…</span></div></div>
+      <div class="tpl"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 8 8 8"/><path d="m16 8-8 8"/></svg><div>去掉空格<span class="d">删除名称中所有空格</span></div></div>
+      <div class="tpl"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4"/><path d="M16 2v4"/><path d="M3 10h18"/></svg><div>加日期前缀<span class="d">名称前加修改日期 2026-11-07_</span></div></div>
+      <div class="tpl"><svg class="ic" viewBox="0 0 24 24"><path d="m9 15-4 4a2 2 0 0 1-3-3l4-4"/><path d="m15 9 4-4a2 2 0 0 0-3-3l-4 4"/></svg><div>全部小写<span class="d">英文字母转小写</span></div></div>
+    </div>
+  </div>
+</div>
+<div class="note">
+  <ul>
     <li><b>① 常用任务 chips</b>（预览区顶部）与 ⑦ 空态模板共用同一套预设：点击 = 生成整条规则链，参数仍可在卡上改。</li>
     <li><b>② 人话效果行</b>由规则参数实时生成（describeOp 纯函数配单测），改参数文字即刻更新。</li>
     <li><b>④ diff 高亮</b>：取旧/新名最长公共前后缀，中间变更片段标 accent 底色。</li>
