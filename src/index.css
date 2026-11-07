@@ -5597,41 +5597,38 @@ body.np-col-resizing * {
 /* ── 列表 = 方案 C 卡片流（2026-11-06 用户选定）：每条一张 surface-2 软底
    卡片，条目间靠留白分隔（无斑马纹无分隔线）；选中/勾选 = accent inset
    描边；类型 = 淡染小 chip 右上；meta 行 = 相对时间 · 来源应用 + 悬停动作 */
+/* np-clip-row = 透明外壳：只承载虚拟列表定位/量测 + 底部 8px 间隔。
+   间隔曾用透明 border 实现——border 使 padding-box 圆角按「外半径−相邻边
+   border 宽」内缩，且顶边 0/其余 8 的不等宽让顶部两角成椭圆、底部两角正圆
+   （2026-11-07 用户报四角不一致根因）。现间隔 = 外壳 padding-bottom：进
+   measureElement 量测盒参与 offset 累计，且完全不接触卡片视觉 */
 .np-clip-row {
+  /* 左右 8px 缩进 + 底部 8px 间隔：全部在外壳 padding 上（进量测盒，
+     不接触内层卡片视觉） */
+  padding: 0 calc(var(--np-gap) * 2) calc(var(--np-gap) * 2);
+  color: var(--np-fg);
+}
+/* 可见卡片本体：无 border 无 clip 花招，圆角四角恒等且 = 设置的
+   --np-radius-pane（随设置「面板圆角」0-24 实时跟随） */
+.np-clip-card {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  /* 卡片间 8px 留白（2026-11-07 用户确认要间隔；预览 C 定案 8px）。间隔必须
-     走透明 border 而非 margin：虚拟列表 measureElement 量 border-box，margin
-     不参与 offset 累计（4px 时代从未真正生效，rect 相邻贴齐）；透明 border
-     进量测盒 + background-clip: padding-box 保底色圆角不变。四边一致 = 首末
-     卡与列表缘也留 8px 呼吸 */
-  border: solid transparent;
-  /* 间隔只走 底+左右 三边（顶 0）：相邻卡视觉间隔 = 前卡底 border 8px 恰好
-     一档；border-box rect 看不出透明 border（量测口径为外沿） */
-  border-width: 0 calc(var(--np-gap) * 2) calc(var(--np-gap) * 2);
-  /* 底色一律 background-color（禁止简写）：简写会重置下方 clip 回 border-box，
-     选中/hover 态底色填进透明 border 区 → 选中卡比普通卡左右各宽 8px、
-     圆角画在外沿一档（2026-11-07 用户报「选中条更长/圆角不符设置」根因）；
-     卡片底色区恒 = padding box，圆角恒随设置 --np-radius-pane */
   background-color: var(--np-surface-2);
-  background-clip: padding-box;
-  /* border-radius 定义的是 border-box 圆角，padding-box（底色）圆角会被
-     border 宽内缩（10-8=2px 视觉，2026-11-07 用户报「圆角与窗格不一致」）——
-     补回 border 宽使底色视觉圆角恰 = 设置的 --np-radius-pane，与窗格同观感 */
-  border-radius: calc(var(--np-radius-pane) + var(--np-gap) * 2);
+  border-radius: var(--np-radius-pane);
   cursor: default;
   overflow: hidden;
   user-select: none;
-  color: var(--np-fg);
 }
-/* 悬停：hover 半透明叠染 surface-2（保底色，等价预览 color-mix 公式） */
-.np-clip-row:hover {
+/* 悬停：hover 半透明叠染 surface-2（保底色，等价预览 color-mix 公式），
+   命中面 = 卡片本体（外壳间隔带不触发） */
+.np-clip-card:hover {
   background-color: color-mix(in srgb, var(--np-hover) 55%, var(--np-surface-2));
 }
-/* 键盘选中：sel 淡染 + accent 描边，预览文字转 accent */
-.np-clip-row.is-sel {
+/* 键盘选中：仅颜色背景变化（sel 淡染 + accent 文字），无任何几何量增减
+   ——描边为 inset box-shadow 不占布局，高度恒定（2026-11-07 用户定案） */
+.np-clip-row.is-sel .np-clip-card {
   background-color: var(--np-sel);
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--np-accent) 55%, transparent);
   color: var(--np-accent);
@@ -5640,7 +5637,7 @@ body.np-col-resizing * {
   color: var(--np-accent);
 }
 /* 多选勾选（T1-4）：accent 描边（无底染，与键盘选中区分靠底色缺失） */
-.np-clip-row.is-pick {
+.np-clip-row.is-pick .np-clip-card {
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--np-accent) 55%, transparent);
 }
 .np-clip-idx {
@@ -5710,11 +5707,14 @@ body.np-col-resizing * {
 }
 /* meta 行：相对时间 · 来源应用 + 悬停动作组（margin-left auto）；
    整行 nowrap（2026-11-06 巡检修复：窄窗时间「11 小时前」折行竖排），
-   溢出由来源 src 的 ellipsis 吸收 */
+   溢出由来源 src 的 ellipsis 吸收；min-height 常驻预留动作钮高度（20px）：
+   动作组 display 切换不再撑高卡片（2026-11-07 用户报「选中高度变化」根因
+   ——旧列表 28px 行高兜底掩盖，卡片流无兜底后显形） */
 .np-clip-meta {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-height: calc(var(--np-gap) * 5);
   font-size: var(--np-font-sm);
   color: var(--np-muted);
   font-variant-numeric: tabular-nums;
@@ -5787,7 +5787,7 @@ body.np-col-resizing * {
   gap: var(--np-gap);
   margin-left: auto;
 }
-.np-clip-row:hover .np-clip-actions,
+.np-clip-card:hover .np-clip-actions,
 .np-clip-row.is-sel .np-clip-actions {
   display: inline-flex;
 }

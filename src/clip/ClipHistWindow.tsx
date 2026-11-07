@@ -613,15 +613,23 @@ export function ClipHistWindow() {
                     width: "100%",
                     transform: `translateY(${vi.start}px)`,
                   }}
-                  onClick={(e) => {
-                    if (e.ctrlKey) {
-                      e.stopPropagation();
-                      togglePick(it.id);
-                    } else {
-                      pasteItem(it, false);
-                    }
-                  }}
                 >
+                  {/* 可见卡片本体：外壳（np-clip-row）只承载虚拟列表定位/量测
+                      与底部 8px 间隔 padding——间隔进量测盒且不污染卡片圆角
+                      （border 间隔会让 padding-box 圆角随相邻边 border 宽
+                      不等变成椭圆，2026-11-07 用户报四角不一致根因）。
+                      点击/勾选挂卡片本体：点间隔空白不误触粘贴 */}
+                  <div
+                    className="np-clip-card"
+                    onClick={(e) => {
+                      if (e.ctrlKey) {
+                        e.stopPropagation();
+                        togglePick(it.id);
+                      } else {
+                        pasteItem(it, false);
+                      }
+                    }}
+                  >
                   {picked.has(it.id) ? (
                     <span className="np-clip-idx np-clip-idxpick" data-tip="已勾选">
                       <AppIcon icon={Check} size={DENSITY.iconXs} />
@@ -718,6 +726,7 @@ export function ClipHistWindow() {
                         </button>
                       </span>
                     </div>
+                  </div>
                   </div>
                 </div>
               );
