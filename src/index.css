@@ -4656,6 +4656,8 @@ body.np-col-resizing * {
   align-items: center;
   gap: var(--np-gap);
   min-width: 0;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 .np-rchain-pair-k {
   font-size: var(--np-font-sm);
@@ -4666,8 +4668,21 @@ body.np-col-resizing * {
   width: 108px;
   min-width: 0;
 }
-.np-rchain-params .np-select {
-  min-width: 0;
+/* 字号统一（2026-11-08 用户要求）：卡内全部控件对齐正文档 --np-font-ui
+   （Blueprint small 默认 12px 与自绘 13px 混用），标签/效果行维持 --np-font-sm */
+.np-rchain-params .bp6-input-group input,
+.np-rchain .np-rchain-params .bp6-button,
+.np-rchain .np-rchain-params .np-select,
+.np-bren-num {
+  font-size: var(--np-font-ui);
+}
+/* Emotion 运行时注入后于 index.css（同特异性下 Blueprint 12px 胜出）——
+   输入框需更高特异性压过 */
+.np-rchain .np-rchain-params .bp6-input-group input {
+  font-size: var(--np-font-ui);
+}
+.np-rchain-params .np-select span {
+  white-space: nowrap;
 }
 /* 行2 人话效果行（describeOp 实时生成，②） */
 .np-rchain-plain {
