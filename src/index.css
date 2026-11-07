@@ -4454,6 +4454,22 @@ body.np-col-resizing * {
   white-space: nowrap;
 }
 /* ── 批量重命名对话框（np-bren）── */
+/* 规则小节标题（2026-11-07 市场对齐批三段式分组）：小字 600 + fg，
+   置灰态 is-off = 参数段被「仅扩展名」作用域禁用 */
+.np-bren-sect {
+  font-size: var(--np-font-sm);
+  font-weight: 600;
+  color: var(--np-fg);
+  margin-bottom: var(--np-gutter);
+}
+.np-bren-sect.is-off {
+  color: var(--np-muted);
+  opacity: 0.65;
+}
+/* 关联禁用的参数行（§4.9 参数行关联禁用）：整行降透明 */
+.np-bren-field.is-off {
+  opacity: 0.45;
+}
 .np-bren-form {
   display: flex;
   flex-wrap: wrap;
@@ -4471,6 +4487,28 @@ body.np-col-resizing * {
 }
 .np-bren-k {
   flex: 0 0 auto;
+}
+/* 预览表头：列标签与行同宽对齐（old 45% / new 55%），「只看变更」驻右 */
+.np-bren-head {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gutter);
+  height: var(--np-row-h);
+  margin-bottom: var(--np-gap);
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-bren-head .np-bren-old,
+.np-bren-head .np-bren-new {
+  font-size: var(--np-font-sm);
+}
+.np-bren-head .bp6-switch {
+  flex: 0 0 auto;
+  margin-left: auto;
+  margin-bottom: 0;
+}
+.np-bren-head .bp6-switch .bp6-label {
+  white-space: nowrap;
 }
 /* 预览列表：surface-2 凹陷层级（§4.7），行高走 --np-row-h */
 .np-bren-preview {

@@ -17,7 +17,7 @@ import { ArrowRight, Info, OctagonAlert, TriangleAlert } from "lucide-react";
 import { formatBytes, formatSize, formatTime } from "../lib/format";
 import { typeName } from "../lib/fileIcons";
 import { api, type FileEntry, type FileLocks } from "../lib/ipc";
-import { DEFAULT_RULE, pickRenames, planRenames, type RenameRule } from "../lib/batchRename";
+import { compileRegex, DEFAULT_RULE, pickRenames, planRenames, type RenameRule } from "../lib/batchRename";
 import { enqueueDelete } from "../lib/operations";
 import { AppIcon, ic } from "./AppIcon";
 import {
@@ -31,6 +31,7 @@ import {
   ConvertDialog,
   MontageDialog,
   ResizeDialog,
+  Seg,
   WatermarkDialog,
 } from "./ImgDialogs";
 import { NpSelect } from "./NpSelect";
@@ -605,7 +606,17 @@ function UnlockDialog({
 
 const SEQ_PAD_OPTS = [1, 2, 3, 4].map((n) => ({ value: n, label: `${n} 位` }));
 
-/** 批量重命名：查找替换 + 前后缀 + 可选序号，实时预览（规则引擎在 lib/batchRename） */
+const CASE_MODE_OPTS = [
+  { value: "keep", label: t("保持原样") },
+  { value: "upper", label: t("全部大写") },
+  { value: "lower", label: t("全部小写") },
+  { value: "title", label: t("首字母大写") },
+] as const;
+
+/** 批量重命名：替换（字面/正则）+ 前后缀 + 序号 + 大小写 + 作用域，实时预览。
+ *  规则区按 §4.9 三段式分组小节；正则非法内联红字；预览支持「只看变更」
+ *  （规则引擎在 lib/batchRename，2026-11-07 市场对齐批：PowerRename/
+ *  Advanced Renamer 的正则/大小写/作用域/只看变更四项核心能力） */
 function BatchRenameDialog({
   dialog,
   onDone,
@@ -614,14 +625,18 @@ function BatchRenameDialog({
   onDone(v: { path: string; newName: string }[] | null): void;
 }) {
   const [rule, setRule] = useState<RenameRule>(DEFAULT_RULE);
+  const [onlyChanged, setOnlyChanged] = useState(false);
   const plan = useMemo(() => planRenames(dialog.entries, rule), [dialog.entries, rule]);
   const todo = pickRenames(plan);
   const errorCount = plan.filter((i) => i.changed && i.error).length;
   const changedCount = plan.filter((i) => i.changed).length;
+  const shown = onlyChanged ? plan.filter((i) => i.changed) : plan;
+  const regexInvalid = rule.regex && !!rule.find && !compileRegex(rule.find);
   const patch = (p: Partial<RenameRule>) => setRule((r) => ({ ...r, ...p }));
   return (
     <>
       <DialogBody>
+        <div className="np-bren-sect">{t("替换")}</div>
         <div className="np-bren-form">
           <span className="np-bren-field">
             <span className="np-bren-k">{t("查找")}</span>
@@ -632,50 +647,66 @@ function BatchRenameDialog({
               spellCheck={false}
               onChange={(e) => patch({ find: e.target.value })}
             />
+            <Seg
+              value={rule.regex ? "regex" : "literal"}
+              options={[
+                { value: "literal", label: t("字面"), title: "按普通文本查找" },
+                { value: "regex", label: t("正则"), title: "按正则表达式查找，替换串支持 $1 捕获组" },
+              ]}
+              onChange={(v) => patch({ regex: v === "regex" })}
+            />
           </span>
           <span className="np-bren-field">
             <span className="np-bren-k">{t("替换为")}</span>
             <InputGroup
               size="small"
               value={rule.replace}
+              placeholder={rule.regex ? "$1 = 第 1 组" : undefined}
               spellCheck={false}
               onChange={(e) => patch({ replace: e.target.value })}
             />
           </span>
-          <span className="np-bren-field">
+        </div>
+        {regexInvalid && (
+          <div className="np-dialog-error">正则表达式无效，请修正后重试。</div>
+        )}
+        <div className={`np-bren-sect ${rule.extOnly ? "is-off" : ""}`}>{t("前后缀与序号")}</div>
+        <div className="np-bren-form">
+          <span className={`np-bren-field ${rule.extOnly ? "is-off" : ""}`}>
             <span className="np-bren-k">{t("前缀")}</span>
             <InputGroup
               size="small"
               value={rule.prefix}
+              disabled={rule.extOnly}
               spellCheck={false}
               onChange={(e) => patch({ prefix: e.target.value })}
             />
           </span>
-          <span className="np-bren-field">
+          <span className={`np-bren-field ${rule.extOnly ? "is-off" : ""}`}>
             <span className="np-bren-k">{t("后缀")}</span>
             <InputGroup
               size="small"
               value={rule.suffix}
+              disabled={rule.extOnly}
               spellCheck={false}
               onChange={(e) => patch({ suffix: e.target.value })}
             />
           </span>
-        </div>
-        <div className="np-bren-form">
-          <span className="np-bren-field">
+          <span className={`np-bren-field ${rule.extOnly ? "is-off" : ""}`}>
             {/* Switch v6 无 small 档，默认即紧凑（AGENTS §4.4） */}
             <Switch
-              checked={rule.useSeq}
+              checked={rule.useSeq && !rule.extOnly}
+              disabled={rule.extOnly}
               label={t("加序号")}
               onChange={(e) => patch({ useSeq: e.currentTarget.checked })}
             />
           </span>
-          <span className="np-bren-field">
+          <span className={`np-bren-field ${rule.extOnly || !rule.useSeq ? "is-off" : ""}`}>
             <span className="np-bren-k">{t("起始")}</span>
             <InputGroup
               size="small"
               value={String(rule.seqStart)}
-              disabled={!rule.useSeq}
+              disabled={!rule.useSeq || rule.extOnly}
               spellCheck={false}
               onChange={(e) => {
                 const n = Number(e.target.value);
@@ -683,7 +714,7 @@ function BatchRenameDialog({
               }}
             />
           </span>
-          <span className="np-bren-field">
+          <span className={`np-bren-field ${rule.extOnly || !rule.useSeq ? "is-off" : ""}`}>
             <span className="np-bren-k">{t("位数")}</span>
             <NpSelect
               value={rule.seqPad}
@@ -692,8 +723,39 @@ function BatchRenameDialog({
             />
           </span>
         </div>
+        <div className="np-bren-sect">{t("大小写与作用域")}</div>
+        <div className="np-bren-form">
+          <span className="np-bren-field">
+            <span className="np-bren-k">{t("大小写")}</span>
+            <NpSelect
+              value={rule.caseMode}
+              options={[...CASE_MODE_OPTS]}
+              onChange={(caseMode) => patch({ caseMode: caseMode as RenameRule["caseMode"] })}
+            />
+          </span>
+          <span className="np-bren-field">
+            <span className="np-bren-k">{t("作用域")}</span>
+            <Seg
+              value={rule.extOnly ? "ext" : "stem"}
+              options={[
+                { value: "stem", label: t("主名"), title: "仅修改主名，扩展名原样保留" },
+                { value: "ext", label: t("仅扩展名"), title: "仅修改扩展名段（前后缀与序号不参与）" },
+              ]}
+              onChange={(v) => patch({ extOnly: v === "ext" })}
+            />
+          </span>
+        </div>
+        <div className="np-bren-head">
+          <span className="np-bren-old">{t("原名")}</span>
+          <span className="np-bren-new">{t("新名")}</span>
+          <Switch
+            checked={onlyChanged}
+            label={t("只看变更")}
+            onChange={(e) => setOnlyChanged(e.currentTarget.checked)}
+          />
+        </div>
         <div className="np-bren-preview">
-          {plan.slice(0, 200).map((i) => (
+          {shown.slice(0, 200).map((i) => (
             <div key={i.path} className="np-bren-row">
               <span className="np-bren-old np-ellipsis">{i.oldName}</span>
               <AppIcon
