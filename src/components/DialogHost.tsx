@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../lib/i18n";
 import {
   Button,
@@ -12,16 +12,7 @@ import {
   Switch,
   type Intent,
 } from "@blueprintjs/core";
-import {
-  ArrowRight,
-  ChevronDown,
-  ChevronUp,
-  CircleCheck,
-  Info,
-  OctagonAlert,
-  TriangleAlert,
-  X,
-} from "lucide-react";
+import { ArrowRight, CircleCheck, Info, OctagonAlert, TriangleAlert, X } from "lucide-react";
 
 import { formatBytes, formatSize, formatTime } from "../lib/format";
 import { typeName } from "../lib/fileIcons";
@@ -698,15 +689,13 @@ function BatchRenameDialog({
   const patchOp = (id: string, p: Partial<RenameOp>) =>
     setOpsList((l) => l.map((o) => (o.id === id ? ({ ...o, ...p } as RenameOp) : o)));
   const removeOp = (id: string) => setOpsList((l) => l.filter((o) => o.id !== id));
-  const moveOp = (id: string, dir: -1 | 1) =>
-    setOpsList((l) => {
-      const i = l.findIndex((o) => o.id === id);
-      const j = i + dir;
-      if (i < 0 || j < 0 || j >= l.length) return l;
-      const c = [...l];
-      [c[i], c[j]] = [c[j], c[i]];
-      return c;
-    });
+  /** 指针拖拽排序会话：规则卡 onPointerDown 记起点 → window pointermove
+   *  位移超 4px 进拖拽态（源卡半透明 + elementsFromPoint 命中卡片显示
+   *  accent 上缘指示线）→ pointerup 落位。拖拽中 onClickCapture 吞落点
+   *  补发 click（防 NpSelect/输入交互误触） */
+  const dragRef = useRef<{ id: string; moved: boolean } | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
   /** 类型切换 = 换新默认参数（旧类型参数不迁移），保留作用域 */
   const changeType = (id: string, type: RenameOp["type"]) => {
     const cur = opsList.find((o) => o.id === id);
@@ -714,175 +703,243 @@ function BatchRenameDialog({
     patchOp(id, newOp({ type, scope: cur.scope }) as Partial<RenameOp>);
   };
 
-  /** 单条规则的参数控件（随类型变化；紧凑行内布局） */
+  /** 参数区：每个参数 = 中文标签 + 控件成对（np-rchain-pair），分类清晰 */
   const opParams = (op: RenameOp) => {
     switch (op.type) {
       case "replace":
         return (
           <>
-            <Seg
-              value={op.regex ? "regex" : "literal"}
-              options={[
-                { value: "literal", label: t("字面") },
-                { value: "regex", label: t("正则"), title: "替换串支持 $1 捕获组" },
-              ]}
-              onChange={(v) => patchOp(op.id, { regex: v === "regex" } as Partial<RenameOp>)}
-            />
-            <InputGroup
-              size="small"
-              value={op.find}
-              placeholder={t("查找")}
-              spellCheck={false}
-              onChange={(e) => patchOp(op.id, { find: e.target.value } as Partial<RenameOp>)}
-            />
-            <InputGroup
-              size="small"
-              value={op.replace}
-              placeholder={op.regex ? t("$1 = 第 1 组") : t("替换为")}
-              spellCheck={false}
-              onChange={(e) => patchOp(op.id, { replace: e.target.value } as Partial<RenameOp>)}
-            />
+            <span className="np-rchain-pair">
+              <span className="np-rchain-pair-k">{t("查找")}</span>
+              <InputGroup
+                size="small"
+                value={op.find}
+                placeholder={t("要查找的文字")}
+                spellCheck={false}
+                onChange={(e) => patchOp(op.id, { find: e.target.value } as Partial<RenameOp>)}
+              />
+            </span>
+            <span className="np-rchain-pair">
+              <span className="np-rchain-pair-k">{t("替换为")}</span>
+              <InputGroup
+                size="small"
+                value={op.replace}
+                placeholder={op.regex ? t("$1 = 第 1 组") : t("新文字")}
+                spellCheck={false}
+                onChange={(e) => patchOp(op.id, { replace: e.target.value } as Partial<RenameOp>)}
+              />
+            </span>
+            <span className="np-rchain-pair">
+              <span className="np-rchain-pair-k">{t("按")}</span>
+              <Seg
+                value={op.regex ? "regex" : "literal"}
+                options={[
+                  { value: "literal", label: t("文字") },
+                  { value: "regex", label: t("表达式"), title: "正则表达式，替换串支持 $1 捕获组" },
+                ]}
+                onChange={(v) => patchOp(op.id, { regex: v === "regex" } as Partial<RenameOp>)}
+              />
+            </span>
+            {op.regex && (
+              <span className="np-rchain-pair">
+                <NpSelect
+                  value={"__rx__"}
+                  options={[
+                    { value: "__rx__", label: t("常用示例 ▾") },
+                    { value: "\\s+", label: t("去空格（\\s+）") },
+                    { value: "\\(.*?\\)", label: t("去括号内容") },
+                    { value: "^\\d+[._-]", label: t("去序号前缀") },
+                  ]}
+                  onChange={(v) => {
+                    if (v !== "__rx__") patchOp(op.id, { find: v } as Partial<RenameOp>);
+                  }}
+                />
+              </span>
+            )}
           </>
         );
       case "remove":
         return (
-          <InputGroup
-            size="small"
-            value={op.find}
-            placeholder={t("要删除的文本")}
-            spellCheck={false}
-            onChange={(e) => patchOp(op.id, { find: e.target.value } as Partial<RenameOp>)}
-          />
+          <span className="np-rchain-pair">
+            <span className="np-rchain-pair-k">{t("删除")}</span>
+            <InputGroup
+              size="small"
+              value={op.find}
+              placeholder={t("要删除的文字")}
+              spellCheck={false}
+              onChange={(e) => patchOp(op.id, { find: e.target.value } as Partial<RenameOp>)}
+            />
+          </span>
         );
       case "insert":
         return (
           <>
-            <InputGroup
-              size="small"
-              value={op.text}
-              placeholder={t("要插入的文本")}
-              spellCheck={false}
-              onChange={(e) => patchOp(op.id, { text: e.target.value } as Partial<RenameOp>)}
-            />
-            <Seg
-              value={op.position}
-              options={[
-                { value: "start", label: t("开头") },
-                { value: "end", label: t("末尾") },
-              ]}
-              onChange={(v) => patchOp(op.id, { position: v } as Partial<RenameOp>)}
-            />
+            <span className="np-rchain-pair">
+              <span className="np-rchain-pair-k">{t("内容")}</span>
+              <InputGroup
+                size="small"
+                value={op.text}
+                placeholder={t("要插入的文字")}
+                spellCheck={false}
+                onChange={(e) => patchOp(op.id, { text: e.target.value } as Partial<RenameOp>)}
+              />
+            </span>
+            <span className="np-rchain-pair">
+              <span className="np-rchain-pair-k">{t("位置")}</span>
+              <Seg
+                value={op.position}
+                options={[
+                  { value: "start", label: t("最前") },
+                  { value: "end", label: t("最后") },
+                ]}
+                onChange={(v) => patchOp(op.id, { position: v } as Partial<RenameOp>)}
+              />
+            </span>
           </>
         );
       case "prefix":
         return (
-          <InputGroup
-            size="small"
-            value={op.text}
-            placeholder={t("前缀文本")}
-            spellCheck={false}
-            onChange={(e) => patchOp(op.id, { text: e.target.value } as Partial<RenameOp>)}
-          />
+          <span className="np-rchain-pair">
+            <span className="np-rchain-pair-k">{t("加在最前")}</span>
+            <InputGroup
+              size="small"
+              value={op.text}
+              placeholder={t("前缀文字")}
+              spellCheck={false}
+              onChange={(e) => patchOp(op.id, { text: e.target.value } as Partial<RenameOp>)}
+            />
+          </span>
         );
       case "suffix":
         return (
-          <InputGroup
-            size="small"
-            value={op.text}
-            placeholder={t("后缀文本")}
-            spellCheck={false}
-            onChange={(e) => patchOp(op.id, { text: e.target.value } as Partial<RenameOp>)}
-          />
+          <span className="np-rchain-pair">
+            <span className="np-rchain-pair-k">{t("加在末尾")}</span>
+            <InputGroup
+              size="small"
+              value={op.text}
+              placeholder={t("后缀文字")}
+              spellCheck={false}
+              onChange={(e) => patchOp(op.id, { text: e.target.value } as Partial<RenameOp>)}
+            />
+          </span>
         );
       case "trim":
         return (
           <>
-            <span className="np-bren-k">{t("去首")}</span>
-            <input
-              className="np-bren-num"
-              type="number"
-              min={0}
-              value={op.head}
-              onChange={(e) =>
-                patchOp(op.id, { head: Math.max(0, Math.floor(Number(e.target.value) || 0)) } as Partial<RenameOp>)
-              }
-            />
-            <span className="np-bren-k">{t("去尾")}</span>
-            <input
-              className="np-bren-num"
-              type="number"
-              min={0}
-              value={op.tail}
-              onChange={(e) =>
-                patchOp(op.id, { tail: Math.max(0, Math.floor(Number(e.target.value) || 0)) } as Partial<RenameOp>)
-              }
-            />
-            <span className="np-bren-k">{t("个字符")}</span>
+            <span className="np-rchain-pair">
+              <span className="np-rchain-pair-k">{t("去开头")}</span>
+              <input
+                className="np-bren-num"
+                type="number"
+                min={0}
+                value={op.head}
+                onChange={(e) =>
+                  patchOp(op.id, { head: Math.max(0, Math.floor(Number(e.target.value) || 0)) } as Partial<RenameOp>)
+                }
+              />
+              <span className="np-rchain-pair-k">{t("个字符")}</span>
+            </span>
+            <span className="np-rchain-pair">
+              <span className="np-rchain-pair-k">{t("去末尾")}</span>
+              <input
+                className="np-bren-num"
+                type="number"
+                min={0}
+                value={op.tail}
+                onChange={(e) =>
+                  patchOp(op.id, { tail: Math.max(0, Math.floor(Number(e.target.value) || 0)) } as Partial<RenameOp>)
+                }
+              />
+              <span className="np-rchain-pair-k">{t("个字符")}</span>
+            </span>
           </>
         );
       case "number":
         return (
           <>
-            <Seg
-              value={op.position}
-              options={[
-                { value: "start", label: t("开头") },
-                { value: "end", label: t("末尾") },
-              ]}
-              onChange={(v) => patchOp(op.id, { position: v } as Partial<RenameOp>)}
-            />
-            <span className="np-bren-k">{t("起始")}</span>
-            <input
-              className="np-bren-num"
-              type="number"
-              min={0}
-              value={op.start}
-              onChange={(e) =>
-                patchOp(op.id, { start: Math.max(0, Math.floor(Number(e.target.value) || 0)) } as Partial<RenameOp>)
-              }
-            />
-            <span className="np-bren-k">{t("位数")}</span>
-            <NpSelect value={op.pad} options={R_PAD_OPTS} onChange={(pad) => patchOp(op.id, { pad } as Partial<RenameOp>)} />
-            <InputGroup
-              size="small"
-              value={op.separator}
-              placeholder={t("分隔符")}
-              spellCheck={false}
-              onChange={(e) => patchOp(op.id, { separator: e.target.value } as Partial<RenameOp>)}
-            />
+            <span className="np-rchain-pair">
+              <span className="np-rchain-pair-k">{t("位置")}</span>
+              <Seg
+                value={op.position}
+                options={[
+                  { value: "start", label: t("最前") },
+                  { value: "end", label: t("最后") },
+                ]}
+                onChange={(v) => patchOp(op.id, { position: v } as Partial<RenameOp>)}
+              />
+            </span>
+            <span className="np-rchain-pair">
+              <span className="np-rchain-pair-k">{t("从")}</span>
+              <input
+                className="np-bren-num"
+                type="number"
+                min={0}
+                value={op.start}
+                onChange={(e) =>
+                  patchOp(op.id, { start: Math.max(0, Math.floor(Number(e.target.value) || 0)) } as Partial<RenameOp>)
+                }
+              />
+              <span className="np-rchain-pair-k">{t("起")}</span>
+            </span>
+            <span className="np-rchain-pair">
+              <span className="np-rchain-pair-k">{t("位数")}</span>
+              <NpSelect value={op.pad} options={R_PAD_OPTS} onChange={(pad) => patchOp(op.id, { pad } as Partial<RenameOp>)} />
+            </span>
+            <span className="np-rchain-pair">
+              <span className="np-rchain-pair-k">{t("分隔")}</span>
+              <InputGroup
+                size="small"
+                value={op.separator}
+                placeholder={t("-")}
+                spellCheck={false}
+                onChange={(e) => patchOp(op.id, { separator: e.target.value } as Partial<RenameOp>)}
+              />
+            </span>
           </>
         );
       case "case":
         return (
-          <NpSelect
-            value={op.mode}
-            options={[...R_CASE_OPTS]}
-            onChange={(mode) => patchOp(op.id, { mode } as Partial<RenameOp>)}
-          />
+          <span className="np-rchain-pair">
+            <span className="np-rchain-pair-k">{t("转成")}</span>
+            <NpSelect
+              value={op.mode}
+              options={[...R_CASE_OPTS]}
+              onChange={(mode) => patchOp(op.id, { mode } as Partial<RenameOp>)}
+            />
+          </span>
         );
       case "date":
         return (
           <>
-            <NpSelect
-              value={op.format}
-              options={[...R_DATE_OPTS]}
-              onChange={(format) => patchOp(op.id, { format } as Partial<RenameOp>)}
-            />
-            <Seg
-              value={op.position}
-              options={[
-                { value: "start", label: t("开头") },
-                { value: "end", label: t("末尾") },
-              ]}
-              onChange={(v) => patchOp(op.id, { position: v } as Partial<RenameOp>)}
-            />
-            <InputGroup
-              size="small"
-              value={op.separator}
-              placeholder={t("分隔符")}
-              spellCheck={false}
-              onChange={(e) => patchOp(op.id, { separator: e.target.value } as Partial<RenameOp>)}
-            />
+            <span className="np-rchain-pair">
+              <span className="np-rchain-pair-k">{t("格式")}</span>
+              <NpSelect
+                value={op.format}
+                options={[...R_DATE_OPTS]}
+                onChange={(format) => patchOp(op.id, { format } as Partial<RenameOp>)}
+              />
+            </span>
+            <span className="np-rchain-pair">
+              <span className="np-rchain-pair-k">{t("位置")}</span>
+              <Seg
+                value={op.position}
+                options={[
+                  { value: "start", label: t("最前") },
+                  { value: "end", label: t("最后") },
+                ]}
+                onChange={(v) => patchOp(op.id, { position: v } as Partial<RenameOp>)}
+              />
+            </span>
+            <span className="np-rchain-pair">
+              <span className="np-rchain-pair-k">{t("分隔")}</span>
+              <InputGroup
+                size="small"
+                value={op.separator}
+                placeholder={t("_")}
+                spellCheck={false}
+                onChange={(e) => patchOp(op.id, { separator: e.target.value } as Partial<RenameOp>)}
+              />
+            </span>
           </>
         );
     }
@@ -962,18 +1019,15 @@ function BatchRenameDialog({
           </div>
           <div className="np-rchain">
             <div className="np-rchain-bar">
-              {/* 添加规则 = NpSelect 选类型即追加（PopoverNext 直包 Button 在
-                  Dialog 内不弹，§4.7 用已验证的 NpSelect 封装） */}
-              <NpSelect
-                value={"__add__"}
-                options={[
-                  { value: "__add__", label: t("＋ 添加规则") },
-                  ...OP_TYPE_ITEMS.map((x) => ({ value: x.type, label: x.label })),
-                ]}
-                onChange={(type) => {
-                  if (type !== "__add__") addOp(type as RenameOp["type"]);
-                }}
-              />
+              {/* 添加规则 = 原生按钮直接追加默认类型（查找替换），类型在卡上
+                  下拉更换——NpSelect 弹层在 Dialog 内对自动化/真实点击均有时序
+                  不稳定，原生 button 已验证可靠 */}
+              <button
+                className="np-bren-chip"
+                onClick={() => addOp("replace")}
+              >
+                ＋ {t("添加规则")}
+              </button>
               <span className="np-dialog-muted">
                 {opsList.length} {t("条规则")}
               </span>
@@ -998,11 +1052,53 @@ function BatchRenameDialog({
             ) : (
               <div className="np-rchain-list">
                 {opsList.map((op, idx) => (
-                  <div key={op.id} className="np-rchain-item">
-                    {/* 两行紧凑布局：行1 = 序号+类型+作用域+参数+操作钮；
-                        行2 = 人话效果（describeOp 实时生成） */}
+                  <div
+                    key={op.id}
+                    className={`np-rchain-item ${dragId === op.id ? "is-drag" : ""} ${
+                      overIdx === idx && dragId !== null && dragId !== op.id ? "is-over" : ""
+                    }`}
+                    onPointerDown={(e) => {
+                      // NpSelect/Button/输入交互不启动拖拽
+                      if ((e.target as HTMLElement).closest(".np-select, button, input, .bp6-input-group, .np-seg")) return;
+                      dragRef.current = { id: op.id, moved: false };
+                      setDragId(op.id);
+                      // setPointerCapture：后续 move/up 强制派发给卡片（工作区排序同款，
+                      // window 监听在 WebView2 下 pointerup 不可靠）
+                      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                    }}
+                    onPointerMove={(e) => {
+                      const d = dragRef.current;
+                      if (!d || d.id !== op.id) return;
+                      if (!d.moved && e.buttons === 0) return;
+                      d.moved = true;
+                      const cards = [...document.querySelectorAll(".np-rchain-item")];
+                      const hit = cards.findIndex((c) => {
+                        const b = c.getBoundingClientRect();
+                        return e.clientY >= b.top && e.clientY <= b.bottom;
+                      });
+                      setOverIdx(hit >= 0 ? hit : null);
+                    }}
+                    onPointerUp={(e) => {
+                      const target = overIdx;
+                      setDragId(null);
+                      setOverIdx(null);
+                      dragRef.current = null;
+                      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+                      if (target === null || target === idx) return;
+                      setOpsList((l) => {
+                        const c = [...l];
+                        const [m] = c.splice(idx, 1);
+                        c.splice(target, 0, m);
+                        return c;
+                      });
+                    }}
+                  >
+                    {/* 两行紧凑布局：行1 = 序号+类型+作用域+操作钮，行2 = 参数区，
+                        行3 = 人话效果（describeOp 实时生成）；卡片可拖拽排序 */}
                     <div className="np-rchain-top">
-                      <span className="np-rchain-idx">{idx + 1}</span>
+                      <span className="np-rchain-idx" data-tip="拖动卡片可调整顺序">
+                        {idx + 1}
+                      </span>
                       <NpSelect
                         value={op.type}
                         options={OP_TYPE_ITEMS.map((x) => ({ value: x.type, label: x.label }))}
@@ -1013,44 +1109,12 @@ function BatchRenameDialog({
                         options={R_SCOPE_OPTS.map((x) => ({ value: x.value, label: x.label, title: x.title }))}
                         onChange={(scope) => patchOp(op.id, { scope } as Partial<RenameOp>)}
                       />
-                      <div className="np-rchain-params">
-                        {opParams(op)}
-                        {op.type === "replace" && op.regex && (
-                          <NpSelect
-                            value={"__rx__"}
-                            options={[
-                              { value: "__rx__", label: t("常用示例 ▾") },
-                              { value: "\\s+", label: t("去空格（\\s+）") },
-                              { value: "\\(.*?\\)", label: t("去括号内容（\\(.*?\\)）") },
-                              { value: "^\\d+[._-]", label: t("去序号前缀（^\\d+[._-]）") },
-                            ]}
-                            onChange={(v) => {
-                              if (v !== "__rx__") patchOp(op.id, { find: v } as Partial<RenameOp>);
-                            }}
-                          />
-                        )}
-                      </div>
                       <span className="np-rchain-sp" />
-                      <button
-                        className="np-rchain-btn"
-                        data-tip="上移"
-                        disabled={idx === 0}
-                        onClick={() => moveOp(op.id, -1)}
-                      >
-                        <AppIcon icon={ChevronUp} size={DENSITY.iconXs} />
-                      </button>
-                      <button
-                        className="np-rchain-btn"
-                        data-tip="下移"
-                        disabled={idx === opsList.length - 1}
-                        onClick={() => moveOp(op.id, 1)}
-                      >
-                        <AppIcon icon={ChevronDown} size={DENSITY.iconXs} />
-                      </button>
                       <button className="np-rchain-btn" data-tip="删除规则" onClick={() => removeOp(op.id)}>
                         <AppIcon icon={X} size={DENSITY.iconXs} />
                       </button>
                     </div>
+                    <div className="np-rchain-params">{opParams(op)}</div>
                     <div className="np-rchain-plain">
                       <AppIcon icon={CircleCheck} size={DENSITY.iconXs} />
                       <span>{describeOp(op)}</span>

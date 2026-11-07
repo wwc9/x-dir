@@ -61,10 +61,20 @@ export function newOp<T extends RenameOp["type"]>(
   const d = out as unknown as Record<string, unknown>;
   switch (out.type) {
     case "replace":
+      if (d.find === undefined) d.find = "";
+      if (d.replace === undefined) d.replace = "";
       if (d.regex === undefined) d.regex = false;
+      break;
+    case "prefix":
+    case "suffix":
+      if (d.text === undefined) d.text = "";
+      break;
+    case "remove":
+      if (d.find === undefined) d.find = "";
       break;
     case "insert":
       if (d.position === undefined) d.position = "end";
+      if (d.text === undefined) d.text = "";
       break;
     case "number":
       if (d.position === undefined) d.position = "end";
@@ -241,6 +251,7 @@ export function diffFragments(
 export function describeOp(op: RenameOp): string {
   switch (op.type) {
     case "replace": {
+      if (!op.find && !op.replace) return "未填写查找与替换内容";
       const what = op.regex ? `查找正则「${op.find}」` : `把「${op.find}」`;
       return op.replace ? `${what}替换为「${op.replace}」` : `${what}删除`;
     }

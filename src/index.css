@@ -4625,15 +4625,67 @@ body.np-col-resizing * {
 .np-rchain-item {
   display: flex;
   flex-direction: column;
-  gap: var(--np-gutter);
+  gap: var(--np-gap);
   background: var(--np-surface-2);
   border-radius: var(--np-radius-pane);
   padding: var(--np-gutter) calc(var(--np-gutter) + 2px);
+  /* 拖拽排序态：源卡半透明，落位目标卡上缘 accent 指示线 */
+  transition: opacity 120ms;
+}
+.np-rchain-item.is-drag {
+  opacity: 0.45;
+}
+.np-rchain-item.is-over {
+  box-shadow: inset 0 2px 0 var(--np-accent);
 }
 .np-rchain-top {
   display: flex;
   align-items: center;
   gap: var(--np-gap);
+}
+/* 参数区 = 中文标签 + 控件成对（np-rchain-pair），两列自适应换行 */
+.np-rchain-params {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--np-gap) calc(var(--np-gutter) * 3);
+  min-width: 0;
+}
+.np-rchain-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--np-gap);
+  min-width: 0;
+}
+.np-rchain-pair-k {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  flex: none;
+}
+.np-rchain-params .bp6-input-group {
+  width: 108px;
+  min-width: 0;
+}
+.np-rchain-params .np-select {
+  min-width: 0;
+}
+/* 行2 人话效果行（describeOp 实时生成，②） */
+.np-rchain-plain {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+  min-width: 0;
+  font-size: var(--np-font-sm);
+  color: var(--np-accent);
+  background: color-mix(in srgb, var(--np-accent) 8%, transparent);
+  border-radius: var(--np-radius);
+  padding: 2px var(--np-gutter);
+}
+.np-rchain-plain span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .np-rchain-idx {
   flex: none;
