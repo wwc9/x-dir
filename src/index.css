@@ -5692,7 +5692,9 @@ body.np-col-resizing * {
   align-self: center;
   color: var(--np-accent);
 }
-/* meta 行：相对时间 · 来源应用 + 悬停动作组（margin-left auto） */
+/* meta 行：相对时间 · 来源应用 + 悬停动作组（margin-left auto）；
+   整行 nowrap（2026-11-06 巡检修复：窄窗时间「11 小时前」折行竖排），
+   溢出由来源 src 的 ellipsis 吸收 */
 .np-clip-meta {
   display: flex;
   align-items: center;
@@ -5700,6 +5702,7 @@ body.np-col-resizing * {
   font-size: var(--np-font-sm);
   color: var(--np-muted);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .np-clip-dot {
   width: 3px;
@@ -5841,6 +5844,9 @@ body.np-col-resizing * {
   display: inline-flex;
   align-items: center;
   gap: var(--np-gap);
+  /* 不压缩不折行（2026-11-06 巡检修复：keys 长清单挤压下「清空」竖排折行） */
+  flex: none;
+  white-space: nowrap;
   border: none;
   background: transparent;
   color: var(--np-muted);
@@ -5942,4 +5948,21 @@ body.np-col-resizing * {
 .np-cliptb .np-winbtn.is-on:hover {
   background: var(--np-sel);
   color: var(--np-accent);
+}
+/* 窄窗（≤419px，最小宽 360）逐级让位给搜索框（2026-11-06 巡检修复）：
+   先隐计数副行、再隐标题（logo 章已表达身份）——否则搜索 input 被压到
+   只剩「搜索」二字 */
+@media (max-width: 419px) {
+  .np-cliptb-sub {
+    display: none;
+  }
+}
+@media (max-width: 379px) {
+  .np-cliptb-id {
+    display: none;
+  }
+  /* 窗口钮收窄（全局 34px）：再让 ~30px 给搜索框 */
+  .np-cliptb .np-winbtn {
+    width: 28px;
+  }
 }
