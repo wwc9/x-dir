@@ -5602,8 +5602,17 @@ body.np-col-resizing * {
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  margin: 0 var(--np-gap) var(--np-gap);
+  /* 卡片间 8px 留白（2026-11-07 用户确认要间隔；预览 C 定案 8px）。间隔必须
+     走透明 border 而非 margin：虚拟列表 measureElement 量 border-box，margin
+     不参与 offset 累计（4px 时代从未真正生效，rect 相邻贴齐）；透明 border
+     进量测盒 + background-clip: padding-box 保底色圆角不变。四边一致 = 首末
+     卡与列表缘也留 8px 呼吸 */
+  border: solid transparent;
+  /* 间隔只走 底+左右 三边（顶 0）：相邻卡视觉间隔 = 前卡底 border 8px 恰好
+     一档；border-box rect 看不出透明 border（量测口径为外沿） */
+  border-width: 0 calc(var(--np-gap) * 2) calc(var(--np-gap) * 2);
   background: var(--np-surface-2);
+  background-clip: padding-box;
   border-radius: var(--np-radius-pane);
   cursor: default;
   user-select: none;
