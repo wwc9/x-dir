@@ -5617,10 +5617,13 @@ body.np-col-resizing * {
      卡片底色区恒 = padding box，圆角恒随设置 --np-radius-pane */
   background-color: var(--np-surface-2);
   background-clip: padding-box;
-  border-radius: var(--np-radius-pane);
+  /* border-radius 定义的是 border-box 圆角，padding-box（底色）圆角会被
+     border 宽内缩（10-8=2px 视觉，2026-11-07 用户报「圆角与窗格不一致」）——
+     补回 border 宽使底色视觉圆角恰 = 设置的 --np-radius-pane，与窗格同观感 */
+  border-radius: calc(var(--np-radius-pane) + var(--np-gap) * 2);
   cursor: default;
-  user-select: none;
   overflow: hidden;
+  user-select: none;
   color: var(--np-fg);
 }
 /* 悬停：hover 半透明叠染 surface-2（保底色，等价预览 color-mix 公式） */
