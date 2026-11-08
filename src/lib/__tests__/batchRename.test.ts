@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   arabicToCnNum,
   cnNumToArabic,
+  parentFolderName,
   describeOp,
   diffFragments,
   illegalChars,
@@ -337,3 +338,50 @@ describe("删除指定字符（字符类勾选 + 删除/保留）", () => {
     expect(describeOp(newOp({ type: "removeCls", keep: false, cls: [] }))).toBe("未勾选要删除的字符类型");
   });
 });
+
+describe("首批扩容规则（首尾空白/父文件夹名/插入第N字符后/扩展名小写）", () => {
+  it("去首尾空白（含全角空格，内部空白不动）", () => {
+    const items = planRenames([f("  报告  .txt"), f("　底稿　"), f("a b.txt")], ops(newOp({ type: "trimEdges" })));
+    expect(items.map((i) => i.newName)).toEqual(["报告.txt", "底稿", "a b.txt"]);
+    expect(items.every((i) => i.changed === (i.oldName !== i.newName))).toBe(true);
+  });
+
+  it("父文件夹名：前缀/后缀 + 分隔符；盘根文件跳过", () => {
+    const items = planRenames([f("底稿.txt")], ops(newOp({ type: "parent", position: "start", separator: "-" })));
+    expect(items[0].newName).toBe("d-底稿.txt");
+    const items2 = planRenames([f("底稿.txt")], ops(newOp({ type: "parent", position: "end", separator: "_" })));
+    expect(items2[0].newName).toBe("底稿_d.txt");
+    // 盘根文件（C:\a.txt）无父文件夹名 → 原样
+    const root = { path: "C:\a.txt", name: "a.txt", isDir: false };
+    const items3 = planRenames([root], ops(newOp({ type: "parent", position: "start", separator: "-" })));
+    expect(items3[0].newName).toBe("a.txt");
+    expect(items3[0].changed).toBe(false);
+  });
+
+  it("插入文字：第 N 个字符后（越界钳制到末尾）", () => {
+    const items = planRenames([f("ABC.txt")], ops(newOp({ type: "insert", position: "at", at: 2, text: "-" })));
+    expect(items[0].newName).toBe("AB-C.txt");
+    const items2 = planRenames([f("AB.txt")], ops(newOp({ type: "insert", position: "at", at: 9, text: "-" })));
+    expect(items2[0].newName).toBe("AB-.txt");
+  });
+
+  it("扩展名小写（case+ext+lower 句式卡）", () => {
+    const items = planRenames([f("报告.TXT"), f("照片.PNG")], ops(newOp({ type: "case", scope: "ext", mode: "lower" })));
+    expect(items.map((i) => i.newName)).toEqual(["报告.txt", "照片.png"]);
+  });
+
+  it("describeOp：新类型人话效果", () => {
+    expect(describeOp(newOp({ type: "trimEdges" }))).toBe("去掉名称首尾的空白（含全角空格）");
+    expect(describeOp(newOp({ type: "parent", position: "start", separator: "-" }))).toBe("在名称开头加父文件夹名");
+    expect(describeOp(newOp({ type: "insert", position: "at", at: 2, text: "-" }))).toBe("在第 2 个字符后插入「-」");
+    expect(describeOp(newOp({ type: "case", scope: "ext", mode: "lower" }))).toBe("把英文字母全部改为小写");
+  });
+
+  it("parentFolderName 纯函数", () => {
+    expect(parentFolderName("C:\\d\\sub\\a.txt")).toBe("sub");
+    expect(parentFolderName("C:\\d\\a.txt")).toBe("d");
+    expect(parentFolderName("C:\\a.txt")).toBe("");
+    expect(parentFolderName("/home/user/a.txt")).toBe("user");
+  });
+});
+

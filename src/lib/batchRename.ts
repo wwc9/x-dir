@@ -22,7 +22,7 @@ export type ArithOp = "add" | "sub" | "mul" | "div";
 export type RenameOp = { id: string; enabled: boolean; scope: RenameScope } & (
   | { type: "replace"; find: string; replace: string; regex: boolean }
   | { type: "remove"; find: string }
-  | { type: "insert"; text: string; position: "start" | "end" }
+  | { type: "insert"; text: string; position: "start" | "end" | "at"; at?: number }
   | { type: "prefix"; text: string }
   | { type: "suffix"; text: string }
   | { type: "trim"; head: number; tail: number }
@@ -35,6 +35,8 @@ export type RenameOp = { id: string; enabled: boolean; scope: RenameScope } & (
   | { type: "dateFormat"; format: DateReFmt }
   | { type: "chinese"; mode: "s2t" | "t2s" }
   | { type: "pinyin"; mode: "initials" | "full" }
+  | { type: "trimEdges" }
+  | { type: "parent"; position: "start" | "end"; separator: string }
   | { type: "removeCls"; keep: boolean; cls: CharCls[] }
 );
 
@@ -226,6 +228,16 @@ export function newOp<T extends RenameOp["type"]>(
     case "insert":
       if (d.position === undefined) d.position = "end";
       if (d.text === undefined) d.text = "";
+      if (d.at === undefined) d.at = 3;
+      break;
+    case "case":
+      if (d.mode === undefined) d.mode = "upper";
+      break;
+    case "trimEdges":
+      break;
+    case "parent":
+      if (d.position === undefined) d.position = "start";
+      if (d.separator === undefined) d.separator = "-";
       break;
     case "number":
       if (d.position === undefined) d.position = "end";
@@ -298,7 +310,7 @@ function fmtDate(mtimeMs: number | undefined, format: DateFmt): string {
 }
 
 /** 单条规则对目标段的一次应用（number/date 用 idx/mtime 注入计数与时间） */
-function applyOp(text: string, op: RenameOp, idx: number, mtimeMs: number | undefined): string {
+function applyOp(text: string, op: RenameOp, idx: number, mtimeMs: number | undefined, parent: string): string {
   if (!op.enabled) return text;
   switch (op.type) {
     case "replace": {
@@ -313,8 +325,13 @@ function applyOp(text: string, op: RenameOp, idx: number, mtimeMs: number | unde
       if (!op.find) return text;
       return text.split(op.find).join("");
     }
-    case "insert":
+    case "insert": {
+      if (op.position === "at") {
+        const at = Math.max(0, Math.min(op.at ?? 0, text.length));
+        return text.slice(0, at) + op.text + text.slice(at);
+      }
       return op.position === "start" ? op.text + text : text + op.text;
+    }
     case "prefix":
       return op.text + text;
     case "suffix":
@@ -367,7 +384,21 @@ function applyOp(text: string, op: RenameOp, idx: number, mtimeMs: number | unde
       if (!re) return text;
       return text.replace(re, "");
     }
+    case "trimEdges":
+      return text.replace(/^\s+|\s+$/gu, "");
+    case "parent": {
+      if (!parent) return text;
+      return op.position === "start" ? parent + op.separator + text : text + op.separator + parent;
+    }
   }
+}
+
+/** 父文件夹名（路径上一级目录名；盘根/无上级返回 ""） */
+export function parentFolderName(path: string): string {
+  const i1 = path.lastIndexOf("\\"), i2 = path.lastIndexOf("/");
+  const cut = Math.max(i1, i2) > 0 ? path.slice(0, Math.max(i1, i2)) : "";
+  if (!cut || /^[A-Za-z]:$/.test(cut)) return "";
+  return cut.slice(Math.max(cut.lastIndexOf("\\"), cut.lastIndexOf("/")) + 1) || cut;
 }
 
 /** 生成改名计划：规则链按序应用 + 全批目标重名/非法名检测
@@ -379,6 +410,7 @@ export function planRenames(
 ): RenamePlanItem[] {
   const items: RenamePlanItem[] = entries.map((e, idx) => {
     const [s0, e0] = splitName(e.name, e.isDir);
+    const parentName = parentFolderName(e.path);
     // 段状态跨规则链维护：name 规则改主名段、ext 规则改扩展名段、
     // nameExt 规则改整名（应用后重拆段，后续规则仍能正确作用）
     let stem = s0;
@@ -386,11 +418,11 @@ export function planRenames(
     for (const op of ops) {
       if (!op.enabled) continue;
       if (op.scope === "ext") {
-        ext = applyOp(ext, op, idx, e.mtimeMs);
+        ext = applyOp(ext, op, idx, e.mtimeMs, parentName);
       } else if (op.scope === "name") {
-        stem = applyOp(stem, op, idx, e.mtimeMs);
+        stem = applyOp(stem, op, idx, e.mtimeMs, parentName);
       } else {
-        const whole = applyOp(stem + ext, op, idx, e.mtimeMs);
+        const whole = applyOp(stem + ext, op, idx, e.mtimeMs, parentName);
         const [ns, ne] = splitName(whole, e.isDir);
         stem = ns;
         ext = ne;
@@ -465,7 +497,7 @@ export function describeOp(op: RenameOp): string {
     case "remove":
       return op.find ? `删除名称里所有的「${op.find}」` : "未填写要删除的文字";
     case "insert":
-      return `${op.position === "start" ? "在名称开头" : "在名称末尾"}插入「${op.text}」`;
+      return `${op.position === "at" ? `在第 ${op.at ?? 0} 个字符后` : op.position === "start" ? "在名称开头" : "在名称末尾"}插入「${op.text}」`;
     case "prefix":
       return `在最前面加「${op.text}」`;
     case "suffix":
@@ -500,6 +532,10 @@ export function describeOp(op: RenameOp): string {
       return op.mode === "s2t" ? "把简体汉字转换为繁体" : "把繁体汉字转换为简体";
     case "pinyin":
       return op.mode === "initials" ? "把汉字转换为拼音首字母" : "把汉字转换为全拼";
+    case "trimEdges":
+      return "去掉名称首尾的空白（含全角空格）";
+    case "parent":
+      return `${op.position === "start" ? "在名称开头" : "在名称末尾"}加父文件夹名`;
     case "removeCls": {
       if (!op.cls.length) return "未勾选要删除的字符类型";
       const names = op.cls.map((c) => CLS_NAMES[c]).join("、");

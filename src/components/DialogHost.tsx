@@ -631,6 +631,7 @@ interface RuleDef {
   name: string;
   s: string;
   scope?: RenameScope;
+  mode?: "upper" | "lower" | "title";
 }
 const RULE_GROUPS: { cat: RuleCat; name: string; rules: RuleDef[] }[] = [
   {
@@ -639,7 +640,8 @@ const RULE_GROUPS: { cat: RuleCat; name: string; rules: RuleDef[] }[] = [
     rules: [
       { type: "prefix", name: "加前缀", s: "在最前面加 [文字]" },
       { type: "suffix", name: "加后缀", s: "在扩展名前加 [文字]" },
-      { type: "insert", name: "插入文字", s: "在 [名称开头/末尾] 插入 [文字]" },
+      { type: "insert", name: "插入文字", s: "在 [名称开头/末尾/第N个字符后] 插入 [文字]" },
+      { type: "parent", name: "父文件夹名", s: "在名称开头加父文件夹名，分隔 [-]" },
       { type: "number", name: "加序号", s: "在 [位置] 加编号，从 [1] 起、宽 [2 位]" },
       { type: "date", name: "加日期", s: "在 [位置] 加修改日期 [格式]" },
     ],
@@ -658,6 +660,7 @@ const RULE_GROUPS: { cat: RuleCat; name: string; rules: RuleDef[] }[] = [
     rules: [
       { type: "remove", name: "删除文字", s: "删除名称里所有的 [文字]" },
       { type: "removeCls", name: "删除指定字符", s: "删除 [勾选字符类型] 的字符，可切 [删除/保留]" },
+      { type: "trimEdges", name: "去首尾空白", s: "去掉名称首尾的空白（含全角空格）" },
       { type: "trim", name: "掐头去尾", s: "去掉开头 [2] 个、末尾 [1] 个字符" },
     ],
   },
@@ -666,6 +669,7 @@ const RULE_GROUPS: { cat: RuleCat; name: string; rules: RuleDef[] }[] = [
     name: "转换",
     rules: [
       { type: "case", name: "大小写", s: "把英文字母 [全部改为大写/小写/首字母大写]" },
+      { type: "case", name: "扩展名小写", s: "把扩展名改为小写", scope: "ext", mode: "lower" },
       { type: "chinese", name: "简繁转换", s: "把汉字 [简体→繁体 / 繁体→简体]" },
       { type: "pinyin", name: "转拼音", s: "把汉字转 [拼音首字母 / 全拼]" },
       { type: "cnNum", name: "中文数字", s: "把名称里的数字 [十二→12 / 12→十二]" },
@@ -678,7 +682,7 @@ const RULE_GROUPS: { cat: RuleCat; name: string; rules: RuleDef[] }[] = [
 const RULE_TYPE_NAMES: Record<RenameOp["type"], string> = Object.fromEntries(
   RULE_GROUPS.flatMap((g) => g.rules)
     // replace 双条目（查找替换/替换扩展名）按 scope 区分，不进类型名映射
-    .filter((r) => !(r.type === "replace"))
+    .filter((r) => !(r.type === "replace" || r.type === "case"))
     .map((r) => [r.type, r.name]),
 ) as Record<RenameOp["type"], string>;
 
@@ -831,8 +835,8 @@ function BatchRenameDialog({
       else n.add(path);
       return n;
     });
-  const addRule = (def: { type: RenameOp["type"]; scope?: RenameScope }) =>
-    setOpsList((l) => [...l, newOp({ type: def.type, ...(def.scope ? { scope: def.scope } : {}) })]);
+  const addRule = (def: RuleDef) =>
+    setOpsList((l) => [...l, newOp({ type: def.type, ...(def.scope ? { scope: def.scope } : {}), ...(def.mode ? { mode: def.mode } : {}) })]);
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelCat, setPanelCat] = useState<RuleCat>("add");
   const patchOp = (id: string, p: Partial<RenameOp>) =>
@@ -855,11 +859,12 @@ function BatchRenameDialog({
     />
   );
 
-  /** 卡头类型词：replace 按 scope 区分双条目（ext = 替换扩展名专用句式卡） */
-  const typeNameOf = (op: RenameOp) =>
-    op.type === "replace"
-      ? t(op.scope === "ext" ? "替换扩展名" : "查找替换")
-      : t(RULE_TYPE_NAMES[op.type]);
+  /** 卡头类型词：replace/case 双条目按 scope/mode 区分（替换扩展名、扩展名小写等句式卡） */
+  const typeNameOf = (op: RenameOp) => {
+    if (op.type === "replace") return t(op.scope === "ext" ? "替换扩展名" : "查找替换");
+    if (op.type === "case") return t(op.scope === "ext" ? (op.mode === "lower" ? "扩展名小写" : "扩展名大写") : "大小写");
+    return t(RULE_TYPE_NAMES[op.type]);
+  };
 
   /** 语句卡：整条规则 = 一句话，参数以词槽内嵌句中（2026-11-08 用户定案）。
    *  句式随参数自动切换：replace 表达式模式 / suffix 整名作用域 / trim 填 0
@@ -905,11 +910,17 @@ function BatchRenameDialog({
       case "insert":
         return [
           "在",
-          <NpSelect key="p" value={op.position} options={[{ value: "start", label: t("名称开头") }, { value: "end", label: t("名称末尾") }]}
+          <NpSelect key="p" value={op.position} options={[{ value: "start", label: t("名称开头") }, { value: "end", label: t("名称末尾") }, { value: "at", label: t("第 N 个字符后") }]}
             onChange={(v) => patchOp(op.id, { position: v } as Partial<RenameOp>)} />,
           "插入",
           <InputGroup key="t" size="small" value={op.text} placeholder={t("要插入的文字")} spellCheck={false}
             onChange={(e) => patchOp(op.id, { text: e.target.value } as Partial<RenameOp>)} />,
+          ...(op.position === "at" ? [
+            "，第",
+            <input key="at" className="np-bren-num" type="number" min={0} value={op.at ?? 0}
+              onChange={(e) => patchOp(op.id, { at: Math.max(0, Math.floor(Number(e.target.value) || 0)) } as Partial<RenameOp>)} />,
+            "个字符后",
+          ] : []),
           "，作用于", scopeSlot(op),
         ];
       case "prefix":
@@ -1023,7 +1034,22 @@ function BatchRenameDialog({
             onChange={(format) => patchOp(op.id, { format } as Partial<RenameOp>)} />,
           "，作用于", scopeSlot(op),
         ];
-       case "removeCls":
+       case "trimEdges":
+        return [
+          <span key="s1">去掉名称首尾的空白（含全角空格），作用于</span>,
+          scopeSlot(op),
+        ];
+      case "parent":
+        return [
+          "在",
+          <NpSelect key="p" value={op.position} options={[{ value: "start", label: t("名称开头") }, { value: "end", label: t("名称末尾") }]}
+            onChange={(v) => patchOp(op.id, { position: v } as Partial<RenameOp>)} />,
+          "加父文件夹名，分隔符",
+          <InputGroup key="sep" className="np-rs-narrow" size="small" value={op.separator} spellCheck={false}
+            onChange={(e) => patchOp(op.id, { separator: e.target.value } as Partial<RenameOp>)} />,
+          "，作用于", scopeSlot(op),
+        ];
+      case "removeCls":
         return [
           op.keep ? <span key="s1">只保留名称里的</span> : <span key="s1">删除名称里的</span>,
           <ClsSlot key="slot" op={op} onPatch={(p) => patchOp(op.id, p)} />,
