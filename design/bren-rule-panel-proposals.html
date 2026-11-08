@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>批量重命名 · 规则二级分类面板 · 设计预览</title>
+<style>
+  /* ═══ np token 替身（与 src/index.css 同值，2026-11-08）═══ */
+  .t-light {
+    --np-bg: #e9ecf1; --np-surface: #ffffff; --np-surface-2: #f0f2f5;
+    --np-border: #d6dbe2; --np-hairline: rgba(16, 24, 40, 0.06);
+    --np-fg: #171d26; --np-muted: #66707e;
+    --np-accent: #3574f0; --np-accent-fg: #ffffff;
+    --np-hover: rgba(26, 33, 41, 0.055); --np-sel: rgba(53, 116, 240, 0.12);
+    --np-danger: #d1434b; --np-success: #46a758;
+    --np-ring: 0 0 0 2px color-mix(in srgb, var(--np-accent) 45%, transparent);
+    --c-add: #46a758; --c-replace: #3574f0; --c-remove: #d1434b; --c-convert: #7d64d8;
+  }
+  .t-dark {
+    --np-bg: #131519; --np-surface: #1b1e23; --np-surface-2: #24282f;
+    --np-border: #3a414b; --np-hairline: rgba(255, 255, 255, 0.08);
+    --np-fg: #e8eaed; --np-muted: #8b929c;
+    --np-accent: #5c9dff; --np-accent-fg: #0d1117;
+    --np-hover: rgba(255, 255, 255, 0.055); --np-sel: rgba(92, 157, 255, 0.16);
+    --np-danger: #f27073; --np-success: #5cb964;
+    --np-ring: 0 0 0 2px color-mix(in srgb, var(--np-accent) 45%, transparent);
+    --c-add: #5cb964; --c-replace: #5c9dff; --c-remove: #f27073; --c-convert: #a08df5;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 26px 34px 56px; background: #dde2ea; color: #171d26;
+    font-family: system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 13px; }
+  body.t-dark { background: #101216; color: #e8eaed; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: #8a93a0; font-size: 12px; margin-bottom: 16px; }
+  body.t-dark .sub { color: #8b929c; }
+  .banner { background: var(--np-surface); border: 1px solid var(--np-border); border-radius: 12px;
+    padding: 12px 16px; margin-bottom: 20px; font-size: 12px; color: var(--np-muted);
+    line-height: 1.9; max-width: 1060px; }
+  .banner b { color: var(--np-fg); }
+  .banner code { background: var(--np-surface-2); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+
+  .toolbar { display: flex; gap: 10px; align-items: center; padding: 0 0 12px; }
+  .tbtn { height: 26px; padding: 0 14px; border: 1px solid var(--np-border); border-radius: 999px;
+    background: var(--np-surface); color: var(--np-fg); font-size: 12px; cursor: pointer; }
+  .tbtn:hover { background: var(--np-hover); }
+  .tbtn.on { background: var(--np-sel); border-color: var(--np-accent); color: var(--np-accent); font-weight: 600; }
+  .toolbar .hint { font-size: 11px; color: var(--np-muted); }
+
+  section { margin-bottom: 40px; max-width: 1060px; }
+  .sec-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .sec-h .tag { color: #fff; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 2px 10px; }
+  .sec-h h2 { font-size: 14px; margin: 0; }
+  .sec-note { font-size: 12px; color: var(--np-muted); margin: 0 0 14px; line-height: 1.9; max-width: 1040px; }
+  .sec-note b { color: var(--np-fg); }
+
+  /* 状态标记 */
+  .st { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; }
+  .st.now { color: var(--np-success); }
+  .st.up { color: var(--np-accent); }
+  .st.plan { color: var(--np-muted); }
+
+  /* ═══ 分类总表 ═══ */
+  table { border-collapse: collapse; width: 100%; max-width: 1060px; font-size: 12px; }
+  th { text-align: left; font-size: 11px; color: var(--np-muted); font-weight: 600;
+    padding: 6px 10px; border-bottom: 1px solid var(--np-border); white-space: nowrap; }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--np-hairline); color: var(--np-fg); vertical-align: top; }
+  td.mut { color: var(--np-muted); }
+  tr.cat td { background: var(--np-surface-2); font-weight: 600; font-size: 12px; }
+  tr.cat td .dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px; margin-right: 7px; vertical-align: 0; }
+  .slot { color: var(--np-accent); font-weight: 600; }
+  .slot.mut2 { color: var(--np-fg); font-weight: 600; }
+
+  /* ═══ 面板语境（右栏 mini mock）═══ */
+  .ctx { width: 560px; background: var(--np-surface); border-radius: 12px; padding: 14px 16px 16px;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.1); position: relative; }
+  .ctxbar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; margin-bottom: 12px; }
+  .addbtn { height: 24px; padding: 0 11px; border: 1px solid var(--np-border); border-radius: 999px;
+    background: var(--np-surface); color: var(--np-fg); font-size: 12px; cursor: pointer; }
+  .addbtn:hover { background: var(--np-hover); }
+  .addbtn.open { background: var(--np-sel); border-color: var(--np-accent); color: var(--np-accent); }
+  .chip { height: 24px; padding: 0 10px; border: 1px solid var(--np-border); border-radius: 999px;
+    background: var(--np-surface); color: var(--np-fg); font-size: 12px; cursor: pointer; }
+  .chip:hover { background: var(--np-hover); }
+  .cnt { font-size: 11px; color: var(--np-muted); margin-left: auto; }
+
+  /* 语句卡 mini（语境用） */
+  .a-card { background: var(--np-surface-2); border-radius: 10px; padding: 8px 10px 8px 8px;
+    margin-bottom: 8px; display: flex; gap: 8px; }
+  .a-sent { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; font-size: 12px;
+    color: var(--np-muted); line-height: 24px; }
+  .a-idx { font-size: 11px; color: var(--np-muted); border: 1px solid var(--np-border);
+    border-radius: 999px; width: 20px; height: 20px; display: inline-flex; align-items: center;
+    justify-content: center; flex: none; }
+  .a-type { font-size: 12px; font-weight: 600; color: var(--np-fg); margin-bottom: 6px; display: inline-flex; gap: 7px; align-items: center; }
+  .grip { width: 14px; display: inline-flex; flex-direction: column; gap: 3px; align-items: center;
+    cursor: grab; color: var(--np-muted); flex: none; opacity: .8; margin-top: 2px; }
+  .grip i { width: 10px; height: 1.6px; border-radius: 2px; background: currentColor; display: block; }
+  .grip i:nth-child(2) { width: 6px; }
+  .inp { height: 24px; padding: 0 8px; border: none; border-radius: 6px; outline: none;
+    background: var(--np-surface); box-shadow: inset 0 0 0 1px var(--np-border);
+    color: var(--np-fg); font-size: 12px; font-family: inherit; }
+  .inp::placeholder { color: var(--np-muted); }
+  .dd { position: relative; display: inline-flex; }
+  .dd > button { height: 24px; padding: 0 7px 0 9px; display: inline-flex; align-items: center; gap: 4px;
+    border: none; border-radius: 6px; background: var(--np-surface);
+    box-shadow: inset 0 0 0 1px var(--np-border); color: var(--np-accent); font-weight: 600; font-size: 12px; cursor: pointer; }
+  .dd .cv { font-size: 9px; color: var(--np-muted); font-weight: 400; }
+
+  /* ═══ 面板通用 ═══ */
+  .panel { position: absolute; z-index: 20; background: var(--np-surface); border-radius: 12px;
+    box-shadow: 0 0 0 1px var(--np-border), 0 16px 40px rgba(20, 28, 40, .22); padding: 8px; }
+  .p-head { display: flex; align-items: center; gap: 8px; padding: 4px 8px 8px; }
+  .p-head .t { font-size: 12px; font-weight: 600; color: var(--np-fg); }
+  .p-head .d { font-size: 11px; color: var(--np-muted); }
+  .ritem { border-radius: 8px; padding: 5px 9px; cursor: pointer; }
+  .ritem:hover { background: var(--np-hover); }
+  .ritem .n { font-size: 12.5px; color: var(--np-fg); display: flex; align-items: center; gap: 6px; }
+  .ritem .s { font-size: 11px; color: var(--np-muted); margin-top: 1px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .ritem.plan { cursor: default; }
+  .ritem.plan .n { color: var(--np-muted); }
+  .gtag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; }
+  .gtag .dot { width: 7px; height: 7px; border-radius: 999px; }
+  .gtag .c { color: var(--np-muted); font-weight: 400; }
+
+  /* 面板一：两栏二级 */
+  .p2 { display: flex; width: 470px; }
+  .p2 .rail { width: 128px; flex: none; border-right: 1px solid var(--np-hairline); padding: 4px; }
+  .p2 .cat { display: flex; align-items: center; gap: 7px; padding: 7px 9px; border-radius: 8px;
+    cursor: pointer; color: var(--np-fg); font-size: 12.5px; }
+  .p2 .cat:hover { background: var(--np-hover); }
+  .p2 .cat.on { background: var(--np-sel); color: var(--np-accent); font-weight: 600; }
+  .p2 .cat .dot { width: 8px; height: 8px; border-radius: 999px; }
+  .p2 .cat .n2 { margin-left: auto; font-size: 11px; color: var(--np-muted); font-weight: 400; }
+  .p2 .list { flex: 1; min-width: 0; padding: 4px; }
+
+  /* 面板二：单面板全分组（左右两列配平：左 = 添加+替换，右 = 删除+转换） */
+  .p1 { width: 540px; display: flex; gap: 4px; }
+  .p1 .col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .p1 .col:first-child { border-right: 1px solid var(--np-hairline); }
+  .p1 .grp { padding: 4px 6px 6px; border-radius: 8px; }
+  .p1 .ghead { padding: 4px 4px 6px; }
+
+  /* ═══ 删除指定字符 · 词槽交互 ═══ */
+  .slotwrap { position: relative; display: inline-flex; }
+  .cls-panel { position: absolute; z-index: 25; top: calc(100% + 6px); left: 0; width: 224px;
+    background: var(--np-surface); border-radius: 12px; padding: 10px;
+    box-shadow: 0 0 0 1px var(--np-border), 0 16px 40px rgba(20, 28, 40, .22); }
+  .cls-panel .ck { display: flex; align-items: center; gap: 8px; height: 26px; font-size: 12.5px;
+    color: var(--np-fg); cursor: pointer; border-radius: 6px; padding: 0 4px; }
+  .cls-panel .ck:hover { background: var(--np-hover); }
+  .cls-panel .ck input { width: 13px; height: 13px; accent-color: var(--np-accent); cursor: pointer; }
+  .cls-panel .ft { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--np-hairline); }
+  .cls-panel .prev { font-size: 11px; color: var(--np-muted); margin-top: 8px; line-height: 1.6; }
+  .cls-panel .prev code { background: var(--np-surface-2); border-radius: 4px; padding: 0 4px;
+    font-family: Consolas, monospace; font-size: 11px; color: var(--np-fg); }
+  .seg { display: inline-flex; gap: 4px; }
+  .seg b { display: inline-flex; align-items: center; height: 20px; padding: 0 9px; border-radius: 999px;
+    border: 1px solid var(--np-border); color: var(--np-muted); font-size: 11px; font-weight: 400; cursor: pointer; }
+  .seg b.on { background: var(--np-sel); border-color: var(--np-accent); color: var(--np-accent); font-weight: 600; }
+
+  .note-plan { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .note-plan span { font-size: 11px; border-radius: 999px; padding: 2px 10px;
+    border: 1px solid var(--np-border); color: var(--np-muted); }
+  .note-plan span.first { border-color: color-mix(in srgb, var(--np-success) 45%, var(--np-border)); color: var(--np-success); }
+</style>
+</head>
+<body class="t-dark">
+
+<div class="toolbar">
+  <button class="tbtn on" id="btn-dark">深色</button>
+  <button class="tbtn" id="btn-light">浅色</button>
+  <span class="hint">本页为规则分类面板设计预览，不代表最终实现；两套面板均可点击体验。</span>
+</div>
+
+<h1>批量重命名 · 规则二级分类面板 · 设计预览</h1>
+<div class="sub">design/bren-rule-panel-proposals.html · 2026-11-08 · 语句卡方向已确认（bren-card-a-sentences.html）；本页只设计「添加规则」的分类面板与规则细化清单，不改代码</div>
+
+<div class="banner">
+  <b>目标</b>：规则从平铺 9 chips 升级为<b>二级分类</b>——四大类「<b>添加</b>（往名称里加东西）/ <b>替换</b>（把一段换成另一段）/ <b>删除</b>（从名称里去掉）/ <b>转换</b>（不改长度改形态）」，每类下细化若干规则；同时把参考工具的优点纳入：<code>补齐长度</code>、<code>删除指定类型字符（空格/数字/汉字/大小写/符号/非法，可勾选、可切保留）</code>、<code>转换类（简繁/拼音/中文数字/日期格式化）</code>。<br>
+  <b>状态标记</b>：<span class="st now">● 现有</span>引擎已支持零成本　<span class="st up">◐ 增强</span>现有引擎小改或快捷形态　<span class="st plan">○ 规划</span>需新增引擎类型（按需排期，本期不实现）
+</div>
+
+<!-- ═══ 分类总表 ═══ -->
+<section>
+  <div class="sec-h"><span class="tag" style="background:var(--np-accent)">清单</span><h2>规则分类细化总表</h2></div>
+  <p class="sec-note">句式沿用语句卡范式（词槽 = 蓝色可变参数）。每条规则的完整句式以本表为准；<b>首批落地建议 = 全部 ● 与 ◐ 两条</b>，○ 按需排期。</p>
+  <table>
+    <tr><th style="width:86px">分类</th><th style="width:130px">规则</th><th>词槽句式</th><th style="width:76px">状态</th><th>说明</th></tr>
+    <tr class="cat"><td colspan="5"><span class="dot" style="background:var(--c-add)"></span>添加 · 往名称里加内容（6）</td></tr>
+    <tr><td class="mut">添加</td><td>加前缀</td><td>在最前面加 <span class="slot">[文字]</span></td><td><span class="st now">● 现有</span></td><td class="mut">快捷形态 = 插入文字（开头）</td></tr>
+    <tr><td class="mut">添加</td><td>加后缀</td><td>在扩展名前加 <span class="slot">[文字]</span></td><td><span class="st now">● 现有</span></td><td class="mut">.docx 等扩展名恒留末尾</td></tr>
+    <tr><td class="mut">添加</td><td>插入文字</td><td>在 <span class="slot">[名称开头 / 名称末尾 / 第 N 个字符后]</span> 插入 <span class="slot">[文字]</span></td><td><span class="st up">◐ 增强</span></td><td class="mut">新增「第 N 个字符后」位置档</td></tr>
+    <tr><td class="mut">添加</td><td>加序号</td><td>在 <span class="slot">[位置]</span> 加编号，从 <span class="slot mut2">[1]</span> 起、宽 <span class="slot">[2 位]</span>，分隔符 <span class="slot mut2">[-]</span></td><td><span class="st now">● 现有</span></td><td class="mut">作用域恒主名</td></tr>
+    <tr><td class="mut">添加</td><td>加日期</td><td>在 <span class="slot">[位置]</span> 加修改日期 <span class="slot">[格式]</span>，分隔符 <span class="slot mut2">[_]</span></td><td><span class="st now">● 现有</span></td><td class="mut">拍摄日期（EXIF）列为远期候选</td></tr>
+    <tr><td class="mut">添加</td><td>补齐长度</td><td>把名称里的数字补齐到 <span class="slot">[3]</span> 位（1 → 001）</td><td><span class="st plan">○ 规划</span></td><td class="mut">参考工具同名功能；可选「整名补足到 N 位」模式</td></tr>
+    <tr class="cat"><td colspan="5"><span class="dot" style="background:var(--c-replace)"></span>替换 · 把一段内容换成另一段（2）</td></tr>
+    <tr><td class="mut">替换</td><td>查找替换</td><td>把 <span class="slot mut2">[报告]</span> 替换为 <span class="slot mut2">[项目]</span>，按 <span class="slot">[文字 / 表达式]</span> 匹配</td><td><span class="st now">● 现有</span></td><td class="mut">表达式模式支持 $1 捕获组</td></tr>
+    <tr><td class="mut">替换</td><td>替换扩展名</td><td>把扩展名 <span class="slot mut2">[jpg]</span> 改为 <span class="slot mut2">[png]</span></td><td><span class="st up">◐ 增强</span></td><td class="mut">= 现有引擎（查找替换 + 只改扩展名）的专用句式，零引擎改动</td></tr>
+    <tr class="cat"><td colspan="5"><span class="dot" style="background:var(--c-remove)"></span>删除 · 从名称里去掉内容（3）</td></tr>
+    <tr><td class="mut">删除</td><td>删除文字</td><td>删除名称里所有的 <span class="slot mut2">[备份]</span></td><td><span class="st now">● 现有</span></td><td class="mut">—</td></tr>
+    <tr><td class="mut">删除</td><td>删除指定字符</td><td>删除 <span class="slot">[☑ 空格 数字 汉字 大小写 符号 非法]</span> 类型的字符，可切 <span class="slot">[删除 / 保留]</span></td><td><span class="st plan">○ 规划</span></td><td class="mut">参考工具同款；引擎内部按字符类正则实现</td></tr>
+    <tr><td class="mut">删除</td><td>掐头去尾</td><td>去掉开头 <span class="slot mut2">[2]</span> 个、末尾 <span class="slot mut2">[1]</span> 个字符</td><td><span class="st now">● 现有</span></td><td class="mut">填 0 的段自动从句子消失</td></tr>
+    <tr class="cat"><td colspan="5"><span class="dot" style="background:var(--c-convert)"></span>转换 · 不加不减，改写形态（6）</td></tr>
+    <tr><td class="mut">转换</td><td>大小写</td><td>把英文字母 <span class="slot">[全部大写 / 首字母大写 / 全部小写]</span></td><td><span class="st now">● 现有</span></td><td class="mut">对应 AA / Aa / aa</td></tr>
+    <tr><td class="mut">转换</td><td>中文数字互转</td><td>把名称里的数字 <span class="slot">[十二 → 12 / 12 → 十二]</span></td><td><span class="st plan">○ 规划</span></td><td class="mut">需中文数字解析库逻辑</td></tr>
+    <tr><td class="mut">转换</td><td>简繁转换</td><td>把汉字 <span class="slot">[简 → 繁 / 繁 → 简]</span></td><td><span class="st plan">○ 规划</span></td><td class="mut">需简繁词表（MIT 协议评估后引入）</td></tr>
+    <tr><td class="mut">转换</td><td>转拼音</td><td>把汉字转 <span class="slot">[首字母 Pin / 全拼]</span></td><td><span class="st plan">○ 规划</span></td><td class="mut">可复用现有 pinyin crate（搜索已在用）</td></tr>
+    <tr><td class="mut">转换</td><td>数字加减乘除</td><td>把名称里的数字 <span class="slot">[加 / 减 / 乘 / 除]</span> <span class="slot mut2">[2]</span></td><td><span class="st plan">○ 规划</span></td><td class="mut">如 3 → 6；多处数字时按出现顺序处理</td></tr>
+    <tr><td class="mut">转换</td><td>日期格式化</td><td>把名称里的日期统一成 <span class="slot">[2026-11-07]</span></td><td><span class="st plan">○ 规划</span></td><td class="mut">识别常见日期写法后重排</td></tr>
+  </table>
+  <div class="note-plan">
+    <span class="first">首批建议：● 9 条 + 替换扩展名 + 面板（引擎零/小改动）</span>
+    <span>第二批：删除指定字符（引擎新增一类）</span>
+    <span>按需：补齐长度 / 转拼音</span>
+    <span>远期：简繁 / 中文数字 / 四则 / 日期格式化</span>
+  </div>
+</section>
+
+<!-- ═══ 面板方案一 ═══ -->
+<section>
+  <div class="sec-h"><span class="tag" style="background:var(--c-add)">面板一 · 推荐</span><h2>两栏二级面板 —— 左选大类，右列规则</h2></div>
+  <p class="sec-note">「＋ 添加规则」点开<b>一张面板</b>：左栏 = 四大类（色点 + 名称 + 数量），右栏 = 选中类的规则列表（名称 + 词槽句式预览，<b>规划中的条目灰显不可点</b>）。二级结构直观、句式预览空间充足；点击大类即切换，无需弹层叠弹层。<b>常用任务 chips 保留在栏顶</b>——高频操作零层级直达，长尾规则走面板。</p>
+  <div class="ctx">
+    <div class="ctxbar">
+      <button class="addbtn open" id="p2-btn">＋ 添加规则 ▾</button>
+      <button class="chip">批量编号</button><button class="chip">去空格</button><button class="chip">加日期前缀</button><button class="chip">全部小写</button><button class="chip">换扩展名</button>
+      <span class="cnt">2 条规则</span>
+    </div>
+    <div class="panel" id="p2-panel" style="top: 40px; left: 16px;">
+      <div class="p-head"><span class="t">添加规则</span><span class="d">按分类选择 · 悬停看句式</span></div>
+      <div class="p2">
+        <div class="rail">
+          <div class="cat on" data-cat="add"><span class="dot" style="background:var(--c-add)"></span>添加<span class="n2">6</span></div>
+          <div class="cat" data-cat="replace"><span class="dot" style="background:var(--c-replace)"></span>替换<span class="n2">2</span></div>
+          <div class="cat" data-cat="remove"><span class="dot" style="background:var(--c-remove)"></span>删除<span class="n2">3</span></div>
+          <div class="cat" data-cat="convert"><span class="dot" style="background:var(--c-convert)"></span>转换<span class="n2">6</span></div>
+        </div>
+        <div class="list" id="p2-list"></div>
+      </div>
+    </div>
+    <div style="margin-top: 210px;">
+      <div class="a-card">
+        <span class="grip"><i></i><i></i><i></i></span>
+        <div style="flex:1">
+          <div class="a-type"><span class="a-idx">1</span>加序号</div>
+          <div class="a-sent">在 <span class="dd"><button>扩展名前 <span class="cv">▼</span></button></span> 加编号，从 <input class="inp" style="width:36px; text-align:center" value="1"> 起、宽 <span class="dd"><button>2 位 <span class="cv">▼</span></button></span>，分隔符 <input class="inp" style="width:32px" value="-"></div>
+        </div>
+      </div>
+      <div class="a-card">
+        <span class="grip"><i></i><i></i><i></i></span>
+        <div style="flex:1">
+          <div class="a-type"><span class="a-idx">2</span>查找替换</div>
+          <div class="a-sent">把 <input class="inp" style="width:72px" value="报告"> 替换为 <input class="inp" style="width:56px" value="项目"> ，按 <span class="dd"><button>文字 <span class="cv">▼</span></button></span> 匹配，作用于 <span class="dd"><button>主名 <span class="cv">▼</span></button></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 面板方案二 ═══ -->
+<section>
+  <div class="sec-h"><span class="tag" style="background:var(--c-convert)">面板二 · 备选</span><h2>单面板全分组 —— 四类同屏，零切换</h2></div>
+  <p class="sec-note">一张面板铺开全部四类（2×2 分组栅格），<b>大类不藏层级</b>，所有规则一眼到底；代价是面板更宽（~540px，超出右栏时向视口居中展开），且 17 条同屏信息密度偏高。适合「规则总量就这十几条、不想多点一次」的取向。</p>
+  <div class="ctx">
+    <div class="ctxbar">
+      <button class="addbtn open" id="p1-btn">＋ 添加规则 ▾</button>
+      <button class="chip">批量编号</button><button class="chip">去空格</button><button class="chip">全部小写</button><button class="chip">换扩展名</button>
+      <span class="cnt">2 条规则</span>
+    </div>
+    <div class="panel" id="p1-panel" style="top: 40px; left: 8px;">
+      <div class="p-head"><span class="t">添加规则</span><span class="d">四类全览 · 悬停看句式</span></div>
+      <div class="p1" id="p1-grid"></div>
+    </div>
+    <div style="margin-top: 250px;">
+      <div class="a-card">
+        <span class="grip"><i></i><i></i><i></i></span>
+        <div style="flex:1">
+          <div class="a-type"><span class="a-idx">1</span>加序号</div>
+          <div class="a-sent">在 <span class="dd"><button>扩展名前 <span class="cv">▼</span></button></span> 加编号，从 <input class="inp" style="width:36px; text-align:center" value="1"> 起、宽 <span class="dd"><button>2 位 <span class="cv">▼</span></button></span>，分隔符 <input class="inp" style="width:32px" value="-"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 删除指定字符 词槽 ═══ -->
+<section>
+  <div class="sec-h"><span class="tag" style="background:var(--c-remove)">词槽交互</span><h2>「删除指定字符」—— 勾选面板嵌进语句卡</h2></div>
+  <p class="sec-note">参考工具的「勾选要删除/保留的字符类型」收敛成语句卡的一个<b>词槽</b>：点开勾选面板，选中哪些类型、句子实时改写；切「保留」句式翻转为「只保留…」。正则由引擎按字符类内部生成，用户全程不见正则。</p>
+  <div class="ctx">
+    <div class="a-card">
+      <span class="grip"><i></i><i></i><i></i></span>
+      <div style="flex:1">
+        <div class="a-type"><span class="a-idx">1</span>删除指定字符</div>
+        <div class="a-sent">
+          <span class="slotwrap">
+            <span class="dd open" id="cls-dd"><button id="cls-slot">空格、数字 <span class="cv">▼</span></button></span>
+            <div class="cls-panel" id="cls-panel">
+              <label class="ck"><input type="checkbox" data-re="\s" checked>空格</label>
+              <label class="ck"><input type="checkbox" data-re="\d" checked>数字</label>
+              <label class="ck"><input type="checkbox" data-re="\u4e00-\u9fa5">汉字</label>
+              <label class="ck"><input type="checkbox" data-re="A-Z">大写字母</label>
+              <label class="ck"><input type="checkbox" data-re="a-z">小写字母</label>
+              <label class="ck"><input type="checkbox" data-re="（中文标点类）">中文符号</label>
+              <label class="ck"><input type="checkbox" data-re="[()_\-\[\]]">英文符号</label>
+              <label class="ck"><input type="checkbox" data-re="[\\/:*?&quot;&lt;&gt;|]">非法字符</label>
+              <div class="ft">
+                <span class="seg" id="cls-mode"><b class="on">删除</b><b>保留</b></span>
+                <span class="d" style="font-size:11px;color:var(--np-muted)">作用于 主名</span>
+              </div>
+              <div class="prev">将删除 <code>空格、数字</code>（内部正则 <code id="cls-re">[\s\d]</code>）</div>
+            </div>
+          </span>
+          的字符，作用于 <span class="dd"><button>主名 <span class="cv">▼</span></button></span>
+        </div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--np-muted);line-height:1.9">勾选变化实时改写：句子词槽回显 <b style="color:var(--np-fg)">「空格、数字」</b>，下方预览内部正则；一个都不勾时句子落兜底句「<b style="color:var(--np-fg)">未勾选任何字符类型</b>」。「保留」模式 = 删除未勾选的类型（如只保留汉字和数字，批量清洗混杂编号）。</div>
+  </div>
+</section>
+
+<script>
+  // 主题切换
+  const bd = document.body, bD = document.getElementById("btn-dark"), bL = document.getElementById("btn-light");
+  function setTheme(dark) {
+    bd.classList.toggle("t-dark", dark); bd.classList.toggle("t-light", !dark);
+    bD.classList.toggle("on", dark); bL.classList.toggle("on", !dark);
+  }
+  bD.onclick = () => setTheme(true);
+  bL.onclick = () => setTheme(false);
+
+  // 规则数据（name / sentence / status: now|up|plan）
+  const RULES = {
+    add: [
+      { n: "加前缀", s: "在最前面加 [文字]", st: "now" },
+      { n: "加后缀", s: "在扩展名前加 [文字]", st: "now" },
+      { n: "插入文字", s: "在 [开头/末尾/第N个字符后] 插入 [文字]", st: "up" },
+      { n: "加序号", s: "在 [位置] 加编号，从 [1] 起、宽 [2位]，分隔 [-]", st: "now" },
+      { n: "加日期", s: "在 [位置] 加修改日期 [格式]，分隔 [_]", st: "now" },
+      { n: "补齐长度", s: "把名称里的数字补齐到 [3] 位（1 → 001）", st: "plan" },
+    ],
+    replace: [
+      { n: "查找替换", s: "把 [文字] 替换为 [文字]，按 [文字/表达式]", st: "now" },
+      { n: "替换扩展名", s: "把扩展名 [jpg] 改为 [png]", st: "up" },
+    ],
+    remove: [
+      { n: "删除文字", s: "删除名称里所有的 [文字]", st: "now" },
+      { n: "删除指定字符", s: "删除 [勾选字符类型]，可切 [删除/保留]", st: "plan" },
+      { n: "掐头去尾", s: "去掉开头 [2] 个、末尾 [1] 个字符", st: "now" },
+    ],
+    convert: [
+      { n: "大小写", s: "把英文字母 [全部大写/首字母大写/全部小写]", st: "now" },
+      { n: "中文数字互转", s: "把名称里的数字 [十二→12 / 12→十二]", st: "plan" },
+      { n: "简繁转换", s: "把汉字 [简→繁 / 繁→简]", st: "plan" },
+      { n: "转拼音", s: "把汉字转 [首字母 Pin / 全拼]", st: "plan" },
+      { n: "数字加减乘除", s: "把名称里的数字 [加/减/乘/除] [2]", st: "plan" },
+      { n: "日期格式化", s: "把名称里的日期统一成 [2026-11-07]", st: "plan" },
+    ],
+  };
+  const STLBL = { now: "●", up: "◐", plan: "○" };
+  const itemHtml = (r) =>
+    `<div class="ritem ${r.st === "plan" ? "plan" : ""}" title="${r.s}">
+      <div class="n">${STLBL[r.st]} ${r.n}${r.st === "plan" ? ' <span style="font-size:10px;color:var(--np-muted);margin-left:auto">规划</span>' : ""}</div>
+      <div class="s">${r.s}</div>
+    </div>`;
+
+  // 面板一：两栏二级
+  const p2list = document.getElementById("p2-list");
+  function renderCat(key) {
+    const r = RULES[key];
+    p2list.innerHTML = r.map(itemHtml).join("");
+    p2list.querySelectorAll(".ritem:not(.plan)").forEach((el) => el.addEventListener("click", () => {
+      document.getElementById("p2-panel").style.display = "none";
+      document.getElementById("p2-btn").classList.remove("open");
+    }));
+  }
+  renderCat("add");
+  document.querySelectorAll("#p2-panel .cat").forEach((c) => c.addEventListener("click", () => {
+    document.querySelectorAll("#p2-panel .cat").forEach((x) => x.classList.remove("on"));
+    c.classList.add("on");
+    renderCat(c.dataset.cat);
+  }));
+  document.getElementById("p2-btn").addEventListener("click", (e) => {
+    const p = document.getElementById("p2-panel");
+    const open = p.style.display !== "none";
+    p.style.display = open ? "none" : "block";
+    e.currentTarget.classList.toggle("open", !open);
+    e.stopPropagation();
+  });
+
+  // 面板二：单面板全分组（左右两列配平：左 = 添加+替换，右 = 删除+转换）
+  const GN = { add: "添加", replace: "替换", remove: "删除", convert: "转换" };
+  const GC = { add: "var(--c-add)", replace: "var(--c-replace)", remove: "var(--c-remove)", convert: "var(--c-convert)" };
+  const grpHtml = (k) =>
+    `<div class="grp">
+      <div class="ghead"><span class="gtag"><span class="dot" style="background:${GC[k]}"></span>${GN[k]}<span class="c">${RULES[k].length} 条</span></span></div>
+      ${RULES[k].map(itemHtml).join("")}
+    </div>`;
+  document.getElementById("p1-grid").innerHTML =
+    `<div class="col">${grpHtml("add")}${grpHtml("replace")}</div>` +
+    `<div class="col">${grpHtml("remove")}${grpHtml("convert")}</div>`;
+  document.getElementById("p1-btn").addEventListener("click", (e) => {
+    const p = document.getElementById("p1-panel");
+    const open = p.style.display !== "none";
+    p.style.display = open ? "none" : "block";
+    e.currentTarget.classList.toggle("open", !open);
+    e.stopPropagation();
+  });
+
+  // 字符类词槽
+  const slot = document.getElementById("cls-slot");
+  const clsDd = document.getElementById("cls-dd");
+  const boxes = [...document.querySelectorAll("#cls-panel input[data-re]")];
+  let keep = false;
+  function refreshCls() {
+    const on = boxes.filter((b) => b.checked);
+    const names = on.map((b) => b.parentElement.textContent.trim());
+    slot.childNodes[0].textContent = (keep ? "保留 " : "") + (names.length ? names.join("、") : "未勾选") + " ";
+    const re = on.map((b) => b.dataset.re).join("");
+    document.getElementById("cls-re").textContent = on.length ? (keep ? "[^" + re + "]" : "[" + re + "]") : "—";
+  }
+  boxes.forEach((b) => b.addEventListener("change", refreshCls));
+  document.querySelectorAll("#cls-mode b").forEach((b) => b.addEventListener("click", () => {
+    document.querySelectorAll("#cls-mode b").forEach((x) => x.classList.remove("on"));
+    b.classList.add("on");
+    keep = b.textContent === "保留";
+    refreshCls();
+  }));
+  slot.parentElement.addEventListener("click", (e) => { e.stopPropagation(); });
+  slot.addEventListener("click", () => clsDd.classList.toggle("open"));
+  refreshCls();
+</script>
+</body>
+</html>
