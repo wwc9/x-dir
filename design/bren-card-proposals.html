@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>批量重命名 · 规则卡重设计 · 3 套方案</title>
+<style>
+  /* ═══ np token 替身（与 src/index.css 同值，2026-11-08）═══ */
+  .t-light {
+    --np-bg: #e9ecf1; --np-surface: #ffffff; --np-surface-2: #f0f2f5;
+    --np-border: #d6dbe2; --np-hairline: rgba(16, 24, 40, 0.06);
+    --np-fg: #171d26; --np-muted: #66707e;
+    --np-accent: #3574f0; --np-accent-fg: #ffffff;
+    --np-hover: rgba(26, 33, 41, 0.055); --np-sel: rgba(53, 116, 240, 0.12);
+    --np-danger: #d1434b; --np-success: #46a758;
+    --np-ring: 0 0 0 2px color-mix(in srgb, var(--np-accent) 45%, transparent);
+  }
+  .t-dark {
+    --np-bg: #131519; --np-surface: #1b1e23; --np-surface-2: #24282f;
+    --np-border: #3a414b; --np-hairline: rgba(255, 255, 255, 0.08);
+    --np-fg: #e8eaed; --np-muted: #8b929c;
+    --np-accent: #5c9dff; --np-accent-fg: #0d1117;
+    --np-hover: rgba(255, 255, 255, 0.055); --np-sel: rgba(92, 157, 255, 0.16);
+    --np-danger: #f27073; --np-success: #5cb964;
+    --np-ring: 0 0 0 2px color-mix(in srgb, var(--np-accent) 45%, transparent);
+  }
+  /* 类别色（方案 C / B 色点用）：全部取自既有 --np-icon-* / 语义 token，无新色板 */
+  .t-light {
+    --c-replace: #3574f0; --c-remove: #d1434b; --c-insert: #46a758;
+    --c-prefix: #3c6fb8; --c-suffix: #cf6a3f; --c-trim: #2997b8;
+    --c-number: #7d64d8; --c-case: #a45aa4; --c-date: #e07817;
+  }
+  .t-dark {
+    --c-replace: #5c9dff; --c-remove: #f27073; --c-insert: #5cb964;
+    --c-prefix: #7fa8e3; --c-suffix: #e8926b; --c-trim: #43c1dc;
+    --c-number: #a08df5; --c-case: #c47ec7; --c-date: #ef9b2d;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 26px 34px 56px; background: #dde2ea; color: #171d26;
+    font-family: system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 13px;
+    transition: background .2s; }
+  body.t-dark { background: #101216; color: #e8eaed; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: #8a93a0; font-size: 12px; margin-bottom: 16px; }
+  body.t-dark .sub { color: #8b929c; }
+  .banner { background: var(--np-surface); border: 1px solid var(--np-border); border-radius: 12px;
+    padding: 12px 16px; margin-bottom: 22px; font-size: 12px; color: var(--np-muted);
+    line-height: 1.9; max-width: 1020px; }
+  .banner b { color: var(--np-fg); }
+  .banner code { background: var(--np-surface-2); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+
+  /* 顶部工具条 */
+  .toolbar { position: sticky; top: 0; z-index: 50; display: flex; gap: 10px; align-items: center;
+    padding: 8px 0; margin-bottom: 6px; background: linear-gradient(to bottom, var(--np-bg) 78%, transparent); }
+  .tbtn { height: 26px; padding: 0 14px; border: 1px solid var(--np-border); border-radius: 999px;
+    background: var(--np-surface); color: var(--np-fg); font-size: 12px; cursor: pointer; }
+  .tbtn:hover { background: var(--np-hover); }
+  .tbtn.on { background: var(--np-sel); border-color: var(--np-accent); color: var(--np-accent); font-weight: 600; }
+  .toolbar .hint { font-size: 11px; color: var(--np-muted); }
+
+  section { margin-bottom: 42px; max-width: 1020px; }
+  .sec-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+  .sec-h .tag { color: #fff; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 2px 10px; }
+  .sec-h h2 { font-size: 15px; margin: 0; }
+  .sec-note { font-size: 12px; color: var(--np-muted); margin: 0 0 14px; line-height: 1.9; max-width: 1000px; }
+  .sec-note b { color: var(--np-fg); }
+  .pros { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  .pros span { font-size: 11px; border-radius: 999px; padding: 2px 10px; border: 1px solid var(--np-border); color: var(--np-muted); }
+  .pros span.plus { border-color: color-mix(in srgb, var(--np-success) 45%, var(--np-border)); color: var(--np-success); }
+  .pros span.minus { border-color: color-mix(in srgb, var(--np-danger) 45%, var(--np-border)); color: var(--np-danger); }
+
+  /* ═══ 通用控件替身（np 配方：24px 高、6px 圆角、填充式 + 发丝描边）═══ */
+  .col { width: 480px; background: var(--np-surface); border-radius: 12px; padding: 14px 16px 16px;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.1); }
+  .bar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; margin-bottom: 12px; }
+  .bar .lab { font-size: 11px; color: var(--np-muted); margin-right: 2px; }
+  .chip { height: 24px; padding: 0 10px; border: 1px solid var(--np-border); border-radius: 999px;
+    background: var(--np-surface); color: var(--np-fg); font-size: 12px; cursor: pointer; }
+  .chip:hover { background: var(--np-hover); }
+  .cnt { font-size: 11px; color: var(--np-muted); margin-left: auto; }
+
+  /* 下拉（NpSelect 替身） */
+  .dd { position: relative; display: inline-flex; }
+  .dd > button { height: 24px; padding: 0 7px 0 9px; display: inline-flex; align-items: center; gap: 4px;
+    border: none; border-radius: 6px; background: var(--np-surface-2);
+    box-shadow: inset 0 0 0 1px var(--np-border); color: var(--np-fg); font-size: 12px; cursor: pointer; }
+  .dd > button:hover { background: var(--np-hover); }
+  .dd.open > button { background: var(--np-surface); box-shadow: var(--np-ring); }
+  .dd .cv { font-size: 9px; color: var(--np-muted); transition: transform .15s; }
+  .dd.open .cv { transform: rotate(180deg); }
+  .menu { display: none; position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 128px;
+    background: var(--np-surface); border-radius: 10px; padding: 4px;
+    box-shadow: 0 0 0 1px var(--np-border), 0 12px 32px rgba(20, 28, 40, .18); }
+  .dd.open .menu { display: block; }
+  .menu div { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    height: 26px; padding: 0 9px; border-radius: 6px; font-size: 12px; color: var(--np-fg); cursor: pointer; }
+  .menu div:hover { background: var(--np-hover); }
+  .menu div .ck { visibility: hidden; color: var(--np-accent); font-weight: 600; }
+  .menu div.on .ck { visibility: visible; }
+  .menu div.on { color: var(--np-accent); font-weight: 600; }
+
+  /* 输入框替身 */
+  .inp { height: 24px; padding: 0 8px; border: none; border-radius: 6px; outline: none;
+    background: var(--np-surface); box-shadow: inset 0 0 0 1px var(--np-border);
+    color: var(--np-fg); font-size: 12px; font-family: inherit; }
+  .inp:focus { background: var(--np-surface); box-shadow: var(--np-ring); }
+  .inp::placeholder { color: var(--np-muted); }
+  .inp.num { width: 44px; text-align: center; }
+
+  /* 分段（seg pill）替身 */
+  .seg { display: inline-flex; gap: 4px; }
+  .seg b { display: inline-flex; align-items: center; height: 22px; padding: 0 10px; border-radius: 999px;
+    border: 1px solid var(--np-border); color: var(--np-muted); font-size: 12px; font-weight: 400; cursor: pointer; }
+  .seg b:hover { background: var(--np-hover); color: var(--np-fg); }
+  .seg b.on { background: var(--np-sel); border-color: var(--np-accent); color: var(--np-accent); font-weight: 600; }
+  .seg b.on::before { content: "✓"; font-size: 10px; margin-right: 4px; }
+
+  /* 开关替身 */
+  .sw { width: 26px; height: 15px; border-radius: 999px; background: var(--np-surface-2);
+    box-shadow: inset 0 0 0 1px var(--np-border); position: relative; cursor: pointer; flex: none; }
+  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px;
+    border-radius: 999px; background: var(--np-muted); transition: all .15s; }
+  .sw.on { background: var(--np-accent); box-shadow: none; }
+  .sw.on::after { left: 13px; background: var(--np-accent-fg); }
+
+  /* 删除钮替身 */
+  .x { width: 22px; height: 22px; border: none; border-radius: 6px; background: transparent;
+    color: var(--np-muted); font-size: 13px; line-height: 1; cursor: pointer; flex: none; }
+  .x:hover { background: var(--np-hover); color: var(--np-danger); }
+
+  /* 拖拽把手 */
+  .grip { width: 14px; display: inline-flex; flex-direction: column; gap: 3px; align-items: center;
+    cursor: grab; color: var(--np-muted); flex: none; opacity: .8; }
+  .grip i { width: 10px; height: 1.6px; border-radius: 2px; background: currentColor; display: block; }
+  .grip i:nth-child(2) { width: 6px; }
+
+  /* 效果行替身 */
+  .fx { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 11px; color: var(--np-accent);
+    background: color-mix(in srgb, var(--np-accent) 8%, transparent); border-radius: 6px; padding: 3px 8px; }
+  .fx span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fx svg { flex: none; }
+
+  /* ═══════════ 现状对照 ═══════════ */
+  .cur-card { background: var(--np-surface-2); border-radius: 10px; padding: 8px 10px; display: flex;
+    flex-direction: column; gap: 6px; margin-bottom: 8px; }
+  .cur-r1 { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--np-muted); }
+  .cur-r1 .n { width: 16px; text-align: center; color: var(--np-muted); font-variant-numeric: tabular-nums; }
+  .cur-r2 { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--np-muted); }
+
+  /* ═══════════ 方案 A · 语句词槽卡 ═══════════ */
+  .a-card { background: var(--np-surface); border: 1px solid var(--np-border); border-radius: 10px;
+    padding: 8px 10px 8px 8px; margin-bottom: 8px; display: flex; gap: 8px; }
+  .a-card.off { opacity: .55; }
+  .a-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .a-head { display: flex; align-items: center; gap: 7px; }
+  .a-idx { font-size: 11px; color: var(--np-muted); font-variant-numeric: tabular-nums;
+    border: 1px solid var(--np-border); border-radius: 999px; width: 20px; height: 20px;
+    display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .a-type { font-size: 12px; font-weight: 600; color: var(--np-fg); }
+  .a-sp { flex: 1; }
+  .a-sent { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; font-size: 12px;
+    color: var(--np-muted); line-height: 24px; }
+  .a-sent .w { color: var(--np-fg); }
+  .a-sent .slot { height: 24px; }
+  .a-sent .slot.dd > button { background: var(--np-surface); font-weight: 600; color: var(--np-accent); }
+  .a-sent .inp { font-weight: 600; color: var(--np-fg); min-width: 0; }
+
+  /* ═══════════ 方案 B · 分栏表单卡 ═══════════ */
+  .b-card { background: var(--np-surface); border: 1px solid var(--np-border); border-radius: 10px;
+    display: flex; margin-bottom: 8px; overflow: hidden; }
+  .b-card.off .b-body { opacity: .55; }
+  .b-rail { width: 34px; flex: none; background: var(--np-surface-2); display: flex; flex-direction: column;
+    align-items: center; gap: 7px; padding: 8px 0; border-right: 1px solid var(--np-hairline); }
+  .b-idx { font-size: 11px; color: var(--np-muted); font-variant-numeric: tabular-nums; font-weight: 600; }
+  .b-dot { width: 8px; height: 8px; border-radius: 999px; }
+  .b-body { flex: 1; min-width: 0; padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; }
+  .b-head { display: flex; align-items: center; gap: 8px; }
+  .b-type { font-size: 13px; font-weight: 600; color: var(--np-fg); }
+  .b-scope { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .b-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 10px; }
+  .b-cell { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .b-cell.w { grid-column: 1 / -1; }
+  .b-cell .k { font-size: 11px; color: var(--np-muted); }
+  .b-cell .inp { width: 100%; }
+  .b-cell .dd > button, .b-cell .dd { width: 100%; }
+  .b-cell .dd > button { justify-content: space-between; }
+  .b-foot { display: flex; }
+
+  /* ═══════════ 方案 C · 色徽分区卡 ═══════════ */
+  .c-card { background: var(--np-surface); border: 1px solid var(--np-border); border-left: 3px solid var(--dot, var(--np-accent));
+    border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 7px; }
+  .c-card.off { opacity: .55; }
+  .c-head { display: flex; align-items: center; gap: 8px; }
+  .c-badge { width: 24px; height: 24px; border-radius: 999px; display: inline-flex; align-items: center;
+    justify-content: center; flex: none; background: color-mix(in srgb, var(--dot) 16%, transparent);
+    color: var(--dot); }
+  .c-name { font-size: 13px; font-weight: 600; color: var(--np-fg); }
+  .c-scope { height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11px; color: var(--np-muted);
+    background: var(--np-surface-2); display: inline-flex; align-items: center; gap: 3px; cursor: pointer; }
+  .c-scope:hover { color: var(--np-fg); }
+  .c-sp { flex: 1; }
+  .c-pills { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+  .pill { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 4px 0 9px;
+    border-radius: 999px; background: var(--np-surface-2); box-shadow: inset 0 0 0 1px var(--np-border); }
+  .pill .k { font-size: 11px; color: var(--np-muted); }
+  .pill .inp { background: transparent; box-shadow: none; padding: 0 2px; font-weight: 600; }
+  .pill .inp.num { width: 30px; }
+  .pill .dd > button { background: transparent; box-shadow: none; padding: 0 2px; font-weight: 600; color: var(--np-fg); }
+  .pill .dd.open > button { color: var(--np-accent); }
+  .c-card .fx { margin-top: 1px; }
+
+  /* 小图标（16 栅格 SVG，stroke 1.5） */
+  svg.ic { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.5;
+    stroke-linecap: round; stroke-linejoin: round; }
+</style>
+</head>
+<body class="t-dark">
+
+<div class="toolbar">
+  <button class="tbtn on" id="btn-dark">深色</button>
+  <button class="tbtn" id="btn-light">浅色</button>
+  <span class="hint">三个方案使用同一组示例规则（加序号 / 查找替换 / 删除文字）；下拉、分段、开关、输入均可点按体验。</span>
+</div>
+
+<h1>批量重命名 · 规则卡重设计 · 3 套方案</h1>
+<div class="sub">design/bren-card-proposals.html · 2026-11-08 · 静态预览，不参与构建；取值全部对齐 index.css token</div>
+
+<div class="banner">
+  <b>现状的清晰度问题</b>：行1 的序号/类型/作用域/删除四个控件视觉等权，类型和作用域分不清主次；行2 参数 = 标签+控件横向流，配对关系弱；行3 效果行与参数区关系不明；没有启用/停用开关；拖拽把手不可见。<br>
+  三套方案的共同改动：<b>① 类型升为卡主标题</b>（粗体大字，一眼知道这张卡干什么）；<b>② 作用域降为次要 pill/seg</b>（大多数场景只改主名，不必占卡头 C 位）；<b>③ 新增启用开关</b>（模型已有 <code>enabled</code> 字段，卡上终于可见）；<b>④ 拖拽把手显形</b>（左侧 ⠿ 或序号即把手）。
+</div>
+
+<!-- ═══════════ 现状对照 ═══════════ -->
+<section>
+  <div class="sec-h"><span class="tag gray">现状</span><h2>当前实现（对照）</h2></div>
+  <div class="col">
+    <div class="bar"><span class="lab">添加规则：</span>
+      <button class="chip">查找替换</button><button class="chip">删除文字</button><button class="chip">加序号</button><button class="chip">…共 9 类</button>
+      <span class="cnt">2 条规则</span>
+    </div>
+    <div class="cur-card">
+      <div class="cur-r1"><span class="n">1</span><span>加序号 ▾</span><span>只改主名 ▾</span><span style="margin-left:auto">×</span></div>
+      <div class="cur-r2"><span>位置 [最前|✓最后]</span><span>从 [1] 起</span><span>位数 [2位▾]</span><span>分隔 [-]</span></div>
+      <div class="cur-r2" style="color:var(--np-accent)">✓ 在扩展名前加编号 [-01] [-02] …</div>
+    </div>
+    <div class="cur-card" style="opacity:.85">
+      <div class="cur-r1"><span class="n">2</span><span>查找替换 ▾</span><span>只改主名 ▾</span><span style="margin-left:auto">×</span></div>
+      <div class="cur-r2"><span>查找 [要查找的文字]</span><span>替换为 [新文字]</span><span>按 [✓文字|表达式]</span></div>
+      <div class="cur-r2" style="color:var(--np-accent)">✓ 把「报告」替换为「项目」</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 方案 A · 语句词槽卡 ═══════════ -->
+<section>
+  <div class="sec-h"><span class="tag" style="background:var(--np-accent)">方案 A</span><h2>语句卡 —— 规则就是一句话（词槽句式）</h2></div>
+  <p class="sec-note">把整条规则压缩成<b>一句自然语句</b>，参数以<b>词槽控件</b>内嵌在句子里（自动化工具的 sentence-builder 范式）。句子本身即效果描述——原行3 效果行<b>整行省掉</b>；类型不再是下拉，而是卡头的粗体词；作用域内嵌在句尾「作用于…」。<b>念一遍卡片就是改完的结果</b>，这是三案里可读性最高的。</p>
+  <div class="pros"><span class="plus">＋ 最好懂：读句子即懂规则</span><span class="plus">＋ 少一层：效果行并入语句</span><span class="plus">＋ 词槽即参数，无标签负担</span><span class="minus">－ 每种类型要写一套句式模板</span><span class="minus">－ 窄卡语句换行需设计</span></div>
+  <div class="col">
+    <div class="bar"><span class="lab">添加规则：</span>
+      <button class="chip">查找替换</button><button class="chip">删除文字</button><button class="chip">插入文字</button><button class="chip">加前缀</button><button class="chip">加后缀</button><button class="chip">掐头去尾</button><button class="chip">加序号</button><button class="chip">大小写</button><button class="chip">插入日期</button>
+      <span class="cnt">3 条规则</span>
+    </div>
+
+    <div class="a-card">
+      <span class="grip" title="拖动排序"><i></i><i></i><i></i></span>
+      <div class="a-main">
+        <div class="a-head">
+          <span class="a-idx">1</span><span class="a-type">加序号</span>
+          <span class="a-sp"></span>
+          <span class="sw on" data-sw></span>
+          <button class="x" title="删除规则">×</button>
+        </div>
+        <div class="a-sent">
+          在<span class="slot dd" data-dd><button>扩展名前 <span class="cv">▼</span></button>
+            <div class="menu"><div class="on">最前 <span class="ck">✓</span></div><div>最后 <span class="ck">✓</span></div><div>扩展名前 <span class="ck">✓</span></div></div></span>
+          加编号，从 <input class="inp num" value="1"> 起、宽
+          <span class="slot dd" data-dd><button>2 位 <span class="cv">▼</span></button>
+            <div class="menu"><div class="on">1 位 <span class="ck">✓</span></div><div class="on">2 位 <span class="ck">✓</span></div><div>3 位 <span class="ck">✓</span></div></div></span>，
+          用 <input class="inp" style="width:40px" value="-"> 分隔
+        </div>
+      </div>
+    </div>
+
+    <div class="a-card">
+      <span class="grip" title="拖动排序"><i></i><i></i><i></i></span>
+      <div class="a-main">
+        <div class="a-head">
+          <span class="a-idx">2</span><span class="a-type">查找替换</span>
+          <span class="a-sp"></span>
+          <span class="sw on" data-sw></span>
+          <button class="x" title="删除规则">×</button>
+        </div>
+        <div class="a-sent">
+          把 <input class="inp" style="width:86px" value="报告"> 替换为 <input class="inp" style="width:70px" value="项目">，
+          按
+          <span class="seg"><b class="on">文字</b><b>表达式</b></span>，
+          作用于
+          <span class="slot dd" data-dd><button>主名 <span class="cv">▼</span></button>
+            <div class="menu"><div class="on">主名（扩展名不动） <span class="ck">✓</span></div><div>整个名称 <span class="ck">✓</span></div><div>只改扩展名 <span class="ck">✓</span></div></div></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="a-card off">
+      <span class="grip" title="拖动排序"><i></i><i></i><i></i></span>
+      <div class="a-main">
+        <div class="a-head">
+          <span class="a-idx">3</span><span class="a-type">删除文字</span>
+          <span style="font-size:11px;color:var(--np-muted)">已停用</span>
+          <span class="a-sp"></span>
+          <span class="sw" data-sw></span>
+          <button class="x" title="删除规则">×</button>
+        </div>
+        <div class="a-sent">
+          删除名称里所有的 <input class="inp" style="width:96px" placeholder="要删除的文字"> ，作用于
+          <span class="slot dd" data-dd><button>主名 <span class="cv">▼</span></button>
+            <div class="menu"><div class="on">主名（扩展名不动） <span class="ck">✓</span></div><div>整个名称 <span class="ck">✓</span></div><div>只改扩展名 <span class="ck">✓</span></div></div></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 方案 B · 分栏表单卡 ═══════════ -->
+<section>
+  <div class="sec-h"><span class="tag" style="background:var(--c-number)">方案 B</span><h2>分栏表单卡 —— 左轨定位，标签永远在控件上方</h2></div>
+  <p class="sec-note"><b>左轨</b>（surface-2 竖条）收纳定位类元素：拖拽把手、序号、类别色点；<b>右侧</b>三段纵排：标题行（类型粗体 + 作用域 seg 靠右）、<b>两列参数网格</b>（标签 11px 在控件正上方，永远不错位）、效果行收底。<b>标签与控件的配对关系是三案里最明确的</b>，参数多的规则（加序号 4 参、日期 3 参）最受益。</p>
+  <div class="pros"><span class="plus">＋ 标签上置，配对零歧义</span><span class="plus">＋ 两列网格，多参数最整齐</span><span class="plus">＋ 左轨收纳序号/把手，卡面更净</span><span class="minus">－ 纵向更高（约多一行）</span><span class="minus">－ 表单感强，趣味性一般</span></div>
+  <div class="col">
+    <div class="bar"><span class="lab">添加规则：</span>
+      <button class="chip">查找替换</button><button class="chip">删除文字</button><button class="chip">插入文字</button><button class="chip">加前缀</button><button class="chip">加后缀</button><button class="chip">掐头去尾</button><button class="chip">加序号</button><button class="chip">大小写</button><button class="chip">插入日期</button>
+      <span class="cnt">3 条规则</span>
+    </div>
+
+    <div class="b-card">
+      <div class="b-rail">
+        <span class="grip" title="拖动排序"><i></i><i></i><i></i></span>
+        <span class="b-idx">1</span>
+        <span class="b-dot" style="background:var(--c-number)"></span>
+      </div>
+      <div class="b-body">
+        <div class="b-head">
+          <span class="b-type">加序号</span>
+          <div class="b-scope">
+            <span class="seg"><b class="on">主名</b><b>整名</b><b>只改扩展名</b></span>
+            <span class="sw on" data-sw></span>
+            <button class="x" title="删除规则">×</button>
+          </div>
+        </div>
+        <div class="b-grid">
+          <div class="b-cell"><span class="k">起始编号</span><input class="inp" value="1"></div>
+          <div class="b-cell"><span class="k">编号位数</span>
+            <span class="dd" data-dd><button>2 位 <span class="cv">▼</span></button>
+              <div class="menu"><div>1 位 <span class="ck">✓</span></div><div class="on">2 位 <span class="ck">✓</span></div><div>3 位 <span class="ck">✓</span></div></div></span>
+          </div>
+          <div class="b-cell"><span class="k">分隔符</span><input class="inp" value="-"></div>
+          <div class="b-cell"><span class="k">插入位置</span>
+            <span class="dd" data-dd><button>扩展名前 <span class="cv">▼</span></button>
+              <div class="menu"><div>最前 <span class="ck">✓</span></div><div>最后 <span class="ck">✓</span></div><div class="on">扩展名前 <span class="ck">✓</span></div></div></span>
+          </div>
+        </div>
+        <div class="fx"><svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 8l2 2 3.5-4"/></svg><span>在扩展名前加编号 [-01] [-02] …</span></div>
+      </div>
+    </div>
+
+    <div class="b-card">
+      <div class="b-rail">
+        <span class="grip" title="拖动排序"><i></i><i></i><i></i></span>
+        <span class="b-idx">2</span>
+        <span class="b-dot" style="background:var(--c-replace)"></span>
+      </div>
+      <div class="b-body">
+        <div class="b-head">
+          <span class="b-type">查找替换</span>
+          <div class="b-scope">
+            <span class="seg"><b class="on">主名</b><b>整名</b><b>只改扩展名</b></span>
+            <span class="sw on" data-sw></span>
+            <button class="x" title="删除规则">×</button>
+          </div>
+        </div>
+        <div class="b-grid">
+          <div class="b-cell"><span class="k">查找</span><input class="inp" value="报告" placeholder="要查找的文字"></div>
+          <div class="b-cell"><span class="k">替换为</span><input class="inp" value="项目" placeholder="新文字"></div>
+          <div class="b-cell w"><span class="k">匹配方式</span>
+            <span class="seg"><b class="on">文字</b><b>表达式（支持 $1 捕获组）</b></span>
+          </div>
+        </div>
+        <div class="fx"><svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 8l2 2 3.5-4"/></svg><span>把「报告」替换为「项目」</span></div>
+      </div>
+    </div>
+
+    <div class="b-card">
+      <div class="b-rail">
+        <span class="grip" title="拖动排序"><i></i><i></i><i></i></span>
+        <span class="b-idx">3</span>
+        <span class="b-dot" style="background:var(--c-remove)"></span>
+      </div>
+      <div class="b-body" style="opacity:.55">
+        <div class="b-head">
+          <span class="b-type">删除文字</span>
+          <span style="font-size:11px;color:var(--np-muted)">已停用</span>
+          <div class="b-scope">
+            <span class="seg"><b class="on">主名</b><b>整名</b><b>只改扩展名</b></span>
+            <span class="sw" data-sw></span>
+            <button class="x" title="删除规则">×</button>
+          </div>
+        </div>
+        <div class="b-grid">
+          <div class="b-cell w"><span class="k">要删除的文字</span><input class="inp" placeholder="留空 = 不删除"></div>
+        </div>
+        <div class="fx"><svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 8l2 2 3.5-4"/></svg><span>未填写要删除的文字</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 方案 C · 色徽分区卡 ═══════════ -->
+<section>
+  <div class="sec-h"><span class="tag" style="background:var(--c-trim)">方案 C</span><h2>色徽分区卡 —— 颜色即类型，扫读优先</h2></div>
+  <p class="sec-note">每类规则一枚<b>类别色圆徽 + 图标</b>（取自既有 <code>--np-icon-*</code> 色板，无新色板），卡左缘 3px 同色条（复用「激活 = 3px 描边」语言）；类型名粗体紧随其后，作用域降为小 pill；参数收进<b>一体药丸</b>（标签+值同底、点击即改）；效果行浅染收底。<b>多规则堆叠时扫读最快</b>——余光里颜色就分清了哪条是删除、哪条是编号。</p>
+  <div class="pros"><span class="plus">＋ 扫读最快：颜色+图标即类型</span><span class="plus">＋ 药丸参数一体感强</span><span class="plus">＋ 左缘色条与全局激活语言同源</span><span class="minus">－ 色彩语义需要一点学习</span><span class="minus">－ 9 类配色需防近色混淆</span></div>
+  <div class="col">
+    <div class="bar"><span class="lab">添加规则：</span>
+      <button class="chip">查找替换</button><button class="chip">删除文字</button><button class="chip">插入文字</button><button class="chip">加前缀</button><button class="chip">加后缀</button><button class="chip">掐头去尾</button><button class="chip">加序号</button><button class="chip">大小写</button><button class="chip">插入日期</button>
+      <span class="cnt">3 条规则</span>
+    </div>
+
+    <div class="c-card" style="--dot:var(--c-number)">
+      <div class="c-head">
+        <span class="grip" title="拖动排序"><i></i><i></i><i></i></span>
+        <span class="c-badge"><svg class="ic" viewBox="0 0 16 16"><path d="M5 2.5l-1.5 11M12.5 2.5L11 13.5M3 5.5h10M2.8 10.5h10"/></svg></span>
+        <span class="c-name">加序号</span>
+        <span class="c-sp"></span>
+        <span class="c-scope">主名 <span style="font-size:8px">▼</span></span>
+        <span class="sw on" data-sw></span>
+        <button class="x" title="删除规则">×</button>
+      </div>
+      <div class="c-pills">
+        <span class="pill"><span class="k">位置</span><span class="dd" data-dd><button>扩展名前 <span class="cv">▼</span></button>
+          <div class="menu"><div>最前 <span class="ck">✓</span></div><div>最后 <span class="ck">✓</span></div><div class="on">扩展名前 <span class="ck">✓</span></div></div></span></span>
+        <span class="pill"><span class="k">从</span><input class="inp num" value="1"><span class="k">起</span></span>
+        <span class="pill"><span class="k">位数</span><span class="dd" data-dd><button>2 <span class="cv">▼</span></button>
+          <div class="menu"><div>1 <span class="ck">✓</span></div><div class="on">2 <span class="ck">✓</span></div><div>3 <span class="ck">✓</span></div></div></span></span>
+        <span class="pill"><span class="k">分隔</span><input class="inp" style="width:32px" value="-"></span>
+      </div>
+      <div class="fx"><svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 8l2 2 3.5-4"/></svg><span>在扩展名前加编号 [-01] [-02] …</span></div>
+    </div>
+
+    <div class="c-card" style="--dot:var(--c-replace)">
+      <div class="c-head">
+        <span class="grip" title="拖动排序"><i></i><i></i><i></i></span>
+        <span class="c-badge"><svg class="ic" viewBox="0 0 16 16"><path d="M13 3H5m0 0 2-2M5 3l2 2M3 13h8m0 0-2-2m2 2-2 2"/></svg></span>
+        <span class="c-name">查找替换</span>
+        <span class="c-sp"></span>
+        <span class="c-scope">主名 <span style="font-size:8px">▼</span></span>
+        <span class="sw on" data-sw></span>
+        <button class="x" title="删除规则">×</button>
+      </div>
+      <div class="c-pills">
+        <span class="pill"><span class="k">查找</span><input class="inp" style="width:74px" value="报告"></span>
+        <span class="pill"><span class="k">替换为</span><input class="inp" style="width:60px" value="项目"></span>
+        <span class="pill"><span class="k">按</span>
+          <span class="seg"><b class="on">文字</b><b>表达式</b></span>
+        </span>
+      </div>
+      <div class="fx"><svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 8l2 2 3.5-4"/></svg><span>把「报告」替换为「项目」</span></div>
+    </div>
+
+    <div class="c-card off" style="--dot:var(--c-remove)">
+      <div class="c-head">
+        <span class="grip" title="拖动排序"><i></i><i></i><i></i></span>
+        <span class="c-badge"><svg class="ic" viewBox="0 0 16 16"><path d="M3 8h10"/></svg></span>
+        <span class="c-name">删除文字</span>
+        <span style="font-size:11px;color:var(--np-muted)">已停用</span>
+        <span class="c-sp"></span>
+        <span class="c-scope">主名 <span style="font-size:8px">▼</span></span>
+        <span class="sw" data-sw></span>
+        <button class="x" title="删除规则">×</button>
+      </div>
+      <div class="c-pills">
+        <span class="pill"><span class="k">删除</span><input class="inp" style="width:96px" placeholder="要删除的文字"></span>
+      </div>
+      <div class="fx"><svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 8l2 2 3.5-4"/></svg><span>未填写要删除的文字</span></div>
+    </div>
+  </div>
+</section>
+
+<script>
+  // 主题切换
+  const bd = document.body, bD = document.getElementById("btn-dark"), bL = document.getElementById("btn-light");
+  function setTheme(dark) {
+    bd.classList.toggle("t-dark", dark); bd.classList.toggle("t-light", !dark);
+    bD.classList.toggle("on", dark); bL.classList.toggle("on", !dark);
+  }
+  bD.onclick = () => setTheme(true);
+  bL.onclick = () => setTheme(false);
+
+  // 下拉替身：点开/选中/外点关闭
+  document.addEventListener("click", (e) => {
+    const dd = e.target.closest(".dd");
+    document.querySelectorAll(".dd.open").forEach((d) => { if (d !== dd) d.classList.remove("open"); });
+    if (!dd) return;
+    const item = e.target.closest(".menu div");
+    if (item) {
+      dd.querySelectorAll(".menu div").forEach((d) => d.classList.remove("on"));
+      item.classList.add("on");
+      dd.querySelector(":scope > button").childNodes[0].textContent = item.childNodes[0].textContent.trim() + " ";
+      dd.classList.remove("open");
+      e.stopPropagation();
+      return;
+    }
+    if (e.target.closest(".dd > button")) dd.classList.toggle("open");
+  });
+
+  // 分段替身
+  document.querySelectorAll(".seg").forEach((s) => s.addEventListener("click", (e) => {
+    const b = e.target.closest("b"); if (!b) return;
+    s.querySelectorAll("b").forEach((x) => x.classList.remove("on")); b.classList.add("on");
+  }));
+  // 开关替身
+  document.querySelectorAll("[data-sw]").forEach((s) => s.addEventListener("click", () => {
+    s.classList.toggle("on");
+    const card = s.closest(".a-card,.b-card,.c-card");
+    if (card) {
+      card.classList.toggle("off", !s.classList.contains("on"));
+      const st = card.querySelector(".a-head span:nth-child(3), .b-head span:nth-child(2), .c-head span:nth-child(3)");
+    }
+  }));
+</script>
+</body>
+</html>
