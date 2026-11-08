@@ -4578,21 +4578,24 @@ body.np-col-resizing * {
    左大预览表（行级勾选参与 + 只看变更），右规则链（可堆叠/排序/删除） ── */
 .np-bren2 {
   display: flex;
+  flex-direction: column;
   gap: 12px;
   align-items: stretch;
+  /* 上下分布：整体高度钳制，预览/规则链各自内滚 */
+  height: min(58vh, 560px);
 }
 .np-bren-preview2 {
-  flex: 1;
+  flex: 1 1 54%;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
 /* 预览列表：surface-2 凹陷内滚；行勾选 checkbox 用 accent 色 */
 .np-bren-list {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
-  max-height: 430px;
-  overflow-y: auto;
+  overflow: auto;
   background: var(--np-surface-2);
   border-radius: var(--np-radius-pane);
   padding: var(--np-gutter);
@@ -4605,6 +4608,20 @@ body.np-col-resizing * {
   margin: 0;
   accent-color: var(--np-accent);
   cursor: pointer;
+}
+/* 长文件名横向滚动（2026-11-08 用户需求）：行宽随内容延展，新旧名
+   不截断（列表内解除 np-ellipsis 的截断），列表双向滚动 */
+.np-bren-list .np-bren-row {
+  width: max-content;
+  min-width: 100%;
+}
+.np-bren-list .np-bren-old,
+.np-bren-list .np-bren-new,
+.np-bren-list .np-ellipsis {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
 }
 /* 取消勾选的行（不参与改名）整行淡显 */
 .np-bren-row.is-skip {
@@ -4630,12 +4647,12 @@ body.np-col-resizing * {
 }
 /* 右侧规则链 */
 .np-rchain {
-  width: 460px;
-  flex: 0 0 auto;
+  flex: 1 1 46%;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: var(--np-gutter);
-  min-height: 0;
 }
 .np-rchain-bar {
   display: flex;
@@ -4654,8 +4671,8 @@ body.np-col-resizing * {
   flex-direction: column;
   gap: var(--np-gutter);
   overflow-y: auto;
+  flex: 1 1 auto;
   min-height: 0;
-  max-height: 430px;
   padding-right: 2px;
 }
 .np-rchain-item {
