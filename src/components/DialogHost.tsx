@@ -1112,6 +1112,7 @@ function BatchRenameDialog({
               />
             </div>
             <div className="np-bren-list">
+              <div className="np-bren-rows">
               {shown.slice(0, 200).map((i) => {
                 const frag = i.changed && !i.error ? diffFragments(i.oldName, i.newName) : null;
                 return (
@@ -1146,6 +1147,7 @@ function BatchRenameDialog({
                 </div>
                 );
               })}
+              </div>
             </div>
           </div>
           <div className="np-rchain">
@@ -1269,20 +1271,7 @@ function BatchRenameDialog({
             </div>
             {opsList.length === 0 ? (
               <div className="np-rchain-empty">
-                <div>{t("还没有规则——点「添加规则」从分类面板选择，规则按从上到下顺序生效。也可从常用任务开始：")}</div>
-                <div className="np-rchain-tpl">
-                  {REN_TEMPLATES.slice(0, 4).map((tp) => (
-                    <button
-                      key={tp.id}
-                      className="np-rchain-tpl-btn"
-                      data-tip={tp.desc}
-                      onClick={() => setOpsList(tp.build())}
-                    >
-                      <span>{t(tp.label)}</span>
-                      <span className="np-rchain-tpl-d">{t(tp.desc)}</span>
-                    </button>
-                  ))}
-                </div>
+                <div>{t("还没有规则——点「添加规则」从分类面板选择，规则按从上到下顺序生效")}</div>
               </div>
             ) : (
               <div className="np-rchain-list">

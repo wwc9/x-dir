@@ -334,7 +334,7 @@ const EN: Record<string, string> = {
   "暂无方案——调好规则链后点下方保存": "No schemes yet — set up the rule chain and save below",
   "保存": "Save",
   "套用此方案（替换当前规则链）": "Apply this scheme (replaces current chain)",
-  "还没有规则——点「添加规则」从分类面板选择，规则按从上到下顺序生效。也可从常用任务开始：": "No rules yet — click \"Add rule\" to pick from the category panel; rules apply top-down. Or start from quick tasks:",
+  "还没有规则——点「添加规则」从分类面板选择，规则按从上到下顺序生效": "No rules yet — click \"Add rule\" to pick from the category panel; rules apply top-down",
   "清空": "Clear",
   "点选目标窗格 · Esc 取消": "Click the target pane · Esc to cancel",
   "烘焙 EXIF 方向（手机照片转正，顺带抹除位置等元数据）": "Bake EXIF orientation (straighten phone photos and strip GPS metadata)",
