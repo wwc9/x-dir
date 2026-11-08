@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { t } from "../lib/i18n";
 import {
   Button,
@@ -25,6 +26,9 @@ import {
   pickRenames,
   planRenames,
   REN_TEMPLATES,
+  type CharCls,
+  // CLS_NAMES 由 lib describeOp 使用；UI 类名清单见 CLS_DEFS
+  removeClsRegex,
   type RenameOp,
   type RenameScope,
 } from "../lib/batchRename";
@@ -653,6 +657,7 @@ const RULE_GROUPS: { cat: RuleCat; name: string; rules: RuleDef[] }[] = [
     name: "删除",
     rules: [
       { type: "remove", name: "删除文字", s: "删除名称里所有的 [文字]" },
+      { type: "removeCls", name: "删除指定字符", s: "删除 [勾选字符类型] 的字符，可切 [删除/保留]" },
       { type: "trim", name: "掐头去尾", s: "去掉开头 [2] 个、末尾 [1] 个字符" },
     ],
   },
@@ -698,6 +703,99 @@ const R_DATE_OPTS = [
 
 const R_PAD_OPTS = [1, 2, 3, 4, 5, 6].map((n) => ({ value: n, label: `${n} 位` }));
 
+/** 字符类勾选定义（删除指定字符词槽面板行序） */
+const CLS_DEFS: { key: CharCls; name: string }[] = [
+  { key: "space", name: "空格" },
+  { key: "digit", name: "数字" },
+  { key: "hanzi", name: "汉字" },
+  { key: "upper", name: "大写字母" },
+  { key: "lower", name: "小写字母" },
+  { key: "cnPunct", name: "中文符号" },
+  { key: "enPunct", name: "英文符号" },
+  { key: "illegal", name: "非法字符" },
+];
+
+/** 「删除指定字符」词槽：勾选面板内联在语句卡上（absolute 定位），
+ *  点面板外收起；删除/保留双模式由卡上 Seg 切换 */
+function ClsSlot({ op, onPatch }: { op: Extract<RenameOp, { type: "removeCls" }>; onPatch: (p: Partial<RenameOp>) => void }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLSpanElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      // 面板 portal 到 body（规则列滚动容器会裁剪内联浮层），内外两个 ref 都放行
+      if (!wrapRef.current?.contains(t) && !panelRef.current?.contains(t)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [open]);
+  const toggle = () => {
+    if (!open) {
+      const b = wrapRef.current?.getBoundingClientRect();
+      if (b) {
+        // 视口下方放不下（面板高 ~340px）则向上翻
+        const below = window.innerHeight - b.bottom;
+        setPos({
+          top: below > 360 ? b.bottom + 6 : Math.max(8, b.top - 352),
+          left: Math.min(b.left, window.innerWidth - 244),
+        });
+      }
+    }
+    setOpen(!open);
+  };
+  const names = CLS_DEFS.filter((d) => op.cls.includes(d.key)).map((d) => d.name);
+  const reSrc = removeClsRegex(op.cls, op.keep);
+  return (
+    <span className="np-rs-clswrap" ref={wrapRef}>
+      <button
+        className={`np-select np-rs-clsbtn${open ? " is-open" : ""}`}
+        onClick={(e) => { e.stopPropagation(); toggle(); }}
+      >
+        {names.length ? names.join("、") : t("未勾选字符类型")}
+        <span className="np-select-chev">{ic(ChevronDown)}</span>
+      </button>
+      {open &&
+        createPortal(
+          <div
+            className="np-rs-clspanel"
+            ref={panelRef}
+            style={pos ? { position: "fixed", top: pos.top, left: pos.left } : undefined}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {CLS_DEFS.map((d) => (
+              <label key={d.key} className="np-rs-ck">
+                <input
+                  type="checkbox"
+                  checked={op.cls.includes(d.key)}
+                  onChange={(e) => {
+                    const set = new Set(op.cls);
+                    if (e.currentTarget.checked) set.add(d.key);
+                    else set.delete(d.key);
+                    onPatch({ cls: [...set] } as Partial<RenameOp>);
+                  }}
+                />
+                {t(d.name)}
+              </label>
+            ))}
+            <div className="np-rs-ft">
+              <Seg
+                value={op.keep ? "keep" : "remove"}
+                options={[{ value: "remove", label: t("删除") }, { value: "keep", label: t("保留") }]}
+                onChange={(v) => onPatch({ keep: v === "keep" } as Partial<RenameOp>)}
+              />
+            </div>
+            <div className="np-rs-prev">
+              {reSrc ? (op.keep ? t("将删除未勾选类型") : t("将删除勾选类型")) : t("未勾选任何类型，名称不变")}
+            </div>
+          </div>,
+          document.body,
+        )}
+    </span>
+  );
+}
 /** 批量重命名（2026-11-07 用户定案参考 Smart File Renamer 布局）：
  *  左 = 大预览表（行级勾选参与 + 只看变更），右 = 规则链（9 种规则类型
  *  可堆叠/排序/删除/独立作用域，按序生效实时预览）。规则引擎在
@@ -925,6 +1023,13 @@ function BatchRenameDialog({
             onChange={(format) => patchOp(op.id, { format } as Partial<RenameOp>)} />,
           "，作用于", scopeSlot(op),
         ];
+       case "removeCls":
+        return [
+          op.keep ? <span key="s1">只保留名称里的</span> : <span key="s1">删除名称里的</span>,
+          <ClsSlot key="slot" op={op} onPatch={(p) => patchOp(op.id, p)} />,
+          <span key="s2">的字符</span>,
+          "，作用于", scopeSlot(op),
+        ];
     }
   };
 
@@ -1094,7 +1199,7 @@ function BatchRenameDialog({
                       if (!(e.currentTarget as HTMLElement).contains(e.target as Node)) return;
                       // NpSelect/Button/输入/Blueprint 控件（Switch 开关等 .bp6-control
                       // 指示器是 span，漏排会把开关点击吞成拖拽）不启动拖拽
-                      if ((e.target as HTMLElement).closest(".np-select, button, input, .bp6-input-group, .np-seg, .bp6-control")) return;
+                      if ((e.target as HTMLElement).closest(".np-select, button, input, .bp6-input-group, .np-seg, .bp6-control, .np-rs-clspanel")) return;
                       dragRef.current = { id: op.id, moved: false };
                       setDragId(op.id);
                       // setPointerCapture：后续 move/up 强制派发给卡片（工作区排序同款，

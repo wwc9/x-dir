@@ -4765,6 +4765,70 @@ body.np-col-resizing * {
   background-color: var(--np-surface);
   box-shadow: var(--np-ring);
 }
+/* 「删除指定字符」词槽（勾选面板内联语句卡，2026-11-08）：触发钮复用
+   np-select 配方（卡内白底+发丝描边），面板 = 瞬态浮层档圆角 + np 阴影 */
+.np-rs-clswrap {
+  position: relative;
+  display: inline-flex;
+}
+.np-rs-clsbtn {
+  gap: var(--np-gap);
+  max-width: 220px;
+}
+.np-rs-clsbtn .bp6-button-text,
+.np-rs-clsbtn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.np-rs-clspanel {
+  position: fixed;
+  z-index: 120;
+  width: 232px;
+  padding: 10px;
+  background: var(--np-surface);
+  border-radius: var(--np-radius-lg);
+  box-shadow:
+    0 0 0 1px var(--np-border),
+    var(--np-shadow);
+}
+.np-rs-ck {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 4px;
+  border-radius: var(--np-radius);
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+  cursor: pointer;
+}
+.np-rs-ck:hover {
+  background: var(--np-hover);
+}
+.np-rs-ck input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--np-accent);
+  cursor: pointer;
+  flex: none;
+}
+.np-rs-ft {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--np-gap);
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--np-hairline);
+}
+.np-rs-prev {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  margin-top: 8px;
+  line-height: 1.6;
+}
 /* 序号预览（加序号句内 -01、-02…） */
 .np-rs-prev {
   font-weight: 600;

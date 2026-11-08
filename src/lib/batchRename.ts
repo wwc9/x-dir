@@ -35,7 +35,38 @@ export type RenameOp = { id: string; enabled: boolean; scope: RenameScope } & (
   | { type: "dateFormat"; format: DateReFmt }
   | { type: "chinese"; mode: "s2t" | "t2s" }
   | { type: "pinyin"; mode: "initials" | "full" }
+  | { type: "removeCls"; keep: boolean; cls: CharCls[] }
 );
+
+/** 字符类（删除指定字符规则的可勾选类型） */
+export type CharCls = "space" | "digit" | "hanzi" | "upper" | "lower" | "cnPunct" | "enPunct" | "illegal";
+
+export const CLS_NAMES: Record<CharCls, string> = {
+  space: "空格", digit: "数字", hanzi: "汉字", upper: "大写字母",
+  lower: "小写字母", cnPunct: "中文符号", enPunct: "英文符号", illegal: "非法字符",
+};
+
+const CLS_RE: Record<CharCls, string> = {
+  space: "\\s\\u3000",
+  digit: "\\d",
+  hanzi: "一-龥",
+  upper: "A-Z",
+  lower: "a-z",
+  cnPunct: "　-〿！-～—…‘’“”",
+  enPunct: "!-/:-@[-`{-~",
+  illegal: "\\/:*?\"<>|\\x00-\\x1f",
+};
+
+/** 由勾选类型编译字符类正则（keep = 反选只保留；未勾选返回 null） */
+export function removeClsRegex(cls: CharCls[], keep: boolean): RegExp | null {
+  if (!cls.length) return null;
+  const inner = cls.map((c) => CLS_RE[c]).join("");
+  try {
+    return new RegExp(keep ? `[^${inner}]` : `[${inner}]`, "gu");
+  } catch {
+    return null;
+  }
+}
 
 /* ── 简繁转换（opencc-js，转换器惰性单例，词典仅在用到时初始化）── */
 let s2tConv: ((s: string) => string) | null = null;
@@ -230,6 +261,10 @@ export function newOp<T extends RenameOp["type"]>(
     case "pinyin":
       if (d.mode === undefined) d.mode = "initials";
       break;
+    case "removeCls":
+      if (d.keep === undefined) d.keep = false;
+      if (d.cls === undefined) d.cls = [];
+      break;
   }
   return out;
 }
@@ -327,6 +362,11 @@ function applyOp(text: string, op: RenameOp, idx: number, mtimeMs: number | unde
       return convertChinese(text, op.mode);
     case "pinyin":
       return convertPinyin(text, op.mode);
+    case "removeCls": {
+      const re = removeClsRegex(op.cls, op.keep);
+      if (!re) return text;
+      return text.replace(re, "");
+    }
   }
 }
 
@@ -460,6 +500,11 @@ export function describeOp(op: RenameOp): string {
       return op.mode === "s2t" ? "把简体汉字转换为繁体" : "把繁体汉字转换为简体";
     case "pinyin":
       return op.mode === "initials" ? "把汉字转换为拼音首字母" : "把汉字转换为全拼";
+    case "removeCls": {
+      if (!op.cls.length) return "未勾选要删除的字符类型";
+      const names = op.cls.map((c) => CLS_NAMES[c]).join("、");
+      return op.keep ? `只保留名称里的${names}（删除其余字符）` : `删除名称里的${names}`;
+    }
   }
 }
 

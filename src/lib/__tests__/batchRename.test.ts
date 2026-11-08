@@ -303,3 +303,37 @@ describe("转换类规则（中文数字/补齐/四则/日期格式化/简繁/�
   });
 });
 
+describe("删除指定字符（字符类勾选 + 删除/保留）", () => {
+  it("删除勾选类型：空格+数字", () => {
+    const items = planRenames([f("ab c12 3d.txt")], ops(newOp({ type: "removeCls", keep: false, cls: ["space", "digit"] })));
+    expect(items[0].newName).toBe("abcd.txt");
+  });
+  it("保留模式：只保留汉字", () => {
+    const items = planRenames([f("ab12汉字cd")], ops(newOp({ type: "removeCls", keep: true, cls: ["hanzi"] })));
+    expect(items[0].newName).toBe("汉字");
+  });
+  it("中文/英文标点分类可分", () => {
+    const cn = planRenames([f("a、b。c")], ops(newOp({ type: "removeCls", keep: false, cls: ["cnPunct"] })));
+    expect(cn[0].newName).toBe("abc");
+    const en = planRenames([f("a-b_c")], ops(newOp({ type: "removeCls", keep: false, cls: ["enPunct"] })));
+    expect(en[0].newName).toBe("abc");
+  });
+  it("非法字符类含 Windows 保留字符", () => {
+    const items = planRenames([f("a|b")], ops(newOp({ type: "removeCls", keep: false, cls: ["illegal"] })));
+    expect(items[0].newName).toBe("ab");
+  });
+  it("大小写分开勾选", () => {
+    const items = planRenames([f("aA1bB")], ops(newOp({ type: "removeCls", keep: false, cls: ["upper", "digit"] })));
+    expect(items[0].newName).toBe("ab");
+  });
+  it("未勾选 = 原样不变（兜底句交给 UI）", () => {
+    const items = planRenames([f("a b")], ops(newOp({ type: "removeCls", keep: false, cls: [] })));
+    expect(items[0].newName).toBe("a b");
+    expect(items[0].changed).toBe(false);
+  });
+  it("describeOp：删除/保留两态人话", () => {
+    expect(describeOp(newOp({ type: "removeCls", keep: false, cls: ["space", "digit"] }))).toBe("删除名称里的空格、数字");
+    expect(describeOp(newOp({ type: "removeCls", keep: true, cls: ["hanzi"] }))).toBe("只保留名称里的汉字（删除其余字符）");
+    expect(describeOp(newOp({ type: "removeCls", keep: false, cls: [] }))).toBe("未勾选要删除的字符类型");
+  });
+});
