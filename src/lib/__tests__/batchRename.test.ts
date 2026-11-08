@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   arabicToCnNum,
+  withFreshIds,
   cnNumToArabic,
   parentFolderName,
   describeOp,
@@ -385,3 +386,13 @@ describe("首批扩容规则（首尾空白/父文件夹名/插入第N字符后/
   });
 });
 
+it("withFreshIds：方案套用重发 id 且字段原样保留", () => {
+  const chain = ops(newOp({ type: "trimEdges" }), newOp({ type: "arith", arith: "add", value: 1 }));
+  const fresh = withFreshIds(chain);
+  expect(fresh.map((o) => o.id)).not.toEqual(chain.map((o) => o.id));
+  expect(new Set(fresh.map((o) => o.id)).size).toBe(fresh.length);
+  expect(fresh[0].type).toBe("trimEdges");
+  const arith = fresh[1] as Extract<RenameOp, { type: "arith" }>;
+  expect(arith.arith).toBe("add");
+  expect(arith.value).toBe(1);
+});

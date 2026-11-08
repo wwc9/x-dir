@@ -1,4 +1,5 @@
 // 与 Rust 结构体一一对应的 IPC 类型与封装（serde rename_all = "camelCase"）
+import type { RenameOp } from "./batchRename";
 import { invoke } from "@tauri-apps/api/core";
 
 export const THIS_PC = "::{ThisPC}";
@@ -298,6 +299,13 @@ export interface ColorRule {
   color: TagColor;
 }
 
+/** 批量重命名方案：保存的规则链（套用时深拷贝并重发 id） */
+export interface RenameScheme {
+  id: string;
+  name: string;
+  ops: RenameOp[];
+}
+
 export interface Settings {
   theme: "system" | "light" | "dark";
   /** 界面语言（2026-10-21）：zh=中文 / en=English，暂只此两种 */
@@ -314,6 +322,8 @@ export interface Settings {
   customCommands: CustomCommand[];
   /** 右键菜单布局（有序条目：内置功能/自定义命令/分割线，含出现条件） */
   menuEntries: MenuEntry[];
+  /** 批量重命名方案（规则链预设：方案面板保存/套用/删除，随 settings.json 持久化） */
+  renameSchemes: RenameScheme[];
   /** 右键菜单编辑器左栏（启用菜单）宽（px，两栏间可拖，钳制 240–480） */
   menuedLeftWidth: number;
   /** V2：真实文件图标（SHGetFileInfo） */
@@ -464,6 +474,7 @@ export const DEFAULT_SETTINGS: Settings = {
   customCommands: [],
   // 出厂布局由 settings.load 的迁移填充（defaultMenuEntries，含旧命令条目化）
   menuEntries: [],
+  renameSchemes: [],
   menuedLeftWidth: 300,
   realIcons: true,
   // 2026-10-15 定案：默认走内置引擎（灵动岛字节级进度 + 应用内冲突框）；

@@ -49,6 +49,7 @@ function toPlain(s: SettingsStore): Settings {  return {
     favorites: s.favorites,
     customCommands: s.customCommands,
     menuEntries: s.menuEntries,
+    renameSchemes: s.renameSchemes,
     menuedLeftWidth: s.menuedLeftWidth,
     realIcons: s.realIcons,
     nativeFileOps: s.nativeFileOps,
@@ -357,6 +358,10 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     // 地址框固定常驻（不可移除、可排序）：任何来源的配置都保证存在
     merged.toolbarEntries = ensureToolbarAddr(merged.toolbarEntries ?? []);
     // 暂存区：旧档缺字段发空数组；脏数据（非字符串项）过滤
+    // 批量重命名方案：旧档缺字段发空数组；脏数据（缺 name/ops）过滤
+    merged.renameSchemes = Array.isArray(merged.renameSchemes)
+      ? merged.renameSchemes.filter((sc) => !!sc && typeof sc.name === "string" && Array.isArray(sc.ops))
+      : [];
     merged.staging = Array.isArray(merged.staging)
       ? merged.staging.filter((x): x is string => typeof x === "string")
       : [];

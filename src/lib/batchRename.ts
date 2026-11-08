@@ -197,6 +197,11 @@ export function compileRegex(find: string): RegExp | null {
 
 let opSeq = 0;
 
+/** 方案套用：深拷贝规则链并重发 id（同一方案可反复套用，卡片 id 不串） */
+export function withFreshIds(ops: RenameOp[]): RenameOp[] {
+  return ops.map((o) => ({ ...o, id: `op${++opSeq}` }) as RenameOp);
+}
+
 /** 新规则工厂（带唯一 id；id 用于 React key 与排序）。
  *  泛型 T 按规则类型分支收紧可传字段（传错字段名编译期报错），
  *  未传的类型特定参数在实现内补默认值 */

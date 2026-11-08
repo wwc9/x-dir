@@ -22,6 +22,7 @@ import { api, type FileEntry, type FileLocks } from "../lib/ipc";
 import {
   compileRegex,
   diffFragments,
+  withFreshIds,
   newOp,
   pickRenames,
   planRenames,
@@ -59,6 +60,8 @@ import {
 } from "./ToolsDialogs";
 import { DENSITY } from "../lib/tokens";
 import { useUi, type DialogKind, type DialogSpec } from "../stores/ui";
+import { useSettings } from "../stores/settings";
+import { useUndo } from "../lib/undo";
 
 /** 宽弹窗类型（§4.9 带/清单参数对话框，统一 680px）：分析类结果弹窗 +
  *  PDF 合并/水印/提取删页 + 通用合并 + Excel 合并 + 图片五件套（2026-11-03
@@ -839,6 +842,20 @@ function BatchRenameDialog({
     setOpsList((l) => [...l, newOp({ type: def.type, ...(def.scope ? { scope: def.scope } : {}), ...(def.mode ? { mode: def.mode } : {}) })]);
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelCat, setPanelCat] = useState<RuleCat>("add");
+  const schemes = useSettings((s) => s.renameSchemes);
+  const updateSettings = useSettings((s) => s.update);
+  const [schemeOpen, setSchemeOpen] = useState(false);
+  const [schemeName, setSchemeName] = useState("");
+  const saveScheme = () => {
+    const name = schemeName.trim();
+    if (!name || !opsList.length) return;
+    updateSettings({ renameSchemes: [...schemes, { id: `sch${Date.now()}${Math.floor(Math.random() * 1000)}`, name, ops: opsList }] });
+    setSchemeName("");
+    useUi.getState().toast(`已保存方案「${name}」`);
+  };
+  /** 撤回上次重命名：撤销栈顶为 rename 批条目时可用（整批一条，一次全撤） */
+  const undoTop = useUndo((s) => s.stack[s.stack.length - 1]);
+  const canUndoRename = undoTop?.kind === "rename";
   const patchOp = (id: string, p: Partial<RenameOp>) =>
     setOpsList((l) => l.map((o) => (o.id === id ? ({ ...o, ...p } as RenameOp) : o)));
   const removeOp = (id: string) => setOpsList((l) => l.filter((o) => o.id !== id));
@@ -1188,6 +1205,64 @@ function BatchRenameDialog({
                   rightIcon={<span className="np-select-chev">{ic(ChevronDown)}</span>}
                 />
               </PopoverNext>
+              <PopoverNext
+                isOpen={schemeOpen}
+                onInteraction={setSchemeOpen}
+                placement="bottom-start"
+                arrow={false}
+                content={
+                  <div className="np-scheme">
+                    <div className="np-scheme-head">
+                      <span className="np-scheme-t">{t("我的方案")}</span>
+                    </div>
+                    <div className="np-scheme-list">
+                      {schemes.length === 0 && (
+                        <div className="np-scheme-empty">{t("暂无方案——调好规则链后点下方保存")}</div>
+                      )}
+                      {schemes.map((sc) => (
+                        <div key={sc.id} className="np-scheme-item">
+                          <div
+                            className="np-scheme-apply"
+                            title={t("套用此方案（替换当前规则链）")}
+                            onClick={() => {
+                              setOpsList(withFreshIds(sc.ops));
+                              setSchemeOpen(false);
+                              useUi.getState().toast(`已套用方案「${sc.name}」`);
+                            }}
+                          >
+                            <div className="np-scheme-n">{sc.name}</div>
+                            <div className="np-scheme-s">{sc.ops.length} {t("条规则")}</div>
+                          </div>
+                          <button className="np-rchain-btn" data-tip="删除方案" onClick={(e) => { e.stopPropagation(); updateSettings({ renameSchemes: schemes.filter((x) => x.id !== sc.id) }); }}>
+                            <AppIcon icon={X} size={DENSITY.iconXs} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="np-scheme-save">
+                      <input
+                        className="np-scheme-inp"
+                        value={schemeName}
+                        placeholder={t("方案名")}
+                        spellCheck={false}
+                        onChange={(e) => setSchemeName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") saveScheme(); }}
+                      />
+                      <Button size="small" disabled={!opsList.length || !schemeName.trim()} onClick={() => saveScheme()}>
+                        {t("保存")}
+                      </Button>
+                    </div>
+                  </div>
+                }
+              >
+                <Button
+                  minimal
+                  size="small"
+                  className={`np-select${schemeOpen ? " is-open" : ""}`}
+                  text={t("方案")}
+                  rightIcon={<span className="np-select-chev">{ic(ChevronDown)}</span>}
+                />
+              </PopoverNext>
               <span className="np-dialog-muted">
                 {opsList.length} {t("条规则")}
               </span>
@@ -1299,6 +1374,15 @@ function BatchRenameDialog({
       <DialogFooter
         actions={
           <>
+            {canUndoRename && (
+              <Button
+                size="small"
+                data-tip={`撤回上次重命名（Ctrl+Z）`}
+                onClick={() => { void useUndo.getState().undo(); }}
+              >
+                {undoTop.ops.length > 1 ? `撤回重命名（${undoTop.ops.length} 项）` : t("撤回上次重命名")}
+              </Button>
+            )}
             <Button size="small" onClick={() => onDone(null)}>
               {t("取消")}
             </Button>

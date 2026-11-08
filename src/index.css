@@ -4765,6 +4765,68 @@ body.np-col-resizing * {
   background-color: var(--np-surface);
   box-shadow: var(--np-ring);
 }
+/* ── 方案面板（批量重命名规则链保存/套用，2026-11-08）── */
+.np-scheme {
+  width: 300px;
+  padding: var(--np-gutter);
+}
+.np-scheme-head {
+  padding: 2px 6px 6px;
+}
+.np-scheme-t {
+  font-size: var(--np-font-ui);
+  font-weight: 600;
+  color: var(--np-fg);
+}
+.np-scheme-list {
+  max-height: 240px;
+  overflow-y: auto;
+}
+.np-scheme-empty {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  padding: 6px 8px 8px;
+}
+.np-scheme-item {
+  display: flex;
+  align-items: center;
+  border-radius: var(--np-radius);
+}
+.np-scheme-item:hover {
+  background: var(--np-hover);
+}
+.np-scheme-apply {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+.np-scheme-n {
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.np-scheme-s {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-scheme-save {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+  margin-top: 6px;
+  padding: 8px 6px 2px;
+  border-top: 1px solid var(--np-hairline);
+}
+.np-scheme-inp {
+  flex: 1;
+  min-width: 0;
+  height: var(--np-ctl-h);
+  padding: 0 8px;
+  font-size: var(--np-font-ui);
+}
 /* 「删除指定字符」词槽（勾选面板内联语句卡，2026-11-08）：触发钮复用
    np-select 配方（卡内白底+发丝描边），面板 = 瞬态浮层档圆角 + np 阴影 */
 .np-rs-clswrap {
