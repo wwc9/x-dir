@@ -454,6 +454,22 @@ body {
   background-color: var(--np-surface);
   box-shadow: var(--np-ring);
 }
+/* NpSelect 暗色覆回（2026-11-08）：Blueprint dark minimal 钮规则
+   .bp6-dark .bp6-button.bp6-minimal（0-3-0）把 .np-select（0-1-0）的填充
+   压成 background-color: initial——暗色下全应用下拉失去 surface-2 填充面、
+   开态 accent ring 被 box-shadow:none 吞掉；同特异性（0-3-0，源序在后）
+   提级覆回，亮色不受影响 */
+.bp6-dark .bp6-button.np-select {
+  background-color: var(--np-surface-2);
+  box-shadow: none;
+}
+.bp6-dark .bp6-button.np-select:hover {
+  background-color: var(--np-hover);
+}
+.bp6-dark .bp6-button.np-select.is-open {
+  background-color: var(--np-surface);
+  box-shadow: var(--np-ring);
+}
 /* NpSelect 触发钮箭头：muted + 开态旋转 180°，同语义单源 */
 .np-select .np-select-chev {
   display: inline-flex;
@@ -4584,13 +4600,16 @@ body.np-col-resizing * {
 .np-bren-row.is-skip {
   opacity: 0.45;
 }
+/* 数字输入框（规则卡内）：同「卡内控件辨识」配方——surface + 发丝描边，
+   聚焦提亮 + ring（与 .bp6-input 全局基线同态） */
 .np-bren-num {
   width: 52px;
   height: var(--np-ctl-h);
   padding: 0 6px;
   border: none;
   border-radius: var(--np-radius);
-  background: var(--np-surface-2);
+  background: var(--np-surface);
+  box-shadow: inset 0 0 0 1px var(--np-border);
   color: var(--np-fg);
   font-size: var(--np-font-ui);
   outline: none;
@@ -4611,7 +4630,14 @@ body.np-col-resizing * {
 .np-rchain-bar {
   display: flex;
   align-items: center;
-  gap: var(--np-gutter);
+  flex-wrap: wrap;
+  gap: var(--np-gap) var(--np-gutter);
+}
+/* 「添加规则：」行标签（同 np-bren-tasks-lab 口径） */
+.np-rchain-bar-lab {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  flex: none;
 }
 .np-rchain-list {
   display: flex;
@@ -4680,6 +4706,38 @@ body.np-col-resizing * {
    输入框需更高特异性压过 */
 .np-rchain .np-rchain-params .bp6-input-group input {
   font-size: var(--np-font-ui);
+}
+/* 卡内控件辨识（2026-11-08 用户反馈）：规则卡面 = surface-2，与全局输入
+   基线同底——文本框/数字框/下拉在卡上「隐形」。卡内输入类控件统一提亮为
+   surface + 发丝描边（暗色主题 = 更深凹陷面 + 亮描边），聚焦仍走全局 ring；
+   NpSelect 开态需同特异性显式恢复 ring（源顺序已被上方基础规则压过） */
+.np-rchain-item .bp6-input {
+  background: var(--np-surface);
+  box-shadow: inset 0 0 0 1px var(--np-border);
+}
+.np-rchain-item .np-select {
+  background-color: var(--np-surface);
+  box-shadow: inset 0 0 0 1px var(--np-border);
+}
+.np-rchain-item .np-select:hover {
+  background-color: var(--np-hover);
+}
+.np-rchain-item .np-select.is-open {
+  background-color: var(--np-surface);
+  box-shadow: var(--np-ring);
+}
+/* 卡内下拉暗色档（0-4-0）：压过全局暗色覆回（0-3-0），保持卡内
+   surface + 发丝描边配方（同上方亮色规则） */
+.bp6-dark .np-rchain-item .np-select {
+  background-color: var(--np-surface);
+  box-shadow: inset 0 0 0 1px var(--np-border);
+}
+.bp6-dark .np-rchain-item .np-select:hover {
+  background-color: var(--np-hover);
+}
+.bp6-dark .np-rchain-item .np-select.is-open {
+  background-color: var(--np-surface);
+  box-shadow: var(--np-ring);
 }
 .np-rchain-params .np-select span {
   white-space: nowrap;

@@ -616,16 +616,18 @@ function UnlockDialog({
   return <>{size === null ? "计算中…" : formatBytes(size)}</>;
 }
 
-const OP_TYPE_ITEMS: { type: RenameOp["type"]; label: string }[] = [
-  { type: "replace", label: "替换（字面/正则）" },
-  { type: "remove", label: "删除文本" },
-  { type: "insert", label: "插入文本" },
-  { type: "prefix", label: "添加前缀" },
-  { type: "suffix", label: "添加后缀" },
-  { type: "trim", label: "修剪首尾" },
-  { type: "number", label: "加序号" },
-  { type: "case", label: "大小写" },
-  { type: "date", label: "文件日期" },
+/** 规则类型单一来源：label 同时用于「添加规则」平铺 chips 与卡内类型下拉
+ *  （2026-11-08 用户要求：添加入口平铺全部类型 + 口语化短标签，下拉不再截断） */
+const OP_TYPE_ITEMS: { type: RenameOp["type"]; label: string; tip: string }[] = [
+  { type: "replace", label: "查找替换", tip: "把名称里的文字替换成新文字（支持正则表达式）" },
+  { type: "remove", label: "删除文字", tip: "删掉名称里指定的文字" },
+  { type: "insert", label: "插入文字", tip: "在名称最前或最后插入文字" },
+  { type: "prefix", label: "加前缀", tip: "在名称最前面加一段文字" },
+  { type: "suffix", label: "加后缀", tip: "在扩展名前加一段文字" },
+  { type: "trim", label: "掐头去尾", tip: "去掉开头/末尾指定个数的字符" },
+  { type: "number", label: "加序号", tip: "给文件按顺序编号（-01、-02…）" },
+  { type: "case", label: "大小写", tip: "全部大写 / 全部小写 / 首字母大写" },
+  { type: "date", label: "插入日期", tip: "把文件修改日期插进名称" },
 ];
 
 /* ③ 作用域口语化（下拉项带副标题解释，title 即下拉项 tooltip） */
@@ -1019,22 +1021,27 @@ function BatchRenameDialog({
           </div>
           <div className="np-rchain">
             <div className="np-rchain-bar">
-              {/* 添加规则 = 原生按钮直接追加默认类型（查找替换），类型在卡上
-                  下拉更换——NpSelect 弹层在 Dialog 内对自动化/真实点击均有时序
-                  不稳定，原生 button 已验证可靠 */}
-              <button
-                className="np-bren-chip"
-                onClick={() => addOp("replace")}
-              >
-                ＋ {t("添加规则")}
-              </button>
+              {/* 添加规则 = 全部类型平铺成 chips（2026-11-08 用户要求：点不同
+                  类型即加对应规则，不再单按钮默认追加查找替换）——原生 button
+                  直加已验证可靠（NpSelect 弹层在 Dialog 内时序不稳定） */}
+              <span className="np-rchain-bar-lab">{t("添加规则：")}</span>
+              {OP_TYPE_ITEMS.map((x) => (
+                <button
+                  key={x.type}
+                  className="np-bren-chip"
+                  data-tip={x.tip}
+                  onClick={() => addOp(x.type)}
+                >
+                  {t(x.label)}
+                </button>
+              ))}
               <span className="np-dialog-muted">
                 {opsList.length} {t("条规则")}
               </span>
             </div>
             {opsList.length === 0 ? (
               <div className="np-rchain-empty">
-                <div>{t("还没有规则——点「添加规则」开始，规则按从上到下顺序生效。也可从常用任务开始：")}</div>
+                <div>{t("还没有规则——点上方类型按钮添加，规则按从上到下顺序生效。也可从常用任务开始：")}</div>
                 <div className="np-rchain-tpl">
                   {REN_TEMPLATES.slice(0, 4).map((tp) => (
                     <button
