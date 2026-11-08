@@ -1,13 +1,23 @@
 // 批量重命名规则引擎（纯函数，配单测）：规则链模型——按序堆叠的改名规则，
 // 逐条对名称应用（Smart File Renamer / Advanced Renamer 同范式）。
-// 规则类型 9 种：替换（字面/正则）/ 删除 / 插入 / 前缀 / 后缀 / 修剪 /
-// 序号 / 大小写 / 日期（文件修改时间）。每条规则独立作用域（主名/扩展名/整名）。
+// 规则类型：替换（字面/正则）/ 删除 / 插入 / 前缀 / 后缀 / 修剪 /
+// 序号 / 大小写 / 日期（文件修改时间）/ 中文数字互转 / 数字补齐 /
+// 数字四则 / 日期格式化（改写名称内日期写法）/ 简繁转换 / 转拼音。
+// 每条规则独立作用域（主名/扩展名/整名）。
 // 扩展名保护：主名模式下扩展名原样保留；「.bashrc」点首名整名视作主名。
 import { isValidName } from "./path";
+// 简繁转换（MIT AND Apache-2.0，按方向子路径导入只带所需词典）与
+// 拼音（MIT）仅被「转换」类规则使用；其余规则零开销
+import { Converter } from "opencc-js/cn2t";
+import { Converter as T2CnConverter } from "opencc-js/t2cn";
+import { pinyin } from "pinyin-pro";
 
 export type RenameScope = "name" | "nameExt" | "ext";
 export type CaseMode = "upper" | "lower" | "title";
 export type DateFmt = "ymd" | "ymdCompact" | "ymdHms";
+/** 名称内日期重排目标格式（日期格式化规则） */
+export type DateReFmt = "ymd" | "ymdCompact" | "cn";
+export type ArithOp = "add" | "sub" | "mul" | "div";
 
 export type RenameOp = { id: string; enabled: boolean; scope: RenameScope } & (
   | { type: "replace"; find: string; replace: string; regex: boolean }
@@ -19,7 +29,117 @@ export type RenameOp = { id: string; enabled: boolean; scope: RenameScope } & (
   | { type: "number"; position: "start" | "end"; start: number; pad: number; separator: string }
   | { type: "case"; mode: CaseMode }
   | { type: "date"; format: DateFmt; position: "start" | "end"; separator: string }
+  | { type: "cnNum"; mode: "toArabic" | "toChinese" }
+  | { type: "padNum"; width: number }
+  | { type: "arith"; arith: ArithOp; value: number }
+  | { type: "dateFormat"; format: DateReFmt }
+  | { type: "chinese"; mode: "s2t" | "t2s" }
+  | { type: "pinyin"; mode: "initials" | "full" }
 );
+
+/* ── 简繁转换（opencc-js，转换器惰性单例，词典仅在用到时初始化）── */
+let s2tConv: ((s: string) => string) | null = null;
+let t2sConv: ((s: string) => string) | null = null;
+
+/** 简→繁 / 繁→简（非汉字原样保留；转换器初始化失败时原文返回） */
+function convertChinese(text: string, mode: "s2t" | "t2s"): string {
+  try {
+    if (mode === "s2t") {
+      s2tConv ??= Converter({ from: "cn", to: "t" }) as (s: string) => string;
+      return s2tConv(text);
+    }
+    t2sConv ??= T2CnConverter({ from: "t", to: "cn" }) as (s: string) => string;
+    return t2sConv(text);
+  } catch {
+    return text;
+  }
+}
+
+/** 汉字转拼音（pinyin-pro，非汉字原样保留；initials = 首字母第一个字母） */
+function convertPinyin(text: string, mode: "initials" | "full"): string {
+  if (mode === "initials") {
+    // pattern first = 首字母（审 → s 而非声母 sh）；nonZh consecutive 保留非汉字段
+    return pinyin(text, { pattern: "first", toneType: "none", nonZh: "consecutive" }).replace(/\s+/g, "");
+  }
+  return pinyin(text, { toneType: "none", type: "array" }).join("");
+}
+
+/* ── 中文数字 ↔ 阿拉伯数字（整数；零一二两三四五六七八九十百千万亿）── */
+const CN_DIGIT: Record<string, number> = {
+  零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9,
+};
+
+/** 中文数字解析（整数，支持十/百/千/万/亿；非纯中文数字串返回 null） */
+export function cnNumToArabic(s: string): number | null {
+  if (!/^[零一二两三四五六七八九十百千万亿]+$/.test(s) || s.length > 24) return null;
+  let result = 0, section = 0, number = 0;
+  for (const ch of s) {
+    const d = CN_DIGIT[ch];
+    if (d !== undefined) { number += d; continue; }
+    if (ch === "十") { number += number === 0 ? 1 : 0; section += number * 10; number = 0; continue; }
+    if (ch === "百") { section += number * 100; number = 0; continue; }
+    if (ch === "千") { section += number * 1000; number = 0; continue; }
+    if (ch === "万") { section = (section + number) * 10000; result += section; section = 0; number = 0; continue; }
+    if (ch === "亿") { section = (section + number) * 100000000; result += section; section = 0; number = 0; continue; }
+  }
+  return result + section + number;
+}
+
+const CN_NUM = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+
+/** 节内（0-9999）中文数字（零位折叠为单个「零」；段首「一十」简写「十」） */
+function sec4ToCn(v: number): string {
+  const q = Math.floor(v / 1000) % 10, b = Math.floor(v / 100) % 10;
+  const s = Math.floor(v / 10) % 10, g = v % 10;
+  let out = "";
+  if (q) out += CN_NUM[q] + "千";
+  if (b) out += CN_NUM[b] + "百";
+  else if (q && (s || g)) out += "零";
+  if (s) out += out === "" && s === 1 ? "十" : CN_NUM[s] + "十";
+  else if ((q || b) && g) out += "零";
+  if (g) out += CN_NUM[g];
+  return out;
+}
+
+/** 阿拉伯整数 → 中文数字（0 ≤ n < 1e12；越界返回 null） */
+export function arabicToCnNum(n: number): string | null {
+  if (!Number.isInteger(n) || n < 0 || n >= 1e12) return null;
+  if (n === 0) return "零";
+  const secs: number[] = [];
+  let r = n;
+  while (r > 0) { secs.push(r % 10000); r = Math.floor(r / 10000); }
+  const units = ["", "万", "亿"];
+  let out = "";
+  let pendingZero = false;
+  for (let i = secs.length - 1; i >= 0; i--) {
+    const v = secs[i];
+    if (v === 0) { if (out) pendingZero = true; continue; }
+    // 节间补零：低位节不足千位（或中间有整零节）时，与已输出高位之间补单个「零」
+    if (out && (pendingZero || v < 1000)) out += "零";
+    pendingZero = false;
+    out += sec4ToCn(v) + (i > 0 ? units[i] : "");
+  }
+  return out;
+}
+
+/** 名称内日期重排（日期格式化规则）：识别常见写法统一为目标格式。
+ *  识别顺序 = 8 位紧凑（可带 _HHMMSS）在前、分隔写法在后；带 (?!\d) 防截断
+ *  更长的数字串；年份 < 1900 或月日非法的串原样保留（时间不进目标格式时丢弃） */
+export function reformatDates(text: string, format: DateReFmt): string {
+  return text.replace(
+    /(\d{4})(\d{2})(\d{2})(?:_?(\d{2})(\d{2})(\d{2}))?(?!\d)|(\d{4})[-/年.](\d{1,2})[-/月.](\d{1,2})日?(?!\d)/g,
+    (m, y1, mo1, d1, _H, _M, _S, y2, mo2, d2) => {
+      const y = Number(y1 ?? y2), mo = Number(mo1 ?? mo2), dd = Number(d1 ?? d2);
+      if (y < 1900 || mo < 1 || mo > 12 || dd < 1 || dd > 31) return m;
+      const dt = new Date(y, mo - 1, dd);
+      if (dt.getMonth() !== mo - 1 || dt.getDate() !== dd) return m;
+      const p = (v: number) => String(v).padStart(2, "0");
+      if (format === "cn") return `${y}年${mo}月${dd}日`;
+      if (format === "ymdCompact") return `${y}${p(mo)}${p(dd)}`;
+      return `${y}-${p(mo)}-${p(dd)}`;
+    },
+  );
+}
 
 export interface RenamePlanItem {
   path: string;
@@ -91,6 +211,25 @@ export function newOp<T extends RenameOp["type"]>(
       if (d.position === undefined) d.position = "end";
       if (d.separator === undefined) d.separator = "";
       break;
+    case "cnNum":
+      if (d.mode === undefined) d.mode = "toArabic";
+      break;
+    case "padNum":
+      if (d.width === undefined) d.width = 3;
+      break;
+    case "arith":
+      if (d.arith === undefined) d.arith = "add";
+      if (d.value === undefined) d.value = 1;
+      break;
+    case "dateFormat":
+      if (d.format === undefined) d.format = "ymd";
+      break;
+    case "chinese":
+      if (d.mode === undefined) d.mode = "s2t";
+      break;
+    case "pinyin":
+      if (d.mode === undefined) d.mode = "initials";
+      break;
   }
   return out;
 }
@@ -160,6 +299,34 @@ function applyOp(text: string, op: RenameOp, idx: number, mtimeMs: number | unde
       if (!d) return text;
       return op.position === "start" ? d + op.separator + text : text + op.separator + d;
     }
+    case "cnNum":
+      return op.mode === "toArabic"
+        ? text.replace(/[零一二两三四五六七八九十百千万亿]+/g, (m) => {
+            const v = cnNumToArabic(m);
+            return v === null ? m : String(v);
+          })
+        : text.replace(/\d+/g, (m) => arabicToCnNum(Number(m)) ?? m);
+    case "padNum":
+      return text.replace(/\d+/g, (m) => m.padStart(Math.max(1, Math.min(op.width, 12)), "0"));
+    case "arith": {
+      return text.replace(/\d+(?:\.\d+)?/g, (m) => {
+        const v = Number(m);
+        let r: number;
+        switch (op.arith) {
+          case "add": r = v + op.value; break;
+          case "sub": r = v - op.value; break;
+          case "mul": r = v * op.value; break;
+          default: r = op.value === 0 ? v : Math.round((v / op.value) * 100) / 100;
+        }
+        return String(r);
+      });
+    }
+    case "dateFormat":
+      return reformatDates(text, op.format);
+    case "chinese":
+      return convertChinese(text, op.mode);
+    case "pinyin":
+      return convertPinyin(text, op.mode);
   }
 }
 
@@ -275,6 +442,24 @@ export function describeOp(op: RenameOp): string {
       return op.mode === "upper" ? "把英文字母全部改为大写" : op.mode === "lower" ? "把英文字母全部改为小写" : "每个词首字母改为大写";
     case "date":
       return `${op.position === "start" ? "在名称开头" : "在扩展名前"}加文件修改日期（${fmtDate(Date.now(), op.format)}${op.separator ? ` 分隔符「${op.separator}」` : ""}）`;
+    case "cnNum":
+      return op.mode === "toArabic" ? "把名称里的中文数字换成阿拉伯数字" : "把名称里的阿拉伯数字换成中文数字";
+    case "padNum":
+      return `把名称里的数字补齐到 ${op.width} 位`;
+    case "arith": {
+      const sym = op.arith === "add" ? "加" : op.arith === "sub" ? "减" : op.arith === "mul" ? "乘" : "除";
+      return `把名称里的数字${sym} ${op.value}`;
+    }
+    case "dateFormat":
+      return op.format === "cn"
+        ? "把名称里的日期统一成「2026年11月7日」写法"
+        : op.format === "ymd"
+          ? "把名称里的日期统一成「2026-11-07」写法"
+          : "把名称里的日期统一成「20261107」写法";
+    case "chinese":
+      return op.mode === "s2t" ? "把简体汉字转换为繁体" : "把繁体汉字转换为简体";
+    case "pinyin":
+      return op.mode === "initials" ? "把汉字转换为拼音首字母" : "把汉字转换为全拼";
   }
 }
 

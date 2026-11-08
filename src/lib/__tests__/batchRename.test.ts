@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  arabicToCnNum,
+  cnNumToArabic,
   describeOp,
   diffFragments,
   illegalChars,
@@ -214,3 +216,90 @@ describe("人话描述 / diff / 非法字符 / 模板（2026-11-07 易用性批�
     expect(numbered.map((i) => i.newName)).toEqual(["a-01.txt", "b-02.txt"]);
   });
 });
+
+describe("转换类规则（中文数字/补齐/四则/日期格式化/简繁/拼音）", () => {
+  it("中文数字 → 阿拉伯（十/百/千/万进位 + 两）", () => {
+    expect(cnNumToArabic("十二")).toBe(12);
+    expect(cnNumToArabic("二十五")).toBe(25);
+    expect(cnNumToArabic("一百零三")).toBe(103);
+    expect(cnNumToArabic("三千零五十")).toBe(3050);
+    expect(cnNumToArabic("一万二")).toBe(10002);
+    expect(cnNumToArabic("两")).toBe(2);
+    expect(cnNumToArabic("abc")).toBeNull();
+    expect(cnNumToArabic("报告2025")).toBeNull();
+  });
+
+  it("阿拉伯 → 中文数字（零位折叠/节间补零/越界 null）", () => {
+    expect(arabicToCnNum(0)).toBe("零");
+    expect(arabicToCnNum(12)).toBe("十二");
+    expect(arabicToCnNum(103)).toBe("一百零三");
+    expect(arabicToCnNum(3050)).toBe("三千零五十");
+    expect(arabicToCnNum(10001)).toBe("一万零一");
+    expect(arabicToCnNum(120000000)).toBe("一亿二千万");
+    expect(arabicToCnNum(1.5)).toBeNull();
+    expect(arabicToCnNum(-3)).toBeNull();
+  });
+
+  it("planRenames：中文数字互转作用于名称", () => {
+    const items = planRenames([f("第十二期报告")], ops(newOp({ type: "cnNum", mode: "toArabic" })));
+    expect(items[0].newName).toBe("第12期报告");
+    const items2 = planRenames([f("第12期报告")], ops(newOp({ type: "cnNum", mode: "toChinese" })));
+    expect(items2[0].newName).toBe("第十二期报告");
+  });
+
+  it("补齐位数：短数字前补零，长数字不变", () => {
+    const items = planRenames([f("第3期"), f("第2025期")], ops(newOp({ type: "padNum", width: 4 })));
+    expect(items.map((i) => i.newName)).toEqual(["第0003期", "第2025期"]);
+    const narrow = planRenames([f("第12期")], ops(newOp({ type: "padNum", width: 3 })));
+    expect(narrow[0].newName).toBe("第012期"); // width=3 即补齐到 3 位
+  });
+
+  it("数字加减乘除（除法保留两位小数；可与补齐位数链式组合）", () => {
+    const mk = (arith: "add" | "sub" | "mul" | "div", value: number) => newOp({ type: "arith", arith, value });
+    expect(planRenames([f("第3期")], ops(mk("add", 1)))[0].newName).toBe("第4期");
+    expect(planRenames([f("第10页")], ops(mk("sub", 3)))[0].newName).toBe("第7页");
+    expect(planRenames([f("30张")], ops(mk("mul", 2)))[0].newName).toBe("60张");
+    expect(planRenames([f("30张")], ops(mk("div", 4)))[0].newName).toBe("7.5张");
+    const items = planRenames([f("003号")], ops(mk("add", 1), newOp({ type: "padNum", width: 3 })));
+    expect(items[0].newName).toBe("004号");
+  });
+
+  it("日期格式化：识别常见写法统一为目标格式，非法串不动", () => {
+    const reformat = (fmt: "ymd" | "ymdCompact" | "cn", name: string) =>
+      planRenames([f(name)], ops(newOp({ type: "dateFormat", format: fmt })))[0].newName;
+    expect(reformat("cn", "2026-11-07报告")).toBe("2026年11月7日报告");
+    expect(reformat("ymd", "报告20261107")).toBe("报告2026-11-07");
+    expect(reformat("ymd", "报告20261107_140509")).toBe("报告2026-11-07");
+    expect(reformat("ymdCompact", "2026年11月7日底稿")).toBe("20261107底稿");
+    expect(reformat("ymd", "2026/11/7底稿")).toBe("2026-11-07底稿");
+    expect(reformat("ymd", "20251340报告")).toBe("20251340报告"); // 13月40日非法
+    expect(reformat("ymd", "140509")).toBe("140509"); // 年份 1405 < 1900
+    expect(reformat("ymd", "第2025期")).toBe("第2025期"); // 年份后无月日
+  });
+
+  it("简繁转换（opencc-js 词典，词级转换）", () => {
+    const items = planRenames([f("审计报告数据库")], ops(newOp({ type: "chinese", mode: "s2t" })));
+    expect(items[0].newName).toBe("審計報告數據庫");
+    const items2 = planRenames([f("審計報告資料庫")], ops(newOp({ type: "chinese", mode: "t2s" })));
+    expect(items2[0].newName).toBe("审计报告资料库");
+  });
+
+  it("转拼音（首字母/全拼，非汉字原样保留）", () => {
+    const items = planRenames([f("拼音")], ops(newOp({ type: "pinyin", mode: "initials" })));
+    expect(items[0].newName).toBe("py");
+    const items2 = planRenames([f("拼音2025")], ops(newOp({ type: "pinyin", mode: "full" })));
+    expect(items2[0].newName).toBe("pinyin2025");
+    const items3 = planRenames([f("审计ABC2025")], ops(newOp({ type: "pinyin", mode: "initials" })));
+    expect(items3[0].newName).toBe("sjABC2025");
+  });
+
+  it("describeOp 转换类人话效果", () => {
+    expect(describeOp(newOp({ type: "cnNum", mode: "toArabic" }))).toBe("把名称里的中文数字换成阿拉伯数字");
+    expect(describeOp(newOp({ type: "padNum", width: 3 }))).toBe("把名称里的数字补齐到 3 位");
+    expect(describeOp(newOp({ type: "arith", arith: "mul", value: 2 }))).toBe("把名称里的数字乘 2");
+    expect(describeOp(newOp({ type: "dateFormat", format: "cn" }))).toBe("把名称里的日期统一成「2026年11月7日」写法");
+    expect(describeOp(newOp({ type: "chinese", mode: "s2t" }))).toBe("把简体汉字转换为繁体");
+    expect(describeOp(newOp({ type: "pinyin", mode: "initials" }))).toBe("把汉字转换为拼音首字母");
+  });
+});
+

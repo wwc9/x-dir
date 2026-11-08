@@ -661,6 +661,12 @@ const RULE_GROUPS: { cat: RuleCat; name: string; rules: RuleDef[] }[] = [
     name: "转换",
     rules: [
       { type: "case", name: "大小写", s: "把英文字母 [全部改为大写/小写/首字母大写]" },
+      { type: "chinese", name: "简繁转换", s: "把汉字 [简体→繁体 / 繁体→简体]" },
+      { type: "pinyin", name: "转拼音", s: "把汉字转 [拼音首字母 / 全拼]" },
+      { type: "cnNum", name: "中文数字", s: "把名称里的数字 [十二→12 / 12→十二]" },
+      { type: "padNum", name: "补齐位数", s: "把名称里的数字补齐到 [N 位]" },
+      { type: "arith", name: "数字加减乘除", s: "把名称里的数字 [加/减/乘/除] [2]" },
+      { type: "dateFormat", name: "日期格式化", s: "把名称里的日期统一成 [2026-11-07]" },
     ],
   },
 ];
@@ -872,6 +878,51 @@ function BatchRenameDialog({
           "，分隔符",
           <InputGroup key="sep" className="np-rs-narrow" size="small" value={op.separator} spellCheck={false}
             onChange={(e) => patchOp(op.id, { separator: e.target.value } as Partial<RenameOp>)} />,
+          "，作用于", scopeSlot(op),
+        ];
+      case "chinese":
+        return [
+          <span key="s1">把汉字</span>,
+          <NpSelect key="m" value={op.mode} options={[{ value: "s2t", label: t("简体 → 繁体") }, { value: "t2s", label: t("繁体 → 简体") }]}
+            onChange={(mode) => patchOp(op.id, { mode } as Partial<RenameOp>)} />,
+          "，作用于", scopeSlot(op),
+        ];
+      case "pinyin":
+        return [
+          <span key="s1">把汉字转</span>,
+          <NpSelect key="m" value={op.mode} options={[{ value: "initials", label: t("拼音首字母") }, { value: "full", label: t("全拼") }]}
+            onChange={(mode) => patchOp(op.id, { mode } as Partial<RenameOp>)} />,
+          "，作用于", scopeSlot(op),
+        ];
+      case "cnNum":
+        return [
+          <span key="s1">把名称里的数字</span>,
+          <NpSelect key="m" value={op.mode} options={[{ value: "toArabic", label: t("十二 → 12") }, { value: "toChinese", label: t("12 → 十二") }]}
+            onChange={(mode) => patchOp(op.id, { mode } as Partial<RenameOp>)} />,
+          "，作用于", scopeSlot(op),
+        ];
+      case "padNum":
+        return [
+          <span key="s1">把名称里的数字补齐到</span>,
+          <NpSelect key="w" value={op.width} options={R_PAD_OPTS.filter((o) => o.value >= 2)} onChange={(width) => patchOp(op.id, { width } as Partial<RenameOp>)} />,
+          "，作用于", scopeSlot(op),
+        ];
+      case "arith":
+        return [
+          <span key="s1">把名称里的数字</span>,
+          <Seg key="a" value={op.arith}
+            options={[{ value: "add", label: t("加") }, { value: "sub", label: t("减") }, { value: "mul", label: t("乘") }, { value: "div", label: t("除") }]}
+            onChange={(v) => patchOp(op.id, { arith: v } as Partial<RenameOp>)} />,
+          <input key="v" className="np-bren-num" type="number" value={op.value}
+            onChange={(e) => patchOp(op.id, { value: Number(e.target.value) || 0 } as Partial<RenameOp>)} />,
+          "，作用于", scopeSlot(op),
+        ];
+      case "dateFormat":
+        return [
+          <span key="s1">把名称里的日期统一成</span>,
+          <NpSelect key="f" value={op.format}
+            options={[{ value: "ymd", label: t("2026-11-07") }, { value: "ymdCompact", label: t("20261107") }, { value: "cn", label: t("2026年11月7日") }]}
+            onChange={(format) => patchOp(op.id, { format } as Partial<RenameOp>)} />,
           "，作用于", scopeSlot(op),
         ];
     }
