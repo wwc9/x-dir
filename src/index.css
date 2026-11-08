@@ -27,6 +27,12 @@
   --np-danger-fg: #ffffff;
   /* 成功/新增高亮（滚动截图预览新拼接段闪烁，浅色对齐 SHOT_PALETTE 绿） */
   --np-success: #46a758;
+  /* 规则分类色（批量重命名分类面板四大类，2026-11-08）：添加/替换/删除复用
+     语义 token 同值，转换为紫（对齐 --np-icon-exe 紫，无新色板） */
+  --np-cat-add: #46a758;
+  --np-cat-replace: #3574f0;
+  --np-cat-remove: #d1434b;
+  --np-cat-convert: #7d64d8;
   --np-shadow: 0 12px 32px rgba(20, 28, 40, 0.14);
   /* 遮罩：所有 Dialog/Overlay backdrop 全局唯一浓度（.dark 另声明） */
   --np-overlay: rgba(15, 22, 34, 0.35);
@@ -133,6 +139,10 @@ html.bp6-dark {
   --np-danger: #f27073;
   --np-danger-fg: #14161a;
   --np-success: #5cb964;
+  --np-cat-add: #5cb964;
+  --np-cat-replace: #5c9dff;
+  --np-cat-remove: #f27073;
+  --np-cat-convert: #a08df5;
   --np-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
   /* 深色遮罩换纯黑、浓度略高于浅色（0.35），压得住深色界面 */
   --np-overlay: rgba(0, 0, 0, 0.45);
@@ -4664,124 +4674,83 @@ body.np-col-resizing * {
 .np-rchain-item.is-over {
   box-shadow: inset 0 2px 0 var(--np-accent);
 }
-.np-rchain-top {
+/* ── 语句卡 + 两栏二级分类面板（2026-11-08 面板一定案）──
+   卡 = 行1 把手+序号+类型词+启用开关+删除（np-rs-head），行2 词槽句式
+   （np-rs：句子即效果，无独立效果行）；停用卡整卡淡显（is-off） */
+.np-rs-head {
   display: flex;
   align-items: center;
   gap: var(--np-gap);
-}
-/* 参数区 = 中文标签 + 控件成对（np-rchain-pair），两列自适应换行 */
-.np-rchain-params {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--np-gap) calc(var(--np-gutter) * 3);
   min-width: 0;
 }
-.np-rchain-pair {
+.np-rs-grip {
   display: inline-flex;
   align-items: center;
-  gap: var(--np-gap);
-  min-width: 0;
-  flex-wrap: nowrap;
-  white-space: nowrap;
-}
-.np-rchain-pair-k {
-  font-size: var(--np-font-sm);
   color: var(--np-muted);
+  cursor: grab;
   flex: none;
 }
-.np-rchain-params .bp6-input-group {
-  width: 108px;
-  min-width: 0;
-}
-/* 字号统一（2026-11-08 用户要求）：卡内全部控件对齐正文档 --np-font-ui
-   （Blueprint small 默认 12px 与自绘 13px 混用），标签/效果行维持 --np-font-sm */
-.np-rchain-params .bp6-input-group input,
-.np-rchain .np-rchain-params .bp6-button,
-.np-rchain .np-rchain-params .np-select,
-.np-bren-num {
-  font-size: var(--np-font-ui);
-}
-/* Emotion 运行时注入后于 index.css（同特异性下 Blueprint 12px 胜出）——
-   输入框需更高特异性压过 */
-.np-rchain .np-rchain-params .bp6-input-group input {
-  font-size: var(--np-font-ui);
-}
-/* 卡内控件辨识（2026-11-08 用户反馈）：规则卡面 = surface-2，与全局输入
-   基线同底——文本框/数字框/下拉在卡上「隐形」。卡内输入类控件统一提亮为
-   surface + 发丝描边（暗色主题 = 更深凹陷面 + 亮描边），聚焦仍走全局 ring；
-   NpSelect 开态需同特异性显式恢复 ring（源顺序已被上方基础规则压过） */
-.np-rchain-item .bp6-input {
-  background: var(--np-surface);
-  box-shadow: inset 0 0 0 1px var(--np-border);
-}
-.np-rchain-item .np-select {
-  background-color: var(--np-surface);
-  box-shadow: inset 0 0 0 1px var(--np-border);
-}
-.np-rchain-item .np-select:hover {
-  background-color: var(--np-hover);
-}
-.np-rchain-item .np-select.is-open {
-  background-color: var(--np-surface);
-  box-shadow: var(--np-ring);
-}
-/* 卡内下拉暗色档（0-4-0）：压过全局暗色覆回（0-3-0），保持卡内
-   surface + 发丝描边配方（同上方亮色规则） */
-.bp6-dark .np-rchain-item .np-select {
-  background-color: var(--np-surface);
-  box-shadow: inset 0 0 0 1px var(--np-border);
-}
-.bp6-dark .np-rchain-item .np-select:hover {
-  background-color: var(--np-hover);
-}
-.bp6-dark .np-rchain-item .np-select.is-open {
-  background-color: var(--np-surface);
-  box-shadow: var(--np-ring);
-}
-.np-rchain-params .np-select span {
-  white-space: nowrap;
-}
-/* 行2 人话效果行（describeOp 实时生成，②） */
-.np-rchain-plain {
-  display: flex;
-  align-items: center;
-  gap: var(--np-gap);
-  min-width: 0;
-  font-size: var(--np-font-sm);
-  color: var(--np-accent);
-  background: color-mix(in srgb, var(--np-accent) 8%, transparent);
-  border-radius: var(--np-radius);
-  padding: 2px var(--np-gutter);
-}
-.np-rchain-plain span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.np-rchain-idx {
+.np-rs-idx {
   flex: none;
-  width: 18px;
+  min-width: 18px;
   text-align: center;
   font-size: var(--np-font-sm);
   color: var(--np-muted);
   font-variant-numeric: tabular-nums;
 }
-.np-rchain-top .np-select {
+.np-rs-type {
+  font-size: var(--np-font-ui);
+  font-weight: 600;
+  color: var(--np-fg);
   flex: none;
-  min-width: 0;
-  max-width: 118px;
 }
-.np-rchain-top .np-select span {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.np-rs-off {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  flex: none;
+}
+.np-rchain-item.is-off {
+  opacity: 0.55;
+}
+/* 词槽句式行：连接文字 muted，词槽控件继承「卡内控件辨识」配方（surface + 发丝描边） */
+.np-rs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--np-gap);
+  font-size: var(--np-font-ui);
+  color: var(--np-muted);
+  min-width: 0;
+  line-height: var(--np-ctl-h);
+}
+.np-rs .bp6-input-group {
+  width: 96px;
+  min-width: 0;
+}
+.np-rs .bp6-input-group.np-rs-narrow {
+  width: 44px;
+}
+.np-rs .np-select span {
   white-space: nowrap;
 }
+/* 序号预览（加序号句内 -01、-02…） */
+.np-rs-prev {
+  font-weight: 600;
+  color: var(--np-accent);
+}
+/* 卡内控件字号统一正文档（Emotion 运行时注入晚于本文件，输入框需更高特异性压过） */
+.np-rs .bp6-input,
+.np-rs .np-select,
+.np-rs .np-seg .bp6-button {
+  font-size: var(--np-font-ui);
+}
+.np-rchain .np-rs .bp6-input {
+  font-size: var(--np-font-ui);
+}
+/* 右侧弹性占位 + 行尾小图标钮（删除）：20px 紧凑（同 np-clip-actions 口径） */
 .np-rchain-sp {
   flex: 1;
 }
-/* 行尾小图标钮（上移/下移/删除）：20px 紧凑（同 np-clip-actions 口径） */
 .np-rchain-btn {
   display: inline-flex;
   align-items: center;
@@ -4803,17 +4772,103 @@ body.np-col-resizing * {
   opacity: 0.35;
   cursor: default;
 }
-.np-rchain-params {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--np-gap);
-  min-width: 0;
-  flex: 1;
+/* ── 添加规则 · 两栏二级分类面板（np-rp）── */
+.np-rp {
+  width: 470px;
+  padding: var(--np-gutter);
 }
-.np-rchain-params .bp6-input-group {
-  width: 96px;
+.np-rp-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--np-gap);
+  padding: 2px 6px 6px;
+}
+.np-rp-t {
+  font-size: var(--np-font-ui);
+  font-weight: 600;
+  color: var(--np-fg);
+}
+.np-rp-d {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-rp-body {
+  display: flex;
+}
+.np-rp-rail {
+  width: 118px;
+  flex: none;
+  border-right: 1px solid var(--np-hairline);
+  padding-right: var(--np-gap);
+}
+.np-rp-cat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--np-row-h);
+  padding: 0 8px;
+  border-radius: var(--np-radius);
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+  cursor: pointer;
+}
+.np-rp-cat:hover {
+  background: var(--np-hover);
+}
+.np-rp-cat.is-on {
+  background: var(--np-sel);
+  color: var(--np-accent);
+  font-weight: 600;
+}
+.np-rp-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--np-radius-pill);
+  flex: none;
+}
+.np-rp-dot.is-add {
+  background: var(--np-cat-add);
+}
+.np-rp-dot.is-replace {
+  background: var(--np-cat-replace);
+}
+.np-rp-dot.is-remove {
+  background: var(--np-cat-remove);
+}
+.np-rp-dot.is-convert {
+  background: var(--np-cat-convert);
+}
+.np-rp-n {
+  margin-left: auto;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  font-weight: 400;
+}
+.np-rp-list {
+  flex: 1;
   min-width: 0;
+  padding-left: var(--np-gap);
+  max-height: 296px;
+  overflow-y: auto;
+}
+.np-rp-item {
+  border-radius: var(--np-radius);
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.np-rp-item:hover {
+  background: var(--np-hover);
+}
+.np-rp-n2 {
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+}
+.np-rp-s {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .np-rchain-empty {
   padding: calc(var(--np-gutter) * 2);
@@ -4823,9 +4878,6 @@ body.np-col-resizing * {
   color: var(--np-muted);
   text-align: center;
 }
-/* ── 规则卡两行紧凑布局（2026-11-07 易用性批）──
-   行1 = np-rchain-top（序号+类型+作用域+参数+操作钮），行2 = 人话效果行 */
-/* ① 常用任务 chips（预览列顶部；与空态模板共用 REN_TEMPLATES） */
 .np-bren-tasks {
   display: flex;
   align-items: center;
@@ -4855,26 +4907,6 @@ body.np-col-resizing * {
 .np-bren-diff {
   background: color-mix(in srgb, var(--np-accent) 18%, transparent);
   border-radius: 3px;
-  padding: 0 1px;
-  font-weight: 600;
-}
-/* 行2 人话效果行（describeOp 实时生成，②） */
-.np-rchain-plain {
-  display: flex;
-  align-items: center;
-  gap: var(--np-gap);
-  min-width: 0;
-  font-size: var(--np-font-sm);
-  color: var(--np-accent);
-  background: color-mix(in srgb, var(--np-accent) 8%, transparent);
-  border-radius: var(--np-radius);
-  padding: 2px var(--np-gutter);
-}
-.np-rchain-plain span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 /* ⑦ 空态模板按钮 */
 .np-rchain-tpl {
