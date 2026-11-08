@@ -14,7 +14,7 @@ import {
   Switch,
   type Intent,
 } from "@blueprintjs/core";
-import { ArrowRight, ChevronDown, GripVertical, Info, OctagonAlert, TriangleAlert, X } from "lucide-react";
+import { ChevronDown, GripVertical, Info, OctagonAlert, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 
 import { formatBytes, formatSize, formatTime } from "../lib/format";
 import { typeName } from "../lib/fileIcons";
@@ -804,9 +804,19 @@ function ClsSlot({ op, onPatch }: { op: Extract<RenameOp, { type: "removeCls" }>
   );
 }
 /** 批量重命名（2026-11-07 用户定案参考 Smart File Renamer 布局）：
- *  左 = 大预览表（行级勾选参与 + 只看变更），右 = 规则链（9 种规则类型
- *  可堆叠/排序/删除/独立作用域，按序生效实时预览）。规则引擎在
- *  lib/batchRename.ts（planRenames op 链式范式，同 Advanced Renamer） */
+ *  上 = 四列文件表（原名/新名预览/结果/路径，行级勾选参与 + 只看变更 +
+ *  添加/删除文件），下 = 规则链（20 种规则类型可堆叠/排序/删除/独立作用域，
+ *  按序生效实时预览）。规则引擎在 lib/batchRename.ts（planRenames op 链式
+ *  范式，同 Advanced Renamer） */
+
+/** 路径列：取父目录（添加文件支持跨目录收集，同名文件可能来自不同目录）；
+ *  盘根直下文件（"C:\\a.txt"）带上盘符根分隔符 */
+const dirOf = (p: string) => {
+  const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
+  if (i < 0) return "";
+  return p[i - 1] === ":" ? p.slice(0, i + 1) : p.slice(0, i);
+};
+
 function BatchRenameDialog({
   dialog,
   onDone,
@@ -816,11 +826,35 @@ function BatchRenameDialog({
 }) {
   const [opsList, setOpsList] = useState<RenameOp[]>([]);
   const [onlyChanged, setOnlyChanged] = useState(false);
+  // 文件表工作列表（2026-11-08 添加/删除文件）：本地副本，增删只影响本次
+  // 对话框，不动 dialog.entries（来源窗格选区）也不动磁盘
+  const [entries, setEntries] = useState<FileEntry[]>(dialog.entries);
   // 预览行勾选：显式全选集（打开时全部参与；取消勾选的行不被应用）
   const [picked, setPicked] = useState<Set<string>>(
     () => new Set(dialog.entries.map((e) => e.path)),
   );
-  const plan = useMemo(() => planRenames(dialog.entries, opsList), [dialog.entries, opsList]);
+  /** 添加文件：原生多选对话框（可跨目录）→ 去重在列 → statPaths 补全
+   *  元数据（「加修改日期」等时间类规则依赖真实 mtime）→ 并入表并勾选参与 */
+  const addFiles = async () => {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const sel = await open({ title: t("添加文件"), multiple: true, directory: false });
+    if (!sel) return;
+    const paths = (Array.isArray(sel) ? sel : [sel]).filter(
+      (p) => !entries.some((e) => e.path === p),
+    );
+    if (!paths.length) return;
+    const add = await api.statPaths(paths);
+    if (!add.length) return;
+    setEntries((l) => [...l, ...add]);
+    setPicked((s) => {
+      const n = new Set(s);
+      for (const e of add) n.add(e.path);
+      return n;
+    });
+  };
+  /** 删除选中：从工作列表移除勾选行（仅列表，不动磁盘文件） */
+  const removePicked = () => setEntries((l) => l.filter((e) => !picked.has(e.path)));
+  const plan = useMemo(() => planRenames(entries, opsList), [entries, opsList]);
   const todo = useMemo(() => pickRenames(plan, picked), [plan, picked]);
   const errorCount = plan.filter((i) => i.changed && i.error).length;
   const changedCount = plan.filter((i) => i.changed).length;
@@ -1081,38 +1115,31 @@ function BatchRenameDialog({
       <DialogBody>
         <div className="np-bren2">
           <div className="np-bren-preview2">
-            {/* ① 常用任务 chips：一键生成整条规则链（参数可在卡上继续微调） */}
-            <div className="np-bren-tasks">
-              <span className="np-bren-tasks-lab">{t("常用任务：")}</span>
-              {REN_TEMPLATES.map((tp) => (
-                <button
-                  key={tp.id}
-                  className="np-bren-chip"
-                  data-tip={tp.desc}
-                  onClick={() => setOpsList(tp.build())}
-                >
-                  {t(tp.label)}
-                </button>
-              ))}
-            </div>
-            <div className="np-bren-head">
-              <input
-                type="checkbox"
-                checked={allSel}
-                onChange={toggleAll}
-                aria-label={t("全选")}
-                data-tip={t("全选 / 全不选")}
-              />
-              <span className="np-bren-old">{t("原名")}</span>
-              <span className="np-bren-new">{t("新名（改动片段高亮）")}</span>
-              <Switch
-                checked={onlyChanged}
-                label={t("只看变更")}
-                onChange={(e) => setOnlyChanged(e.currentTarget.checked)}
-              />
-            </div>
+            {/* ① 四列文件表（2026-11-08 用户定案）：原文件名/新文件名预览/
+                结果/路径，行 = 同款 grid 模板跨行对齐，原名/新名/路径单元格
+                内容超宽时列内横向滚动（行高恒定）；表头 sticky 驻顶，
+                「只看变更」驻表头右端 */}
             <div className="np-bren-list">
-              <div className="np-bren-rows">
+              <div className="np-bren-head">
+                <input
+                  type="checkbox"
+                  checked={allSel}
+                  onChange={toggleAll}
+                  aria-label={t("全选")}
+                  data-tip={t("全选 / 全不选")}
+                />
+                <span>{t("原文件名")}</span>
+                <span data-tip={t("改动片段以 accent 底色高亮")}>{t("新文件名预览")}</span>
+                <span>{t("结果")}</span>
+                <span className="np-bren-headpath">
+                  {t("路径")}
+                  <Switch
+                    checked={onlyChanged}
+                    label={t("只看变更")}
+                    onChange={(e) => setOnlyChanged(e.currentTarget.checked)}
+                  />
+                </span>
+              </div>
               {shown.slice(0, 200).map((i) => {
                 const frag = i.changed && !i.error ? diffFragments(i.oldName, i.newName) : null;
                 return (
@@ -1123,12 +1150,11 @@ function BatchRenameDialog({
                     onChange={() => togglePick(i.path)}
                     aria-label={t("参与改名")}
                   />
-                  <span className="np-bren-old np-ellipsis" title={i.oldName}>
+                  <span className="np-bren-cell np-bren-old" title={i.oldName}>
                     {i.oldName}
                   </span>
-                  <AppIcon icon={ArrowRight} size={DENSITY.iconXs} className="np-bren-arrow" />
                   <span
-                    className={`np-bren-new np-ellipsis ${
+                    className={`np-bren-cell np-bren-new ${
                       i.error ? "is-err" : i.changed ? "is-chg" : "is-same"
                     }`}
                     title={i.error ?? i.newName}
@@ -1144,17 +1170,55 @@ function BatchRenameDialog({
                         i.newName
                       ))}
                   </span>
+                  <span
+                    className={`np-bren-res ${i.error ? "is-err" : i.changed ? "is-chg" : "is-same"}`}
+                    title={i.error ?? undefined}
+                  >
+                    {i.error ?? (i.changed ? t("将改名") : t("无变化"))}
+                  </span>
+                  <span className="np-bren-cell np-bren-path" title={dirOf(i.path)}>
+                    {dirOf(i.path) || "—"}
+                  </span>
                 </div>
                 );
               })}
-              </div>
+            </div>
+            {/* ② 列表下工具行（2026-11-08 用户定案）：常用任务 chips 驻左 +
+                添加文件/删除选中驻右 */}
+            <div className="np-bren-foot">
+              <span className="np-bren-tasks-lab">{t("常用任务：")}</span>
+              {REN_TEMPLATES.map((tp) => (
+                <button
+                  key={tp.id}
+                  className="np-bren-chip"
+                  data-tip={tp.desc}
+                  onClick={() => setOpsList(tp.build())}
+                >
+                  {t(tp.label)}
+                </button>
+              ))}
+              <span className="np-bren-foot-sp" />
+              <button className="np-bren-tool" onClick={() => { void addFiles(); }}>
+                <AppIcon icon={Plus} size={DENSITY.iconXs} />
+                {t("添加文件")}
+              </button>
+              <button
+                className="np-bren-tool"
+                disabled={!picked.size}
+                data-tip="从列表移除勾选行（不动磁盘文件）"
+                onClick={removePicked}
+              >
+                <AppIcon icon={Trash2} size={DENSITY.iconXs} />
+                {t("删除选中")}（{picked.size}）
+              </button>
             </div>
           </div>
           <div className="np-rchain">
             <div className="np-rchain-bar">
               {/* 添加规则 = 两栏二级分类面板（面板一定案 2026-11-08）：左栏四大类、
-                  右栏名称 + 词槽句式预览；点规则即加链尾并收面板。常用任务 chips
-                  保留在预览列栏顶，高频操作零层级直达 */}
+                  右栏名称 + 词槽句式预览；点规则即加链尾并收面板。触发钮改
+                  prominent 档（用户反馈「要明显」）：添加规则 = accent 淡染主张钮，
+                  方案 = surface+发丝描边次张钮，与「N 条规则」计数等高中轴对齐 */}
               <PopoverNext
                 isOpen={panelOpen}
                 onInteraction={setPanelOpen}
@@ -1200,10 +1264,10 @@ function BatchRenameDialog({
                 }
               >
                 <Button
-                  minimal
                   size="small"
-                  className={`np-select${panelOpen ? " is-open" : ""}`}
-                  text={`＋ ${t("添加规则")}`}
+                  className={`np-rchain-add${panelOpen ? " is-open" : ""}`}
+                  icon={<AppIcon icon={Plus} size={DENSITY.iconXs} />}
+                  text={t("添加规则")}
                   rightIcon={<span className="np-select-chev">{ic(ChevronDown)}</span>}
                 />
               </PopoverNext>
@@ -1258,9 +1322,8 @@ function BatchRenameDialog({
                 }
               >
                 <Button
-                  minimal
                   size="small"
-                  className={`np-select${schemeOpen ? " is-open" : ""}`}
+                  className={`np-rchain-scheme${schemeOpen ? " is-open" : ""}`}
                   text={t("方案")}
                   rightIcon={<span className="np-select-chev">{ic(ChevronDown)}</span>}
                 />
@@ -1323,8 +1386,10 @@ function BatchRenameDialog({
                       });
                     }}
                   >
-                    {/* 语句卡：行1 = 把手+序号+类型词+启用开关+删除；行2 = 词槽句式
-                        （句子即效果，无独立效果行）；停用卡整卡淡显 */}
+                    {/* 语句卡单行（2026-11-08 用户定案，宽弹窗放得下）：
+                        把手+序号+类型词+词槽句式+启用开关+删除同一行，
+                        句式超宽时行内横滚（弹层均 portal 不被裁剪）；
+                        停用卡整卡淡显 */}
                     <div className="np-rs-head">
                       <span className="np-rs-grip" data-tip="拖动卡片可调整顺序">
                         <AppIcon icon={GripVertical} size={DENSITY.iconXs} />
@@ -1332,6 +1397,7 @@ function BatchRenameDialog({
                       <span className="np-rs-idx">{idx + 1}</span>
                       <span className="np-rs-type">{typeNameOf(op)}</span>
                       {!op.enabled && <span className="np-rs-off">{t("已停用")}</span>}
+                      <div className="np-rs">{opSentence(op)}</div>
                       <span className="np-rchain-sp" />
                       <Switch
                         checked={op.enabled}
@@ -1341,7 +1407,6 @@ function BatchRenameDialog({
                         <AppIcon icon={X} size={DENSITY.iconXs} />
                       </button>
                     </div>
-                    <div className="np-rs">{opSentence(op)}</div>
                   </div>
                 ))}
               </div>
@@ -1354,8 +1419,8 @@ function BatchRenameDialog({
           </div>
         )}
         <div className="np-dialog-muted">
-          已变更 {changedCount} / 共 {dialog.entries.length} 项
-          {picked.size < dialog.entries.length && `，${dialog.entries.length - picked.size} 项已取消勾选`}
+          已变更 {changedCount} / 共 {entries.length} 项
+          {picked.size < entries.length && `，${entries.length - picked.size} 项已取消勾选`}
           {errorCount > 0 && `，${errorCount} 项冲突或非法（红色标出）`}
           {plan.length > 200 && "（仅预览前 200 行）"}
         </div>

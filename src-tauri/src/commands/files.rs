@@ -9,7 +9,7 @@ use std::path::Path;
 use tauri::Manager;
 
 use crate::AppState;
-use crate::fs::entry::{name_exists_ci, path_exists};
+use crate::fs::entry::{FileEntry, name_exists_ci, path_exists};
 use crate::fs::path::{
     file_name_of, is_valid_name, join_name, norm_key, parent_of, same_name_ci, to_extended,
 };
@@ -177,6 +177,21 @@ pub async fn check_conflicts(
     })
     .await
     .map_err(|e| AppError::new("E_IO", format!("冲突预检线程失败：{e}")))?
+}
+
+/// 批量重命名「添加文件」（2026-11-08）：原生多选对话框回传的路径批量转
+/// FileEntry（可跨目录）。逐路径独立读取、失败路径跳过（可能已被移动/删除）；
+/// spawn_blocking：选择集可能上百，阻塞 IO 不占 tokio worker
+#[tauri::command]
+pub async fn stat_paths(paths: Vec<String>) -> Result<Vec<FileEntry>, AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(paths
+            .iter()
+            .filter_map(|p| crate::fs::entry::path_to_entry(p))
+            .collect())
+    })
+    .await
+    .map_err(|e| AppError::new("E_IO", format!("读取文件信息线程失败：{e}")))?
 }
 
 #[tauri::command]

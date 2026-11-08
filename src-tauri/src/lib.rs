@@ -197,6 +197,7 @@ pub fn run() {
             commands::files::list_dir,
             commands::files::list_dirs,
             commands::files::check_conflicts,
+            commands::files::stat_paths,
             commands::files::rename_item,
             commands::files::create_dir,
             commands::files::create_file,

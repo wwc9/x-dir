@@ -4514,26 +4514,38 @@ body.np-col-resizing * {
 .np-bren-k {
   flex: 0 0 auto;
 }
-/* 预览表头：列标签与行同宽对齐（old 45% / new 55%），「只看变更」驻右 */
-.np-bren-head {
-  display: flex;
+/* ── 四列文件表（2026-11-08 用户定案）：原文件名/新文件名预览/结果/路径。
+   行与表头用同一 grid 模板（--np-bren-cols 定义在 .np-bren-list，两容器
+   同宽同模板 → 各列跨行对齐）；原名/新名/路径单元格内容超宽时列内横向
+   滚动（行高恒定，长名不再撑宽整表）；表头 sticky 驻顶，「只看变更」
+   驻路径列表头右端 ── */
+.np-bren-list .np-bren-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: var(--np-bren-cols);
+  column-gap: var(--np-gutter);
   align-items: center;
-  gap: var(--np-gutter);
-  height: var(--np-row-h);
-  margin-bottom: var(--np-gap);
+  height: 30px;
+  padding: 0 var(--np-gutter);
+  background: var(--np-surface-2);
+  border-bottom: 1px solid var(--np-hairline);
   font-size: var(--np-font-sm);
   color: var(--np-muted);
 }
-.np-bren-head .np-bren-old,
-.np-bren-head .np-bren-new {
-  font-size: var(--np-font-sm);
+.np-bren-headpath {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--np-gap);
+  min-width: 0;
 }
-.np-bren-head .bp6-switch {
-  flex: 0 0 auto;
-  margin-left: auto;
+.np-bren-headpath .bp6-switch {
+  flex: none;
   margin-bottom: 0;
 }
-.np-bren-head .bp6-switch .bp6-label {
+.np-bren-headpath .bp6-switch .bp6-label {
   white-space: nowrap;
 }
 /* 预览列表：surface-2 凹陷层级（§4.7），行高走 --np-row-h */
@@ -4591,35 +4603,61 @@ body.np-col-resizing * {
   display: flex;
   flex-direction: column;
 }
-/* 预览列表：surface-2 凹陷内滚；行勾选 checkbox 用 accent 色。
-   行宽随内容延展（长文件名横向滚动，2026-11-08）：行容器 max-content
-   撑起共享宽度，行间旧/新两列按比例对齐 */
+/* 预览列表：surface-2 凹陷内滚；列模板变量供表头/行共用（容器无 padding，
+   行与表头自带同款内边距，sticky 表头满宽遮盖滚过的行） */
 .np-bren-list {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
   background: var(--np-surface-2);
   border-radius: var(--np-radius-pane);
-  padding: var(--np-gutter);
-}
-.np-bren-rows {
-  width: max-content;
-  min-width: 100%;
+  --np-bren-cols: 22px minmax(140px, 1.15fr) minmax(140px, 1.15fr) minmax(104px, 0.7fr) minmax(200px, 1.4fr);
 }
 .np-bren-list .np-bren-row {
-  width: auto;
+  display: grid;
+  grid-template-columns: var(--np-bren-cols);
+  column-gap: var(--np-gutter);
+  align-items: center;
+  height: var(--np-row-h);
+  padding: 0 var(--np-gutter);
+}
+/* 单元格：纵向居中；内容超宽时列内横滚（胶囊滚动条由 autoScrollbar 浮现），
+   行高恒定。np-bren-old/-new 基类的 flex 比例由 ToolsDialogs 批量新建
+   文件夹预览复用，此处不覆写（grid 子项的 flex 属性无效果） */
+.np-bren-cell {
+  display: flex;
+  align-items: center;
+  height: 100%;
   min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
 }
-.np-bren-list .np-bren-old {
-  flex: 0 0 42%;
+.np-bren-path {
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
 }
-.np-bren-list .np-bren-new {
-  flex: 1 1 0;
+/* 结果列：将改名/无变化/错误人话短词，超宽省略 + title 看全文 */
+.np-bren-res {
   min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--np-font-sm);
 }
-.np-bren-head input[type="checkbox"],
-.np-bren-list input[type="checkbox"] {
-  flex: 0 0 auto;
+.np-bren-res.is-chg {
+  color: var(--np-accent);
+}
+.np-bren-res.is-err {
+  color: var(--np-danger);
+}
+.np-bren-res.is-same {
+  color: var(--np-muted);
+}
+/* 行勾选 checkbox（直子元素限定：「只看变更」Switch 内部 input 不中招），
+   accent 色 */
+.np-bren-head > input[type="checkbox"],
+.np-bren-row > input[type="checkbox"] {
   width: 13px;
   height: 13px;
   margin: 0;
@@ -4659,21 +4697,86 @@ body.np-col-resizing * {
 }
 .np-rchain-bar {
   display: flex;
-  /* baseline：触发钮文字与「N 条规则」计数基线对齐（center 会有数像素偏差） */
-  align-items: baseline;
+  /* center：触发钮（ctl-h 等高）与「N 条规则」计数盒中轴对齐 */
+  align-items: center;
   flex-wrap: wrap;
   gap: var(--np-gap) var(--np-gutter);
 }
-/* 「N 条规则」计数文本与触发钮等高居中（2026-11-08 用户反馈对齐） */
 .np-rchain-bar .np-dialog-muted {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
+  height: var(--np-ctl-h);
 }
-/* 「添加规则：」行标签（同 np-bren-tasks-lab 口径） */
-.np-rchain-bar-lab {
-  font-size: var(--np-font-sm);
+/* 规则栏触发钮 prominent 档（2026-11-08 用户反馈「要明显」）：
+   添加规则 = accent 淡染主张钮（实底描边，操作入口一眼可见）；
+   方案 = surface + 发丝描边次张钮。.bp6-button 双类提特异性压过
+   Blueprint 默认钮面，暗色 .bp6-dark 同构覆回（源序在后同 specificity） */
+.bp6-button.np-rchain-add {
+  height: var(--np-ctl-h);
+  padding: 0 12px;
+  border-radius: var(--np-radius);
+  background-color: color-mix(in srgb, var(--np-accent) 12%, var(--np-surface));
+  color: var(--np-accent);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--np-accent) 32%, transparent);
+}
+.bp6-button.np-rchain-add:hover {
+  background-color: color-mix(in srgb, var(--np-accent) 20%, var(--np-surface));
+}
+.bp6-button.np-rchain-add.is-open {
+  background-color: color-mix(in srgb, var(--np-accent) 12%, var(--np-surface));
+  box-shadow: var(--np-ring);
+}
+.bp6-button.np-rchain-scheme {
+  height: var(--np-ctl-h);
+  padding: 0 12px;
+  border-radius: var(--np-radius);
+  background-color: var(--np-surface);
+  color: var(--np-fg);
+  box-shadow: inset 0 0 0 1px var(--np-border);
+}
+.bp6-button.np-rchain-scheme:hover {
+  background-color: var(--np-hover);
+}
+.bp6-button.np-rchain-scheme.is-open {
+  background-color: var(--np-surface);
+  box-shadow: var(--np-ring);
+}
+.bp6-dark .bp6-button.np-rchain-add {
+  background-color: color-mix(in srgb, var(--np-accent) 12%, var(--np-surface));
+  color: var(--np-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--np-accent) 32%, transparent);
+}
+.bp6-dark .bp6-button.np-rchain-add:hover {
+  background-color: color-mix(in srgb, var(--np-accent) 20%, var(--np-surface));
+}
+.bp6-dark .bp6-button.np-rchain-add.is-open {
+  background-color: color-mix(in srgb, var(--np-accent) 12%, var(--np-surface));
+  box-shadow: var(--np-ring);
+}
+.bp6-dark .bp6-button.np-rchain-scheme {
+  background-color: var(--np-surface);
+  color: var(--np-fg);
+  box-shadow: inset 0 0 0 1px var(--np-border);
+}
+.bp6-dark .bp6-button.np-rchain-scheme:hover {
+  background-color: var(--np-hover);
+}
+.bp6-dark .bp6-button.np-rchain-scheme.is-open {
+  background-color: var(--np-surface);
+  box-shadow: var(--np-ring);
+}
+/* 触发钮下拉箭头（np-select-chev 同语义：muted + 开态旋转 180°） */
+.np-rchain-add .np-select-chev,
+.np-rchain-scheme .np-select-chev {
+  display: inline-flex;
+  align-items: center;
   color: var(--np-muted);
-  flex: none;
+  transition: transform 0.15s;
+}
+.np-rchain-add.is-open .np-select-chev,
+.np-rchain-scheme.is-open .np-select-chev {
+  transform: rotate(180deg);
 }
 .np-rchain-list {
   display: flex;
@@ -4738,16 +4841,25 @@ body.np-col-resizing * {
 .np-rchain-item.is-off {
   opacity: 0.55;
 }
-/* 词槽句式行：连接文字 muted，词槽控件继承「卡内控件辨识」配方（surface + 发丝描边） */
+/* 词槽句式行（2026-11-08 单行卡定案）：占卡中弹性主位，不换行、超宽行内
+   横滚（NpSelect/勾选面板弹层均 portal 到 body 不被裁剪）；连接文字 muted，
+   词槽控件继承「卡内控件辨识」配方（surface + 发丝描边） */
 .np-rs {
   display: flex;
-  flex-wrap: wrap;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
   align-items: center;
   gap: var(--np-gap);
   font-size: var(--np-font-ui);
   color: var(--np-muted);
   min-width: 0;
   line-height: var(--np-ctl-h);
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+}
+.np-rs > * {
+  flex: none;
 }
 .np-rs .bp6-input-group {
   width: 96px;
@@ -5062,12 +5174,37 @@ body.np-col-resizing * {
   color: var(--np-muted);
   text-align: center;
 }
-.np-bren-tasks {
+/* 列表下工具行（2026-11-08 用户定案）：常用任务 chips 驻左 +
+   添加文件/删除选中驻右 */
+.np-bren-foot {
   display: flex;
   align-items: center;
-  gap: var(--np-gap);
   flex-wrap: wrap;
-  margin-bottom: var(--np-gutter);
+  gap: var(--np-gap);
+  margin-top: var(--np-gutter);
+}
+.np-bren-foot-sp {
+  flex: 1 1 auto;
+}
+.np-bren-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--np-ctl-h);
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--np-radius);
+  background: var(--np-surface-2);
+  color: var(--np-fg);
+  font-size: var(--np-font-ui);
+  cursor: pointer;
+}
+.np-bren-tool:hover:not(:disabled) {
+  background: var(--np-hover);
+}
+.np-bren-tool:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 .np-bren-tasks-lab {
   font-size: var(--np-font-sm);

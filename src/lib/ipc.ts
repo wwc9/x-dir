@@ -633,6 +633,9 @@ export const api = {
     }),
   listDirs: (path: string, showHidden = false) =>
     cmd<string[]>("list_dirs", { path, showHidden }),
+  /** 批量重命名「添加文件」：原生多选对话框回传的任意路径批量补全元数据
+   *  （逐路径读取，失败路径后端跳过；时间类规则依赖真实 mtime） */
+  statPaths: (paths: string[]) => cmd<FileEntry[]>("stat_paths", { paths }),
   exportConfig: (path: string) =>
     cmd<{ workspaces: number; sourceSettingsPath: string }>("export_config", { path }),
   importConfig: (path: string) =>
