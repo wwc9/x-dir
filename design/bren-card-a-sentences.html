@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>批量重命名 · 方案 A 语句卡 · 全 9 类句式设计</title>
+<style>
+  /* ═══ np token 替身（与 src/index.css 同值，2026-11-08）═══ */
+  .t-light {
+    --np-bg: #e9ecf1; --np-surface: #ffffff; --np-surface-2: #f0f2f5;
+    --np-border: #d6dbe2; --np-hairline: rgba(16, 24, 40, 0.06);
+    --np-fg: #171d26; --np-muted: #66707e;
+    --np-accent: #3574f0; --np-accent-fg: #ffffff;
+    --np-hover: rgba(26, 33, 41, 0.055); --np-sel: rgba(53, 116, 240, 0.12);
+    --np-danger: #d1434b; --np-success: #46a758;
+    --np-ring: 0 0 0 2px color-mix(in srgb, var(--np-accent) 45%, transparent);
+  }
+  .t-dark {
+    --np-bg: #131519; --np-surface: #1b1e23; --np-surface-2: #24282f;
+    --np-border: #3a414b; --np-hairline: rgba(255, 255, 255, 0.08);
+    --np-fg: #e8eaed; --np-muted: #8b929c;
+    --np-accent: #5c9dff; --np-accent-fg: #0d1117;
+    --np-hover: rgba(255, 255, 255, 0.055); --np-sel: rgba(92, 157, 255, 0.16);
+    --np-danger: #f27073; --np-success: #5cb964;
+    --np-ring: 0 0 0 2px color-mix(in srgb, var(--np-accent) 45%, transparent);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 26px 34px 56px; background: #dde2ea; color: #171d26;
+    font-family: system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 13px; }
+  body.t-dark { background: #101216; color: #e8eaed; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: #8a93a0; font-size: 12px; margin-bottom: 16px; }
+  body.t-dark .sub { color: #8b929c; }
+  .banner { background: var(--np-surface); border: 1px solid var(--np-border); border-radius: 12px;
+    padding: 12px 16px; margin-bottom: 20px; font-size: 12px; color: var(--np-muted);
+    line-height: 1.9; max-width: 1020px; }
+  .banner b { color: var(--np-fg); }
+  .banner code { background: var(--np-surface-2); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+
+  .toolbar { display: flex; gap: 10px; align-items: center; padding: 0 0 12px; }
+  .tbtn { height: 26px; padding: 0 14px; border: 1px solid var(--np-border); border-radius: 999px;
+    background: var(--np-surface); color: var(--np-fg); font-size: 12px; cursor: pointer; }
+  .tbtn:hover { background: var(--np-hover); }
+  .tbtn.on { background: var(--np-sel); border-color: var(--np-accent); color: var(--np-accent); font-weight: 600; }
+  .toolbar .hint { font-size: 11px; color: var(--np-muted); }
+
+  section { margin-bottom: 34px; max-width: 1020px; }
+  .sec-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .sec-h h2 { font-size: 14px; margin: 0; }
+  .sec-note { font-size: 12px; color: var(--np-muted); margin: 0 0 14px; line-height: 1.9; max-width: 1000px; }
+  .sec-note b { color: var(--np-fg); }
+
+  .col { width: 560px; background: var(--np-surface); border-radius: 12px; padding: 14px 16px 16px;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.1); }
+  .bar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; margin-bottom: 12px; }
+  .bar .lab { font-size: 11px; color: var(--np-muted); margin-right: 2px; }
+  .chip { height: 24px; padding: 0 10px; border: 1px solid var(--np-border); border-radius: 999px;
+    background: var(--np-surface); color: var(--np-fg); font-size: 12px; cursor: pointer; }
+  .chip:hover { background: var(--np-hover); }
+  .cnt { font-size: 11px; color: var(--np-muted); margin-left: auto; }
+
+  /* 下拉词槽（NpSelect 替身；句内词槽 = 蓝色粗体） */
+  .dd { position: relative; display: inline-flex; }
+  .dd > button { height: 24px; padding: 0 7px 0 9px; display: inline-flex; align-items: center; gap: 4px;
+    border: none; border-radius: 6px; background: var(--np-surface-2);
+    box-shadow: inset 0 0 0 1px var(--np-border); color: var(--np-fg); font-size: 12px; cursor: pointer; }
+  .dd > button:hover { background: var(--np-hover); }
+  .dd.open > button { background: var(--np-surface); box-shadow: var(--np-ring); }
+  .dd .cv { font-size: 9px; color: var(--np-muted); transition: transform .15s; }
+  .dd.open .cv { transform: rotate(180deg); }
+  .menu { display: none; position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 132px;
+    background: var(--np-surface); border-radius: 10px; padding: 4px;
+    box-shadow: 0 0 0 1px var(--np-border), 0 12px 32px rgba(20, 28, 40, .18); }
+  .dd.open .menu { display: block; }
+  .menu div { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    height: 26px; padding: 0 9px; border-radius: 6px; font-size: 12px; color: var(--np-fg); cursor: pointer; }
+  .menu div:hover { background: var(--np-hover); }
+  .menu div .ck { visibility: hidden; color: var(--np-accent); font-weight: 600; }
+  .menu div.on .ck { visibility: visible; }
+  .menu div.on { color: var(--np-accent); font-weight: 600; }
+
+  .inp { height: 24px; padding: 0 8px; border: none; border-radius: 6px; outline: none;
+    background: var(--np-surface); box-shadow: inset 0 0 0 1px var(--np-border);
+    color: var(--np-fg); font-size: 12px; font-family: inherit; }
+  .inp:focus { box-shadow: var(--np-ring); }
+  .inp::placeholder { color: var(--np-muted); }
+  .inp.num { width: 40px; text-align: center; }
+
+  .seg { display: inline-flex; gap: 4px; }
+  .seg b { display: inline-flex; align-items: center; height: 22px; padding: 0 10px; border-radius: 999px;
+    border: 1px solid var(--np-border); color: var(--np-muted); font-size: 12px; font-weight: 400; cursor: pointer; }
+  .seg b:hover { background: var(--np-hover); color: var(--np-fg); }
+  .seg b.on { background: var(--np-sel); border-color: var(--np-accent); color: var(--np-accent); font-weight: 600; }
+  .seg b.on::before { content: "✓"; font-size: 10px; margin-right: 4px; }
+
+  .sw { width: 26px; height: 15px; border-radius: 999px; background: var(--np-surface-2);
+    box-shadow: inset 0 0 0 1px var(--np-border); position: relative; cursor: pointer; flex: none; }
+  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px;
+    border-radius: 999px; background: var(--np-muted); transition: all .15s; }
+  .sw.on { background: var(--np-accent); box-shadow: none; }
+  .sw.on::after { left: 13px; background: var(--np-accent-fg); }
+
+  .x { width: 22px; height: 22px; border: none; border-radius: 6px; background: transparent;
+    color: var(--np-muted); font-size: 13px; line-height: 1; cursor: pointer; flex: none; }
+  .x:hover { background: var(--np-hover); color: var(--np-danger); }
+
+  .grip { width: 14px; display: inline-flex; flex-direction: column; gap: 3px; align-items: center;
+    cursor: grab; color: var(--np-muted); flex: none; opacity: .8; }
+  .grip i { width: 10px; height: 1.6px; border-radius: 2px; background: currentColor; display: block; }
+  .grip i:nth-child(2) { width: 6px; }
+
+  /* ═══ 语句卡 ═══ */
+  .a-card { background: var(--np-surface-2); border-radius: 10px;
+    padding: 8px 10px 8px 8px; margin-bottom: 8px; display: flex; gap: 8px; }
+  .a-card.off { opacity: .55; }
+  .a-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .a-head { display: flex; align-items: center; gap: 7px; }
+  .a-idx { font-size: 11px; color: var(--np-muted); font-variant-numeric: tabular-nums;
+    border: 1px solid var(--np-border); border-radius: 999px; width: 20px; height: 20px;
+    display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .a-type { font-size: 12px; font-weight: 600; color: var(--np-fg); }
+  .a-badge { font-size: 10px; color: var(--np-accent); background: var(--np-sel);
+    border-radius: 999px; padding: 1px 8px; }
+  .a-offlab { font-size: 11px; color: var(--np-muted); }
+  .a-sp { flex: 1; }
+  .a-sent { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; font-size: 12px;
+    color: var(--np-muted); line-height: 24px; }
+  .a-sent .slot.dd > button { background: var(--np-surface); font-weight: 600; color: var(--np-accent); }
+  .a-sent .inp { font-weight: 600; color: var(--np-fg); min-width: 0; }
+  .a-tip { font-size: 11px; color: var(--np-muted); opacity: .85; padding-left: 2px; }
+  .a-tip b { color: var(--np-fg); font-weight: 600; }
+
+  /* 兜底句清单 */
+  .fb { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 22px; max-width: 1020px; }
+  .fb div { font-size: 12px; color: var(--np-muted); line-height: 1.7; }
+  .fb b { color: var(--np-fg); font-weight: 600; margin-right: 6px; }
+</style>
+</head>
+<body class="t-dark">
+
+<div class="toolbar">
+  <button class="tbtn on" id="btn-dark">深色</button>
+  <button class="tbtn" id="btn-light">浅色</button>
+  <span class="hint">每种规则类型一条句式；蓝色词槽 = 下拉可选，白底词槽 = 直接输入。句尾统一「作用于…」控制作用范围。</span>
+</div>
+
+<h1>方案 A 语句卡 · 全 9 类句式设计</h1>
+<div class="sub">design/bren-card-a-sentences.html · 2026-11-08 · 方案 A（design/bren-card-proposals.html）的逐类型句式清单</div>
+
+<div class="banner">
+  <b>句式设计原则</b>：① 句子主干 = 动词开头的一句话，<b>念出来就是改完的结果</b>；② 可变参数 = 句中词槽（下拉词槽蓝色粗体、输入词槽白底粗体）；③ 句尾统一 <code>作用于 [主名]</code> 词槽（主名 = 扩展名不动 / 整个名称 / 只改扩展名）；④ 效果行不再需要——句子本身就是效果。<br>
+  <b>与现状参数的对应</b>：现状每条卡 2~4 个参数 + 1 个作用域下拉；语句卡把它们全部收进一句话，卡头只剩 序号 + 类型词 + 开关 + 删除。
+</div>
+
+<section>
+  <div class="sec-h"><h2>逐类型句式（示例值可直接改）</h2></div>
+  <div class="col">
+    <div class="bar"><span class="lab">添加规则：</span>
+      <button class="chip">查找替换</button><button class="chip">删除文字</button><button class="chip">插入文字</button><button class="chip">加前缀</button><button class="chip">加后缀</button><button class="chip">掐头去尾</button><button class="chip">加序号</button><button class="chip">大小写</button><button class="chip">插入日期</button>
+      <span class="cnt">10 条规则</span>
+    </div>
+
+    <!-- 1 查找替换 -->
+    <div class="a-card">
+      <span class="grip" title="拖动排序"><i></i><i></i><i></i></span>
+      <div class="a-main">
+        <div class="a-head">
+          <span class="a-idx">1</span><span class="a-type">查找替换</span>
+          <span class="a-sp"></span>
+          <span class="sw on" data-sw></span>
+          <button class="x" title="删除规则">×</button>
+        </div>
+        <div class="a-sent">
+          把 <input class="inp" style="width:84px" value="报告"> 替换为 <input class="inp" style="width:64px" value="项目"> ，按
+          <span class="dd" data-dd><button>文字 <span class="cv">▼</span></button>
+            <div class="menu"><div class="on">文字 <span class="ck">✓</span></div><div>表达式（正则） <span class="ck">✓</span></div></div></span> 匹配，
+          作用于
+          <span class="dd" data-dd><button>主名 <span class="cv">▼</span></button>
+            <div class="menu"><div class="on">主名（扩展名不动） <span class="ck">✓</span></div><div>整个名称 <span class="ck">✓</span></div><div>只改扩展名 <span class="ck">✓</span></div></div></span>
+        </div>
+        <div class="a-tip">选「表达式」后整句切换为 ↓ 第 2 条的句式；查找留空时兜底句「<b>未填写查找与替换内容</b>」。</div>
+      </div>
+    </div>
+
+    <!-- 2 查找替换 · 表达式变体 -->
+    <div class="a-card">
+      <span class="grip" title="拖动排序"><i></i><i></i><i></i></span>
+      <div class="a-main">
+        <div class="a-head">
+          <span class="a-idx">2</span><span class="a-type">查找替换</span>
+          <span class="a-badge">表达式变体</span>
+          <span class="a-sp"></span>
+          <span class="sw on" data-sw></span>
+          <button class="x" title="删除规则">×</button>
+        </div>
+        <div class="a-sent">
+          用正则 <input class="inp" style="width:96px" value="\s+"> 匹配的部分替换为 <input class="inp" style="width:52px" value="-"> ，
+          作用于
+          <span class="dd" data-dd><button>主名 <span class="cv">▼</span></button>
+            <div class="menu"><div class="on">主名（扩展名不动） <span class="ck">✓</span></div><div>整个名称 <span class="ck">✓</span></div><div>只改扩展名 <span class="ck">✓</span></div></div></span>
+        </div>
+        <div class="a-tip">替换串支持 <b>$1 = 第 1 组</b>；写坏的正则规则标红并跳过执行。</div>
+      </div>
+    </div>
+
+    <!-- 3 删除文字 -->
+    <div class="a-card">
+      <span class="grip" title="拖动排序"><i></i><i></i><i></i></span>
+      <div class="a-main">
+        <div class="a-head">
+          <span class="a-idx">3</span><span class="a-type">删除文字</span>
+          <span class="a-sp"></span>
+          <span class="sw on" data-sw></span>
+          <button class="x" title="删除规则">×</button>
+        </div>
+        <div class="a-sent">
+          删除名称里所有的 <input class="inp" style="width:72px" value="备份"> ，
+          作用于
+          <span class="dd" data-dd><button>主名 <span class="cv">▼</span></button>
+            <div class="menu"><div class="on">主名（扩展名不动） <span class="ck">✓</span></div><div>整个名称 <span class="ck">✓</span></div><div>只改扩展名 <span class="ck">✓</span></div></div></span>
+        </div>
+        <div class="a-tip">常用变体：删除空格 = 填一个空格；删除序号前缀可改用第 2 条的 <b>\d+[._-]</b> 表达式。</div>
+      </div>
+    </div>
+
+    <!-- 4 插入文字 -->
+    <div class="a-card">
+      <span class="grip" title="拖动排序"><i></i><i></i><i></i></span>
+      <div class="a-main">
+        <div class="a-head">
+          <span class="a-idx">4</span><span class="a-type">插入文字</span>
+          <span class="a-sp"></span>
+          <span class="sw on" data-sw></span>
+          <button class="x" title="删除规则">×</button>
+        </div>
+        <div class="a-sent">
+          在
+          <span class="dd" data-dd><button>名称开头 <span class="cv">▼</span></button>
+            <div class="menu"><div class="on">名称开头 <span class="ck">✓</span></div><div>名称末尾 <span class="ck">✓</span></div></div></span>
+          插入 <input class="inp" style="width:88px" value="[定稿]"> ，
+          作用于
+          <span class="dd" data-dd><button>主名 <span class="cv">▼</span></button>
+            <div class="menu"><div class="on">主名（扩展名不动） <span class="ck">✓</span></div><div>整个名称 <span class="ck">✓</span></div><div>只改扩展名 <span class="ck">✓</span></div></div></span>
+        </div>
+        <div class="a-tip">主名作用域下「名称末尾」= 扩展名前；整名作用域下 = 文件名最末尾。</div>
+      </div>
+    </div>
+
+    <!-- 5 加前缀 -->
+    <div class="a-card">
+      <span class="grip" title="拖动排序"><i></i><i></i><i></i></span>
+      <div class="a-main">
+        <div class="a-head">
+          <span class="a-idx">5</span><span class="a-type">加前缀</span>
+          <span class="a-sp"></span>
+          <span class="sw on" data-sw></span>
+          <button class="x" title="删除规则">×</button>
+        </div>
+        <div class="a-sent">
+          在最前面加 <input class="inp" style="width:84px" value="江西国控_"> ，
+          作用于
+          <span class="dd" data-dd><button>主名 <span class="cv">▼</span></button>
+            <div class="menu"><div class="on">主名（扩展名不动） <span class="ck">✓</span></div><div>整个名称 <span class="ck">✓</span></div><div>只改扩展名 <span class="ck">✓</span></div></div></span>
+        </div>
+        <div class="a-tip">加前缀 = 插入文字（开头）的快捷形态，只是词槽更少、更常用于日期/项目号前缀。</div>
+      </div>
+    </div>
+
+    <!-- 6 加后缀 -->
+    <div class="a-card">
+      <span class="grip" title="拖动排序"><i></i><i></i><i></i></span>
+      <div class="a-main">
+        <div class="a-head">
+          <span class="a-idx">6</span><span class="a-type">加后缀</span>
+          <span class="a-sp"></span>
+          <span class="sw on" data-sw></span>
+          <button class="x" title="删除规则">×</button>
+        </div>
+        <div class="a-sent">
+          在扩展名前加 <input class="inp" style="width:76px" value="_定稿"> ，
+          作用于
+          <span class="dd" data-dd><button>主名 <span class="cv">▼</span></button>
+            <div class="menu"><div class="on">主名（扩展名不动） <span class="ck">✓</span></div><div>整个名称 <span class="ck">✓</span></div><div>只改扩展名 <span class="ck">✓</span></div></div></span>
+        </div>
+        <div class="a-tip">「在扩展名前」即现状语义（.docx 永远留在最后）；切「整名」作用域时句式自动变为「在末尾加 …」。</div>
+      </div>
+    </div>
+
+    <!-- 7 掐头去尾 -->
+    <div class="a-card">
+      <span class="grip" title="拖动排序"><i></i><i></i><i></i></span>
+      <div class="a-main">
+        <div class="a-head">
+          <span class="a-idx">7</span><span class="a-type">掐头去尾</span>
+          <span class="a-sp"></span>
+          <span class="sw on" data-sw></span>
+          <button class="x" title="删除规则">×</button>
+        </div>
+        <div class="a-sent">
+          去掉开头 <input class="inp num" value="2"> 个、末尾 <input class="inp num" value="1"> 个字符，
+          作用于
+          <span class="dd" data-dd><button>主名 <span class="cv">▼</span></button>
+            <div class="menu"><div class="on">主名（扩展名不动） <span class="ck">✓</span></div><div>整个名称 <span class="ck">✓</span></div><div>只改扩展名 <span class="ck">✓</span></div></div></span>
+        </div>
+        <div class="a-tip">填 0 的那一段自动从句子里消失（如只掐头 →「去掉开头 2 个字符」），不会出现「去掉 0 个」。</div>
+      </div>
+    </div>
+
+    <!-- 8 加序号 -->
+    <div class="a-card">
+      <span class="grip" title="拖动排序"><i></i><i></i><i></i></span>
+      <div class="a-main">
+        <div class="a-head">
+          <span class="a-idx">8</span><span class="a-type">加序号</span>
+          <span class="a-sp"></span>
+          <span class="sw on" data-sw></span>
+          <button class="x" title="删除规则">×</button>
+        </div>
+        <div class="a-sent">
+          在
+          <span class="dd" data-dd><button>扩展名前 <span class="cv">▼</span></button>
+            <div class="menu"><div>名称开头 <span class="ck">✓</span></div><div>名称末尾 <span class="ck">✓</span></div><div class="on">扩展名前 <span class="ck">✓</span></div></div></span>
+          加编号，从 <input class="inp num" value="1"> 起、宽
+          <span class="dd" data-dd><button>2 位 <span class="cv">▼</span></button>
+            <div class="menu"><div>1 位 <span class="ck">✓</span></div><div class="on">2 位 <span class="ck">✓</span></div><div>3 位 <span class="ck">✓</span></div></div></span>
+          （<b style="color:var(--np-accent)">-01、-02…</b>），分隔符 <input class="inp" style="width:36px" value="-">
+        </div>
+        <div class="a-tip">作用域对加序号恒为「主名」（扩展名永远不参与编号），句尾省略作用于词槽——破例的一条。</div>
+      </div>
+    </div>
+
+    <!-- 9 大小写 -->
+    <div class="a-card">
+      <span class="grip" title="拖动排序"><i></i><i></i><i></i></span>
+      <div class="a-main">
+        <div class="a-head">
+          <span class="a-idx">9</span><span class="a-type">大小写</span>
+          <span class="a-sp"></span>
+          <span class="sw on" data-sw></span>
+          <button class="x" title="删除规则">×</button>
+        </div>
+        <div class="a-sent">
+          把英文字母
+          <span class="dd" data-dd><button>全部改为大写 <span class="cv">▼</span></button>
+            <div class="menu"><div class="on">全部改为大写 <span class="ck">✓</span></div><div>全部改为小写 <span class="ck">✓</span></div><div>首字母大写 <span class="ck">✓</span></div></div></span>，
+          作用于
+          <span class="dd" data-dd><button>主名 <span class="cv">▼</span></button>
+            <div class="menu"><div class="on">主名（扩展名不动） <span class="ck">✓</span></div><div>整个名称 <span class="ck">✓</span></div><div>只改扩展名 <span class="ck">✓</span></div></div></span>
+        </div>
+        <div class="a-tip">「首字母大写」= 每个词首字母大写、其余小写（jpg → Jpg）。</div>
+      </div>
+    </div>
+
+    <!-- 10 插入日期 -->
+    <div class="a-card">
+      <span class="grip" title="拖动排序"><i></i><i></i><i></i></span>
+      <div class="a-main">
+        <div class="a-head">
+          <span class="a-idx">10</span><span class="a-type">插入日期</span>
+          <span class="a-sp"></span>
+          <span class="sw on" data-sw></span>
+          <button class="x" title="删除规则">×</button>
+        </div>
+        <div class="a-sent">
+          在
+          <span class="dd" data-dd><button>名称开头 <span class="cv">▼</span></button>
+            <div class="menu"><div class="on">名称开头 <span class="ck">✓</span></div><div>名称末尾 <span class="ck">✓</span></div></div></span>
+          加修改日期
+          <span class="dd" data-dd><button>2026-11-07 <span class="cv">▼</span></button>
+            <div class="menu"><div class="on">2026-11-07 <span class="ck">✓</span></div><div>20261107 <span class="ck">✓</span></div><div>2026-11-07_140509 <span class="ck">✓</span></div></div></span> ，
+          分隔符 <input class="inp" style="width:36px" value="_"> ，
+          作用于
+          <span class="dd" data-dd><button>主名 <span class="cv">▼</span></button>
+            <div class="menu"><div class="on">主名（扩展名不动） <span class="ck">✓</span></div><div>整个名称 <span class="ck">✓</span></div><div>只改扩展名 <span class="ck">✓</span></div></div></span>
+        </div>
+        <div class="a-tip">日期取文件的<b>修改时间</b>；「名称末尾」= 扩展名前。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-h"><h2>参数未填写时的兜底句</h2></div>
+  <p class="sec-note">词槽留空时句子不能破——每种可空类型配一句兜底（直接替代整句显示在句位上，替代现状第三行的提示职责）。加序号 / 大小写 / 插入日期三项有默认值，永不为空。</p>
+  <div class="fb">
+    <div><b>查找替换</b>未填写查找与替换内容</div>
+    <div><b>删除文字</b>未填写要删除的文字</div>
+    <div><b>插入文字</b>未填写要插入的文字</div>
+    <div><b>加前缀</b>未填写前缀文字</div>
+    <div><b>加后缀</b>未填写后缀文字</div>
+    <div><b>掐头去尾</b>未填写要去除的字符数</div>
+  </div>
+</section>
+
+<script>
+  const bd = document.body, bD = document.getElementById("btn-dark"), bL = document.getElementById("btn-light");
+  function setTheme(dark) {
+    bd.classList.toggle("t-dark", dark); bd.classList.toggle("t-light", !dark);
+    bD.classList.toggle("on", dark); bL.classList.toggle("on", !dark);
+  }
+  bD.onclick = () => setTheme(true);
+  bL.onclick = () => setTheme(false);
+
+  document.addEventListener("click", (e) => {
+    const dd = e.target.closest(".dd");
+    document.querySelectorAll(".dd.open").forEach((d) => { if (d !== dd) d.classList.remove("open"); });
+    if (!dd) return;
+    const item = e.target.closest(".menu div");
+    if (item) {
+      dd.querySelectorAll(".menu div").forEach((d) => d.classList.remove("on"));
+      item.classList.add("on");
+      dd.querySelector(":scope > button").childNodes[0].textContent = item.childNodes[0].textContent.trim() + " ";
+      dd.classList.remove("open");
+      e.stopPropagation();
+      return;
+    }
+    if (e.target.closest(".dd > button")) dd.classList.toggle("open");
+  });
+  document.querySelectorAll("[data-sw]").forEach((s) => s.addEventListener("click", () => {
+    s.classList.toggle("on");
+    const card = s.closest(".a-card");
+    if (card) card.classList.toggle("off", !s.classList.contains("on"));
+  }));
+</script>
+</body>
+</html>
