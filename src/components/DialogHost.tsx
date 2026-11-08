@@ -175,7 +175,7 @@ export function DialogHost() {
       style={{
         width:
           dialog?.type === "batchRename"
-            ? "min(980px, 92vw)"
+            ? "min(1200px, 92vw)"
             : WIDE_TYPES.has(dialog?.type ?? "")
               ? "min(680px, 92vw)"
               : dialog?.type === "unlock"

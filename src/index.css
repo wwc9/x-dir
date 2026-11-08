@@ -4630,7 +4630,7 @@ body.np-col-resizing * {
 }
 /* 右侧规则链 */
 .np-rchain {
-  width: 400px;
+  width: 460px;
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
