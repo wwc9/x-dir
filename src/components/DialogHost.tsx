@@ -1065,6 +1065,11 @@ function BatchRenameDialog({
                       overIdx === idx && dragId !== null && dragId !== op.id ? "is-over" : ""
                     }`}
                     onPointerDown={(e) => {
+                      // React portal 冒泡防护（2026-11-08 用户报「下拉点击不生效」根因）：
+                      // 卡内 NpSelect 弹层 DOM 上挂在 body 下，合成事件却沿 React 树
+                      // 冒泡到卡片——contains 不为真即弹层来源，放行不进拖拽；否则
+                      // setPointerCapture 吞掉 pointerup，菜单项 onClick 永不触发
+                      if (!(e.currentTarget as HTMLElement).contains(e.target as Node)) return;
                       // NpSelect/Button/输入交互不启动拖拽
                       if ((e.target as HTMLElement).closest(".np-select, button, input, .bp6-input-group, .np-seg")) return;
                       dragRef.current = { id: op.id, moved: false };
