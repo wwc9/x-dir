@@ -1,7 +1,7 @@
 THIRD-PARTY NOTICES FOR X-Dir
 ========================================================================================================================
 
-X-Dir v0.1.4 · Copyright (c) 2026 wwwwwc · 本软件以 MIT 许可证发布（全文见附录）。
+X-Dir v0.1.5 · Copyright (c) 2026 wwwwwc · 本软件以 MIT 许可证发布（全文见附录）。
 
 本文件汇总随 X-Dir 一并再分发的全部第三方组件的归属与许可信息：
   · Rust crates —— 编译进 x-dir.exe（含传递依赖，已按 Windows x64 目标过滤）
@@ -12,7 +12,7 @@ X-Dir v0.1.4 · Copyright (c) 2026 wwwwwc · 本软件以 MIT 许可证发布（
 由 tools/gen-third-party-notices.mjs 生成于 2026-11-09；依赖变更后请重新生成。
 
 
-RUST CRATES（编译进 x-dir.exe）（408 项）
+RUST CRATES（编译进 x-dir.exe）（418 项）
 ------------------------------------------------------------------------------------------------------------------------
 · ab_glyph 0.2.32 — Apache-2.0 — https://github.com/alexheretic/ab-glyph
   Copyright Alex Butler <alexheretic@gmail.com>
@@ -20,6 +20,8 @@ RUST CRATES（编译进 x-dir.exe）（408 项）
   Copyright Alex Butler <alexheretic@gmail.com>
 · adler2 2.0.1 — 0BSD OR MIT OR Apache-2.0 — https://github.com/oyvindln/adler2
   Copyright Jonas Schievink <jonasschievink@gmail.com>, oyvindln <oyvindln@users.noreply.github.com>
+· aes 0.8.4 — MIT OR Apache-2.0 — https://github.com/RustCrypto/block-ciphers
+  Copyright (c) 2018 Artyom Pavlov
 · aes 0.9.3 — MIT OR Apache-2.0 — https://github.com/RustCrypto/block-ciphers
   Copyright (c) 2018-2024 The RustCrypto Project Developers / Copyright (c) 2018 Artyom Pavlov
 · ahash 0.8.12 — MIT OR Apache-2.0 — https://github.com/tkaitchuck/ahash
@@ -116,6 +118,8 @@ RUST CRATES（编译进 x-dir.exe）（408 项）
   Copyright Henri Sivonen <hsivonen@hsivonen.fi>
 · chrono 0.4.45 — MIT OR Apache-2.0 — https://github.com/chronotope/chrono
   Copyright (c) 2014, Kang Seonghoon.
+· cipher 0.4.4 — MIT OR Apache-2.0 — https://github.com/RustCrypto/traits
+  Copyright (c) 2016-2020 RustCrypto Developers
 · cipher 0.5.2 — MIT OR Apache-2.0 — https://github.com/RustCrypto/traits
   Copyright (c) 2016-2025 RustCrypto Developers
 · clap 4.6.7 — MIT OR Apache-2.0 — https://github.com/clap-rs/clap
@@ -132,6 +136,8 @@ RUST CRATES（编译进 x-dir.exe）（408 项）
 · colorchoice 1.0.5 — MIT OR Apache-2.0 — https://github.com/rust-cli/anstyle.git
 · const-oid 0.10.2 — Apache-2.0 OR MIT — https://github.com/RustCrypto/formats
   Copyright (c) 2020-2026 The RustCrypto Project Developers
+· constant_time_eq 0.3.1 — CC0-1.0 OR MIT-0 OR Apache-2.0 — https://github.com/cesarb/constant_time_eq
+  Copyright Cesar Eduardo Barros <cesarb@cesarb.eti.br>
 · cookie 0.18.2 — MIT OR Apache-2.0 — https://github.com/SergioBenitez/cookie-rs
   Copyright 2017 Sergio Benitez / Copyright 2014 Alex Chricton / Copyright (c) 2017 Sergio Benitez
 · core_detect 1.0.0 — MIT/Apache-2.0 — https://github.com/thomcc/core_detect
@@ -282,6 +288,8 @@ RUST CRATES（编译进 x-dir.exe）（408 项）
   Copyright (c) 2015 The Rust Project Developers
 · hex 0.4.3 — MIT OR Apache-2.0 — https://github.com/KokaKiwi/rust-hex
   Copyright (c) 2013-2014 The Rust Project Developers. / Copyright (c) 2015-2020 The rust-hex Developers
+· hmac 0.12.1 — MIT OR Apache-2.0 — https://github.com/RustCrypto/MACs
+  Copyright (c) 2017 Artyom Pavlov
 · html5ever 0.39.0 — MIT OR Apache-2.0 — https://github.com/servo/html5ever
   Copyright (c) 2014 The html5ever Project Developers
 · http 1.5.0 — MIT OR Apache-2.0 — https://github.com/hyperium/http
@@ -321,6 +329,8 @@ RUST CRATES（编译进 x-dir.exe）（408 项）
   Copyright (c) 2016--2017
 · infer 0.22.0 — MIT — https://github.com/bojand/infer
   Copyright (c) 2019 Bojan
+· inout 0.1.4 — MIT OR Apache-2.0 — https://github.com/RustCrypto/utils
+  Copyright (c) 2022 The RustCrypto Project Developers / Copyright (c) 2022 Artyom Pavlov
 · inout 0.2.2 — MIT OR Apache-2.0 — https://github.com/RustCrypto/utils
   Copyright (c) 2022-2025 The RustCrypto Project Developers / Copyright (c) 2022 Artyom Pavlov
 · is_terminal_polyfill 1.70.2 — MIT OR Apache-2.0 — https://github.com/polyfill-rs/is_terminal_polyfill
@@ -417,6 +427,8 @@ RUST CRATES（编译进 x-dir.exe）（408 项）
   Copyright (c) 2016 The Rust Project Developers
 · parking_lot_core 0.9.12 — MIT OR Apache-2.0 — https://github.com/Amanieu/parking_lot
   Copyright (c) 2016 The Rust Project Developers
+· pbkdf2 0.12.2 — MIT OR Apache-2.0 — https://github.com/RustCrypto/password-hashes/tree/master/pbkdf2
+  Copyright (c) 2017 Artyom Pavlov / Copyright (c) 2018-2023 The RustCrypto Project Developers
 · percent-encoding 2.3.2 — MIT OR Apache-2.0 — https://github.com/servo/rust-url/
   Copyright (c) 2013-2025 The rust-url developers
 · phf 0.13.1 — MIT — https://github.com/rust-phf/rust-phf
@@ -539,6 +551,8 @@ RUST CRATES（编译进 x-dir.exe）（408 项）
 · servo_arc 0.4.3 — MIT OR Apache-2.0 — https://github.com/servo/stylo
   Copyright The Servo Project Developers
 · sevenz-rust 0.6.1 — Apache-2.0 — https://github.com/dyz1990/sevenz-rust
+· sha1 0.10.7 — MIT OR Apache-2.0 — https://github.com/RustCrypto/hashes
+  Copyright (c) 2006-2009 Graydon Hoare / Copyright (c) 2009-2013 Mozilla Foundation / Copyright (c) 2016 Artyom Pavlov
 · sha2 0.10.9 — MIT OR Apache-2.0 — https://github.com/RustCrypto/hashes
   Copyright (c) 2006-2009 Graydon Hoare / Copyright (c) 2009-2013 Mozilla Foundation / Copyright (c) 2016 Artyom Pavlov
 · sha2 0.11.1 — MIT OR Apache-2.0 — https://github.com/RustCrypto/hashes
@@ -567,6 +581,8 @@ RUST CRATES（编译进 x-dir.exe）（408 项）
   Copyright (c) 2017 The rust-stringprep Developers
 · strsim 0.11.1 — MIT — https://github.com/rapidfuzz/strsim-rs
   Copyright (c) 2015 Danny Guo / Copyright (c) 2016 Titus Wormer <tituswormer@gmail.com> / Copyright (c) 2018 Akash Kurdekar
+· subtle 2.6.1 — BSD-3-Clause — https://github.com/dalek-cryptography/subtle
+  Copyright (c) 2016-2017 Isis Agora Lovecruft, Henry de Valence. All rights reserved. / Copyright (c) 2016-2024 Isis Agora Lovecruft. All rights reserved.
 · syn 2.0.119 — MIT OR Apache-2.0 — https://github.com/dtolnay/syn
   Copyright David Tolnay <dtolnay@gmail.com>
 · syn 3.0.7 — MIT OR Apache-2.0 — https://github.com/dtolnay/syn
@@ -763,6 +779,10 @@ RUST CRATES（编译进 x-dir.exe）（408 项）
   Copyright The ICU4X Project Developers
 · zerofrom-derive 0.1.8 — Unicode-3.0 — https://github.com/unicode-org/icu4x
   Copyright Manish Goregaokar <manishsmail@gmail.com>
+· zeroize 1.9.1 — Apache-2.0 OR MIT — https://github.com/RustCrypto/utils
+  Copyright (c) 2018-2026 The RustCrypto Project Developers
+· zeroize_derive 1.5.0 — Apache-2.0 OR MIT — https://github.com/RustCrypto/utils
+  Copyright (c) 2019-2026 The RustCrypto Project Developers
 · zerotrie 0.2.5 — Unicode-3.0 — https://github.com/unicode-org/icu4x
   Copyright The ICU4X Project Developers
 · zerovec 0.11.8 — Unicode-3.0 — https://github.com/unicode-org/icu4x
