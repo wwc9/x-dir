@@ -1,7 +1,15 @@
 // lib/path.ts 纯函数回归测试：Windows 路径拆拼/命名合法性（与 Rust fs/path.rs 行为对齐）
 import { describe, expect, it } from "vitest";
 
-import { driveRootOf, fileNameOf, isValidName, joinPath, parentPath , samePathList } from "../path";
+import {
+  driveRootOf,
+  fileNameOf,
+  isValidName,
+  joinPath,
+  parentPath ,
+  samePathList,
+  smartArchiveStem,
+} from "../path";
 
 describe("fileNameOf", () => {
   it("普通路径取末段", () => {
@@ -109,5 +117,29 @@ describe("samePathList", () => {
     expect(samePathList(["C:\\a.txt"], ["C:\\b.txt"])).toBe(false);
     expect(samePathList(["C:\\a.txt"], ["C:\\a.txt", "C:\\b.txt"])).toBe(false);
     expect(samePathList([], [])).toBe(true);
+  });
+});
+
+describe("smartArchiveStem（压缩包智能默认名干，2026-11-08）", () => {
+  it("单对象 = 对象名（文件去扩展名、文件夹全名）", () => {
+    expect(smartArchiveStem([{ name: "报告.docx", isDir: false }], "工作")).toBe("报告");
+    expect(smartArchiveStem([{ name: "数据.csv.gz", isDir: false }], "工作")).toBe("数据.csv");
+    expect(smartArchiveStem([{ name: "README", isDir: false }], "工作")).toBe("README"); // 无扩展名
+    expect(smartArchiveStem([{ name: "项目", isDir: true }], "工作")).toBe("项目");
+  });
+  it("多对象 = 所在目录名", () => {
+    const items = [
+      { name: "a.txt", isDir: false },
+      { name: "b.png", isDir: false },
+    ];
+    expect(smartArchiveStem(items, "工作")).toBe("工作");
+    expect(smartArchiveStem([...items, { name: "子夹", isDir: true }], "工作")).toBe("工作");
+  });
+  it("目录名不可用回退归档", () => {
+    expect(smartArchiveStem([{ name: "a.txt", isDir: false }, { name: "b.txt", isDir: false }], "D:")).toBe("归档"); // 盘根
+    expect(smartArchiveStem([{ name: "a.txt", isDir: false }, { name: "b.txt", isDir: false }], null)).toBe("归档");
+  });
+  it("空清单走目录名/归档分支", () => {
+    expect(smartArchiveStem([], "工作")).toBe("工作");
   });
 });

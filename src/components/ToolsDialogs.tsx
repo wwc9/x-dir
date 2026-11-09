@@ -17,7 +17,7 @@ import { AppIcon } from "./AppIcon";
 import { Seg } from "./ImgDialogs";
 import { DENSITY } from "../lib/tokens";
 import { QueueSection, nameOf, pathsByNames } from "./FileQueue";
-import { isValidName, joinPath, parentPath } from "../lib/path";
+import { fileNameOf, isValidName, joinPath, parentPath, smartArchiveStem } from "../lib/path";
 import { pagesToSpec, parsePageSpec } from "../lib/pdfOps";
 
 function FormRow({
@@ -770,22 +770,11 @@ export function MergeFilesDialog({
   const ext = isZip ? meta.ext : cfg.ext;
   const note = isZip ? meta.note : cfg.note;
   const [name, setName] = useState<string>(cfg.defName);
+  // 用户手动改过名 = 冻结智能跟随（清单增删/冲突递增不再覆写）
+  const [nameEdited, setNameEdited] = useState(false);
 
   function changeFormat(f: CompressFormat) {
     setFormat(f);
-    setName((n) => {
-      const defaults = Object.values(FORMAT_META).map((m) => m.defName);
-      if (defaults.includes(n)) return FORMAT_META[f].defName;
-      let stem = n;
-      for (const m of Object.values(FORMAT_META)) {
-        const suf = `.${m.ext}`;
-        if (stem.toLowerCase().endsWith(suf)) {
-          stem = stem.slice(0, stem.length - suf.length);
-          break;
-        }
-      }
-      return `${stem}.${FORMAT_META[f].ext}`;
-    });
     if (f === "targz") {
       // tar.gz 无加密概念：清空密码与开关（zip/7z 间切换保留）
       setPassword("");
@@ -819,6 +808,25 @@ export function MergeFilesDialog({
       live = false;
     };
   }, [isZip, dir]);
+
+  // 智能默认名（2026-11-08 用户需求）：压缩 flavor 下未手动改名时跟随清单——
+  // 单对象 = 对象名（文件去扩展名）、多对象 = 所在目录名；与现有名冲突自动
+  // (2) 递增；格式切换换扩展名。用户一旦手动改名即冻结
+  useEffect(() => {
+    if (!isZip || nameEdited) return;
+    const infos = items.map((p) => ({
+      name: fileNameOf(p),
+      isDir: entries.find((e) => e.path === p)?.isDir ?? false,
+    }));
+    const stem = smartArchiveStem(infos, dir ? fileNameOf(dir) : null);
+    let cand = `${stem}.${FORMAT_META[format].ext}`;
+    let n = 2;
+    while (existing?.has(cand.toLowerCase()) && n < 100) {
+      cand = `${stem} (${n}).${FORMAT_META[format].ext}`;
+      n += 1;
+    }
+    setName(cand);
+  }, [isZip, nameEdited, items, existing, format, dir, entries]);
 
   const trimmed = name.trim();
   // 缺扩展名时补上（与 Rust 端落名同口径；返回值即最终文件名）
@@ -870,7 +878,10 @@ export function MergeFilesDialog({
               size="small"
               value={name}
               spellCheck={false}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                setNameEdited(true);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && valid) onDone(payload());
               }}
