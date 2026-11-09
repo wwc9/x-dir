@@ -32,49 +32,49 @@ const C = (cond: Partial<MenuCond>): MenuCond => ({
   ...cond,
 });
 
-/** 内置功能库（顺序 = 功能库展示顺序；2026-10-15 分组重整：
- *  「窗格」拆为窗格协作（两面共享的互传）与窗格工具（仅工具栏），「新建与视图」
- *  拆为新建与选择 / 视图；组序按使用频率与逻辑流排列，同组条目在表内连续） */
+/** 内置功能库（顺序 = 功能库展示顺序；2026-11-09 分组合并精简：12 组 → 8 组——
+ *  剪贴板并入「文件」，视图并入「新建与选择」复名「新建与视图」，窗格协作 +
+ *  窗格工具合并为「窗格」（仅工具栏能力位仍由 supportsSel/Blank 表达，组名
+ *  不再区分两面），「表格与文本」并入「办公」复名「办公与表格」，「图片合并
+ *  转 PDF」自办公移入 PDF 组；组序按使用频率与逻辑流排列，同组条目在表内连续） */
 export const BUILTIN_FNS: BuiltinFn[] = [
-  // ── 文件 ──
+  // ── 文件（含剪贴板操作）：打开/互传 → 重命名 → 删除 → 属性 ──
   { key: "open", label: "打开", group: "文件", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ maxCount: 1 }) },
   { key: "openTab", label: "在新标签打开", group: "文件", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "dir", maxCount: 1 }) },
+  { key: "cut", label: "剪切", group: "文件", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
+  { key: "copy", label: "复制", group: "文件", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
+  { key: "paste", label: "粘贴", group: "文件", area: "both", supportsSel: true, supportsBlank: true, cond: C({}) },
+  { key: "copyPath", label: "复制路径", group: "文件", area: "sel", supportsSel: true, supportsBlank: true, cond: C({}) },
+  { key: "copyName", label: "复制名称", group: "文件", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
   { key: "rename", label: "重命名", group: "文件", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ maxCount: 1 }) },
   { key: "batchRename", label: "批量重命名", group: "文件", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ minCount: 2 }) },
   { key: "delete", label: "删除", group: "文件", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
   { key: "deletePerm", label: "永久删除", group: "文件", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
   { key: "properties", label: "属性", group: "文件", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ maxCount: 1 }) },
-  // ── 剪贴板 ──
-  { key: "cut", label: "剪切", group: "剪贴板", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
-  { key: "copy", label: "复制", group: "剪贴板", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
-  { key: "paste", label: "粘贴", group: "剪贴板", area: "both", supportsSel: true, supportsBlank: true, cond: C({}) },
-  { key: "copyPath", label: "复制路径", group: "剪贴板", area: "sel", supportsSel: true, supportsBlank: true, cond: C({}) },
-  { key: "copyName", label: "复制名称", group: "剪贴板", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
-  // ── 新建与选择 ──
-  { key: "newFolder", label: "新建文件夹", group: "新建与选择", area: "blank", supportsSel: true, supportsBlank: true, cond: C({}) },
-  { key: "newFile", label: "新建文本文件", group: "新建与选择", area: "blank", supportsSel: true, supportsBlank: true, cond: C({}) },
-  { key: "newFolders", label: "批量新建文件夹", group: "新建与选择", area: "blank", supportsSel: true, supportsBlank: true, cond: C({}) },
+  // ── 新建与视图 ──
+  { key: "newFolder", label: "新建文件夹", group: "新建与视图", area: "blank", supportsSel: true, supportsBlank: true, cond: C({}) },
+  { key: "newFile", label: "新建文本文件", group: "新建与视图", area: "blank", supportsSel: true, supportsBlank: true, cond: C({}) },
+  { key: "newFolders", label: "批量新建文件夹", group: "新建与视图", area: "blank", supportsSel: true, supportsBlank: true, cond: C({}) },
   // 新建 = 子菜单聚合（文件夹 / 文本 / 常用办公格式），子项执行器在 FileList
-  { key: "new", label: "新建", group: "新建与选择", area: "blank", supportsSel: true, supportsBlank: true, cond: C({}) },
-  { key: "selectAll", label: "全选", group: "新建与选择", area: "blank", supportsSel: true, supportsBlank: true, cond: C({}) },
-  { key: "reverseSelect", label: "反向选择", group: "新建与选择", area: "blank", supportsSel: true, supportsBlank: true, cond: C({}) },
-  // ── 视图 ──
-  { key: "preview", label: "预览", group: "视图", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
-  { key: "refresh", label: "刷新", group: "视图", area: "blank", supportsSel: true, supportsBlank: true, cond: C({}) },
-  { key: "toggleHidden", label: "切换隐藏文件", group: "视图", area: "blank", supportsSel: false, supportsBlank: true, cond: C({}) },
-  // ── 窗格协作（作用于选中项，菜单/工具栏两面共享）──
-  { key: "copyToPane", label: "复制到窗格", group: "窗格协作", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
-  { key: "moveToPane", label: "移动到窗格", group: "窗格协作", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
-  // ── 窗格工具（2026-10-15 并入功能库，与右键菜单共享）：仅工具栏可用——
-  //    无选中语义，supportsSel/Blank 双 false 使其不可拖入右键菜单；
-  //    工具栏条目默认「当前文件夹」恒可用（见 builtinToolbarEntry 的作用域区分）
-  { key: "up", label: "上一级", group: "窗格工具", area: "blank", supportsSel: false, supportsBlank: false, cond: C({}) },
-  { key: "view", label: "视图类型", group: "窗格工具", area: "blank", supportsSel: false, supportsBlank: false, cond: C({}) },
-  { key: "addr", label: "地址框", group: "窗格工具", area: "blank", supportsSel: false, supportsBlank: false, cond: C({}) },
-  { key: "search", label: "搜索当前文件夹", group: "窗格工具", area: "blank", supportsSel: false, supportsBlank: false, cond: C({}) },
-  { key: "splitH", label: "横向分裂", group: "窗格工具", area: "blank", supportsSel: false, supportsBlank: false, cond: C({}) },
-  { key: "splitV", label: "纵向分裂", group: "窗格工具", area: "blank", supportsSel: false, supportsBlank: false, cond: C({}) },
-  { key: "swap", label: "交换窗格", group: "窗格工具", area: "blank", supportsSel: false, supportsBlank: false, cond: C({}) },
+  { key: "new", label: "新建", group: "新建与视图", area: "blank", supportsSel: true, supportsBlank: true, cond: C({}) },
+  { key: "selectAll", label: "全选", group: "新建与视图", area: "blank", supportsSel: true, supportsBlank: true, cond: C({}) },
+  { key: "reverseSelect", label: "反向选择", group: "新建与视图", area: "blank", supportsSel: true, supportsBlank: true, cond: C({}) },
+  { key: "preview", label: "预览", group: "新建与视图", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
+  { key: "refresh", label: "刷新", group: "新建与视图", area: "blank", supportsSel: true, supportsBlank: true, cond: C({}) },
+  { key: "toggleHidden", label: "切换隐藏文件", group: "新建与视图", area: "blank", supportsSel: false, supportsBlank: true, cond: C({}) },
+  // ── 窗格：互传（菜单/工具栏两面共享）+ 窗格工具 ──
+  { key: "copyToPane", label: "复制到窗格", group: "窗格", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
+  { key: "moveToPane", label: "移动到窗格", group: "窗格", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
+  // 窗格工具（2026-10-15 并入功能库，与右键菜单共享）：仅工具栏可用——
+  // 无选中语义，supportsSel/Blank 双 false 使其不可拖入右键菜单；
+  // 工具栏条目默认「当前文件夹」恒可用（见 builtinToolbarEntry 的作用域区分）
+  { key: "up", label: "上一级", group: "窗格", area: "blank", supportsSel: false, supportsBlank: false, cond: C({}) },
+  { key: "view", label: "视图类型", group: "窗格", area: "blank", supportsSel: false, supportsBlank: false, cond: C({}) },
+  { key: "addr", label: "地址框", group: "窗格", area: "blank", supportsSel: false, supportsBlank: false, cond: C({}) },
+  { key: "search", label: "搜索当前文件夹", group: "窗格", area: "blank", supportsSel: false, supportsBlank: false, cond: C({}) },
+  { key: "splitH", label: "横向分裂", group: "窗格", area: "blank", supportsSel: false, supportsBlank: false, cond: C({}) },
+  { key: "splitV", label: "纵向分裂", group: "窗格", area: "blank", supportsSel: false, supportsBlank: false, cond: C({}) },
+  { key: "swap", label: "交换窗格", group: "窗格", area: "blank", supportsSel: false, supportsBlank: false, cond: C({}) },
   // ── 标记与系统 ──
   { key: "colorTag", label: "颜色标记", group: "标记与系统", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
   { key: "addFavorite", label: "添加到收藏夹", group: "标记与系统", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "dir" }) },
@@ -90,9 +90,10 @@ export const BUILTIN_FNS: BuiltinFn[] = [
   { key: "findEmpty", label: "清理空文件/空文件夹", group: "整理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "dir", maxCount: 1 }) },
   { key: "dirSizes", label: "空间分析", group: "整理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "dir", maxCount: 1 }) },
   { key: "compareFolders", label: "文件夹比较", group: "整理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "dir", minCount: 2 }) },
-  // ── PDF ──
+  // ── PDF（「图片合并转 PDF」2026-11-09 自办公移入，家族聚齐）──
   { key: "pdfMerge", label: "合并为 PDF", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2, exts: "pdf,jpg,jpeg,png" }) },
   { key: "pdfMergeFolders", label: "按文件夹合并 PDF", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "dir", minCount: 1 }) },
+  { key: "imgToPdf", label: "图片合并转 PDF", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "png,jpg,jpeg" }) },
   { key: "pdfSplit", label: "PDF 拆分为单页", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", maxCount: 1, exts: "pdf" }) },
   { key: "pdfExtract", label: "PDF 提取页", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", maxCount: 1, exts: "pdf" }) },
   { key: "pdfRemove", label: "PDF 删除页", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", maxCount: 1, exts: "pdf" }) },
@@ -105,17 +106,15 @@ export const BUILTIN_FNS: BuiltinFn[] = [
   { key: "imgConvert", label: "图片格式转换", group: "图片处理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: IMG_EXTS }) },
   { key: "imgResize", label: "图片尺寸调整", group: "图片处理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: IMG_EXTS }) },
   { key: "imgMontage", label: "宫格拼图", group: "图片处理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: MONTAGE_MIN, maxCount: MONTAGE_MAX, exts: IMG_EXTS }) },
-  // ── 办公 ──
-  { key: "imgToPdf", label: "图片合并转 PDF", group: "办公", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "png,jpg,jpeg" }) },
-  { key: "officeToPdf", label: "转为 PDF", group: "办公", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "doc,docx,docm,xls,xlsx,xlsm,xlsb,ppt,pptx,pptm,rtf" }) },
-  { key: "officeClean", label: "清理隐私属性", group: "办公", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "docx,docm,xlsx,xlsm,xlsb,pptx,pptm" }) },
-  { key: "officeToTxt", label: "导出文本 TXT", group: "办公", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "docx,docm,pptx,pptm,xlsx,xlsm,xlsb,xls,ods,epub" }) },
-  // ── 表格与文本 ──
-  { key: "csvConvert", label: "编码转换", group: "表格与文本", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "csv,tsv,txt,md,log" }) },
-  { key: "csvMerge", label: "CSV 合并", group: "表格与文本", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2, exts: "csv,tsv" }) },
-  { key: "xlsxMerge", label: "Excel 合并", group: "表格与文本", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2, exts: "xlsx,xlsm,xls,xlsb,ods" }) },
-  { key: "textMerge", label: "文本合并", group: "表格与文本", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2, exts: "txt,md,log" }) },
-  { key: "exportList", label: "导出文件清单", group: "表格与文本", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
+  // ── 办公与表格 ──
+  { key: "officeToPdf", label: "转为 PDF", group: "办公与表格", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "doc,docx,docm,xls,xlsx,xlsm,xlsb,ppt,pptx,pptm,rtf" }) },
+  { key: "officeClean", label: "清理隐私属性", group: "办公与表格", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "docx,docm,xlsx,xlsm,xlsb,pptx,pptm" }) },
+  { key: "officeToTxt", label: "导出文本 TXT", group: "办公与表格", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "docx,docm,pptx,pptm,xlsx,xlsm,xlsb,xls,ods,epub" }) },
+  { key: "csvConvert", label: "编码转换", group: "办公与表格", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "csv,tsv,txt,md,log" }) },
+  { key: "csvMerge", label: "CSV 合并", group: "办公与表格", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2, exts: "csv,tsv" }) },
+  { key: "xlsxMerge", label: "Excel 合并", group: "办公与表格", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2, exts: "xlsx,xlsm,xls,xlsb,ods" }) },
+  { key: "textMerge", label: "文本合并", group: "办公与表格", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2, exts: "txt,md,log" }) },
+  { key: "exportList", label: "导出文件清单", group: "办公与表格", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
 ];
 
 export function builtinByKey(key: string): BuiltinFn | undefined {

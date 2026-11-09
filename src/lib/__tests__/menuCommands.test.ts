@@ -151,22 +151,18 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
     }
   });
 
-  it("功能库分组（2026-10-15 重整）：组序固定、同组连续、窗格工具仅工具栏", () => {
-    // 展示组序 = 注册表首现顺序：按使用频率与逻辑流排列
+  it("功能库分组（2026-11-09 合并精简）：组序固定、同组连续、窗格工具仅工具栏", () => {
+    // 展示组序 = 注册表首现顺序：按使用频率与逻辑流排列（12 组合并为 8 组）
     const groups = [...new Set(BUILTIN_FNS.map((f) => f.group))];
     expect(groups).toEqual([
       "文件",
-      "剪贴板",
-      "新建与选择",
-      "视图",
-      "窗格协作",
-      "窗格工具",
+      "新建与视图",
+      "窗格",
       "标记与系统",
       "整理",
       "PDF",
       "图片处理",
-      "办公",
-      "表格与文本",
+      "办公与表格",
     ]);
     // 同组条目在注册表内连续（无跨表穿插的组）
     const firstIdx = new Map<string, number>();
@@ -176,14 +172,20 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
         BUILTIN_FNS.filter((x) => x.group === f.group).length,
       );
     });
-    // 「窗格工具」组 = 全部仅工具栏能力位（双 false），不混入两面共享功能
-    for (const f of BUILTIN_FNS.filter((x) => x.group === "窗格工具")) {
-      expect(f.supportsSel).toBe(false);
-      expect(f.supportsBlank).toBe(false);
+    // 仅工具栏能力位（双 false）= 窗格工具七键——「窗格」组不再区分两面，
+    // 能力位语义改按 key 集合锁定（2026-11-09 分组合并后分组名不承载能力信息）
+    const TOOLBAR_ONLY = ["up", "view", "addr", "search", "splitH", "splitV", "swap"];
+    expect(
+      BUILTIN_FNS.filter((x) => !x.supportsSel && !x.supportsBlank).map((x) => x.key),
+    ).toEqual(TOOLBAR_ONLY);
+    // 「窗格」组内其余功能（互传）保持两面共享
+    for (const f of BUILTIN_FNS.filter((x) => x.group === "窗格")) {
+      if (!TOOLBAR_ONLY.includes(f.key)) {
+        expect(f.supportsSel || f.supportsBlank).toBe(true);
+      }
     }
-    for (const f of BUILTIN_FNS.filter((x) => x.group === "窗格协作")) {
-      expect(f.supportsSel || f.supportsBlank).toBe(true);
-    }
+    // 「图片合并转 PDF」归位 PDF 组（家族聚齐）
+    expect(builtinByKey("imgToPdf")?.group).toBe("PDF");
   });
 
   it("工具栏条目默认作用域（2026-10-14 定案：全部功能可入工具栏）", () => {
@@ -350,34 +352,30 @@ describe("默认工具栏布局（defaultToolbarEntries，2026-10-15 定案）",
 });
 
 describe("功能库目录（fnGroups / spyGroup，2026-10-15 A+B 改版）", () => {
-  it("fnGroups = 注册表首现顺序的 11 组（目录渲染顺序）", () => {
+  it("fnGroups = 注册表首现顺序的 8 组（目录渲染顺序，2026-11-09 合并精简）", () => {
     expect(fnGroups()).toEqual([
       "文件",
-      "剪贴板",
-      "新建与选择",
-      "视图",
-      "窗格协作",
-      "窗格工具",
+      "新建与视图",
+      "窗格",
       "标记与系统",
       "整理",
       "PDF",
       "图片处理",
-      "办公",
-      "表格与文本",
+      "办公与表格",
     ]);
   });
 
   it("spyGroup 取视口顶部触及的最新簇；高于首簇返回 null", () => {
     const cs = [
       { group: "文件", top: 0 },
-      { group: "剪贴板", top: 100 },
-      { group: "视图", top: 200 },
+      { group: "窗格", top: 100 },
+      { group: "整理", top: 200 },
     ];
     expect(spyGroup(cs, 0, 0)).toBe("文件");
     expect(spyGroup(cs, 99, 0)).toBe("文件");
-    expect(spyGroup(cs, 100, 0)).toBe("剪贴板");
-    expect(spyGroup(cs, 176, 24)).toBe("视图"); // 176 + 24 ≥ 200
-    expect(spyGroup(cs, 175, 24)).toBe("剪贴板");
+    expect(spyGroup(cs, 100, 0)).toBe("窗格");
+    expect(spyGroup(cs, 176, 24)).toBe("整理"); // 176 + 24 ≥ 200
+    expect(spyGroup(cs, 175, 24)).toBe("窗格");
     expect(spyGroup([], 0, 24)).toBeNull();
   });
 });

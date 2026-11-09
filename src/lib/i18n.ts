@@ -138,17 +138,14 @@ const EN: Record<string, string> = {
   "文本合并": "Merge text files",
   "导出文件清单": "Export file list",
 
-  // ── 功能分组（定制页聚类标题）──
+  // ── 功能分组（定制页聚类标题，2026-11-09 合并精简为 8 组）──
   "文件": "Files",
-  "剪贴板": "Clipboard",
-  "新建与选择": "New & select",
-  "视图": "View",
-  "窗格协作": "Pane collaboration",
-  "窗格工具": "Pane tools",
+  "新建与视图": "New & view",
+  "窗格": "Panes",
   "标记与系统": "Tags & system",
   "整理": "Organize",
   "图片处理": "Images",
-  "办公": "Office",
+  "办公与表格": "Office & tables",
   "跳转到 {g}": "Jump to {g}",
   "暂无浏览记录": "No history yet",
   "清空浏览记录": "Clear history",
