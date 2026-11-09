@@ -2,7 +2,7 @@
 // V2：nativeFileOps 开启时走 IFileOperation，冲突由系统对话框处理，
 // 此处跳过预检对话框（policy 传 rename 仅作原生失败回退时的兜底语义）。
 
-import { api, type Policy } from "./ipc";
+import { api, type Policy, type RenameOutcome } from "./ipc";
 import { fileNameOf, isValidName, joinPath, parentPath } from "./path";
 import { montageOutputName } from "./imgOps";
 import { buildListing, listingFileName, listingFilter, type ListingFormat } from "./listing";
@@ -661,35 +661,45 @@ export async function combineParts(paths: string[]): Promise<void> {
   }
 }
 
-/** 批量重命名执行：逐项 rename（可逆，逐条入撤销栈），完成后刷新 */
+/** 批量重命名执行（2026-11-09 批量化）：一次 rename_items IPC 顺序执行整批
+ *  （替代逐条 rename_item 串行往返），失败项聚合回执；撤销记录 = 整批成功项
+ *  合并为一个条目（一次 Ctrl+Z 全撤，编辑器惯例） */
 export async function applyRenames(
   items: { path: string; newName: string }[],
   onDone: () => void,
 ): Promise<void> {
-  // 撤销记录：整批成功项合并为一个条目（一次 Ctrl+Z 全撤，编辑器惯例）
-  const ops: { from: string; to: string }[] = [];
-  let okCount = 0;
-  for (const it of items) {
-    try {
-      await api.renameItem(it.path, it.newName);
-      okCount += 1;
-      const parent = parentPath(it.path);
-      if (parent) {
-        ops.push({ from: it.path, to: joinPath(parent, it.newName) });
-      }
-    } catch (e) {
-      useUi.getState().toast(`重命名"${fileNameOf(it.path)}"失败：${String(e)}`, "error");
-    }
+  let results: RenameOutcome[];
+  try {
+    results = await api.renameItems(items);
+  } catch (e) {
+    useUi.getState().toast(`批量重命名失败：${String(e)}`, "error");
+    return;
   }
-  if (okCount) {
-    if (ops.length) useUndo.getState().push({ kind: "rename", ops });
-    useUi.getState().toast(`已重命名 ${okCount} 项`);
+  const ok = results.filter((r) => r.ok);
+  const failed = results.filter((r) => !r.ok);
+  if (ok.length) {
+    // 撤销记录：from 源原路径、to 实际落点（Rust 回执直供，含大小写折叠语义）
+    useUndo.getState().push({
+      kind: "rename",
+      ops: ok.map((r) => ({ from: r.from, to: r.to })),
+    });
+    useUi.getState().toast(
+      failed.length
+        ? `已重命名 ${ok.length} 项 · ${failed.length} 项失败：${failed[0].name} ${failed[0].message}`
+        : `已重命名 ${ok.length} 项`,
+      failed.length ? "error" : "info",
+    );
     // 同目录他窗格零防抖同步（批量重命名可在跨目录清单上执行，逐父目录去重）
     const dirs = [
       ...new Set(items.map((it) => parentPath(it.path)).filter((d): d is string => !!d)),
     ];
     if (dirs.length) usePanes.getState().bumpAffected(dirs);
     onDone();
+  } else if (failed.length) {
+    useUi.getState().toast(
+      `重命名失败：${failed[0].name} ${failed[0].message}`,
+      "error",
+    );
   }
 }
 

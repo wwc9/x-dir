@@ -298,6 +298,12 @@ const EN: Record<string, string> = {
     "Output: {name}.part001… + {name}.crc (SHA-256 manifest)",
   "开始分割": "Split",
   "分割失败": "Split failed",
+  // ── 现有功能增强（2026-11-09 二批）：比较同步/重复文件导出 ──
+  "删除 {name} 多余": "Delete redundant in {name}",
+  "共 {n} 组重复 · 可释放 {size}": "{n} duplicate groups · {size} reclaimable",
+  "导出清单": "Export list",
+  "导出失败": "Export failed",
+  "重复文件清单已导出": "Duplicate list exported",
 
   // ── 工具对话框参数（2026-11-09 P2 i18n 补全：新建文件夹/合并/图片五件套/
   //  PDF 合并水印裸中文收编）──

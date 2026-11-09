@@ -249,6 +249,16 @@ export interface MetaResult {
   failed: { path: string; message: string }[];
 }
 
+/** 批量改名回执单行（Rust commands/files.rs RenameOutcome 镜像）：
+ *  ok=false 时 message 给原因；成功 to = 实际落点全路径 */
+export interface RenameOutcome {
+  from: string;
+  name: string;
+  ok: boolean;
+  to: string;
+  message: string;
+}
+
 export interface DriveInfo {
   letter: string;
   label: string;
@@ -845,6 +855,10 @@ export const api = {
   resumeJob: (jobId: number) => cmd<void>("resume_job", { jobId }),
   renameItem: (path: string, newName: string) =>
     cmd<void>("rename_item", { path, newName }),
+  /** 批量重命名（批量重命名对话框执行清单）：一次 IPC 逐项顺序执行，
+   *  单项失败不中断；ok 项 to = 实际落点（撤销栈构造用） */
+  renameItems: (items: { path: string; newName: string }[]) =>
+    cmd<RenameOutcome[]>("rename_items", { items }),
   createDir: (parentDir: string, name: string) =>
     cmd<string>("create_dir", { parentDir, name }),
   createFile: (parentDir: string, name: string) =>

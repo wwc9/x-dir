@@ -971,20 +971,20 @@ export function FileList({
         // 空白处右键 = 复制当前目录路径
         const text = sel.length ? selectedPaths().join("\n") : path;
         return {
-          label: sel.length ? "复制路径" : "复制当前目录路径",
-          action: () => copyText(text, "路径已复制"),
+          label: sel.length ? t("复制路径") : t("复制当前目录路径"),
+          action: () => copyText(text, t(t("路径已复制"))),
         };
       }
       case "copyName":
         return {
           label: t("复制名称"),
-          action: () => copyText(sel.map((e2) => e2.name).join("\n"), "名称已复制"),
+          action: () => copyText(sel.map((e2) => e2.name).join("\n"), t("名称已复制")),
         };
       case "copyNameStem":
         return {
           label: t("复制名称（无扩展名）"),
           action: () =>
-            copyText(sel.map((e2) => stemOf(e2.name)).join("\n"), "名称已复制"),
+            copyText(sel.map((e2) => stemOf(e2.name)).join("\n"), t("名称已复制")),
         };
       // 复制路径变体（2026-11-09，对标 XYplorer/TC 多格式复制）：
       // 空白处右键 = 当前目录路径的各格式变体
@@ -996,22 +996,22 @@ export function FileList({
             {
               label: t("复制为正斜杠路径"),
               action: () =>
-                copyText(items.map(toForwardSlash).join("\n"), "路径已复制"),
+                copyText(items.map(toForwardSlash).join("\n"), t("路径已复制")),
             },
             {
               label: t("复制为带引号路径"),
-              action: () => copyText(items.map(toQuoted).join("\n"), "路径已复制"),
+              action: () => copyText(items.map(toQuoted).join("\n"), t("路径已复制")),
             },
             {
               label: t("复制为扩展长路径（\\\\?\\）"),
               action: () =>
-                copyText(items.map(toExtendedLength).join("\n"), "路径已复制"),
+                copyText(items.map(toExtendedLength).join("\n"), t("路径已复制")),
             },
             {
               label: t("复制相对路径（相对当前目录）"),
               action: () => {
                 const texts = items.map((p2) => relativeTo(p2, path) ?? p2);
-                copyText(texts.join("\n"), "路径已复制");
+                copyText(texts.join("\n"), t("路径已复制"));
               },
             },
             {
@@ -1020,7 +1020,7 @@ export function FileList({
                 const texts = sel.length
                   ? [...new Set(sel.map((e2) => parentPath(e2.path) ?? path))]
                   : [path];
-                copyText(texts.join("\n"), "路径已复制");
+                copyText(texts.join("\n"), t("路径已复制"));
               },
             },
           ],

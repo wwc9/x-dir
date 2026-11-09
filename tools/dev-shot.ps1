@@ -29,6 +29,7 @@ public class W {
   [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, UIntPtr i);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+  [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
   public struct RECT { public int L, T, R, Bt; }
 
   public static uint wantPid;
@@ -132,5 +133,22 @@ switch ($Mode) {
     [W]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
     Write-Output "dragged ($x1,$y1) -> ($x2,$y2)"
   }
-  default { Write-Error "mode must be shot|click|click2|move|rclick|drag"; exit 1 }
+  "clickctrl" {
+    # Ctrl+左键单击（多选行）
+    $x = $r.L + [int]$A; $y = $r.T + [int]$B
+    [W]::SetCursorPos($x, $y) | Out-Null
+    Start-Sleep -Milliseconds 80
+    [W]::keybd_event(0x11, 0, 0, [UIntPtr]::Zero)   # CTRL DOWN
+    Start-Sleep -Milliseconds 60
+    [W]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero)
+    [W]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
+    [W]::keybd_event(0x11, 0, 2, [UIntPtr]::Zero)   # CTRL UP
+    Write-Output "ctrl-clicked abs($x,$y)"
+  }
+  "type" {
+    Add-Type -AssemblyName System.Windows.Forms
+    [System.Windows.Forms.SendKeys]::SendWait($A)
+    Write-Output "typed"
+  }
+  default { Write-Error "mode must be shot|click|click2|move|rclick|drag|clickctrl|type"; exit 1 }
 }

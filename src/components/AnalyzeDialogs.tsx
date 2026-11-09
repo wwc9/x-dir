@@ -13,11 +13,13 @@ import {
   type EmptyScan,
 } from "../lib/ipc";
 import { formatBytes } from "../lib/format";
+import { buildDupCsv, dupWaste } from "../lib/listing";
 import { extOf, fileIcon } from "../lib/fileIcons";
 import { treemap } from "../lib/treemap";
 import { fileNameOf, joinPath } from "../lib/path";
 import { DENSITY } from "../lib/tokens";
 import { deletePaths, transfer } from "../lib/operations";
+import { confirmDialog, useUi } from "../stores/ui";
 import { useIcons } from "../stores/icons";
 import { useSettings } from "../stores/settings";
 import { AppIcon } from "./AppIcon";
@@ -54,7 +56,8 @@ function Loading({ text }: { text: string }) {
   );
 }
 
-/** 重复文件：按组展示，默认勾选每组除首份外的副本；删除走回收站 */
+/** 重复文件：按组展示，默认勾选每组除首份外的副本；删除走回收站；
+ *  头部统计组数与可释放空间（2026-11-09 增强），清单可导出 CSV 审计留档 */
 export function DuplicateDialog({ dir, onDone }: { dir: string; onDone(): void }) {
   const [groups, setGroups] = useState<DupGroup[] | null>(null);
   const [error, setError] = useState("");
@@ -92,6 +95,24 @@ export function DuplicateDialog({ dir, onDone }: { dir: string; onDone(): void }
     if (paths.length) void deletePaths(paths, false); // 弹窗内已确认，跳过二次确认
   };
 
+  const exportCsv = () => {
+    if (!groups) return;
+    void (async () => {
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const target = await save({
+        defaultPath: joinPath(dir, "重复文件清单.csv"),
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (!target) return;
+      try {
+        await api.saveTextFile(target, buildDupCsv(groups));
+        useUi.getState().toast("重复文件清单已导出");
+      } catch (e) {
+        useUi.getState().toast(`导出失败：${String(e)}`, "error");
+      }
+    })();
+  };
+
   return (
     <>
       <DialogBody>
@@ -104,7 +125,11 @@ export function DuplicateDialog({ dir, onDone }: { dir: string; onDone(): void }
         ) : (
           <div className="np-dup-list">
             <div className="np-dialog-muted">
-              共 {groups.length} 组重复，勾选要清理的副本（默认保留每组第一份）
+              {t("共 {n} 组重复 · 可释放 {size}", {
+                n: groups.length,
+                size: formatBytes(dupWaste(groups)),
+              })}
+              ，勾选要清理的副本（默认保留每组第一份）
             </div>
             {groups.map((g) => (
               <div key={g.hash}>
@@ -139,6 +164,9 @@ export function DuplicateDialog({ dir, onDone }: { dir: string; onDone(): void }
           <>
             <Button size="small" onClick={onDone}>
               {t("关闭")}
+            </Button>
+            <Button size="small" disabled={!groups?.length} onClick={exportCsv}>
+              {t("导出清单")}
             </Button>
             <Button size="small" intent="danger" disabled={!sel.size} onClick={del}>
               {t("删除选中（回收站）")}
@@ -508,7 +536,9 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
   );
 }
 
-/** 文件夹比较：三段差异清单（A 独有 / B 独有 / 内容不同），按方向选择性复制同步 */
+/** 文件夹比较：三段差异清单（A 独有 / B 独有 / 内容不同），按方向选择性复制同步；
+ *  「内容不同」段独立勾选（2026-11-09 增强：任一方向都可带走，以勾选侧版本为准），
+ *  另提供「删除右侧多余」回收站动作补齐 TC Synchronize Dirs 的复制/删除两动作 */
 export function CompareDialog({
   a,
   b,
@@ -520,9 +550,10 @@ export function CompareDialog({
 }) {
   const [res, setRes] = useState<CompareResult | null>(null);
   const [error, setError] = useState("");
-  // A→B = aOnly + differ（取 A 版本覆盖）；B→A = bOnly
+  // A→B = aOnly + differ（取 A 版本覆盖）；B→A = bOnly + differ（取 B 版本覆盖）
   const [selA, setSelA] = useState<Set<string>>(new Set());
   const [selB, setSelB] = useState<Set<string>>(new Set());
+  const [selD, setSelD] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let live = true;
@@ -530,8 +561,9 @@ export function CompareDialog({
       (r) => {
         if (!live) return;
         setRes(r);
-        setSelA(new Set([...r.aOnly, ...r.differ].map((i) => i.rel)));
+        setSelA(new Set(r.aOnly.map((i) => i.rel)));
         setSelB(new Set(r.bOnly.map((i) => i.rel)));
+        setSelD(new Set(r.differ.map((i) => i.rel)));
       },
       (e) => live && setError(String(e)),
     );
@@ -540,8 +572,8 @@ export function CompareDialog({
     };
   }, [a, b]);
 
-  const toggle = (side: "a" | "b", rel: string) => {
-    const setter = side === "a" ? setSelA : setSelB;
+  const toggle = (side: "a" | "b" | "d", rel: string) => {
+    const setter = side === "a" ? setSelA : side === "b" ? setSelB : setSelD;
     setter((s) => {
       const n = new Set(s);
       if (n.has(rel)) n.delete(rel);
@@ -554,18 +586,38 @@ export function CompareDialog({
     if (!res) return;
     const root = from === "a" ? a : b;
     const dest = from === "a" ? b : a;
-    const sel = from === "a" ? selA : selB;
-    const pool = from === "a" ? [...res.aOnly, ...res.differ] : res.bOnly;
-    const sources = pool
-      .filter((i) => sel.has(i.rel))
-      .map((i) => joinPath(root, i.rel));
+    const own = from === "a" ? selA : selB;
+    const pool = from === "a" ? res.aOnly : res.bOnly;
+    const sources = [
+      ...pool.filter((i) => own.has(i.rel)),
+      ...res.differ.filter((i) => selD.has(i.rel)),
+    ].map((i) => joinPath(root, i.rel));
     onDone();
     if (sources.length) void transfer(sources, dest, "copy");
   };
 
+  /** 删除「仅在 B」勾选项（回收站）：补齐同步闭环的另一动作——以 A 为准清理
+   *  B 侧多余；弹窗勾选即意图，确认弹窗复核一次（删除类动作口径） */
+  const deleteBOnly = () => {
+    if (!res) return;
+    const paths = res.bOnly
+      .filter((i) => selB.has(i.rel))
+      .map((i) => joinPath(b, i.rel));
+    void confirmDialog({
+      title: "删除多余项",
+      message: `把「仅在 ${fileNameOf(b) || b}」勾选的 ${paths.length} 项移入回收站？`,
+      kind: "danger",
+      okText: "删除",
+    }).then((ok) => {
+      if (!ok) return;
+      onDone();
+      if (paths.length) void deletePaths(paths, false); // 已复核，跳过二次确认
+    });
+  };
+
   const section = (
     title: string,
-    side: "a" | "b",
+    side: "a" | "b" | "d",
     items: { rel: string; size: number }[],
     sel: Set<string>,
   ) =>
@@ -613,7 +665,12 @@ export function CompareDialog({
             <div className="np-cmp-list">
               {section(`仅在 ${aName}`, "a", res.aOnly, selA)}
               {section(`仅在 ${bName}`, "b", res.bOnly, selB)}
-              {section("内容不同（复制时以左侧版本为准）", "a", res.differ, selA)}
+              {section(
+                "内容不同（复制方向决定以哪侧版本为准）",
+                "d",
+                res.differ,
+                selD,
+              )}
               {!res.aOnly.length && !res.bOnly.length && !res.differ.length && (
                 <div className="np-list-empty">{t("两个文件夹内容一致")}</div>
               )}
@@ -629,18 +686,27 @@ export function CompareDialog({
             </Button>
             <Button
               size="small"
+              intent="danger"
               disabled={!selB.size}
+              onClick={deleteBOnly}
+              data-tip={`把「仅在 ${bName}」勾选的 ${selB.size} 项移入回收站`}
+            >
+              {t("删除 {name} 多余", { name: bName })}
+            </Button>
+            <Button
+              size="small"
+              disabled={!selB.size && !selD.size}
               onClick={() => syncTo("b")}
-              data-tip={`把勾选的 ${selB.size} 项从 ${bName} 复制到 ${aName}`}
+              data-tip={`把勾选的 ${selB.size + selD.size} 项以 ${bName} 版本复制到 ${aName}`}
             >
               {bName} → {aName}
             </Button>
             <Button
               size="small"
               intent="primary"
-              disabled={!selA.size}
+              disabled={!selA.size && !selD.size}
               onClick={() => syncTo("a")}
-              data-tip={`把勾选的 ${selA.size} 项从 ${aName} 复制到 ${bName}`}
+              data-tip={`把勾选的 ${selA.size + selD.size} 项以 ${aName} 版本复制到 ${bName}`}
             >
               {aName} → {bName}
             </Button>

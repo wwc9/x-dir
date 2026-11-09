@@ -194,25 +194,82 @@ pub async fn stat_paths(paths: Vec<String>) -> Result<Vec<FileEntry>, AppError> 
     .map_err(|e| AppError::new("E_IO", format!("读取文件信息线程失败：{e}")))?
 }
 
+/// 单项改名共享体：校验/冲突语义见 rename_item；成功返回落点全路径
+fn rename_one(path: &str, new_name: &str) -> Result<String, String> {
+    if !is_valid_name(new_name) {
+        return Err(format!("非法文件名：{new_name}"));
+    }
+    let Some(parent) = parent_of(path) else {
+        return Err("路径缺少父目录".into());
+    };
+    // 仅改大小写的重命名合法；折叠后与"其他"条目同名才冲突（§6.11）
+    if !same_name_ci(new_name, &file_name_of(path)) && name_exists_ci(&parent, new_name) {
+        return Err(format!("已存在同名项：{new_name}"));
+    }
+    let target = join_name(&parent, new_name);
+    fs::rename(to_extended(path), to_extended(&target))
+        .map_err(|e| format!("{}：{}", file_name_of(path), e))?;
+    Ok(target)
+}
+
 #[tauri::command]
 pub fn rename_item(path: String, new_name: String) -> Result<(), AppError> {
-    if !is_valid_name(&new_name) {
-        return Err(AppError::new(
-            "E_INVALID_NAME",
-            format!("非法文件名：{new_name}"),
-        ));
+    rename_one(&path, &new_name)
+        .map(|_| ())
+        .map_err(|e| AppError::new("E_INVALID_NAME", e))
+}
+
+/// 批量改名回执单行（camelCase 下发前端；ok=false 时 message 给原因）
+#[derive(serde::Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameOutcome {
+    pub from: String,
+    pub name: String,
+    pub ok: bool,
+    /// 成功 = 实际落点全路径（撤销栈构造用）；失败 = 空
+    pub to: String,
+    pub message: String,
+}
+
+/// 批量改名输入对（批量重命名对话框的执行清单）
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenamePair {
+    pub path: String,
+    pub new_name: String,
+}
+
+/// 批量重命名（批量重命名对话框执行清单）：一次 IPC 逐项顺序执行，单项
+/// 失败不中断整批——替代前端逐条 rename_item 串行往返（上千项时每次
+/// invoke 往返 ~1ms 级累积可观，2026-11-09 现有功能增强）。校验/冲突语义
+/// 与 rename_item 完全一致
+#[tauri::command]
+pub fn rename_items(items: Vec<RenamePair>) -> Result<Vec<RenameOutcome>, AppError> {
+    if items.len() > 10000 {
+        return Err(AppError::new("E_INVALID_NAME", "单次上限 10000 项"));
     }
-    let parent = parent_of(&path).ok_or_else(|| AppError::new("E_UNKNOWN", "路径缺少父目录"))?;
-    // 仅改大小写的重命名合法；折叠后与"其他"条目同名才冲突（§6.11）
-    if !same_name_ci(&new_name, &file_name_of(&path)) && name_exists_ci(&parent, &new_name) {
-        return Err(AppError::new(
-            "E_EXISTS",
-            format!("已存在同名项：{new_name}"),
-        ));
-    }
-    let target = join_name(&parent, &new_name);
-    fs::rename(to_extended(&path), to_extended(&target))?;
-    Ok(())
+    Ok(items
+        .iter()
+        .map(|it| {
+            let name = file_name_of(&it.path);
+            match rename_one(&it.path, &it.new_name) {
+                Ok(to) => RenameOutcome {
+                    from: it.path.clone(),
+                    name,
+                    ok: true,
+                    to,
+                    message: String::new(),
+                },
+                Err(message) => RenameOutcome {
+                    from: it.path.clone(),
+                    name,
+                    ok: false,
+                    to: String::new(),
+                    message,
+                },
+            }
+        })
+        .collect())
 }
 
 #[tauri::command]
@@ -486,6 +543,61 @@ mod tests {
         ));
         std::fs::create_dir_all(&d).unwrap();
         d.to_string_lossy().into_owned()
+    }
+
+    #[test]
+    fn rename_items_batch_continues_on_failure() {
+        let dir = tempdir();
+        std::fs::write(join_name(&dir, "a.txt"), b"1").unwrap();
+        std::fs::write(join_name(&dir, "b.txt"), b"2").unwrap();
+        std::fs::write(join_name(&dir, "c.txt"), b"3").unwrap();
+        std::fs::write(join_name(&dir, "占用.txt"), b"4").unwrap();
+        let items = vec![
+            RenamePair {
+                path: join_name(&dir, "a.txt"),
+                new_name: "甲.txt".into(),
+            },
+            // 非法名（Windows 保留名）→ 该项失败
+            RenamePair {
+                path: join_name(&dir, "b.txt"),
+                new_name: "con".into(),
+            },
+            // 与 a 改名后的「甲.txt」同名 → 该项失败（先做的不算冲突，冲突按当时磁盘实况）
+            RenamePair {
+                path: join_name(&dir, "c.txt"),
+                new_name: "甲.txt".into(),
+            },
+            // 仅大小写改名合法（同源名折叠）
+            RenamePair {
+                path: join_name(&dir, "占用.txt"),
+                new_name: "大写.TXT".into(),
+            },
+        ];
+        let out = rename_items(items).unwrap();
+        assert_eq!(out.len(), 4);
+        assert!(out[0].ok);
+        assert_eq!(out[0].to, join_name(&dir, "甲.txt"));
+        assert!(!out[1].ok);
+        assert!(out[1].message.contains("非法文件名"));
+        assert!(!out[2].ok);
+        assert!(out[2].message.contains("已存在同名项"));
+        assert!(out[3].ok, "case-only rename must pass: {:?}", out[3]);
+        // 磁盘实况与回执一致
+        assert!(path_exists(&join_name(&dir, "甲.txt")));
+        assert!(path_exists(&join_name(&dir, "大写.TXT")));
+        assert!(path_exists(&join_name(&dir, "b.txt"))); // 失败项原地保留
+        assert!(path_exists(&join_name(&dir, "c.txt")));
+        // 回执 to 可直接构造撤销路径对
+        assert_eq!(out[0].from, join_name(&dir, "a.txt"));
+    }
+
+    #[test]
+    fn rename_item_reports_conflict() {
+        let dir = tempdir();
+        std::fs::write(join_name(&dir, "a.txt"), b"1").unwrap();
+        std::fs::write(join_name(&dir, "b.txt"), b"2").unwrap();
+        let err = rename_one(&join_name(&dir, "a.txt"), "b.txt").unwrap_err();
+        assert!(err.contains("已存在同名项"));
     }
 
     #[test]
