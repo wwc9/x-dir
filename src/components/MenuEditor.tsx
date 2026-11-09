@@ -97,11 +97,12 @@ import { DENSITY } from "../lib/tokens";
 import { useSettings } from "../stores/settings";
 import { t } from "../lib/i18n";
 
-/** 左栏（启用菜单）宽钳制 */
+/** 左栏（启用菜单）宽钳制（2026-11-09 用户反馈加大：上限 480→720、默认
+ *  300→520——条件摘要 4 chip + 名称在 480 下挤压截断，默认即给到舒展宽度） */
 const LEFT_W_MIN = 240;
-const LEFT_W_MAX = 480;
+const LEFT_W_MAX = 720;
 function clampLeftW(w: number): number {
-  if (!Number.isFinite(w)) return 300;
+  if (!Number.isFinite(w)) return 520;
   return Math.min(LEFT_W_MAX, Math.max(LEFT_W_MIN, Math.round(w)));
 }
 

@@ -481,7 +481,8 @@ export const DEFAULT_SETTINGS: Settings = {
   // 出厂布局由 settings.load 的迁移填充（defaultMenuEntries，含旧命令条目化）
   menuEntries: [],
   renameSchemes: [],
-  menuedLeftWidth: 300,
+  // 定制页「启用菜单」栏默认宽（2026-11-09 用户反馈 300→520，上限 720）
+  menuedLeftWidth: 520,
   realIcons: true,
   // 2026-10-15 定案：默认走内置引擎（灵动岛字节级进度 + 应用内冲突框）；
   // 原生 IFileOperation 的进度/冲突交系统 UI 且快操作不弹窗，改为可选开启
