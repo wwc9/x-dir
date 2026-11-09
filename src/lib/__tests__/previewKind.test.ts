@@ -42,13 +42,13 @@ describe("previewKind（扩展名 → 预览类型路由）", () => {
     expect(previewKind("a.pdf")).toBe("pdf");
   });
 
-  it("压缩包清单族（rar 许可证不合 §8 不支持）", () => {
+  it("压缩包清单族（rar 经内嵌 7-Zip 清单，2026-11-08）", () => {
     expect(previewKind("a.zip")).toBe("archive");
     expect(previewKind("a.tar")).toBe("archive");
     expect(previewKind("a.tgz")).toBe("archive");
     expect(previewKind("a.7z")).toBe("archive");
     expect(previewKind("a.tar.gz")).toBe("archive"); // 双重扩展名特判
-    expect(previewKind("a.rar")).toBe("fallback");
+    expect(previewKind("a.rar")).toBe("archive");
     // 单文件压缩：清单卡
     expect(previewKind("a.gz")).toBe("archive");
     expect(previewKind("a.xz")).toBe("archive");

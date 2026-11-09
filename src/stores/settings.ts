@@ -68,6 +68,7 @@ function toPlain(s: SettingsStore): Settings {  return {
     navTreeExpanded: s.navTreeExpanded,
     recentFolders: s.recentFolders,
     recentSearches: s.recentSearches,
+    extractDestDir: s.extractDestDir,
     rememberSelection: s.rememberSelection,
     staging: s.staging,
     nameIndex: s.nameIndex,
@@ -359,6 +360,9 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     merged.toolbarEntries = ensureToolbarAddr(merged.toolbarEntries ?? []);
     // 暂存区：旧档缺字段发空数组；脏数据（非字符串项）过滤
     // 批量重命名方案：旧档缺字段发空数组；脏数据（缺 name/ops）过滤
+    merged.extractDestDir = typeof merged.extractDestDir === "string" && merged.extractDestDir
+      ? merged.extractDestDir
+      : null;
     merged.renameSchemes = Array.isArray(merged.renameSchemes)
       ? merged.renameSchemes.filter((sc) => !!sc && typeof sc.name === "string" && Array.isArray(sc.ops))
       : [];

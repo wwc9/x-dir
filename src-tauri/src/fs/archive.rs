@@ -389,7 +389,7 @@ fn extract_tar(
     )
 }
 
-fn extract_targz(
+pub(crate) fn extract_targz(
     src: &str,
     dest_root: &str,
     cancel: &AtomicBool,
@@ -870,6 +870,51 @@ mod tests {
         let (msg, need_pw) = r.unwrap_err();
         assert!(need_pw, "应分类为需要密码：{msg}");
         assert_eq!(msg, "需要密码");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// multifile 分支 E2E（依赖内嵌 7z.exe，缺失跳过）：7z 多文件包经
+    /// extract_via_7z 解到 `<stem>/` 包装目录 + 进度分母入账（rar 路由与
+    /// 此分支同一引擎路径，本机无法造 rar 样包）
+    #[test]
+    fn extract_via_7z_multifile_lays_entries() {
+        let Some(exe) = crate::fs::sevenzip::sevenzip_exe_dev() else {
+            eprintln!("skip: 内嵌 7-Zip 未下载（tools/get-7zip.ps1）");
+            return;
+        };
+        let dir = tempdir();
+        let src_dir = join_name(&dir, "payload");
+        std::fs::create_dir_all(to_extended(&src_dir)).unwrap();
+        std::fs::write(to_extended(&join_name(&src_dir, "a.txt")), b"one").unwrap();
+        std::fs::write(to_extended(&join_name(&src_dir, "b.log")), b"two!!").unwrap();
+        let ar = join_name(&dir, "multi.7z");
+        let args = |v: Vec<&str>| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        run_7z(
+            &exe,
+            &args(vec!["a", ar.as_str(), src_dir.as_str(), "-bso0"]),
+            &AtomicBool::new(false),
+            |_| {},
+        )
+        .unwrap();
+        let dest = join_name(&dir, "out");
+        std::fs::create_dir_all(to_extended(&dest)).unwrap();
+        let mut p = prog();
+        extract_via_7z(
+            Some(&exe),
+            ar.as_str(),
+            &dest,
+            None,
+            &AtomicBool::new(false),
+            &mut p,
+            true,
+        )
+        .unwrap();
+        let out = join_name(&dest, "multi");
+        assert_eq!(
+            std::fs::read_to_string(to_extended(&join_name(&out, "payload/a.txt"))).unwrap(),
+            "one"
+        );
+        assert_eq!(p.total_bytes, 8); // 清单声明尺寸求和：one(3) + two!!(5)
         std::fs::remove_dir_all(&dir).ok();
     }
 

@@ -135,9 +135,13 @@ pub enum JobKind {
     MergeTexts {
         output: String,
     },
-    /// 压缩为 zip（文件平铺、文件夹递归含顶层目录）→ output
+    /// 压缩（zip / 7z / tar.gz，2026-11-08 格式扩展）→ output；
+    /// password/encrypt_header 仅 7z（AES-256 + 加密文件名）
     ZipFiles {
         output: String,
+        format: crate::fs::textops::CreateFormat,
+        password: Option<String>,
+        encrypt_header: bool,
     },
     /// Excel 工作簿合并（calamine 读 → rust_xlsxwriter 写 .xlsx）→ output
     MergeXlsx {
@@ -655,7 +659,12 @@ impl JobManager {
                             &mut failed,
                         );
                     }
-                    JobKind::ZipFiles { output } => {
+                    JobKind::ZipFiles {
+                        output,
+                        format,
+                        password,
+                        encrypt_header,
+                    } => {
                         if let Some(par) = parent_of(output) {
                             dirty_dirs.push(par);
                         }
@@ -664,9 +673,14 @@ impl JobManager {
                                 dirty_dirs.push(par);
                             }
                         }
-                        crate::fs::textops::run_zip(
+                        let sz = crate::fs::sevenzip::sevenzip_exe(&app).ok();
+                        crate::fs::textops::run_create(
                             &sources,
                             output,
+                            format,
+                            password.as_deref(),
+                            *encrypt_header,
+                            sz.as_deref(),
                             &cancel,
                             &mut prog,
                             &mut em,
@@ -908,7 +922,7 @@ fn clear_readonly_if_set(_path: &str) -> bool {
 }
 
 /// 预统计文件数与字节（复制进度需要总量；目录算 0 字节）；联接目录不深入
-fn walk_stats(path: &str, files: &mut u64, bytes: &mut u64) {
+pub(crate) fn walk_stats(path: &str, files: &mut u64, bytes: &mut u64) {
     let md = match std::fs::symlink_metadata(to_extended(path)) {
         Ok(m) => m,
         Err(_) => return,

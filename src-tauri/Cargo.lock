@@ -6980,6 +6980,7 @@ dependencies = [
  "tauri-plugin-log",
  "tauri-plugin-opener",
  "tiff 0.9.1",
+ "time",
  "trash",
  "webview2-com",
  "windows 0.62.2",
@@ -7272,6 +7273,7 @@ dependencies = [
  "indexmap 2.14.2",
  "memchr",
  "thiserror 2.0.21",
+ "time",
  "zopfli",
 ]
 

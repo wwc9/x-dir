@@ -458,27 +458,49 @@ export async function mergeXlsx(entries: FileEntry[], dir: string): Promise<void
 /** 压缩为 zip（文件平铺、文件夹递归含顶层目录）：filesMerge 对话框
  *  （打包清单 + 输出名合法校验 + 预览，2026-11-03 §4.9 对齐） */
 export async function zipEntries(entries: FileEntry[], dir: string): Promise<void> {
-  const res = await useUi.getState().openDialog<{ paths: string[]; name: string } | null>({
+  const res = await useUi.getState().openDialog<{
+    paths: string[];
+    name: string;
+    format?: "zip" | "7z" | "targz";
+    password?: string;
+    encryptHeader?: boolean;
+  } | null>({
     type: "filesMerge",
     flavor: "zip",
     entries,
   });
   if (!res) return;
   try {
-    const { jobId } = await api.zipFiles(res.paths, joinPath(dir, res.name));
+    const { jobId } = await api.zipFiles(
+      res.paths,
+      joinPath(dir, res.name),
+      res.format ?? "zip",
+      res.password,
+      res.encryptHeader,
+    );
     useJobs.getState().register(jobId, "zip", dir, [dir]);
   } catch (e) {
     useUi.getState().toast(`压缩失败：${String(e)}`, "error");
   }
 }
 
-/** 解压（zip/7z/rar/tar 系/gz/xz/bz2）：多文件包解到所在目录下 `<包名>/`
- *  子文件夹，gz/xz/bz2 单文件流旁写内层名，走任务引擎。加密包解压失败
- *  （reason=password）时弹密码框带密码重试一次（重试仍失败不再循环） */
+/** 解压到压缩包所在目录（右键「解压到此处」/预览面板「解压到此处」） */
 export async function extractArchives(sources: string[], password?: string): Promise<void> {
-  if (!sources.length) return;
-  const destDir = parentPath(sources[0]);
+  const destDir = sources.length ? parentPath(sources[0]) : "";
   if (!destDir) return;
+  await extractArchivesTo(sources, destDir, password);
+}
+
+/** 解压到指定目录（右键「解压到…」/预览面板「解压到…」）：多文件包解到
+ *  `<dest>/<包名>/` 子文件夹，gz/xz/bz2 单文件流旁写内层名，走任务引擎。
+ *  加密包解压失败（reason=password）时弹密码框带密码重试一次（重试仍失败
+ *  不再循环） */
+export async function extractArchivesTo(
+  sources: string[],
+  destDir: string,
+  password?: string,
+): Promise<void> {
+  if (!sources.length || !destDir) return;
   try {
     const { jobId } = await api.extractArchives(sources, destDir, password);
     const sourceParents = sources
@@ -487,7 +509,7 @@ export async function extractArchives(sources: string[], password?: string): Pro
     useJobs.getState().register(jobId, "extract", destDir, sourceParents, (d) => {
       const needPw = d.failed?.some((f) => f.reason === "password");
       if (needPw && !password) {
-        void promptExtractPassword(sources);
+        void promptExtractPassword(sources, destDir);
       }
     });
   } catch (e) {
@@ -495,8 +517,26 @@ export async function extractArchives(sources: string[], password?: string): Pro
   }
 }
 
-/** 解压密码输入（np-input 掩码框）：确认后带密码重跑同一批解压 */
-async function promptExtractPassword(sources: string[]): Promise<void> {
+/** 「解压到…」目标目录选择：记忆上次目标（settings.extractDestDir），
+ *  原生目录对话框默认落上次位置 */
+export async function pickExtractDestDir(): Promise<string | null> {
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const remembered = useSettings.getState().extractDestDir ?? undefined;
+  const sel = await open({
+    title: "解压到…",
+    multiple: false,
+    directory: true,
+    defaultPath: remembered,
+  });
+  if (typeof sel !== "string" || !sel) return null;
+  if (sel !== remembered) {
+    useSettings.getState().update({ extractDestDir: sel });
+  }
+  return sel;
+}
+
+/** 解压密码输入（np-input 掩码框）：确认后带密码重跑同一批解压（同目标） */
+async function promptExtractPassword(sources: string[], destDir: string): Promise<void> {
   const pwd = await useUi.getState().openDialog<string | null>({
     type: "input",
     title: "压缩包已加密",
@@ -505,7 +545,7 @@ async function promptExtractPassword(sources: string[]): Promise<void> {
     mask: true,
   });
   if (!pwd) return;
-  await extractArchives(sources, pwd);
+  await extractArchivesTo(sources, destDir, pwd);
 }
 
 /** 归类分组键：扩展名（无扩展名归"其他"）或修改年月（yyyy-MM） */

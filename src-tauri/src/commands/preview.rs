@@ -3173,7 +3173,10 @@ pub(crate) fn decode_entry_name(raw: &[u8]) -> String {
 }
 
 #[tauri::command]
-pub async fn preview_list_archive(path: String) -> Result<ArchiveListing, String> {
+pub async fn preview_list_archive(
+    app: tauri::AppHandle,
+    path: String,
+) -> Result<ArchiveListing, String> {
     let lower = path.to_ascii_lowercase();
     let file = std::fs::File::open(&path).map_err(|e| e.to_string())?;
     if lower.ends_with(".zip") {
@@ -3184,6 +3187,9 @@ pub async fn preview_list_archive(path: String) -> Result<ArchiveListing, String
         list_tar(std::io::BufReader::new(flate2::read::GzDecoder::new(file)))
     } else if lower.ends_with(".7z") {
         list_7z(&path)
+    } else if lower.ends_with(".rar") {
+        // rar 清单经内嵌 7-Zip（§5 备案）；密码包/未就绪给人话错误
+        list_rar(&app, &path)
     } else if lower.ends_with(".gz") {
         list_gz(&path, &lower)
     } else if lower.ends_with(".xz") {
@@ -3193,7 +3199,7 @@ pub async fn preview_list_archive(path: String) -> Result<ArchiveListing, String
         let name = lower.strip_suffix(".bz2").unwrap_or("data").to_string();
         Ok(single_archive(&name, 0))
     } else {
-        Err("不支持的压缩包格式（支持 zip/tar/tar.gz/7z）".into())
+        Err("不支持的压缩包格式（支持 zip/tar/tar.gz/7z/rar/gz/xz/bz2）".into())
     }
 }
 
@@ -3273,6 +3279,66 @@ fn list_7z(path: &str) -> Result<ArchiveListing, String> {
             size: f.size(),
             is_dir: f.is_directory(),
         });
+    }
+    Ok(ArchiveListing {
+        total,
+        entries,
+        truncated: total > ARCHIVE_CAP,
+    })
+}
+
+/// rar 清单（2026-11-08）：内嵌 7-Zip `l -ba -slt`（只读头不解码）→
+/// 逐块解析 Path/Folder/Size；密码包报「需要密码」人话
+fn list_rar(app: &tauri::AppHandle, path: &str) -> Result<ArchiveListing, String> {
+    use crate::fs::sevenzip::{SevenZipOutcome, run_7z};
+    let exe = crate::fs::sevenzip::sevenzip_exe(app)?;
+    let args = vec![
+        "l".to_string(),
+        "-ba".to_string(),
+        "-slt".to_string(),
+        "-p".to_string(),
+        path.to_string(),
+    ];
+    let (outcome, lines) = run_7z(
+        &exe,
+        &args,
+        &std::sync::atomic::AtomicBool::new(false),
+        |_| {},
+    )
+    .map_err(|e| match e {
+        crate::fs::sevenzip::SevenZipError::Cancelled => "已取消".to_string(),
+        crate::fs::sevenzip::SevenZipError::Failed(m) => m,
+    })?;
+    match outcome {
+        SevenZipOutcome::NeedPassword => return Err("需要密码（当前版本暂不支持输入）".into()),
+        SevenZipOutcome::Failed(m) => return Err(format!("rar 清单失败：{m}")),
+        _ => {}
+    }
+    let mut entries: Vec<ArchiveEntry> = Vec::new();
+    let mut total = 0usize;
+    let mut cur_path = String::new();
+    let mut cur_size = 0u64;
+    let mut cur_folder = false;
+    for l in lines {
+        if let Some(v) = l.strip_prefix("Path = ") {
+            cur_path = v.trim().to_string();
+        } else if let Some(v) = l.strip_prefix("Folder = ") {
+            cur_folder = v.trim() == "+";
+        } else if let Some(v) = l.strip_prefix("Size = ") {
+            cur_size = v.trim().parse::<u64>().unwrap_or(0);
+        } else if l.is_empty() {
+            if !cur_path.is_empty() {
+                total += 1;
+                push_entry(&mut entries, cur_path.clone(), cur_size, cur_folder);
+            }
+            cur_path.clear();
+            cur_size = 0;
+            cur_folder = false;
+        }
+    }
+    if !cur_path.is_empty() {
+        total += 1;
+        push_entry(&mut entries, cur_path, cur_size, cur_folder);
     }
     Ok(ArchiveListing {
         total,

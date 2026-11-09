@@ -47,6 +47,8 @@ import {
   mergeXlsx,
   officeToPdf,
   extractArchives,
+  extractArchivesTo,
+  pickExtractDestDir,
   organizeEntries,
   removePdfPages,
   rotatePdf,
@@ -1140,7 +1142,16 @@ export function FileList({
           },
         };
       case "zipHere":
-        return { label: t("压缩为 zip…"), action: () => void zipEntries(sel, path) };
+        return { label: t("压缩…"), action: () => void zipEntries(sel, path) };
+      case "extractTo":
+        return {
+          label: t("解压到…"),
+          action: () =>
+            void (async () => {
+              const dest = await pickExtractDestDir();
+              if (dest) extractArchivesTo(selectedPaths(), dest);
+            })(),
+        };
       case "extract":
         return {
           label: t("解压到此处"),

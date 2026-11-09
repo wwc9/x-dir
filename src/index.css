@@ -3542,6 +3542,37 @@ body.np-col-resizing * {
   overflow: auto;
   background: var(--np-surface);
 }
+/* 压缩包预览工具行（2026-11-08）：解压到此处 / 解压到…——填充式小按钮，
+   surface-2 底与全局按钮语言一致 */
+.np-pv-arwrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+.np-pv-artools {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+  padding: 0 var(--np-gutter) var(--np-gap);
+}
+.np-pv-arbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--np-ctl-h);
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--np-radius);
+  background: var(--np-surface-2);
+  color: var(--np-fg);
+  font-size: var(--np-font-ui);
+  cursor: pointer;
+}
+.np-pv-arbtn:hover {
+  background: var(--np-hover);
+}
 .np-pv-ar-inner {
   position: relative;
   min-width: 100%;

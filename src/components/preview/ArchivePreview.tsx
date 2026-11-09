@@ -1,14 +1,16 @@
 // 压缩包预览（M3）：内容清单虚拟列表（不解压），Rust 端 zip/tar/tar.gz/7z 列取。
 // 行 = 条目类型图标（复用 fileIcons）+ 名称 + 大小；目录行弱化显示。
+// 顶部工具行（2026-11-08）：解压到此处 / 解压到…（看完清单顺手解压）。
 
 import { useEffect, useRef, useState } from "react";
 import { t } from "../../lib/i18n";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Folder } from "lucide-react";
+import { ArchiveRestore, Folder, FolderInput } from "lucide-react";
 
 import { api, type ArchiveEntry } from "../../lib/ipc";
 import { fileIcon } from "../../lib/fileIcons";
 import { formatSize } from "../../lib/format";
+import { extractArchives, extractArchivesTo, pickExtractDestDir } from "../../lib/operations";
 import { DENSITY } from "../../lib/tokens";
 import { AppIcon } from "../AppIcon";
 
@@ -56,36 +58,59 @@ export function ArchivePreview({
   }
 
   return (
-    <div ref={scrollRef} className="np-pv-ar">
-      {!entries ? (
-        <div className="np-pv-loading">
-          <AppIcon icon={Folder} size={DENSITY.iconMd} colorVar="--np-icon-archive" />
-        </div>
-      ) : entries.length === 0 ? (
-        <div className="np-pv-empty">{t("（空压缩包）")}</div>
-      ) : (
-        <div className="np-pv-ar-inner" style={{ height: virtualizer.getTotalSize() }}>
-          {virtualizer.getVirtualItems().map((row) => {
-            const e = entries[row.index];
-            return (
-              <div
-                key={row.key}
-                className={`np-pv-ar-row ${e.isDir ? "is-dir" : ""}`}
-                style={{
-                  position: "absolute",
-                  insetInline: 0,
-                  height: row.size,
-                  transform: `translateY(${row.start}px)`,
-                }}
-              >
-                <RowIcon e={e} />
-                <span className="np-ellipsis">{e.name}</span>
-                <span className="np-pv-ar-size">{e.isDir ? "—" : formatSize(e)}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+    <div className="np-pv-arwrap">
+      <div className="np-pv-artools">
+        <button
+          className="np-pv-arbtn"
+          onClick={() => void extractArchives([path])}
+        >
+          <AppIcon icon={ArchiveRestore} size={DENSITY.iconSm} />
+          {t("解压到此处")}
+        </button>
+        <button
+          className="np-pv-arbtn"
+          onClick={() =>
+            void (async () => {
+              const dest = await pickExtractDestDir();
+              if (dest) extractArchivesTo([path], dest);
+            })()
+          }
+        >
+          <AppIcon icon={FolderInput} size={DENSITY.iconSm} />
+          {t("解压到…")}
+        </button>
+      </div>
+      <div ref={scrollRef} className="np-pv-ar">
+        {!entries ? (
+          <div className="np-pv-loading">
+            <AppIcon icon={Folder} size={DENSITY.iconMd} colorVar="--np-icon-archive" />
+          </div>
+        ) : entries.length === 0 ? (
+          <div className="np-pv-empty">{t("（空压缩包）")}</div>
+        ) : (
+          <div className="np-pv-ar-inner" style={{ height: virtualizer.getTotalSize() }}>
+            {virtualizer.getVirtualItems().map((row) => {
+              const e = entries[row.index];
+              return (
+                <div
+                  key={row.key}
+                  className={`np-pv-ar-row ${e.isDir ? "is-dir" : ""}`}
+                  style={{
+                    position: "absolute",
+                    insetInline: 0,
+                    height: row.size,
+                    transform: `translateY(${row.start}px)`,
+                  }}
+                >
+                  <RowIcon e={e} />
+                  <span className="np-ellipsis">{e.name}</span>
+                  <span className="np-pv-ar-size">{e.isDir ? "—" : formatSize(e)}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

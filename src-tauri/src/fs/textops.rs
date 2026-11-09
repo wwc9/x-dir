@@ -2,7 +2,7 @@
 //! 文本合并、压缩为 zip。解码复用预览的探测管线（BOM → UTF-8 → GB18030）。
 //! 全部经任务引擎执行：逐文件进度 + 取消检查；输出一律旁写不覆盖。
 
-use std::io::{Seek, Write};
+use std::io::{Read, Seek, Write};
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 
@@ -205,16 +205,56 @@ pub(crate) fn merge_documents(
     }
 }
 
-// ────────────────────────── 压缩为 zip ──────────────────────────
+// ────────────────────────── 压缩（zip / 7z / tar.gz，2026-11-08 扩展） ──────────────────────────
 
-/// 递归写入一个源（文件 = 顶层条目；文件夹 = 顶层目录 + 内部相对路径）
+/// 压缩输出格式（zipFiles 命令参数）
+#[derive(Clone, Debug, PartialEq)]
+pub enum CreateFormat {
+    /// Deflate；已压缩媒体自动 Store；条目显式带源 mtime
+    Zip,
+    /// LZMA2 经内嵌 7z.exe（-t7z；可选 AES-256 密码 + 加密文件名 -mhe=on）
+    SevenZ,
+    /// tar 流 + flate2 GzEncoder 组合（进程内流式；条目 mtime 由 tar 头自带）
+    TarGz,
+}
+
+/// 已压缩媒体/归档扩展名 → Store 直存不二次压缩（jpg/mp4/zip 再压纯费 CPU，
+/// 仅 zip 路径生效；7z 走 LZMA2 不区分——对不可压数据自身膨胀有限）
+const STORE_EXTS: &[&str] = &[
+    "jpg", "jpeg", "png", "gif", "webp", "bmp", "ico", "tif", "tiff", "heic", "mp3", "flac", "ogg",
+    "wav", "m4a", "aac", "mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "zip", "7z", "rar",
+    "gz", "xz", "bz2", "tar", "jar", "apk", "pdf", "docx", "docm", "xlsx", "xlsm", "pptx", "pptm",
+    "epub",
+];
+
+/// 已压缩扩展名判定（纯函数）
+fn is_store_ext(name: &str) -> bool {
+    match name.rfind('.') {
+        Some(i) if i + 1 < name.len() => {
+            STORE_EXTS.contains(&name[i + 1..].to_ascii_lowercase().as_str())
+        }
+        _ => false,
+    }
+}
+
+/// 条目 mtime（SystemTime → zip::DateTime；失败 None = 保持默认）
+fn zip_mtime(meta: &std::fs::Metadata) -> Option<zip::DateTime> {
+    zip::DateTime::try_from(time::OffsetDateTime::from(meta.modified().ok()?)).ok()
+}
+
+/// 递归写入一个源到 zip 流（文件 = 顶层条目；文件夹 = 顶层目录 + 内部相对路径）。
+/// 返回 true = 已取消（调用方停止整包并清半成品）。条目显式带源 mtime（修复
+/// 1980 纪元）；已压缩扩展名 Store；64KB 分块拷贝 = 单大文件内可取消 +
+/// done_bytes 细粒度
 fn add_path_to_zip<W: Write + Seek>(
     out: &mut zip::ZipWriter<W>,
     path: &str,
     arc_name: &str,
     files: &mut u64,
+    cancel: &AtomicBool,
+    prog: &mut JobProgress,
     failed: &mut Vec<FailItem>,
-) {
+) -> bool {
     let full = to_extended(path);
     let meta = match std::fs::symlink_metadata(&full) {
         Ok(m) => m,
@@ -224,7 +264,7 @@ fn add_path_to_zip<W: Write + Seek>(
                 message: e.to_string(),
                 reason: None,
             });
-            return;
+            return false;
         }
     };
     // 目录联接/junction 静默不入包（2026-11-01）：std 的 is_dir() 对 reparse
@@ -237,7 +277,7 @@ fn add_path_to_zip<W: Write + Seek>(
         const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
         let attrs = meta.file_attributes();
         if attrs & FILE_ATTRIBUTE_REPARSE_POINT != 0 && attrs & FILE_ATTRIBUTE_DIRECTORY != 0 {
-            return;
+            return false;
         }
     }
     if meta.is_dir() {
@@ -248,7 +288,7 @@ fn add_path_to_zip<W: Write + Seek>(
                 message: e.to_string(),
                 reason: None,
             });
-            return;
+            return false;
         }
         let Ok(rd) = std::fs::read_dir(&full) else {
             failed.push(FailItem {
@@ -256,7 +296,7 @@ fn add_path_to_zip<W: Write + Seek>(
                 message: "目录枚举失败".into(),
                 reason: None,
             });
-            return;
+            return false;
         };
         let mut children: Vec<String> = rd
             .flatten()
@@ -264,10 +304,23 @@ fn add_path_to_zip<W: Write + Seek>(
             .collect();
         children.sort();
         for name in children {
+            if is_cancelled(cancel) {
+                return true;
+            }
             let child = join_name(path, &name);
-            add_path_to_zip(out, &child, &format!("{dir_arc}{name}"), files, failed);
+            if add_path_to_zip(
+                out,
+                &child,
+                &format!("{dir_arc}{name}"),
+                files,
+                cancel,
+                prog,
+                failed,
+            ) {
+                return true;
+            }
         }
-        return;
+        return false;
     }
     let mut f = match std::fs::File::open(&full) {
         Ok(f) => f,
@@ -277,34 +330,65 @@ fn add_path_to_zip<W: Write + Seek>(
                 message: e.to_string(),
                 reason: None,
             });
-            return;
+            return false;
         }
     };
-    if let Err(e) = out.start_file(
-        arc_name,
-        SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated),
-    ) {
+    let method = if is_store_ext(&file_name_of(path)) {
+        zip::CompressionMethod::Stored
+    } else {
+        zip::CompressionMethod::Deflated
+    };
+    let opt = match zip_mtime(&meta) {
+        Some(dt) => SimpleFileOptions::default()
+            .compression_method(method)
+            .last_modified_time(dt),
+        None => SimpleFileOptions::default().compression_method(method),
+    };
+    if let Err(e) = out.start_file(arc_name, opt) {
         failed.push(FailItem {
             path: path.to_string(),
             message: e.to_string(),
             reason: None,
         });
-        return;
+        return false;
     }
-    match std::io::copy(&mut f, out) {
-        Ok(_) => *files += 1,
-        Err(e) => failed.push(FailItem {
-            path: path.to_string(),
-            message: e.to_string(),
-            reason: None,
-        }),
+    // 64KB 分块：取消即时生效（旧 io::copy 一锤子大文件中途不可停）+ 字节进度
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        if is_cancelled(cancel) {
+            return true;
+        }
+        match f.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                if let Err(e) = out.write_all(&buf[..n]) {
+                    failed.push(FailItem {
+                        path: path.to_string(),
+                        message: e.to_string(),
+                        reason: None,
+                    });
+                    let _ = e;
+                    return false;
+                }
+                prog.done_bytes += n as u64;
+            }
+            Err(e) => {
+                failed.push(FailItem {
+                    path: path.to_string(),
+                    message: e.to_string(),
+                    reason: None,
+                });
+                return false;
+            }
+        }
     }
+    *files += 1;
+    false
 }
 
-/// 压缩为 zip：文件 = 平铺条目，文件夹 = 含顶层目录递归打包；输出 output
-/// （已存在覆盖）。流式写盘（2026-11-01 审查修复：旧实现整包在内存构建，
-/// 压缩数 GB 目录即 OOM）——先写 `<output>.tmp`，成功后原子改名覆盖；
-/// 取消/失败清掉半成品，既有输出不受影响（与旧内存方案的用户可见语义一致）
+/// 压缩一批源为 zip：文件平铺、文件夹递归含顶层目录；输出 output（覆盖语义
+/// 由对话框内联冲突校验 + Rust 端 reject 兜底）。流式写 `<output>.tmp` 成功后
+/// 原子改名；取消/失败清掉半成品。预扫源字节求进度分母
 pub(crate) fn run_zip(
     paths: &[String],
     output: &str,
@@ -314,6 +398,11 @@ pub(crate) fn run_zip(
     failed: &mut Vec<FailItem>,
 ) {
     prog.total_files = paths.len() as u64;
+    let mut total_bytes = 0u64;
+    for p in paths {
+        crate::jobs::walk_stats(p, &mut 0u64, &mut total_bytes);
+    }
+    prog.total_bytes = total_bytes;
     let tmp = format!("{output}.tmp");
     let file = match std::fs::File::create(to_extended(&tmp)) {
         Ok(f) => f,
@@ -328,32 +417,365 @@ pub(crate) fn run_zip(
     };
     let mut out = zip::ZipWriter::new(std::io::BufWriter::new(file));
     let mut done = 0u64;
+    let mut cancelled = false;
     for p in paths {
         if is_cancelled(cancel) {
-            let _ = std::fs::remove_file(to_extended(&tmp));
-            return;
+            cancelled = true;
+            break;
         }
         prog.current_path = p.clone();
-        add_path_to_zip(&mut out, p, &file_name_of(p), &mut done, failed);
+        cancelled = add_path_to_zip(
+            &mut out,
+            p,
+            &file_name_of(p),
+            &mut done,
+            cancel,
+            prog,
+            failed,
+        );
+        if cancelled {
+            break;
+        }
         prog.done_files += 1;
         em.progress(prog);
     }
-    if let Err(e) = out.finish() {
-        failed.push(FailItem {
-            path: output.to_string(),
-            message: e.to_string(),
-            reason: None,
-        });
-        let _ = std::fs::remove_file(to_extended(&tmp));
-        return;
+    let finish = if cancelled {
+        Err("cancelled".to_string())
+    } else {
+        out.finish().map(|_| ()).map_err(|e| e.to_string())
+    };
+    match finish {
+        Ok(()) => {
+            if let Err(e) = std::fs::rename(to_extended(&tmp), to_extended(output)) {
+                failed.push(FailItem {
+                    path: output.to_string(),
+                    message: e.to_string(),
+                    reason: None,
+                });
+                let _ = std::fs::remove_file(to_extended(&tmp));
+            }
+        }
+        Err(_) => {
+            // 取消或收尾失败：半成品清除，既有输出不受影响（out 已被 finish 消费）
+            let _ = std::fs::remove_file(to_extended(&tmp));
+        }
     }
-    if let Err(e) = std::fs::rename(to_extended(&tmp), to_extended(output)) {
-        failed.push(FailItem {
-            path: output.to_string(),
-            message: e.to_string(),
-            reason: None,
-        });
-        let _ = std::fs::remove_file(to_extended(&tmp));
+}
+
+/// 递归写入一个源到 tar 流（镜像 add_path_to_zip：目录递归、mtime 由
+/// set_metadata_from_path 自带、64KB 分块取消 + done_bytes）。返回 true = 取消。
+/// append_data 内部按名设路径并补 cksum，目录头用 EntryType::Directory + 空 payload
+fn add_path_to_tar<W: Write>(
+    b: &mut tar::Builder<W>,
+    path: &str,
+    arc_name: &str,
+    cancel: &AtomicBool,
+    prog: &mut JobProgress,
+    failed: &mut Vec<FailItem>,
+) -> bool {
+    let full = to_extended(path);
+    let meta = match std::fs::symlink_metadata(&full) {
+        Ok(m) => m,
+        Err(e) => {
+            failed.push(FailItem {
+                path: path.to_string(),
+                message: e.to_string(),
+                reason: None,
+            });
+            return false;
+        }
+    };
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const REPARSE: u32 = 0x400;
+        const DIR: u32 = 0x10;
+        let attrs = meta.file_attributes();
+        if attrs & REPARSE != 0 && attrs & DIR != 0 {
+            return false;
+        }
+    }
+    // mtime/模式/size 全部来自 symlink_metadata（reparse 已在上游跳过）
+    let header = |size: u64, dir: bool| -> tar::Header {
+        let mut h = tar::Header::new_gnu();
+        h.set_metadata(&meta);
+        h.set_size(size);
+        if dir {
+            h.set_entry_type(tar::EntryType::Directory);
+        }
+        h
+    };
+    if meta.is_dir() {
+        let mut h = header(0, true);
+        if let Err(e) = b.append_data(&mut h, format!("{arc_name}/"), std::io::empty()) {
+            failed.push(FailItem {
+                path: path.to_string(),
+                message: e.to_string(),
+                reason: None,
+            });
+            return false;
+        }
+        let Ok(rd) = std::fs::read_dir(&full) else {
+            failed.push(FailItem {
+                path: path.to_string(),
+                message: "目录枚举失败".into(),
+                reason: None,
+            });
+            return false;
+        };
+        let mut children: Vec<String> = rd
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        children.sort();
+        for name in children {
+            if is_cancelled(cancel) {
+                return true;
+            }
+            let child = join_name(path, &name);
+            if add_path_to_tar(
+                b,
+                &child,
+                &format!("{arc_name}/{name}"),
+                cancel,
+                prog,
+                failed,
+            ) {
+                return true;
+            }
+        }
+        return false;
+    }
+    let f = match std::fs::File::open(&full) {
+        Ok(f) => f,
+        Err(e) => {
+            failed.push(FailItem {
+                path: path.to_string(),
+                message: e.to_string(),
+                reason: None,
+            });
+            return false;
+        }
+    };
+    let mut h = header(meta.len(), false);
+    let mut counted = f.take(meta.len());
+    match b.append_data(&mut h, arc_name, &mut counted) {
+        Ok(()) => {
+            prog.done_bytes += meta.len();
+            false
+        }
+        Err(e) => {
+            failed.push(FailItem {
+                path: path.to_string(),
+                message: e.to_string(),
+                reason: None,
+            });
+            false
+        }
+    }
+}
+
+/// 压缩一批源为 tar.gz：tar::Builder 叠 flate2 GzEncoder 流式组合（进程内，
+/// 不经 7z.exe——7-Zip 不产 tar.gz 组合格式）。条目 mtime 由 tar 头自带
+pub(crate) fn run_zip_targz(
+    paths: &[String],
+    output: &str,
+    cancel: &AtomicBool,
+    prog: &mut JobProgress,
+    em: &mut EmitterState,
+    failed: &mut Vec<FailItem>,
+) {
+    prog.total_files = paths.len() as u64;
+    let mut total_bytes = 0u64;
+    for p in paths {
+        crate::jobs::walk_stats(p, &mut 0u64, &mut total_bytes);
+    }
+    prog.total_bytes = total_bytes;
+    let tmp = format!("{output}.tmp");
+    let file = match std::fs::File::create(to_extended(&tmp)) {
+        Ok(f) => f,
+        Err(e) => {
+            failed.push(FailItem {
+                path: output.to_string(),
+                message: e.to_string(),
+                reason: None,
+            });
+            return;
+        }
+    };
+    let gz = flate2::write::GzEncoder::new(
+        std::io::BufWriter::new(file),
+        flate2::Compression::default(),
+    );
+    let mut b = tar::Builder::new(gz);
+    let mut cancelled = false;
+    for p in paths {
+        if is_cancelled(cancel) {
+            cancelled = true;
+            break;
+        }
+        prog.current_path = p.clone();
+        cancelled = add_path_to_tar(&mut b, p, &file_name_of(p), cancel, prog, failed);
+        if cancelled {
+            break;
+        }
+        prog.done_files += 1;
+        em.progress(prog);
+    }
+    let finish = if cancelled {
+        Err("cancelled".to_string())
+    } else {
+        // into_inner 链：tar 收尾 → gzip 收尾（CRC 尾块）→ BufWriter 落盘
+        b.into_inner()
+            .map_err(|e| e.to_string())
+            .and_then(|w| w.finish().map_err(|e| e.to_string()))
+            .and_then(|w| w.into_inner().map_err(|e| e.to_string()))
+            .and_then(|mut f| {
+                use std::io::Write;
+                f.flush().map_err(|e| e.to_string())
+            })
+    };
+    match finish {
+        Ok(()) => {
+            if let Err(e) = std::fs::rename(to_extended(&tmp), to_extended(output)) {
+                failed.push(FailItem {
+                    path: output.to_string(),
+                    message: e.to_string(),
+                    reason: None,
+                });
+                let _ = std::fs::remove_file(to_extended(&tmp));
+            }
+        }
+        Err(_) => {
+            let _ = std::fs::remove_file(to_extended(&tmp));
+        }
+    }
+}
+
+/// 经内嵌 7z.exe 压缩为 7z（LZMA2）：清单预扫源字节求分母 → `-bsp1` 百分比
+/// 映射 done_bytes；可选 AES-256 密码（-p）+ 加密文件名（-mhe=on）。
+/// 半成品写 `<output>.tmp`（-t7z 显式定格式，扩展名无关），成功原子改名
+#[allow(clippy::too_many_arguments)] // 引擎参数表 = 任务语义完整口径，不宜拆
+pub(crate) fn run_zip_7z(
+    paths: &[String],
+    output: &str,
+    password: Option<&str>,
+    encrypt_header: bool,
+    exe: &Path,
+    cancel: &AtomicBool,
+    prog: &mut JobProgress,
+    failed: &mut Vec<FailItem>,
+) {
+    prog.total_files = paths.len() as u64;
+    let mut total_bytes = 0u64;
+    for p in paths {
+        crate::jobs::walk_stats(p, &mut 0u64, &mut total_bytes);
+    }
+    prog.total_bytes = total_bytes;
+    let tmp = format!("{output}.tmp");
+    let mut args: Vec<String> = vec![
+        "a".into(),
+        "-t7z".into(),
+        "-bso0".into(),
+        "-bsp1".into(),
+        tmp.clone(),
+    ];
+    if let Some(pw) = password {
+        args.push(format!("-p{pw}"));
+        if encrypt_header {
+            args.push("-mhe=on".into());
+        }
+    }
+    args.extend(paths.iter().cloned());
+    let base = prog.done_bytes;
+    let on_progress = |p: u8| {
+        if total_bytes > 0 {
+            prog.done_bytes = base + (total_bytes * p as u64) / 100;
+        }
+    };
+    match crate::fs::sevenzip::run_7z(exe, &args, cancel, on_progress) {
+        Ok((crate::fs::sevenzip::SevenZipOutcome::Ok, _)) => {
+            if let Err(e) = std::fs::rename(to_extended(&tmp), to_extended(output)) {
+                failed.push(FailItem {
+                    path: output.to_string(),
+                    message: e.to_string(),
+                    reason: None,
+                });
+                let _ = std::fs::remove_file(to_extended(&tmp));
+            }
+        }
+        Ok((crate::fs::sevenzip::SevenZipOutcome::Warning(m), _)) => {
+            failed.push(FailItem {
+                path: output.to_string(),
+                message: m,
+                reason: None,
+            });
+            let _ = std::fs::remove_file(to_extended(&tmp));
+        }
+        Ok((crate::fs::sevenzip::SevenZipOutcome::NeedPassword, _)) => {
+            failed.push(FailItem {
+                path: output.to_string(),
+                message: "需要密码".into(),
+                reason: Some(crate::jobs::FailReason::Password),
+            });
+            let _ = std::fs::remove_file(to_extended(&tmp));
+        }
+        Ok((crate::fs::sevenzip::SevenZipOutcome::Failed(m), _)) => {
+            failed.push(FailItem {
+                path: output.to_string(),
+                message: m,
+                reason: None,
+            });
+            let _ = std::fs::remove_file(to_extended(&tmp));
+        }
+        Err(crate::fs::sevenzip::SevenZipError::Cancelled) => {
+            let _ = std::fs::remove_file(to_extended(&tmp));
+        }
+        Err(crate::fs::sevenzip::SevenZipError::Failed(m)) => {
+            failed.push(FailItem {
+                path: output.to_string(),
+                message: m,
+                reason: None,
+            });
+            let _ = std::fs::remove_file(to_extended(&tmp));
+        }
+    }
+}
+
+/// 压缩总入口（任务引擎 ZipFiles 分发）：按格式分流三个引擎
+#[allow(clippy::too_many_arguments)] // 引擎参数表 = 任务语义完整口径，不宜拆
+pub(crate) fn run_create(
+    paths: &[String],
+    output: &str,
+    format: &CreateFormat,
+    password: Option<&str>,
+    encrypt_header: bool,
+    sz_exe: Option<&Path>,
+    cancel: &AtomicBool,
+    prog: &mut JobProgress,
+    em: &mut EmitterState,
+    failed: &mut Vec<FailItem>,
+) {
+    match format {
+        CreateFormat::Zip => run_zip(paths, output, cancel, prog, em, failed),
+        CreateFormat::TarGz => run_zip_targz(paths, output, cancel, prog, em, failed),
+        CreateFormat::SevenZ => match sz_exe {
+            Some(exe) => run_zip_7z(
+                paths,
+                output,
+                password,
+                encrypt_header,
+                exe,
+                cancel,
+                prog,
+                failed,
+            ),
+            None => failed.push(FailItem {
+                path: output.to_string(),
+                message: "内嵌 7-Zip 未就绪（7z 格式需要）：运行 tools/get-7zip.ps1 下载".into(),
+                reason: None,
+            }),
+        },
     }
 }
 
@@ -399,7 +821,26 @@ mod tests {
         let mut out = zip::ZipWriter::new(&mut buf);
         let mut n = 0;
         let mut failed = Vec::new();
-        add_path_to_zip(&mut out, tmp.to_str().unwrap(), "root", &mut n, &mut failed);
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        let mut prog = crate::jobs::JobProgress {
+            job_id: 0,
+            phase: "running",
+            total_files: 0,
+            done_files: 0,
+            total_bytes: 0,
+            done_bytes: 0,
+            current_path: String::new(),
+            note: None,
+        };
+        add_path_to_zip(
+            &mut out,
+            tmp.to_str().unwrap(),
+            "root",
+            &mut n,
+            &cancel,
+            &mut prog,
+            &mut failed,
+        );
         out.finish().unwrap();
         assert!(failed.is_empty());
         let names = zip_names(&buf.into_inner());
@@ -448,6 +889,91 @@ mod tests {
     }
 
     #[test]
+    fn store_ext_classification() {
+        assert!(is_store_ext("a.JPG"));
+        assert!(is_store_ext("视频.MP4"));
+        assert!(is_store_ext("already.zip"));
+        assert!(is_store_ext("report.docx")); // OOXML 容器已压缩 → Store
+        assert!(is_store_ext("报告.pdf"));
+        assert!(!is_store_ext("readme.md"));
+        assert!(!is_store_ext("noext"));
+    }
+
+    /// tar.gz 压缩/解压往返（add_path_to_tar → GzEncoder → extract_targz）：
+    /// 内容一致 + 条目 mtime 保留（秒级）
+    #[test]
+    fn tar_gz_roundtrip_preserves_mtime() {
+        let dir = std::env::temp_dir().join(format!("xdir-tgz-{}", std::process::id()));
+        let src = dir.join("src");
+        std::fs::create_dir_all(src.join("sub")).unwrap();
+        std::fs::write(src.join("a.txt"), b"t1").unwrap();
+        let target_path = src.join("sub/b.txt");
+        std::fs::write(&target_path, b"t2!").unwrap();
+        let want_mtime = target_path.metadata().unwrap().modified().unwrap();
+
+        let tgz = dir.join("t.tar.gz");
+        let f = std::fs::File::create(&tgz).unwrap();
+        let gz = flate2::write::GzEncoder::new(f, flate2::Compression::default());
+        let mut b = tar::Builder::new(gz);
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        let mut prog = crate::jobs::JobProgress {
+            job_id: 0,
+            phase: "running",
+            total_files: 0,
+            done_files: 0,
+            total_bytes: 0,
+            done_bytes: 0,
+            current_path: String::new(),
+            note: None,
+        };
+        let mut failed = Vec::new();
+        assert!(!add_path_to_tar(
+            &mut b,
+            src.to_str().unwrap(),
+            "src",
+            &cancel,
+            &mut prog,
+            &mut failed
+        ));
+        b.into_inner().unwrap().finish().unwrap();
+        assert!(failed.is_empty());
+
+        let dest = dir.join("out");
+        std::fs::create_dir_all(&dest).unwrap();
+        let mut p2 = crate::jobs::JobProgress { ..prog };
+        let mut skipped = 0u64;
+        crate::fs::archive::extract_targz(
+            tgz.to_str().unwrap(),
+            dest.to_str().unwrap(),
+            &cancel,
+            &mut p2,
+            &mut skipped,
+        )
+        .unwrap();
+        assert_eq!(skipped, 0);
+        let out_file = dest.join("t/src/sub/b.txt"); // 包装目录 = 包名（多包互不覆盖）
+        assert_eq!(std::fs::read_to_string(&out_file).unwrap(), "t2!");
+        // tar 条目 mtime 保留（秒级粒度；tar 头按秒存）
+        let got_secs = out_file
+            .metadata()
+            .unwrap()
+            .modified()
+            .unwrap()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        assert_eq!(
+            got_secs,
+            want_mtime
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            "tar 条目 mtime 应保留"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn zip_files_flat_and_nested() {
         let tmp = std::env::temp_dir().join(format!("xdir-zip-{}", std::process::id()));
         let sub = tmp.join("sub");
@@ -458,8 +984,27 @@ mod tests {
         let mut buf = Cursor::new(Vec::new());
         let mut out = zip::ZipWriter::new(&mut buf);
         let mut n = 0;
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        let mut prog = crate::jobs::JobProgress {
+            job_id: 0,
+            phase: "running",
+            total_files: 0,
+            done_files: 0,
+            total_bytes: 0,
+            done_bytes: 0,
+            current_path: String::new(),
+            note: None,
+        };
         let dir = tmp.join("sub");
-        add_path_to_zip(&mut out, dir.to_str().unwrap(), "sub", &mut n, &mut failed);
+        add_path_to_zip(
+            &mut out,
+            dir.to_str().unwrap(),
+            "sub",
+            &mut n,
+            &cancel,
+            &mut prog,
+            &mut failed,
+        );
         out.finish().unwrap();
         assert!(failed.is_empty());
         let names = zip_names(&buf.into_inner());

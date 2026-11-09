@@ -357,6 +357,8 @@ export interface Settings {
   recentFolders: string[];
   /** 全盘搜索历史（去重置顶，上限 20 条） */
   recentSearches: string[];
+  /** 解压到…记忆目录（2026-11-08）：null = 未用过（对话框默认当前目录） */
+  extractDestDir: string | null;
   /** 导航后按路径记忆选中集（回到该目录自动恢复；Ctrl+A/Esc 等显式操作不受影响） */
   rememberSelection: boolean;
   /** 暂存区（侧边栏下半）：临时拖放的文件/文件夹路径，跨会话保留；去重与上限见 lib/shelf.ts */
@@ -495,6 +497,7 @@ export const DEFAULT_SETTINGS: Settings = {
   navTreeExpanded: [THIS_PC],
   recentFolders: [],
   recentSearches: [],
+  extractDestDir: null,
   rememberSelection: true,
   staging: [],
   workspaceOrder: [],
@@ -893,9 +896,22 @@ export const api = {
    *  mode ∈ "sheets"（每源表一张目标表）| "rows"（纵向拼接去重复表头） */
   mergeXlsx: (paths: string[], output: string, mode: "sheets" | "rows") =>
     cmd<{ jobId: number }>("merge_xlsx", { paths, output, mode }),
-  /** 压缩为 zip（文件平铺、文件夹递归含顶层目录） */
-  zipFiles: (paths: string[], output: string) =>
-    cmd<{ jobId: number }>("zip_files", { paths, output }),
+  /** 压缩（文件平铺、文件夹递归含顶层目录）：format = zip/7z/targz（缺省
+   *  zip）；password/encryptHeader 仅 7z（AES-256 + 加密文件清单） */
+  zipFiles: (
+    paths: string[],
+    output: string,
+    format?: "zip" | "7z" | "targz",
+    password?: string,
+    encryptHeader?: boolean,
+  ) =>
+    cmd<{ jobId: number }>("zip_files", {
+      paths,
+      output,
+      format,
+      password,
+      encryptHeader,
+    }),
   /** 解压 zip/7z/rar/tar 系/gz/xz/bz2：多文件包解到 dest_dir 下 <包名>/ 子目录，
    *  gz/xz/bz2 单文件流旁写内层名；password = 加密包密码（缺省 None） */
   extractArchives: (sources: string[], destDir: string, password?: string) =>

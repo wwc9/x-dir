@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { t, useT } from "../lib/i18n";
 import { api, type FileEntry } from "../lib/ipc";
-import { Button, DialogBody, DialogFooter, InputGroup, Slider } from "@blueprintjs/core";
+import { Button, Checkbox, DialogBody, DialogFooter, InputGroup, Slider } from "@blueprintjs/core";
 import { ArrowRight } from "lucide-react";
 
 import { FOLDER_BATCH_CAP, planFolders } from "../lib/folderBatch";
@@ -718,6 +718,30 @@ const MERGE_FLAVORS = {
   },
 } as const;
 
+/** 压缩格式（仅 filesMerge zip flavor 用；zip = Deflate 进程内 / 7z = LZMA2
+ *  经内嵌 7z.exe 可加密 / targz = tar+gzip 组合，Linux/macOS 互换） */
+type CompressFormat = "zip" | "7z" | "targz";
+const FORMAT_META: Record<
+  CompressFormat,
+  { ext: string; defName: string; note: string }
+> = {
+  zip: {
+    ext: "zip",
+    defName: "归档.zip",
+    note: "Deflate 压缩；图片/视频/办公文档等已压缩格式自动直存（Store）提速。",
+  },
+  "7z": {
+    ext: "7z",
+    defName: "归档.7z",
+    note: "LZMA2 高压缩比（经内嵌 7-Zip）；可选 AES-256 密码，勾选后同时加密文件清单。",
+  },
+  targz: {
+    ext: "tar.gz",
+    defName: "归档.tar.gz",
+    note: "tar + gzip 组合包，Linux / macOS 互换通用；文件夹结构完整保留。",
+  },
+};
+
 export function MergeFilesDialog({
   flavor,
   entries,
@@ -725,31 +749,120 @@ export function MergeFilesDialog({
 }: {
   flavor: keyof typeof MERGE_FLAVORS;
   entries: FileEntry[];
-  onDone(v: { paths: string[]; name: string } | null): void;
+  onDone(v: {
+    paths: string[];
+    name: string;
+    format?: CompressFormat;
+    password?: string;
+    encryptHeader?: boolean;
+  } | null): void;
 }) {
   const t2 = useT();
   const cfg = MERGE_FLAVORS[flavor];
+  const isZip = flavor === "zip";
   const [items, setItems] = useState<string[]>(() => pathsByNames(entries));
-  // as const 词典使 defName 为字面量联合，显式放宽为 string 供自由编辑
+  // 压缩格式（仅 zip flavor）：zip = 进程内 Deflate、7z = 内嵌 7-Zip 可加密、
+  // targz = tar+gzip 组合；切格式时默认名跟随，自定义名只换尾部扩展名
+  const [format, setFormat] = useState<CompressFormat>("zip");
+  const [password, setPassword] = useState("");
+  const [encryptHeader, setEncryptHeader] = useState(false);
+  const meta = FORMAT_META[format];
+  const ext = isZip ? meta.ext : cfg.ext;
+  const note = isZip ? meta.note : cfg.note;
   const [name, setName] = useState<string>(cfg.defName);
+
+  function changeFormat(f: CompressFormat) {
+    setFormat(f);
+    setName((n) => {
+      const defaults = Object.values(FORMAT_META).map((m) => m.defName);
+      if (defaults.includes(n)) return FORMAT_META[f].defName;
+      let stem = n;
+      for (const m of Object.values(FORMAT_META)) {
+        const suf = `.${m.ext}`;
+        if (stem.toLowerCase().endsWith(suf)) {
+          stem = stem.slice(0, stem.length - suf.length);
+          break;
+        }
+      }
+      return `${stem}.${FORMAT_META[f].ext}`;
+    });
+    if (f !== "7z") {
+      setPassword("");
+      setEncryptHeader(false);
+    }
+  }
+
+  // 同名冲突内联校验（§4.9）：列输出目录现有名（首屏 2000 条；Rust 端
+  // zip_files 仍有 E_EXISTS 全量兜底，旁写绝不静默覆盖）
+  const [existing, setExisting] = useState<Set<string> | null>(null);
+  const dir = parentPath(entries[0]?.path ?? "");
+  useEffect(() => {
+    if (!isZip || !dir) return;
+    const outDir: string = dir;
+    let live = true;
+    api
+      .listDir({
+        path: outDir,
+        sort: { key: "name", dir: "asc" },
+        showHidden: true,
+        offset: 0,
+        limit: 2000,
+      })
+      .then((r) => {
+        if (live) setExisting(new Set(r.entries.map((e) => e.name.toLowerCase())));
+      })
+      .catch(() => {
+        if (live) setExisting(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [isZip, dir]);
+
   const trimmed = name.trim();
   // 缺扩展名时补上（与 Rust 端落名同口径；返回值即最终文件名）
-  const withExt = trimmed.toLowerCase().endsWith("." + cfg.ext)
+  const withExt = trimmed.toLowerCase().endsWith("." + ext)
     ? trimmed
-    : `${trimmed}.${cfg.ext}`;
-  // 输出名校验：非空 + Windows 合法名（非法字符/保留名红字内联，§4.9）
+    : `${trimmed}.${ext}`;
+  // 输出名三段校验：非空 / Windows 合法名 / 同名冲突（红字内联）
   const err = !trimmed
     ? t2("请输入文件名")
-    : isValidName(withExt)
-      ? null
-      : t2("名称含非法字符或为 Windows 保留名");
-  const valid = !err;
-  const preview = joinPath(parentPath(entries[0]?.path ?? "") ?? "", withExt);
+    : !isValidName(withExt)
+      ? t2("名称含非法字符或为 Windows 保留名")
+      : existing?.has(withExt.toLowerCase())
+        ? t2("同名文件已存在，请换一个名字")
+        : null;
+  const valid = !err && items.length > 0;
+  const preview = dir ? joinPath(dir, withExt) : withExt;
+  const payload = () => ({
+    paths: items,
+    name: withExt,
+    ...(isZip
+      ? {
+          format,
+          password: format === "7z" && password ? password : undefined,
+          encryptHeader: format === "7z" && password ? encryptHeader : undefined,
+        }
+      : {}),
+  });
   return (
     <>
       <DialogBody>
         <QueueSection title={t2(cfg.queueTitle)} items={items} onChange={setItems} />
         <div className="np-pdfmform">
+          {isZip && (
+            <FormRow k={t2("格式")} wide>
+              <Seg
+                value={format}
+                options={[
+                  { value: "zip", label: "zip" },
+                  { value: "7z", label: "7z" },
+                  { value: "targz", label: "tar.gz" },
+                ]}
+                onChange={(f) => changeFormat(f as CompressFormat)}
+              />
+            </FormRow>
+          )}
           <FormRow k={t2("输出名")}>
             <InputGroup
               size="small"
@@ -757,21 +870,44 @@ export function MergeFilesDialog({
               spellCheck={false}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && valid) onDone({ paths: items, name: withExt });
+                if (e.key === "Enter" && valid) onDone(payload());
               }}
             />
           </FormRow>
+          {isZip && format === "7z" && (
+            <>
+              <FormRow k={t2("密码")}>
+                <InputGroup
+                  size="small"
+                  type="password"
+                  value={password}
+                  placeholder={t2("AES-256，留空 = 不加密")}
+                  spellCheck={false}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </FormRow>
+              {password && (
+                <FormRow k="" wide>
+                  <Checkbox
+                    checked={encryptHeader}
+                    label={t2("同时加密文件清单（-mhe）")}
+                    onChange={(e) => setEncryptHeader(e.currentTarget.checked)}
+                  />
+                </FormRow>
+              )}
+            </>
+          )}
         </div>
         {err && <div className="np-dialog-error">{err}</div>}
         <div className="np-dialog-muted">
-          {t2(cfg.note)}
+          {t2(note)}
           {t2("输出预览：{out}", { out: preview })}
         </div>
       </DialogBody>
       <Footer
         okText={t2(cfg.ok)}
         disabled={!valid}
-        onOk={() => onDone({ paths: items, name: withExt })}
+        onOk={() => onDone(payload())}
         onCancel={() => onDone(null)}
       />
     </>

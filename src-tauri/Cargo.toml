@@ -43,7 +43,10 @@ pinyin = "0.5"
 # 快速预览（V2）：文本编码探测（MIT/Apache-2.0）
 encoding_rs = "0.8"
 # 快速预览：OOXML/ODF 容器与 XML 文本抽取（MIT）
-zip = { version = "2", default-features = false, features = ["deflate"] }
+# zip：deflate 压缩 + time（条目 mtime；缺省 1980 纪元，2026-11-08 修复）
+zip = { version = "2", default-features = false, features = ["deflate", "time"] }
+# SystemTime -> zip::DateTime 转换（zip 不 re-export time；MIT/Apache-2.0，已在依赖树）
+time = "0.3"
 quick-xml = "0.37"
 # 工具箱：重复文件查找的 SHA-256 内容指纹（MIT）
 sha2 = "0.10"

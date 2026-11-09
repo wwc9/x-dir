@@ -125,6 +125,7 @@ const MAP: Record<string, PreviewKind> = {
   tar: "archive",
   tgz: "archive",
   "7z": "archive",
+  rar: "archive",
   // 单文件压缩：清单卡显示内层文件名 + 解压后大小（bz2 格式不存大小）
   gz: "archive",
   xz: "archive",

@@ -125,24 +125,64 @@ pub fn merge_xlsx(
     })
 }
 
-/// 压缩为 zip（文件平铺、文件夹递归含顶层目录；同名覆盖）
+/// 压缩（zip / 7z / tar.gz；文件平铺、文件夹递归含顶层目录）。
+/// 输出已存在 = E_EXISTS 拒绝（对话框内联冲突校验为主，此处兜底——旁写
+/// 不静默覆盖，2026-11-08）；password/encrypt_header 仅 7z 格式生效
 #[tauri::command]
 pub fn zip_files(
     app: AppHandle,
     state: State<'_, AppState>,
     paths: Vec<String>,
     output: String,
+    format: Option<String>,
+    password: Option<String>,
+    encrypt_header: Option<bool>,
 ) -> Result<JobId, AppError> {
     if paths.is_empty() {
         return Err(AppError::new("E_INVALID_NAME", "至少需要 1 个对象"));
     }
     reject_exists(&paths)?;
-    if !output.to_ascii_lowercase().ends_with(".zip") || output.trim().is_empty() {
-        return Err(AppError::new("E_INVALID_NAME", "输出文件名须为 .zip"));
+    let fmt = match format.as_deref().unwrap_or("zip") {
+        "zip" => crate::fs::textops::CreateFormat::Zip,
+        "7z" => crate::fs::textops::CreateFormat::SevenZ,
+        "targz" => crate::fs::textops::CreateFormat::TarGz,
+        other => {
+            return Err(AppError::new(
+                "E_INVALID_NAME",
+                format!("未知压缩格式：{other}"),
+            ));
+        }
+    };
+    if output.trim().is_empty() {
+        return Err(AppError::new("E_INVALID_NAME", "输出文件名无效"));
     }
+    let expect_ext = match fmt {
+        crate::fs::textops::CreateFormat::Zip => ".zip",
+        crate::fs::textops::CreateFormat::SevenZ => ".7z",
+        crate::fs::textops::CreateFormat::TarGz => ".tar.gz",
+    };
+    if !output.to_ascii_lowercase().ends_with(expect_ext) {
+        return Err(AppError::new(
+            "E_INVALID_NAME",
+            format!("输出文件名须为 {expect_ext}"),
+        ));
+    }
+    if crate::fs::entry::path_exists(&output) {
+        return Err(AppError::new(
+            "E_EXISTS",
+            format!("同名文件已存在：{output}"),
+        ));
+    }
+    // 密码仅 7z 有效（zip 不写加密、tar.gz 无此概念），未带密码时忽略开关
+    let encrypt_header = encrypt_header.unwrap_or(false) && password.is_some();
     Ok(JobId {
         job_id: state.jobs.enqueue(
-            JobKind::ZipFiles { output },
+            JobKind::ZipFiles {
+                output,
+                format: fmt,
+                password,
+                encrypt_header,
+            },
             paths,
             None,
             Policy::Skip,
