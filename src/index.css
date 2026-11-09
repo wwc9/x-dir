@@ -2546,8 +2546,9 @@ body.np-col-resizing * {
   min-width: 0;
   overflow: hidden;
   cursor: pointer;
-  border: 1px solid color-mix(in srgb, var(--tm-c, var(--np-icon-generic)) 55%, transparent);
-  background: color-mix(in srgb, var(--tm-c, var(--np-icon-generic)) 15%, transparent);
+  /* 浓淡随体积占比：--tm-bg/--tm-bd 由渲染端按 sqrt(占比) 注入（大项深小项浅） */
+  border: 1px solid color-mix(in srgb, var(--tm-c, var(--np-icon-generic)) var(--tm-bd, 55%), transparent);
+  background: color-mix(in srgb, var(--tm-c, var(--np-icon-generic)) var(--tm-bg, 15%), transparent);
 }
 .np-dsiz-cell:hover {
   filter: brightness(1.1);
@@ -2618,6 +2619,18 @@ body.np-col-resizing * {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
+}
+.np-dsiz-ic {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+}
+/* 体积占比列（占全目录合计的百分比，2026-11-09 用户需求） */
+.np-dsiz-pct {
+  flex: 0 0 auto;
+  min-width: 52px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .np-dsiz-list {
   display: flex;

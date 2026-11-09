@@ -13,6 +13,7 @@ import {
   type EmptyScan,
 } from "../lib/ipc";
 import { formatBytes } from "../lib/format";
+import { fileIcon } from "../lib/fileIcons";
 import { extColorCat, treemap } from "../lib/treemap";
 import { fileNameOf, joinPath } from "../lib/path";
 import { DENSITY } from "../lib/tokens";
@@ -346,6 +347,9 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
               if (!r) return null;
               const cat = extColorCat(r.name, r.isDir);
               const size = formatBytes(r.size);
+              // 浓淡随体积占比（2026-11-09 用户需求）：sqrt 压缩动态范围，
+              // 大项深、小项浅——背景 10–65%、描边 30–70% 两档线性映射
+              const conc = Math.sqrt(total > 0 ? r.size / total : 0);
               const showName = rc.w >= 72 && rc.h >= 24;
               const showSize = rc.w >= 72 && rc.h >= 46;
               return (
@@ -360,7 +364,9 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
                     top: rc.y,
                     width: rc.w,
                     height: rc.h,
-                  }}
+                    "--tm-bg": `${10 + Math.round(conc * 55)}%`,
+                    "--tm-bd": `${30 + Math.round(conc * 40)}%`,
+                  } as React.CSSProperties}
                   data-tip={`${r.name} · ${size}${r.isDir ? ` · ${t("{n} 项", { n: r.files })}` : ""}`}
                   onClick={() => (r.isDir ? drill(r.path) : toggle(r.path))}
                 >
@@ -382,43 +388,56 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
         )}
         {!error && rows && rows.length > 0 && (
           <div className="np-dsiz-list">
-            {rows.map((r) => (
-              <div
-                key={r.path}
-                className="np-dsiz-row"
-                onClick={() => (r.isDir ? drill(r.path) : toggle(r.path))}
-                data-tip={r.isDir ? "查看子目录体积" : undefined}
-              >
-                <span
-                  className="np-dsiz-ck"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggle(r.path);
-                  }}
+            {rows.map((r) => {
+              const spec = fileIcon(r.name, r.isDir);
+              return (
+                <div
+                  key={r.path}
+                  className="np-dsiz-row"
+                  onClick={() => (r.isDir ? drill(r.path) : toggle(r.path))}
+                  data-tip={r.isDir ? "查看子目录体积" : undefined}
                 >
-                  <Checkbox
-                    checked={sel.has(r.path)}
-                    onChange={() => toggle(r.path)}
-                  />
-                </span>
-                <span
-                  className={`np-dsiz-name np-ellipsis${r.isDir ? " is-dir" : ""}`}
-                >
-                  {r.name}
-                </span>
-                <span className="np-dsiz-bar">
                   <span
-                    style={{ width: max ? `${(r.size / max) * 100}%` : "0%" }}
-                  />
-                </span>
-                <span className="np-cell-muted np-dsiz-files">
-                  {r.isDir ? `${r.files} 项` : ""}
-                </span>
-                <span className="np-dsiz-size">
-                  {formatBytes(r.size)}
-                </span>
-              </div>
-            ))}
+                    className="np-dsiz-ck"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggle(r.path);
+                    }}
+                  >
+                    <Checkbox
+                      checked={sel.has(r.path)}
+                      onChange={() => toggle(r.path)}
+                    />
+                  </span>
+                  <span className="np-dsiz-ic">
+                    <AppIcon
+                      icon={spec.icon}
+                      size={DENSITY.iconSm}
+                      colorVar={spec.colorVar}
+                    />
+                  </span>
+                  <span
+                    className={`np-dsiz-name np-ellipsis${r.isDir ? " is-dir" : ""}`}
+                  >
+                    {r.name}
+                  </span>
+                  <span className="np-dsiz-bar">
+                    <span
+                      style={{ width: max ? `${(r.size / max) * 100}%` : "0%" }}
+                    />
+                  </span>
+                  <span className="np-cell-muted np-dsiz-files">
+                    {r.isDir ? `${r.files} 项` : ""}
+                  </span>
+                  <span className="np-cell-muted np-dsiz-pct">
+                    {total > 0 ? `${((r.size / total) * 100).toFixed(1)}%` : "—"}
+                  </span>
+                  <span className="np-dsiz-size">
+                    {formatBytes(r.size)}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         )}
       </DialogBody>
