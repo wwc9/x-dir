@@ -4514,29 +4514,40 @@ body.np-col-resizing * {
 .np-bren-k {
   flex: 0 0 auto;
 }
-/* ── 四列文件表（2026-11-08 用户定案）：原文件名/新文件名预览/结果/路径。
-   行与表头用同一 grid 模板（--np-bren-cols 定义在 .np-bren-list，两容器
-   同宽同模板 → 各列跨行对齐）；原名/新名/路径单元格内容超宽时列内横向
-   滚动（行高恒定，长名不再撑宽整表）；表头 sticky 驻顶，「只看变更」
-   驻路径列表头右端 ── */
-.np-bren-list .np-bren-head {
+/* ── 四列文件表（2026-11-08 二次定案）：原文件名/新文件名预览/结果/路径。
+   单一 grid 容器（表头 + 全部行共用列轨道，行以 Fragment/contents 分组）：
+   旧名/新名列 auto 轨道——容器有富余空白时二者均分（grid stretch auto 轨道
+   特性），内容超宽时按最长行内容撑宽、整表横向滚动（按整列滚动，非单元格）；
+   结果列 90px 定宽短词省略，路径列 max-content 跟随内容不参与空白分配；
+   表头单元格 sticky 驻顶，横向随整表滚动 ── */
+.np-bren-grid {
+  display: grid;
+  width: max-content;
+  min-width: 100%;
+  grid-template-columns: 22px auto auto 90px max-content;
+  align-items: center;
+  padding: 0 var(--np-gutter);
+}
+/* 表头单元格：sticky 驻顶遮住滚过的行；单元格自右留缝（不用 column-gap，
+   底部发丝线跨列连续） */
+.np-bren-hc {
   position: sticky;
   top: 0;
   z-index: 1;
-  display: grid;
-  grid-template-columns: var(--np-bren-cols);
-  column-gap: var(--np-gutter);
+  display: flex;
   align-items: center;
-  height: 30px;
-  padding: 0 var(--np-gutter);
+  height: var(--np-head-h);
+  padding-right: var(--np-gutter);
   background: var(--np-surface-2);
   border-bottom: 1px solid var(--np-hairline);
   font-size: var(--np-font-sm);
   color: var(--np-muted);
+  white-space: nowrap;
+}
+.np-bren-hccb {
+  justify-self: start;
 }
 .np-bren-headpath {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
   gap: var(--np-gap);
   min-width: 0;
@@ -4603,34 +4614,21 @@ body.np-col-resizing * {
   display: flex;
   flex-direction: column;
 }
-/* 预览列表：surface-2 凹陷内滚；列模板变量供表头/行共用（容器无 padding，
-   行与表头自带同款内边距，sticky 表头满宽遮盖滚过的行） */
+/* 预览列表：surface-2 凹陷内滚（双向），np-bren-grid 在内撑 max-content */
 .np-bren-list {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
   background: var(--np-surface-2);
   border-radius: var(--np-radius-pane);
-  --np-bren-cols: 22px minmax(140px, 1.15fr) minmax(140px, 1.15fr) minmax(104px, 0.7fr) minmax(200px, 1.4fr);
 }
-.np-bren-list .np-bren-row {
-  display: grid;
-  grid-template-columns: var(--np-bren-cols);
-  column-gap: var(--np-gutter);
-  align-items: center;
-  height: var(--np-row-h);
-  padding: 0 var(--np-gutter);
-}
-/* 单元格：纵向居中；内容超宽时列内横滚（胶囊滚动条由 autoScrollbar 浮现），
-   行高恒定。np-bren-old/-new 基类的 flex 比例由 ToolsDialogs 批量新建
-   文件夹预览复用，此处不覆写（grid 子项的 flex 属性无效果） */
+/* 行单元格：行高恒定 row-h，自右留缝同表头（跨行同列对齐由共享轨道保证）；
+   文本 nowrap——超宽内容撑的是 auto/max-content 轨道（整列）而非单元格 */
 .np-bren-cell {
   display: flex;
   align-items: center;
-  height: 100%;
-  min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  height: var(--np-row-h);
+  padding-right: var(--np-gutter);
   white-space: nowrap;
 }
 .np-bren-path {
@@ -4639,7 +4637,9 @@ body.np-col-resizing * {
 }
 /* 结果列：将改名/无变化/错误人话短词，超宽省略 + title 看全文 */
 .np-bren-res {
-  min-width: 0;
+  height: var(--np-row-h);
+  line-height: var(--np-row-h);
+  padding-right: var(--np-gutter);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -4654,18 +4654,16 @@ body.np-col-resizing * {
 .np-bren-res.is-same {
   color: var(--np-muted);
 }
-/* 行勾选 checkbox（直子元素限定：「只看变更」Switch 内部 input 不中招），
-   accent 色 */
-.np-bren-head > input[type="checkbox"],
-.np-bren-row > input[type="checkbox"] {
+/* 行勾选 checkbox（accent 色；「只看变更」Switch 内部隐藏 input 不受影响） */
+.np-bren-grid input[type="checkbox"] {
   width: 13px;
   height: 13px;
   margin: 0;
   accent-color: var(--np-accent);
   cursor: pointer;
 }
-/* 取消勾选的行（不参与改名）整行淡显 */
-.np-bren-row.is-skip {
+/* 取消勾选的行（不参与改名）整行淡显：display:contents 行无盒，落单元格 */
+.np-bren-grid .is-skip {
   opacity: 0.45;
 }
 /* 数字输入框（规则卡内）：同「卡内控件辨识」配方——surface + 发丝描边，
@@ -4706,72 +4704,22 @@ body.np-col-resizing * {
   display: inline-flex;
   align-items: center;
   height: var(--np-ctl-h);
+  /* 与触发钮文字同字号：同盒高中轴对齐无字号差偏移 */
+  font-size: var(--np-font-ui);
 }
-/* 规则栏触发钮 prominent 档（2026-11-08 用户反馈「要明显」）：
-   添加规则 = accent 淡染主张钮（实底描边，操作入口一眼可见）；
-   方案 = surface + 发丝描边次张钮。.bp6-button 双类提特异性压过
-   Blueprint 默认钮面，暗色 .bp6-dark 同构覆回（源序在后同 specificity） */
-.bp6-button.np-rchain-add {
-  height: var(--np-ctl-h);
-  padding: 0 12px;
-  border-radius: var(--np-radius);
-  background-color: color-mix(in srgb, var(--np-accent) 12%, var(--np-surface));
-  color: var(--np-accent);
-  font-weight: 600;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--np-accent) 32%, transparent);
-}
-.bp6-button.np-rchain-add:hover {
-  background-color: color-mix(in srgb, var(--np-accent) 20%, var(--np-surface));
-}
-.bp6-button.np-rchain-add.is-open {
-  background-color: color-mix(in srgb, var(--np-accent) 12%, var(--np-surface));
-  box-shadow: var(--np-ring);
-}
-.bp6-button.np-rchain-scheme {
-  height: var(--np-ctl-h);
-  padding: 0 12px;
-  border-radius: var(--np-radius);
-  background-color: var(--np-surface);
-  color: var(--np-fg);
-  box-shadow: inset 0 0 0 1px var(--np-border);
-}
-.bp6-button.np-rchain-scheme:hover {
-  background-color: var(--np-hover);
-}
+/* 规则栏触发钮 = 标准主操作蓝（Button intent="primary"，2026-11-08 用户定案
+   「现代化蓝色按钮」，与 footer「应用」同配方；accent 只用于主操作 §4.7）。
+   仅补开态 ring 与箭头随动：Blueprint 实底蓝上 muted 箭头改继承文字色 */
+.bp6-button.np-rchain-add.is-open,
 .bp6-button.np-rchain-scheme.is-open {
-  background-color: var(--np-surface);
   box-shadow: var(--np-ring);
 }
-.bp6-dark .bp6-button.np-rchain-add {
-  background-color: color-mix(in srgb, var(--np-accent) 12%, var(--np-surface));
-  color: var(--np-accent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--np-accent) 32%, transparent);
-}
-.bp6-dark .bp6-button.np-rchain-add:hover {
-  background-color: color-mix(in srgb, var(--np-accent) 20%, var(--np-surface));
-}
-.bp6-dark .bp6-button.np-rchain-add.is-open {
-  background-color: color-mix(in srgb, var(--np-accent) 12%, var(--np-surface));
-  box-shadow: var(--np-ring);
-}
-.bp6-dark .bp6-button.np-rchain-scheme {
-  background-color: var(--np-surface);
-  color: var(--np-fg);
-  box-shadow: inset 0 0 0 1px var(--np-border);
-}
-.bp6-dark .bp6-button.np-rchain-scheme:hover {
-  background-color: var(--np-hover);
-}
-.bp6-dark .bp6-button.np-rchain-scheme.is-open {
-  background-color: var(--np-surface);
-  box-shadow: var(--np-ring);
-}
-/* 触发钮下拉箭头（np-select-chev 同语义：muted + 开态旋转 180°） */
 .np-rchain-add .np-select-chev,
 .np-rchain-scheme .np-select-chev {
   display: inline-flex;
   align-items: center;
-  color: var(--np-muted);
+  color: inherit;
+  opacity: 0.85;
   transition: transform 0.15s;
 }
 .np-rchain-add.is-open .np-select-chev,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { t } from "../lib/i18n";
 import {
@@ -887,9 +887,12 @@ function BatchRenameDialog({
     setSchemeName("");
     useUi.getState().toast(`已保存方案「${name}」`);
   };
-  /** 撤回上次重命名：撤销栈顶为 rename 批条目时可用（整批一条，一次全撤） */
+  /** 撤回上次重命名（2026-11-08 用户定案「后悔药」）：按钮常驻 footer，
+   *  撤销栈顶为 rename 批条目时可用（整批一条，一次全撤）；本次对话框
+   *  会话内只允许撤回一次（undoUsed 落锁，重开对话框恢复） */
   const undoTop = useUndo((s) => s.stack[s.stack.length - 1]);
-  const canUndoRename = undoTop?.kind === "rename";
+  const [undoUsed, setUndoUsed] = useState(false);
+  const canUndoRename = undoTop?.kind === "rename" && !undoUsed;
   const patchOp = (id: string, p: Partial<RenameOp>) =>
     setOpsList((l) => l.map((o) => (o.id === id ? ({ ...o, ...p } as RenameOp) : o)));
   const removeOp = (id: string) => setOpsList((l) => l.filter((o) => o.id !== id));
@@ -1115,23 +1118,26 @@ function BatchRenameDialog({
       <DialogBody>
         <div className="np-bren2">
           <div className="np-bren-preview2">
-            {/* ① 四列文件表（2026-11-08 用户定案）：原文件名/新文件名预览/
-                结果/路径，行 = 同款 grid 模板跨行对齐，原名/新名/路径单元格
-                内容超宽时列内横向滚动（行高恒定）；表头 sticky 驻顶，
-                「只看变更」驻表头右端 */}
+            {/* ① 四列文件表（2026-11-08 二次定案）：原文件名/新文件名预览/
+                结果/路径。单一 grid（行以 display:contents 分组）共享列轨道
+                ——旧名/新名列 auto 轨道：空间富余时均分剩余空白，内容超宽时
+                整列按内容撑宽、整表横向滚动（横向滚动按整列，非单元格）；
+                结果列 90px 定宽（短词省略 + title），路径列 max-content 跟随
+                内容。表头单元格 sticky 驻顶，「只看变更」驻表头右端 */}
             <div className="np-bren-list">
-              <div className="np-bren-head">
+              <div className="np-bren-grid">
                 <input
+                  className="np-bren-hc np-bren-hccb"
                   type="checkbox"
                   checked={allSel}
                   onChange={toggleAll}
                   aria-label={t("全选")}
                   data-tip={t("全选 / 全不选")}
                 />
-                <span>{t("原文件名")}</span>
-                <span data-tip={t("改动片段以 accent 底色高亮")}>{t("新文件名预览")}</span>
-                <span>{t("结果")}</span>
-                <span className="np-bren-headpath">
+                <span className="np-bren-hc">{t("原文件名")}</span>
+                <span className="np-bren-hc" data-tip={t("改动片段以 accent 底色高亮")}>{t("新文件名预览")}</span>
+                <span className="np-bren-hc">{t("结果")}</span>
+                <span className="np-bren-hc np-bren-headpath">
                   {t("路径")}
                   <Switch
                     checked={onlyChanged}
@@ -1139,49 +1145,51 @@ function BatchRenameDialog({
                     onChange={(e) => setOnlyChanged(e.currentTarget.checked)}
                   />
                 </span>
+                {shown.slice(0, 200).map((i) => {
+                  const frag = i.changed && !i.error ? diffFragments(i.oldName, i.newName) : null;
+                  const skip = picked.has(i.path) ? "" : " is-skip";
+                  return (
+                  <Fragment key={i.path}>
+                    <input
+                      className={skip.trim() || undefined}
+                      type="checkbox"
+                      checked={picked.has(i.path)}
+                      onChange={() => togglePick(i.path)}
+                      aria-label={t("参与改名")}
+                    />
+                    <span className={"np-bren-cell np-bren-old" + skip} title={i.oldName}>
+                      {i.oldName}
+                    </span>
+                    <span
+                      className={`np-bren-cell np-bren-new${skip} ${
+                        i.error ? "is-err" : i.changed ? "is-chg" : "is-same"
+                      }`}
+                      title={i.error ?? i.newName}
+                    >
+                      {i.error ??
+                        (frag ? (
+                          <>
+                            {frag.pre}
+                            {frag.mid && <span className="np-bren-diff">{frag.mid}</span>}
+                            {frag.post}
+                          </>
+                        ) : (
+                          i.newName
+                        ))}
+                    </span>
+                    <span
+                      className={`np-bren-res${skip} ${i.error ? "is-err" : i.changed ? "is-chg" : "is-same"}`}
+                      title={i.error ?? undefined}
+                    >
+                      {i.error ?? (i.changed ? t("将改名") : t("无变化"))}
+                    </span>
+                    <span className={"np-bren-cell np-bren-path" + skip} title={dirOf(i.path)}>
+                      {dirOf(i.path) || "—"}
+                    </span>
+                  </Fragment>
+                  );
+                })}
               </div>
-              {shown.slice(0, 200).map((i) => {
-                const frag = i.changed && !i.error ? diffFragments(i.oldName, i.newName) : null;
-                return (
-                <div key={i.path} className={`np-bren-row ${picked.has(i.path) ? "" : "is-skip"}`}>
-                  <input
-                    type="checkbox"
-                    checked={picked.has(i.path)}
-                    onChange={() => togglePick(i.path)}
-                    aria-label={t("参与改名")}
-                  />
-                  <span className="np-bren-cell np-bren-old" title={i.oldName}>
-                    {i.oldName}
-                  </span>
-                  <span
-                    className={`np-bren-cell np-bren-new ${
-                      i.error ? "is-err" : i.changed ? "is-chg" : "is-same"
-                    }`}
-                    title={i.error ?? i.newName}
-                  >
-                    {i.error ??
-                      (frag ? (
-                        <>
-                          {frag.pre}
-                          {frag.mid && <span className="np-bren-diff">{frag.mid}</span>}
-                          {frag.post}
-                        </>
-                      ) : (
-                        i.newName
-                      ))}
-                  </span>
-                  <span
-                    className={`np-bren-res ${i.error ? "is-err" : i.changed ? "is-chg" : "is-same"}`}
-                    title={i.error ?? undefined}
-                  >
-                    {i.error ?? (i.changed ? t("将改名") : t("无变化"))}
-                  </span>
-                  <span className="np-bren-cell np-bren-path" title={dirOf(i.path)}>
-                    {dirOf(i.path) || "—"}
-                  </span>
-                </div>
-                );
-              })}
             </div>
             {/* ② 列表下工具行（2026-11-08 用户定案）：常用任务 chips 驻左 +
                 添加文件/删除选中驻右 */}
@@ -1199,7 +1207,7 @@ function BatchRenameDialog({
               ))}
               <span className="np-bren-foot-sp" />
               <button className="np-bren-tool" onClick={() => { void addFiles(); }}>
-                <AppIcon icon={Plus} size={DENSITY.iconXs} />
+                <AppIcon icon={Plus} size={DENSITY.iconSm} />
                 {t("添加文件")}
               </button>
               <button
@@ -1208,7 +1216,7 @@ function BatchRenameDialog({
                 data-tip="从列表移除勾选行（不动磁盘文件）"
                 onClick={removePicked}
               >
-                <AppIcon icon={Trash2} size={DENSITY.iconXs} />
+                <AppIcon icon={Trash2} size={DENSITY.iconSm} />
                 {t("删除选中")}（{picked.size}）
               </button>
             </div>
@@ -1216,9 +1224,9 @@ function BatchRenameDialog({
           <div className="np-rchain">
             <div className="np-rchain-bar">
               {/* 添加规则 = 两栏二级分类面板（面板一定案 2026-11-08）：左栏四大类、
-                  右栏名称 + 词槽句式预览；点规则即加链尾并收面板。触发钮改
-                  prominent 档（用户反馈「要明显」）：添加规则 = accent 淡染主张钮，
-                  方案 = surface+发丝描边次张钮，与「N 条规则」计数等高中轴对齐 */}
+                  右栏名称 + 词槽句式预览；点规则即加链尾并收面板。触发钮 = 标准
+                  主操作蓝（intent=primary，2026-11-08 用户定案「现代化蓝色按钮」，
+                  与 footer「应用」同配方），计数文本同字号中轴对齐 */}
               <PopoverNext
                 isOpen={panelOpen}
                 onInteraction={setPanelOpen}
@@ -1265,8 +1273,9 @@ function BatchRenameDialog({
               >
                 <Button
                   size="small"
+                  intent="primary"
                   className={`np-rchain-add${panelOpen ? " is-open" : ""}`}
-                  icon={<AppIcon icon={Plus} size={DENSITY.iconXs} />}
+                  icon={<AppIcon icon={Plus} size={DENSITY.iconSm} />}
                   text={t("添加规则")}
                   rightIcon={<span className="np-select-chev">{ic(ChevronDown)}</span>}
                 />
@@ -1323,6 +1332,7 @@ function BatchRenameDialog({
               >
                 <Button
                   size="small"
+                  intent="primary"
                   className={`np-rchain-scheme${schemeOpen ? " is-open" : ""}`}
                   text={t("方案")}
                   rightIcon={<span className="np-select-chev">{ic(ChevronDown)}</span>}
@@ -1428,15 +1438,19 @@ function BatchRenameDialog({
       <DialogFooter
         actions={
           <>
-            {canUndoRename && (
-              <Button
-                size="small"
-                data-tip={`撤回上次重命名（Ctrl+Z）`}
-                onClick={() => { void useUndo.getState().undo(); }}
-              >
-                {undoTop.ops.length > 1 ? `撤回重命名（${undoTop.ops.length} 项）` : t("撤回上次重命名")}
-              </Button>
-            )}
+            <Button
+              size="small"
+              disabled={!canUndoRename}
+              data-tip={canUndoRename ? `撤回最近一次批量重命名（Ctrl+Z）` : "没有可撤回的重命名（仅支持最近一次）"}
+              onClick={() => {
+                setUndoUsed(true);
+                void useUndo.getState().undo();
+              }}
+            >
+              {canUndoRename && undoTop.ops.length > 1
+                ? `撤回重命名（${undoTop.ops.length} 项）`
+                : t("撤回上次重命名")}
+            </Button>
             <Button size="small" onClick={() => onDone(null)}>
               {t("取消")}
             </Button>
