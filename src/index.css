@@ -2511,6 +2511,114 @@ body.np-col-resizing * {
 .np-dsiz-back:hover {
   background: var(--np-hover);
 }
+.np-dsiz-total {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+/* 矩形树图（2026-11-09 WizTree 式改版）：面积 ∝ 体积，色块按 data-cat 取
+   --np-icon-* 语义色板淡染 + 同源描边；点击文件夹下钻、点击文件选中 */
+.np-dsiz-tm {
+  position: relative;
+  flex: none;
+  height: 240px;
+  border: 1px solid var(--np-hairline);
+  border-radius: var(--np-radius);
+  background: var(--np-surface-2);
+  overflow: hidden;
+  margin-bottom: var(--np-gutter);
+}
+.np-dsiz-tmempty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--np-gutter);
+  text-align: center;
+}
+.np-dsiz-cell {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 2px 5px;
+  min-width: 0;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--tm-c, var(--np-icon-generic)) 55%, transparent);
+  background: color-mix(in srgb, var(--tm-c, var(--np-icon-generic)) 15%, transparent);
+}
+.np-dsiz-cell:hover {
+  filter: brightness(1.1);
+}
+.np-dsiz-cell.is-sel {
+  outline: 2px solid var(--np-accent);
+  outline-offset: -2px;
+}
+.np-dsiz-cellname {
+  max-width: 100%;
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+}
+.np-dsiz-cell.is-dir .np-dsiz-cellname {
+  color: color-mix(in srgb, var(--tm-c, var(--np-icon-generic)) 80%, var(--np-fg));
+  font-weight: 600;
+}
+.np-dsiz-cellsize {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-dsiz-cell[data-cat="folder"] {
+  --tm-c: var(--np-icon-folder);
+}
+.np-dsiz-cell[data-cat="video"] {
+  --tm-c: var(--np-icon-video);
+}
+.np-dsiz-cell[data-cat="image"] {
+  --tm-c: var(--np-icon-image);
+}
+.np-dsiz-cell[data-cat="audio"] {
+  --tm-c: var(--np-icon-audio);
+}
+.np-dsiz-cell[data-cat="archive"] {
+  --tm-c: var(--np-icon-archive);
+}
+.np-dsiz-cell[data-cat="pdf"] {
+  --tm-c: var(--np-icon-pdf);
+}
+.np-dsiz-cell[data-cat="table"] {
+  --tm-c: var(--np-icon-table);
+}
+.np-dsiz-cell[data-cat="doc"] {
+  --tm-c: var(--np-icon-doc);
+}
+.np-dsiz-cell[data-cat="slide"] {
+  --tm-c: var(--np-icon-slide);
+}
+.np-dsiz-cell[data-cat="code"] {
+  --tm-c: var(--np-icon-code);
+}
+.np-dsiz-cell[data-cat="font"] {
+  --tm-c: var(--np-icon-font);
+}
+.np-dsiz-cell[data-cat="exe"] {
+  --tm-c: var(--np-icon-exe);
+}
+.np-dsiz-cell[data-cat="text"] {
+  --tm-c: var(--np-icon-text);
+}
+.np-dsiz-cell[data-cat="generic"] {
+  --tm-c: var(--np-icon-generic);
+}
+.np-dsiz-hint {
+  margin-bottom: var(--np-gutter);
+}
+.np-dsiz-ck {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+}
 .np-dsiz-list {
   display: flex;
   flex-direction: column;

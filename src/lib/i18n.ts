@@ -232,6 +232,14 @@ const EN: Record<string, string> = {
   "页码范围为空": "Page range is empty",
   "请输入页码范围": "Enter a page range",
   "同名输出自动 (2) 递增。": "Duplicate output names get an auto (2) suffix.",
+  "合计 {size} · {n} 项": "Total {size} · {n} items",
+  "点击文件夹色块逐层下钻；勾选文件或文件夹后删除到回收站":
+    "Click a folder tile to drill in; check files or folders to delete to Recycle Bin",
+  "全部条目均为 0 字节，不占色块，可在下方列表勾选删除":
+    "All entries are 0 bytes — no tiles; select in the list below to delete",
+  "{n} 项": "{n} items",
+  "扫描失败：": "Scan failed: ",
+  "查看子目录体积": "View subdirectory sizes",
   "页数读取失败（文件可能损坏或加密）": "Failed to read page count (file may be corrupt or encrypted)",
   "字号需为 5–99 的整数": "Font size must be an integer 5–99",
   "边距需为 0–1000 的整数": "Margin must be an integer 0–1000",

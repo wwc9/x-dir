@@ -1,6 +1,6 @@
 // 目录分析对话框（右键：查找重复文件 / 空间分析 / 文件夹比较）：
 // 扫描由后端异步命令完成（秒级），对话框内 loading → 结果；宽弹窗（§4.7 二级页面规范）。
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../lib/i18n";
 import { Button, Checkbox, DialogBody, DialogFooter } from "@blueprintjs/core";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
@@ -13,6 +13,7 @@ import {
   type EmptyScan,
 } from "../lib/ipc";
 import { formatSize } from "../lib/format";
+import { extColorCat, treemap } from "../lib/treemap";
 import { fileNameOf, joinPath } from "../lib/path";
 import { DENSITY } from "../lib/tokens";
 import { deletePaths, transfer } from "../lib/operations";
@@ -230,17 +231,23 @@ export function EmptyScanDialog({ dir, onDone }: { dir: string; onDone(): void }
   );
 }
 
-/** 空间分析：直接子项体积条（文件夹递归合计），点文件夹逐层钻取 */
+/** 空间分析（2026-11-09 WizTree 式改版）：上矩形树图（squarified 布局，面积
+ *  ∝ 体积、--np-icon-* 类型着色；点击文件夹色块下钻、点击文件色块选中）+
+ *  下体积清单（勾选文件/文件夹，删除到回收站）；逐层钻取与面包屑栈沿用 */
 export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) {
   const [cwd, setCwd] = useState(dir);
   const [stack, setStack] = useState<string[]>([]);
   const [rows, setRows] = useState<DirSizeEntry[] | null>(null);
   const [error, setError] = useState("");
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const tmRef = useRef<HTMLDivElement | null>(null);
+  const [tmBox, setTmBox] = useState({ w: 0, h: 0 });
 
   useEffect(() => {
     let live = true;
     setRows(null);
     setError("");
+    setSel(new Set());
     api.dirSizes(cwd).then(
       (r) => live && setRows(r),
       (e) => live && setError(String(e)),
@@ -250,6 +257,40 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
     };
   }, [cwd]);
 
+  // 容器测量 → 树图布局（宽随弹窗、高固定 240，见 np-dsiz-tm）
+  useEffect(() => {
+    const el = tmRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() =>
+      setTmBox({ w: el.clientWidth, h: el.clientHeight }),
+    );
+    ro.observe(el);
+    setTmBox({ w: el.clientWidth, h: el.clientHeight });
+    return () => ro.disconnect();
+  }, []);
+
+  const rects = useMemo(
+    () =>
+      treemap(
+        (rows ?? []).map((r) => ({ key: r.path, size: r.size })),
+        tmBox.w,
+        tmBox.h,
+      ),
+    [rows, tmBox],
+  );
+  const byPath = useMemo(
+    () => new Map((rows ?? []).map((r) => [r.path, r])),
+    [rows],
+  );
+  const total = useMemo(() => (rows ?? []).reduce((s, r) => s + r.size, 0), [rows]);
+
+  const toggle = (p: string) =>
+    setSel((s) => {
+      const n = new Set(s);
+      if (n.has(p)) n.delete(p);
+      else n.add(p);
+      return n;
+    });
   const max = rows?.[0]?.size ?? 0;
   const drill = (p: string) => {
     setStack((s) => [...s, cwd]);
@@ -261,6 +302,11 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
       setCwd(n.pop() ?? dir);
       return n;
     });
+  const del = () => {
+    const paths = [...sel];
+    onDone();
+    if (paths.length) void deletePaths(paths, false); // 弹窗内已确认，跳过二次确认
+  };
 
   return (
     <>
@@ -274,22 +320,87 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
           <span className="np-ellipsis" title={cwd}>
             {fileNameOf(cwd) || cwd}
           </span>
+          {rows && (
+            <span className="np-cell-muted np-dsiz-total">
+              {t("合计 {size} · {n} 项", {
+                size: formatSize({ isDir: true, size: total }),
+                n: rows.length,
+              })}
+            </span>
+          )}
         </div>
-        {error ? (
-          <div className="np-list-error">扫描失败：{error}</div>
-        ) : !rows ? (
-          <Loading text={t("正在统计目录体积…")} />
-        ) : !rows.length ? (
-          <div className="np-list-empty">{t("空目录")}</div>
-        ) : (
+        <div className="np-dsiz-tm" ref={tmRef}>
+          {error ? (
+            <div className="np-list-error">{t("扫描失败：")}{error}</div>
+          ) : !rows ? (
+            <Loading text={t("正在统计目录体积…")} />
+          ) : !rects.length ? (
+            <div className="np-dialog-muted np-dsiz-tmempty">
+              {rows.length
+                ? t("全部条目均为 0 字节，不占色块，可在下方列表勾选删除")
+                : t("空目录")}
+            </div>
+          ) : (
+            rects.map((rc) => {
+              const r = byPath.get(rc.key);
+              if (!r) return null;
+              const cat = extColorCat(r.name, r.isDir);
+              const size = formatSize({ isDir: r.isDir, size: r.size });
+              const showName = rc.w >= 72 && rc.h >= 24;
+              const showSize = rc.w >= 72 && rc.h >= 46;
+              return (
+                <div
+                  key={rc.key}
+                  className={`np-dsiz-cell${r.isDir ? " is-dir" : ""}${
+                    sel.has(rc.key) ? " is-sel" : ""
+                  }`}
+                  data-cat={cat}
+                  style={{
+                    left: rc.x,
+                    top: rc.y,
+                    width: rc.w,
+                    height: rc.h,
+                  }}
+                  data-tip={`${r.name} · ${size}${r.isDir ? ` · ${t("{n} 项", { n: r.files })}` : ""}`}
+                  onClick={() => (r.isDir ? drill(r.path) : toggle(r.path))}
+                >
+                  {showName && (
+                    <span className="np-dsiz-cellname np-ellipsis">{r.name}</span>
+                  )}
+                  {showSize && (
+                    <span className="np-dsiz-cellsize">{size}</span>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+        {error ? null : rows && rows.length > 0 && (
+          <div className="np-dialog-muted np-dsiz-hint">
+            {t("点击文件夹色块逐层下钻；勾选文件或文件夹后删除到回收站")}
+          </div>
+        )}
+        {!error && rows && rows.length > 0 && (
           <div className="np-dsiz-list">
             {rows.map((r) => (
               <div
                 key={r.path}
                 className="np-dsiz-row"
-                onClick={() => r.isDir && drill(r.path)}
+                onClick={() => (r.isDir ? drill(r.path) : toggle(r.path))}
                 data-tip={r.isDir ? "查看子目录体积" : undefined}
               >
+                <span
+                  className="np-dsiz-ck"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggle(r.path);
+                  }}
+                >
+                  <Checkbox
+                    checked={sel.has(r.path)}
+                    onChange={() => toggle(r.path)}
+                  />
+                </span>
                 <span
                   className={`np-dsiz-name np-ellipsis${r.isDir ? " is-dir" : ""}`}
                 >
@@ -313,9 +424,19 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
       </DialogBody>
       <DialogFooter
         actions={
-          <Button size="small" onClick={onDone}>
-            {t("关闭")}
-          </Button>
+          <>
+            <Button size="small" onClick={onDone}>
+              {t("关闭")}
+            </Button>
+            <Button
+              size="small"
+              intent="danger"
+              disabled={!sel.size}
+              onClick={del}
+            >
+              {t("删除选中（回收站）")}
+            </Button>
+          </>
         }
       />
     </>
