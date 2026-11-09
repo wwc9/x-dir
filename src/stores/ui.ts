@@ -33,6 +33,8 @@ export type DialogSpec =
       label?: string;
       initial?: string;
       okText?: string;
+      /** 掩码显示（压缩包密码输入等） */
+      mask?: boolean;
       validate?(v: string): string | null;
     }
   | { type: "conflict"; items: string[] }

@@ -83,7 +83,7 @@ export const BUILTIN_FNS: BuiltinFn[] = [
   { key: "openTerminal", label: "在终端打开", group: "标记与系统", area: "sel", supportsSel: true, supportsBlank: true, cond: C({}) },
   // ── 整理 ──
   { key: "zipHere", label: "压缩为 zip", group: "整理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
-  { key: "extract", label: "解压到此处", group: "整理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "zip,7z" }) },
+  { key: "extract", label: "解压到此处", group: "整理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "zip,7z,rar,tar,tgz,gz,xz,bz2" }) },
   { key: "organizeBy", label: "按规则归类", group: "整理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2 }) },
   { key: "findDuplicates", label: "查找重复文件", group: "整理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "dir", maxCount: 1 }) },
   { key: "findEmpty", label: "清理空文件/空文件夹", group: "整理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "dir", maxCount: 1 }) },

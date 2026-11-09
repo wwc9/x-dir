@@ -472,20 +472,40 @@ export async function zipEntries(entries: FileEntry[], dir: string): Promise<voi
   }
 }
 
-/** 解压到此处（zip/7z）：每包解到所在目录下 `<包名>/` 子文件夹，走任务引擎 */
-export async function extractArchives(sources: string[]): Promise<void> {
+/** 解压（zip/7z/rar/tar 系/gz/xz/bz2）：多文件包解到所在目录下 `<包名>/`
+ *  子文件夹，gz/xz/bz2 单文件流旁写内层名，走任务引擎。加密包解压失败
+ *  （reason=password）时弹密码框带密码重试一次（重试仍失败不再循环） */
+export async function extractArchives(sources: string[], password?: string): Promise<void> {
   if (!sources.length) return;
   const destDir = parentPath(sources[0]);
   if (!destDir) return;
   try {
-    const { jobId } = await api.extractArchives(sources, destDir);
+    const { jobId } = await api.extractArchives(sources, destDir, password);
     const sourceParents = sources
       .map((s) => parentPath(s))
       .filter((p): p is string => !!p);
-    useJobs.getState().register(jobId, "extract", destDir, sourceParents);
+    useJobs.getState().register(jobId, "extract", destDir, sourceParents, (d) => {
+      const needPw = d.failed?.some((f) => f.reason === "password");
+      if (needPw && !password) {
+        void promptExtractPassword(sources);
+      }
+    });
   } catch (e) {
     useUi.getState().toast(`解压失败：${String(e)}`, "error");
   }
+}
+
+/** 解压密码输入（np-input 掩码框）：确认后带密码重跑同一批解压 */
+async function promptExtractPassword(sources: string[]): Promise<void> {
+  const pwd = await useUi.getState().openDialog<string | null>({
+    type: "input",
+    title: "压缩包已加密",
+    label: "输入解压密码后重试（密码错误将再次提示）",
+    okText: "解压",
+    mask: true,
+  });
+  if (!pwd) return;
+  await extractArchives(sources, pwd);
 }
 
 /** 归类分组键：扩展名（无扩展名归"其他"）或修改年月（yyyy-MM） */

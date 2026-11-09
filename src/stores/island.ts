@@ -15,7 +15,7 @@ interface IslandStore {
   pushReceipt(
     tone: IslandReceipt["tone"],
     text: string,
-    opts?: { dwellMs?: number },
+    opts?: { dwellMs?: number; action?: IslandReceipt["action"] },
   ): void;
   dismissReceipt(id: string): void;
   prune(now: number): void;
@@ -33,7 +33,10 @@ export const useIsland = create<IslandStore>()((set, get) => ({
       // 同文本覆盖（如连续两个「复制 完成」刷新驻留期而非堆叠两条）
       const rest = s.receipts.filter((r) => r.text !== text);
       return {
-        receipts: [...rest, { id: `rcpt-${now}-${++receiptSeq}`, tone, text, until }],
+        receipts: [
+          ...rest,
+          { id: `rcpt-${now}-${++receiptSeq}`, tone, text, until, action: opts?.action },
+        ],
       };
     });
   },

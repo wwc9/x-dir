@@ -824,6 +824,23 @@ body:has(
   color: var(--np-muted);
   font-size: var(--np-font-sm);
 }
+/* 回执附加动作钮（2026-11-08 解压/压缩「打开」目标文件夹）：accent 描边小胶囊 */
+.np-island-act {
+  display: inline-flex;
+  align-items: center;
+  height: calc(var(--np-ctl-h) - 8px);
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--np-accent) 45%, transparent);
+  border-radius: var(--np-radius-pill);
+  background: transparent;
+  color: var(--np-accent);
+  font-size: var(--np-font-sm);
+  cursor: pointer;
+  flex: none;
+}
+.np-island-act:hover {
+  background: color-mix(in srgb, var(--np-accent) 14%, transparent);
+}
 .np-winbtn {
   display: flex;
   align-items: center;

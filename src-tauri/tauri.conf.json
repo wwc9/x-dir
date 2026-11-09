@@ -34,6 +34,11 @@
   },
   "bundle": {
     "active": true,
+    "resources": [
+      "binaries/7z.exe",
+      "binaries/7z.dll",
+      "binaries/7-Zip-License.txt"
+    ],
     "targets": [
       "nsis"
     ],

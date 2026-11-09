@@ -215,6 +215,21 @@ const appVersion = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).
 const ownLicense = readFileSync(join(ROOT, "LICENSE"), "utf8").trim();
 if (!appendix.has("MIT")) appendix.set("MIT", ownLicense); // 附录缺 MIT 时用项目自身 LICENSE 兜底
 
+// ── 随发布物分发的第三方二进制资产（非 crate/npm，2026-11-08 内嵌 7-Zip）──
+// 官方未修改的 7z.exe/7z.dll（tools/get-7zip.ps1 哈希锁定下载）经 Tauri
+// resources 随安装包/便携包分发，命令行调用（arm's length）。许可证 = LGPL-2.1
+// + unRAR 限制条款，全文从随库的 src-tauri/binaries/7-Zip-License.txt 内嵌。
+const BUNDLED_ASSETS = [
+  {
+    name: "7-Zip (7z.exe / 7z.dll)",
+    version: "25.01",
+    license: "LGPL-2.1 + unRAR restriction",
+    repo: "https://www.7-zip.org / https://github.com/ip7z/7zip",
+    rights: "Copyright (c) 1999-2025 Igor Pavlov",
+    licenseFile: join(ROOT, "src-tauri", "binaries", "7-Zip-License.txt"),
+  },
+];
+
 const review = [];
 const lines = [];
 lines.push("THIRD-PARTY NOTICES FOR X-Dir", "=".repeat(120), "");
@@ -252,6 +267,20 @@ for (const [eco, title] of [
       }
     }
     if (!e.spdx) review.push(`${e.name}@${e.version}: 无 SPDX 声明`);
+  }
+}
+
+lines.push("", "随发布物分发的第三方二进制资产（BUNDLED BINARIES）", "-".repeat(120));
+for (const a of BUNDLED_ASSETS) {
+  lines.push(
+    `· ${a.name} ${a.version} — ${a.license} — ${a.repo}`,
+    `  ${a.rights}`,
+  );
+  if (existsSync(a.licenseFile)) {
+    lines.push(`  [${a.license} 全文]`, ...readFileSync(a.licenseFile, "utf8").trim().split(/\r?\n/).map((l) => `  | ${l}`));
+  } else {
+    lines.push(`  ⚠ 许可证全文缺失（${a.licenseFile}），需人工补全`);
+    review.push(`${a.name}: 许可证文件缺失`);
   }
 }
 

@@ -154,6 +154,18 @@ export function IslandPill({ path }: { path: string }) {
           <>
             <AppIcon icon={Icon} size={DENSITY.iconXs} />
             <span className="np-ellipsis">{view.receipt.text}</span>
+            {view.receipt.action && (
+              <button
+                className="np-island-act"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  view.receipt.action?.run();
+                  useIsland.getState().dismissReceipt(view.receipt.id);
+                }}
+              >
+                {view.receipt.action.label}
+              </button>
+            )}
           </>
         );
       }

@@ -3294,7 +3294,7 @@ fn single_archive(name: &str, size: u64) -> ArchiveListing {
 }
 
 /// gzip 单文件：内层名取 FNAME 头字段（无则去 .gz 后缀），大小取尾部 ISIZE（mod 2^32）
-fn gz_probe(
+pub(crate) fn gz_probe(
     header: &[u8],
     isize_tail: [u8; 4],
     fallback_name: &str,

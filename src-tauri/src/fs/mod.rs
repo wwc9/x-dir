@@ -5,6 +5,7 @@ pub mod entry;
 pub mod matcher;
 pub mod path;
 pub mod search;
+pub mod sevenzip;
 pub mod sort;
 pub mod textops;
 pub mod xlsx;

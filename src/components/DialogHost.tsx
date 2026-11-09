@@ -391,6 +391,7 @@ function InputDialog({
         <InputGroup
           autoFocus
           value={value}
+          type={dialog.mask ? "password" : "text"}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") submit();

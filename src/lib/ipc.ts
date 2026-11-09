@@ -255,7 +255,7 @@ export interface AppError {
 
 /** 删除失败的结构化原因（Rust jobs::FailReason 镜像，serde camelCase）；
  *  job-done 的 failed[].reason 下发，inUse 触发「解除占用」对话框 */
-export type FailReason = "inUse" | "accessDenied" | "missing";
+export type FailReason = "inUse" | "accessDenied" | "missing" | "password";
 
 /** 设备与运行环境（Rust commands/system_info.rs 镜像，关于弹窗展示） */
 export interface SystemInfo {
@@ -896,9 +896,10 @@ export const api = {
   /** 压缩为 zip（文件平铺、文件夹递归含顶层目录） */
   zipFiles: (paths: string[], output: string) =>
     cmd<{ jobId: number }>("zip_files", { paths, output }),
-  /** 解压 zip/7z：每包解到 dest_dir 下 <包名>/ 子目录 */
-  extractArchives: (sources: string[], destDir: string) =>
-    cmd<{ jobId: number }>("extract_archives", { sources, destDir }),
+  /** 解压 zip/7z/rar/tar 系/gz/xz/bz2：多文件包解到 dest_dir 下 <包名>/ 子目录，
+   *  gz/xz/bz2 单文件流旁写内层名；password = 加密包密码（缺省 None） */
+  extractArchives: (sources: string[], destDir: string, password?: string) =>
+    cmd<{ jobId: number }>("extract_archives", { sources, destDir, password }),
   /** 重复文件查找（SHA-256 指纹） */
   findDuplicates: (dir: string) => cmd<DupGroup[]>("find_duplicates", { dir }),
   /** 空文件/空文件夹扫描（0 字节文件 + 字面空目录） */

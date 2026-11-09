@@ -71,6 +71,8 @@ interface JobDonePayload {
   cancelled: boolean;
   failed: { path: string; message: string; reason?: FailReason }[];
   items?: { from: string; to: string }[];
+  /** 终态附注（解压非法条目跳过数等） */
+  note?: string;
 }
 
 interface JobsStore {
@@ -80,8 +82,9 @@ interface JobsStore {
   expanded: boolean;
   toggleExpanded(): void;
   init(): Promise<() => void>;
-  /** onDone：任务终态回调（ok/cancelled/items），撤销栈用它在任务成功后入栈
-   *  （items = 传输成功项路径对，非传输任务为 undefined） */
+  /** onDone：任务终态回调（ok/cancelled/items/failed），撤销栈用它在任务成功
+   *  后入栈（items = 传输成功项路径对，非传输任务为 undefined）；failed =
+   *  失败清单（解压密码重试据 reason === "password" 弹框，2026-11-08） */
   register(
     jobId: number,
     mode: JobMode,
@@ -91,6 +94,7 @@ interface JobsStore {
       ok: boolean;
       cancelled: boolean;
       items?: { from: string; to: string }[];
+      failed?: { path: string; message: string; reason?: string }[];
     }) => void,
     deletePermanent?: boolean,
   ): void;
@@ -137,7 +141,7 @@ export const useJobs = create<JobsStore>()((set, get) => ({
       const hook = doneHooks.get(d.jobId);
       if (hook) {
         doneHooks.delete(d.jobId);
-        hook({ ok: d.ok, cancelled: d.cancelled, items: d.items });
+        hook({ ok: d.ok, cancelled: d.cancelled, items: d.items, failed: d.failed });
       }
       let info = get().jobs[d.jobId];
       set((s) => {
@@ -164,10 +168,16 @@ export const useJobs = create<JobsStore>()((set, get) => ({
           useIsland.getState().pushReceipt("info", "任务已取消");
         }
       } else if (info) {
-        // 成功回执：灵动岛轻播报
-        useIsland
-          .getState()
-          .pushReceipt("ok", `${JOB_LABELS[info.mode] ?? "任务"}完成`);
+        // 成功回执：灵动岛轻播报；解压/压缩附「打开」目标目录动作与附注
+        const label = `${JOB_LABELS[info.mode] ?? "任务"}完成${d.note ? ` · ${d.note}` : ""}`;
+        const dir = info.destDir;
+        useIsland.getState().pushReceipt(
+          "ok",
+          label,
+          dir && (info.mode === "extract" || info.mode === "zip")
+            ? { action: { label: "打开", run: () => void api.openItem(dir) } }
+            : undefined,
+        );
       }
       // 极快完成的任务：done 事件可能先于 invoke 返回的 jobId（register 尚未执行）。
       // 暂存等待 register；超时仍未等到（高负载下 invoke 可远超原 120ms 窗口）
@@ -236,7 +246,7 @@ export const useJobs = create<JobsStore>()((set, get) => ({
       const hook = doneHooks.get(jobId);
       if (hook) {
         doneHooks.delete(jobId);
-        hook({ ok: d.ok, cancelled: d.cancelled, items: d.items });
+        hook({ ok: d.ok, cancelled: d.cancelled, items: d.items, failed: d.failed });
       }
       const info = get().jobs[jobId];
       if (info) {
@@ -253,9 +263,14 @@ export const useJobs = create<JobsStore>()((set, get) => ({
         }
         // 失败/取消回执已在 job-done 监听器播过；这里只补漏掉的成功回执
         if (!d.cancelled && !d.failed?.length) {
-          useIsland
-            .getState()
-            .pushReceipt("ok", `${JOB_LABELS[info.mode] ?? "任务"}完成`);
+          const dir = info.destDir;
+          useIsland.getState().pushReceipt(
+            "ok",
+            `${JOB_LABELS[info.mode] ?? "任务"}完成${d.note ? ` · ${d.note}` : ""}`,
+            dir && (info.mode === "extract" || info.mode === "zip")
+              ? { action: { label: "打开", run: () => void api.openItem(dir) } }
+              : undefined,
+          );
         }
       }
     }
@@ -302,10 +317,15 @@ function offerUnlock(failed: JobDonePayload["failed"], permanent: boolean) {
 const lateDone = new Map<number, JobDonePayload>();
 
 /** 任务终态钩子（撤销栈消费）：jobId → onDone，触发即删，保证只回调一次；
- *  items = 传输成功项路径对（非传输任务为 undefined） */
+ *  items = 传输成功项路径对（非传输任务为 undefined）；failed = 失败清单 */
 const doneHooks = new Map<
   number,
-  (d: { ok: boolean; cancelled: boolean; items?: { from: string; to: string }[] }) => void
+  (d: {
+    ok: boolean;
+    cancelled: boolean;
+    items?: { from: string; to: string }[];
+    failed?: { path: string; message: string; reason?: string }[];
+  }) => void
 >();
 
 function bumpAffectedOf(info: JobInfo) {

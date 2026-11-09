@@ -37,6 +37,10 @@ pub struct JobProgress {
     pub total_bytes: u64,
     pub done_bytes: u64,
     pub current_path: String,
+    /// 终态附注（2026-11-08 解压链路）：非法条目跳过数等不构成失败但要让人
+    /// 知道的信息，随 JobDone.note 带给前端灵动岛回执
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -53,6 +57,9 @@ pub struct JobDone {
     /// 承担冲突、无逐项回报，保持为空 = 前端不入撤销栈（宁可不可撤销不可错撤销）
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub items: Vec<TransferPair>,
+    /// 终态附注（解压非法条目跳过数等；前端并入回执展示）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 /// 传输成功项的路径对（JobDone.items 元素，camelCase 序列化）
@@ -137,8 +144,12 @@ pub enum JobKind {
         mode: crate::fs::xlsx::XlsxMergeMode,
         output: String,
     },
-    /// 解压 zip/7z：每包解到 <dest>/<包名>/ 子目录（dest 走 enqueue 的 dest 参数）
-    Extract,
+    /// 解压 zip/7z/rar/tar 系/gz/xz/bz2：每包解到 <dest>/<包名>/ 子目录
+    /// （dest 走 enqueue 的 dest 参数）；password = 加密包解压密码（无则 None，
+    /// 密码缺失失败以 FailReason::Password 回执驱动前端弹框重试）
+    Extract {
+        password: Option<String>,
+    },
     /// 图片压缩（Auto/JPEG/PNG8/无损优化），旁写 <stem>_压缩.<ext>
     ImgCompress {
         opts: crate::img::CompressOpts,
@@ -314,6 +325,7 @@ impl JobManager {
                         total_bytes: 0,
                         done_bytes: 0,
                         current_path: String::new(),
+                        note: None,
                     },
                 );
                 // 排队等待可取消（2026-10-22 修复）：此前直接 slot.lock() 阻塞——
@@ -331,6 +343,7 @@ impl JobManager {
                                 cancelled: true,
                                 failed: vec![],
                                 items: vec![],
+                                note: None,
                             },
                         );
                         cancels.lock().unwrap().remove(&id);
@@ -356,6 +369,7 @@ impl JobManager {
                     total_bytes: 0,
                     done_bytes: 0,
                     current_path: String::new(),
+                    note: None,
                 };
                 let mut failed: Vec<FailItem> = Vec::new();
                 // 传输类成功项路径对（JobDone.items；见 struct 注释）
@@ -678,7 +692,7 @@ impl JobManager {
                             &mut failed,
                         );
                     }
-                    JobKind::Extract => {
+                    JobKind::Extract { password } => {
                         if let Some(dest) = &dest {
                             dirty_dirs.push(dest.clone());
                             for s in &sources {
@@ -686,9 +700,14 @@ impl JobManager {
                                     dirty_dirs.push(par);
                                 }
                             }
+                            // 内嵌 7-Zip 路径解析一次（rar/xz/bz2 路由需要；
+                            // 未下载 = 对应包报「未就绪」人话，其余引擎不受影响）
+                            let sz = crate::fs::sevenzip::sevenzip_exe(&app).ok();
                             crate::fs::archive::run_extract(
                                 &sources,
                                 dest,
+                                sz.as_deref(),
+                                password.as_deref(),
                                 &cancel,
                                 &mut prog,
                                 &mut failed,
@@ -783,6 +802,7 @@ impl JobManager {
                         cancelled,
                         failed,
                         items,
+                        note: prog.note.take(),
                     },
                 );
                 // 后端快照同步失效，前端收到 job-done 后重拉当前页（§6.7）
@@ -808,6 +828,7 @@ impl JobManager {
                             reason: None,
                         }],
                         items: vec![],
+                        note: None,
                     },
                 );
                 cancels_h.lock().unwrap().remove(&id);
@@ -962,6 +983,8 @@ pub enum FailReason {
     AccessDenied,
     /// 已被移动/删除
     Missing,
+    /// 解压/压缩需要密码（前端弹密码框带 -p 重试，2026-11-08）
+    Password,
 }
 
 /// trash 变体自带明确语义的错误（跨平台）

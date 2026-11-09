@@ -80,6 +80,8 @@ export interface IslandReceipt {
   text: string;
   /** 到期时间戳（resolve 时过期即丢弃） */
   until: number;
+  /** 附加动作（2026-11-08 解压/压缩回执「打开」目标文件夹）：点击执行并收起 */
+  action?: { label: string; run(): void };
 }
 
 /** 灵动岛当前应显示的通道视图 */

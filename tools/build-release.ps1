@@ -38,6 +38,9 @@ Write-Host "== 2/5 重新生成 THIRD-PARTY-NOTICES.txt =="
 node tools/gen-third-party-notices.mjs
 Assert-LastExit "第三方声明生成（REVIEW 未清零）"
 
+Write-Host "== 2.5/5 内嵌 7-Zip 便携版（哈希锁定下载/校验）=="
+powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "get-7zip.ps1")
+
 if (-not $SkipBuild) {
     Write-Host "== 3/5 npm run tauri build（前端 + cargo release + NSIS）=="
     npm run tauri build
