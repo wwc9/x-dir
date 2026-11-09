@@ -5,6 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { api, DEFAULT_SETTINGS, THIS_PC, type Settings } from "../lib/ipc";
 import { clampGsPreviewW, sanitizeColWidths, sanitizeGsColWidths } from "../lib/columns";
+import { sanitizeDialogPrefs } from "../lib/dialogPrefs";
 import { fileNameOf } from "../lib/path";
 import { shelfAdd, shelfRemove } from "../lib/shelf";
 import {
@@ -42,6 +43,7 @@ function toPlain(s: SettingsStore): Settings {  return {
     defaultView: s.defaultView,
     defaultSort: s.defaultSort,
     stagingMode: s.stagingMode,
+    dialogPrefs: s.dialogPrefs,
     workspaceOrder: s.workspaceOrder,
     confirmDelete: s.confirmDelete,
     toolbarEntries: s.toolbarEntries,
@@ -363,6 +365,9 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     merged.extractDestDir = typeof merged.extractDestDir === "string" && merged.extractDestDir
       ? merged.extractDestDir
       : null;
+    // 对话框参数记忆（2026-11-09）：仅收 string/number/boolean 值的对象表，
+    // 脏值（嵌套对象/数组/null）整键剔除，防坏档污染对话框初始态
+    merged.dialogPrefs = sanitizeDialogPrefs(merged.dialogPrefs);
     merged.renameSchemes = Array.isArray(merged.renameSchemes)
       ? merged.renameSchemes.filter((sc) => !!sc && typeof sc.name === "string" && Array.isArray(sc.ops))
       : [];

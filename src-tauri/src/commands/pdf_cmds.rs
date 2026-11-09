@@ -149,8 +149,7 @@ pub fn pdf_watermark(
             .unwrap_or(crate::pdf::stamp::WmPos::RightTop),
         transparency: transparency.unwrap_or(9).min(10),
         margin: margin.unwrap_or(20),
-        range: crate::pdf::stamp::WmRange::parse(&page_range.unwrap_or_else(|| "all".into()))
-            .unwrap_or(crate::pdf::stamp::WmRange::All),
+        range: crate::pdf::stamp::WmRange::parse(&page_range.unwrap_or_else(|| "all".into())),
         num_fmt: crate::pdf::stamp::WmNumFmt::parse(
             &page_number_format.unwrap_or_else(|| "cn".into()),
         )

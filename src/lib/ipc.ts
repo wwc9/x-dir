@@ -359,6 +359,10 @@ export interface Settings {
   recentSearches: string[];
   /** 解压到…记忆目录（2026-11-08）：null = 未用过（对话框默认当前目录） */
   extractDestDir: string | null;
+  /** 对话框上次确认参数（2026-11-09 参数记忆）：key = 对话框名（如 imgCompress），
+   *  value = 该对话框提交的参数子集——路径与密码类字段永不入存；打开时与
+   *  内置默认浅合并（lib/dialogPrefs.ts），确认时写回 */
+  dialogPrefs: Record<string, Record<string, unknown>>;
   /** 导航后按路径记忆选中集（回到该目录自动恢复；Ctrl+A/Esc 等显式操作不受影响） */
   rememberSelection: boolean;
   /** 暂存区（侧边栏下半）：临时拖放的文件/文件夹路径，跨会话保留；去重与上限见 lib/shelf.ts */
@@ -498,6 +502,7 @@ export const DEFAULT_SETTINGS: Settings = {
   recentFolders: [],
   recentSearches: [],
   extractDestDir: null,
+  dialogPrefs: {},
   rememberSelection: true,
   staging: [],
   workspaceOrder: [],
@@ -756,7 +761,9 @@ export const api = {
   imgCompress: (paths: string[], target: 0 | 1 | 2 | 3, quality: number) =>
     cmd<{ jobId: number }>("img_compress", { paths, target, quality }),
   /** 图片水印：imagePath 空串 = 文字水印；tile = 平铺/角标；opacity 10–100；
-   *  scaleDiv = 水印尺寸 = 图像短边 / scaleDiv（4–64） */
+   *  scaleDiv = 水印尺寸 = 图像短边 / scaleDiv（4–64）；color = 色码（同 PDF
+   *  水印 8 色板，仅文字水印生效）；pos = 九宫格位置码（tile=false 角标用，
+   *  非法值回落右下） */
   imgWatermark: (
     paths: string[],
     opts: {
@@ -765,6 +772,8 @@ export const api = {
       tile: boolean;
       opacity: number;
       scaleDiv: number;
+      color: string;
+      pos: string;
     },
   ) => cmd<{ jobId: number }>("img_watermark", { paths, ...opts }),
   /** 图片格式转换：target 0=png 1=jpg 2=bmp 3=tiff 4=ico 5=webp（无损） */

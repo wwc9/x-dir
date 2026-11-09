@@ -13,8 +13,10 @@ import { Button, Checkbox, DialogBody, DialogFooter, InputGroup, Slider } from "
 import { ArrowRight } from "lucide-react";
 
 import { FOLDER_BATCH_CAP, planFolders } from "../lib/folderBatch";
+import { loadDialogPrefs, saveDialogPrefs } from "../lib/dialogPrefs";
 import { AppIcon } from "./AppIcon";
 import { Seg } from "./ImgDialogs";
+import { PosGrid } from "./WmPosGrid";
 import { DENSITY } from "../lib/tokens";
 import { QueueSection, nameOf, pathsByNames } from "./FileQueue";
 import { fileNameOf, isValidName, joinPath, parentPath, smartArchiveStem } from "../lib/path";
@@ -66,7 +68,8 @@ function Footer({
 }
 
 /** 批量新建文件夹：多行名单 / 序号模板两种输入，实时预演最终名
- *  （与现有项重名自动 "(2)"，非法名与名单内重名红色标出） */
+ *  （与现有项重名自动 "(2)"，非法名与名单内重名红色标出）；
+ *  参数记忆（2026-11-09 P2）：方式/模板/起止序号随 settings.dialogPrefs */
 export function NewFoldersDialog({
   dir,
   existing,
@@ -76,11 +79,15 @@ export function NewFoldersDialog({
   existing: string[];
   onDone(names: string[] | null): void;
 }) {
-  const [mode, setMode] = useState<"lines" | "pattern">("lines");
+  const t2 = useT();
+  const init = loadDialogPrefs("newFolders", { mode: "lines", pattern: "第{}章", start: 1, end: 10 });
+  const [mode, setMode] = useState<"lines" | "pattern">(
+    init.mode === "pattern" ? "pattern" : "lines",
+  );
   const [text, setText] = useState("");
-  const [pattern, setPattern] = useState("第{}章");
-  const [start, setStart] = useState(1);
-  const [end, setEnd] = useState(10);
+  const [pattern, setPattern] = useState(init.pattern);
+  const [start, setStart] = useState(init.start);
+  const [end, setEnd] = useState(init.end);
   const plan = useMemo(
     () => planFolders(mode, text, pattern, start, end, existing),
     [mode, text, pattern, start, end, existing],
@@ -95,13 +102,13 @@ export function NewFoldersDialog({
     <>
       <DialogBody>
         <div className="np-bren-form">
-          <FormRow k="方式">
+          <FormRow k={t2("方式")}>
             <Seg<"lines" | "pattern">
               value={mode}
               onChange={setMode}
               options={[
-                { value: "lines", label: "多行名单", title: "每行一个名称" },
-                { value: "pattern", label: "序号模板", title: "{} 处按起止序号展开" },
+                { value: "lines", label: t2("多行名单"), title: t2("每行一个名称") },
+                { value: "pattern", label: t2("序号模板"), title: t2("{} 处按起止序号展开") },
               ]}
             />
           </FormRow>
@@ -111,14 +118,14 @@ export function NewFoldersDialog({
             className="np-textarea"
             rows={7}
             value={text}
-            placeholder={"每行一个文件夹名，如：\n项目立项\n需求评审\n开发阶段"}
+            placeholder={t2("每行一个文件夹名，如：\n项目立项\n需求评审\n开发阶段")}
             spellCheck={false}
             autoFocus
             onChange={(e) => setText(e.target.value)}
           />
         ) : (
           <div className="np-bren-form">
-            <FormRow k="模板">
+            <FormRow k={t2("模板")}>
               <InputGroup
                 size="small"
                 value={pattern}
@@ -127,7 +134,7 @@ export function NewFoldersDialog({
                 onChange={(e) => setPattern(e.target.value)}
               />
             </FormRow>
-            <FormRow k="起始">
+            <FormRow k={t2("起始")}>
               <InputGroup
                 size="small"
                 value={String(start)}
@@ -135,7 +142,7 @@ export function NewFoldersDialog({
                 onChange={(e) => setStart(num(e.target.value, start))}
               />
             </FormRow>
-            <FormRow k="结束">
+            <FormRow k={t2("结束")}>
               <InputGroup
                 size="small"
                 value={String(end)}
@@ -166,22 +173,29 @@ export function NewFoldersDialog({
           {!plan.length && (
             <div className="np-bren-row is-same">
               <span className="np-bren-new is-same">
-                {mode === "lines" ? "在上方输入名称名单" : "模板需含 {} 占位符"}
+                {mode === "lines" ? t2("在上方输入名称名单") : t2("模板需含 {} 占位符")}
               </span>
             </div>
           )}
         </div>
         <div className="np-dialog-muted">
-          将在 {dir} 下创建 {okNames.length} 个文件夹（与现有项重名时自动加序号）
-          {errCount > 0 && `，${errCount} 项非法或重名（红色标出）`}
-          {plan.length > 200 && "（仅预览前 200 行）"}
-          {okNames.length >= FOLDER_BATCH_CAP && `，单次上限 ${FOLDER_BATCH_CAP} 个`}
+          {t2("将在 {dir} 下创建 {n} 个文件夹（与现有项重名时自动加序号）", {
+            dir,
+            n: okNames.length,
+          })}
+          {errCount > 0 && t2("，{n} 项非法或重名（红色标出）", { n: errCount })}
+          {plan.length > 200 && t2("（仅预览前 200 行）")}
+          {okNames.length >= FOLDER_BATCH_CAP &&
+            t2("，单次上限 {n} 个", { n: FOLDER_BATCH_CAP })}
         </div>
       </DialogBody>
       <Footer
-        okText={`创建（${okNames.length} 项）`}
+        okText={t2("创建（{n} 项）", { n: okNames.length })}
         disabled={!okNames.length}
-        onOk={() => onDone(okNames)}
+        onOk={() => {
+          saveDialogPrefs("newFolders", { mode, pattern, start, end });
+          onDone(okNames);
+        }}
         onCancel={() => onDone(null)}
       />
     </>
@@ -199,13 +213,19 @@ export function XlsxMergeDialog({
 }) {
   const t2 = useT();
   const [items, setItems] = useState<string[]>(() => pathsByNames(entries));
-  const [mode, setMode] = useState<"sheets" | "rows">("sheets");
+  const [mode, setMode] = useState<"sheets" | "rows">(() =>
+    loadDialogPrefs("xlsxMerge", { mode: "sheets" }).mode === "rows" ? "rows" : "sheets",
+  );
   const [name, setName] = useState("合并表格.xlsx");
   const trimmed = name.trim();
   const valid = trimmed.length > 0;
   // 与 Rust 端同口径：缺 .xlsx 后缀时补上
   const withExt = trimmed.toLowerCase().endsWith(".xlsx") ? trimmed : `${trimmed}.xlsx`;
   const preview = joinPath(parentPath(entries[0]?.path ?? "") ?? "", withExt);
+  const submit = () => {
+    saveDialogPrefs("xlsxMerge", { mode });
+    onDone({ paths: items, mode, name: withExt });
+  };
   return (
     <>
       <DialogBody>
@@ -217,8 +237,8 @@ export function XlsxMergeDialog({
               value={mode}
               onChange={setMode}
               options={[
-                { value: "sheets", label: "分表保留", title: "每个源工作表一张目标表" },
-                { value: "rows", label: "纵向拼接", title: "全部行并入一张表，重复表头自动去除" },
+                { value: "sheets", label: t2("分表保留"), title: t2("每个源工作表一张目标表") },
+                { value: "rows", label: t2("纵向拼接"), title: t2("全部行并入一张表，重复表头自动去除") },
               ]}
             />
           </FormRow>
@@ -229,8 +249,7 @@ export function XlsxMergeDialog({
               spellCheck={false}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && valid)
-                  onDone({ paths: items, mode, name: withExt });
+                if (e.key === "Enter" && valid) submit();
               }}
             />
           </FormRow>
@@ -246,7 +265,7 @@ export function XlsxMergeDialog({
       <Footer
         okText={t2("合并")}
         disabled={!valid}
-        onOk={() => onDone({ paths: items, mode, name: withExt })}
+        onOk={submit}
         onCancel={() => onDone(null)}
       />
     </>
@@ -257,7 +276,10 @@ export function XlsxMergeDialog({
  *  files 变体 = 待合并清单（默认按名称自然序，行可拖动实时调整合并顺序——
  *  Pointer 事件实现：应用窗口注册了 OLE 拖放，HTML5 DnD 事件被拦截不可用）；
  *  folders 变体 = 选中的文件夹（各递归收集，各自输出 合并结果-<名>-<ts>.pdf，
- *  支持 1 个文件夹）。布局分区：合并顺序 → 输出 → 打印补页 → 输出预览 */
+ *  支持 1 个文件夹）。布局分区：合并顺序 → 输出 → 打印补页 → 输出预览。
+ *  2026-11-09 P1/P2：输出名三段校验（非空/合法名/同名冲突红字，Rust 端
+ *  available_name 兜底）+ 智能默认名（单文件 = 文件名干、多文件 = 所在目录
+ *  名，冲突 (2) 递增，手动改名冻结）+ 补页选项随 dialogPrefs 记忆 */
 export function PdfMergeDialog({
   variant,
   entries,
@@ -281,11 +303,68 @@ export function PdfMergeDialog({
   };
   // 默认排序：名称（数字感知自然序，1 → 2 → 10）；拖行 = 实时调整合并顺序
   const [items, setItems] = useState<string[]>(() => pathsByNames(entries));
-  const [autoBlank, setAutoBlank] = useState(false);
-  const [blankFirst, setBlankFirst] = useState(false);
-  const [name, setName] = useState("合并文档.pdf");
-  const valid = byFolder || name.trim().length > 0;
-  const output = parentOf(entries[0]?.path ?? '') + "\\" + (name.trim() || "合并文档.pdf");
+  const init = loadDialogPrefs("pdfMerge", { autoBlank: false, blankFirst: false });
+  const [autoBlank, setAutoBlank] = useState(init.autoBlank);
+  const [blankFirst, setBlankFirst] = useState(init.blankFirst);
+  const dir = parentOf(entries[0]?.path ?? "");
+  const baseStem = useMemo(
+    () =>
+      smartArchiveStem(
+        entries.map((e) => ({ name: nameOf(e.path), isDir: e.isDir })),
+        dir ? fileNameOf(dir) : null,
+        "合并文档",
+      ),
+    [entries, dir],
+  );
+  const [name, setName] = useState(`${baseStem}.pdf`);
+  // 用户手动改过名 = 冻结智能跟随（冲突递增不再覆写，同 zip 压缩口径）
+  const [nameEdited, setNameEdited] = useState(false);
+  // 同名冲突内联校验：列输出目录现有名（首屏 2000 条）
+  const [existing, setExisting] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    if (byFolder || !dir) return;
+    let live = true;
+    api
+      .listDir({
+        path: dir,
+        sort: { key: "name", dir: "asc" },
+        showHidden: true,
+        offset: 0,
+        limit: 2000,
+      })
+      .then((r) => {
+        if (live) setExisting(new Set(r.entries.map((e) => e.name.toLowerCase())));
+      })
+      .catch(() => {
+        if (live) setExisting(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [byFolder, dir]);
+  useEffect(() => {
+    if (byFolder || nameEdited) return;
+    let cand = `${baseStem}.pdf`;
+    let n = 2;
+    while (existing?.has(cand.toLowerCase()) && n < 100) {
+      cand = `${baseStem} (${n}).pdf`;
+      n += 1;
+    }
+    setName(cand);
+  }, [byFolder, nameEdited, baseStem, existing]);
+  const trimmed = name.trim();
+  const withExt = trimmed.toLowerCase().endsWith(".pdf") ? trimmed : `${trimmed}.pdf`;
+  const err = byFolder
+    ? null
+    : !trimmed
+      ? t2("请输入文件名")
+      : !isValidName(withExt)
+        ? t2("名称含非法字符或为 Windows 保留名")
+        : existing?.has(withExt.toLowerCase())
+          ? t2("同名文件已存在，请换一个名字")
+          : null;
+  const valid = !err;
+  const output = dir + "\\" + withExt;
 
   return (
     <>
@@ -319,10 +398,13 @@ export function PdfMergeDialog({
                 size="small"
                 value={name}
                 spellCheck={false}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setNameEdited(true);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && valid)
-                    onDone({ autoBlank, blankFirst, name, paths: items });
+                    onDone({ autoBlank, blankFirst, name: withExt, paths: items });
                 }}
               />
             </FormRow>
@@ -350,6 +432,7 @@ export function PdfMergeDialog({
             </FormRow>
           )}
         </div>
+        {err && <div className="np-dialog-error">{err}</div>}
         <div className="np-dialog-muted">
           {variant === "files"
             ? t2("输出预览：{out}", { out: output })
@@ -362,45 +445,18 @@ export function PdfMergeDialog({
       <Footer
         okText={t2("合并")}
         disabled={!valid}
-        onOk={() =>
+        onOk={() => {
+          saveDialogPrefs("pdfMerge", { autoBlank, blankFirst });
           onDone({
             autoBlank,
             blankFirst,
-            name,
+            name: withExt,
             paths: byFolder ? entries.map((e) => e.path) : items,
-          })
-        }
+          });
+        }}
         onCancel={() => onDone(null)}
       />
     </>
-  );
-}
-
-/** 位置九宫格（3×3），选中点由 index.css 的 ::after 圆点承担 */
-const WM_POS_CELLS: { value: string; tip: string }[] = [
-  { value: "left-top", tip: "左上" },
-  { value: "mid-top", tip: "中上" },
-  { value: "right-top", tip: "右上" },
-  { value: "left-mid", tip: "左中" },
-  { value: "center", tip: "正中" },
-  { value: "right-mid", tip: "右中" },
-  { value: "left-bottom", tip: "左下" },
-  { value: "mid-bottom", tip: "中下" },
-  { value: "right-bottom", tip: "右下" },
-];
-
-function PosGrid({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <div className="np-wm-grid">
-      {WM_POS_CELLS.map((c) => (
-        <button
-          key={c.value}
-          className={"np-wm-cell" + (value === c.value ? " on" : "")}
-          data-tip={c.tip}
-          onClick={() => onChange(c.value)}
-        />
-      ))}
-    </div>
   );
 }
 
@@ -422,7 +478,12 @@ export interface PdfWatermarkSettings {
 /** PDF 加水印参数对话框（2026-10-23 用户定案：单列纵排 + 标签列/控件列
  *  分别左对齐，np-wm-form 网格）：水印文字 / 字体 / 字号 / 颜色 / 不透明度 /
  *  位置（九宫格+对角线合并互斥行）/ 边距 / 页面范围 / 页码与日期格式 /
- *  输出名模板；占位符 chips 随输入框纵排 */
+ *  输出名模板；占位符 chips 随输入框纵排。
+ *  2026-11-09 P1/P2 批：① 选对角线时字号/边距不生效 → 行禁用降灰（对齐
+ *  「不适用参数行禁用」口径）；② 字号/边距改自由输入 + 即时校验红字（不再
+ *  onChange 即 clamp，可清空重输），边距补上限 1000；③ 页面范围加「自定义」
+ *  档（parsePageSpec 同口径预演，Rust 逐文档解析）；④ 输出文案与模板对齐 +
+ *  同名 (2) 递增说明；⑤ 全部样式参数随 dialogPrefs 记忆 */
 export function PdfWatermarkDialog({
   entries,
   onDone,
@@ -431,18 +492,33 @@ export function PdfWatermarkDialog({
   onDone(v: PdfWatermarkSettings | null): void;
 }) {
   const t2 = useT();
-  const [text, setText] = useState("[原文件名]-[页码]");
-  const [fontName, setFontName] = useState("heiti");
-  const [fontSize, setFontSize] = useState(14);
-  const [fontColor, setFontColor] = useState("black");
-  const [position, setPosition] = useState("right-top");
-  const [transparency, setTransparency] = useState(9);
-  const [margin, setMargin] = useState(20);
-  const [pageRange, setPageRange] = useState("all");
-  const [pageNumberFormat, setPageNumberFormat] = useState("cn");
-  const [datetimeFormat, setDatetimeFormat] = useState("cn");
+  const init = loadDialogPrefs("pdfWatermark", {
+    text: "[原文件名]-[页码]",
+    fontName: "heiti",
+    fontSize: 14,
+    fontColor: "black",
+    position: "right-top",
+    transparency: 9,
+    margin: 20,
+    pageRange: "all",
+    pageNumberFormat: "cn",
+    datetimeFormat: "cn",
+    outName: "[原文件名]-水印",
+  });
+  const [text, setText] = useState(init.text);
+  const [fontName, setFontName] = useState(init.fontName);
+  const [fontSizeText, setFontSizeText] = useState(String(init.fontSize));
+  const [fontColor, setFontColor] = useState(init.fontColor);
+  const [position, setPosition] = useState(init.position);
+  const [transparency, setTransparency] = useState(init.transparency);
+  const [marginText, setMarginText] = useState(String(init.margin));
+  const presetRange = ["all", "odd", "even"].includes(init.pageRange);
+  const [pageRange, setPageRange] = useState(presetRange ? init.pageRange : "custom");
+  const [spec, setSpec] = useState(presetRange ? "" : init.pageRange);
+  const [pageNumberFormat, setPageNumberFormat] = useState(init.pageNumberFormat);
+  const [datetimeFormat, setDatetimeFormat] = useState(init.datetimeFormat);
+  const [outName, setOutName] = useState(init.outName);
 
-  const [outName, setOutName] = useState("[原文件名]-水印");
   // 待处理清单（§4.9 置顶）：默认名称自然序，拖行调整处理顺序；
   // 输出预览取清单首项
   const [items, setItems] = useState<string[]>(() => pathsByNames(entries));
@@ -473,9 +549,57 @@ export function PdfWatermarkDialog({
     dirOf(firstPath) +
     "\\" +
     (/\.pdf$/i.test(renderedName) ? renderedName : renderedName + ".pdf");
-  const valid = text.trim().length > 0;
-  // 九宫格与对角线共用 position 单一状态，互斥高亮（选对角线时九宫格全熄）
+  // 九宫格与对角线共用 position 单一状态，互斥高亮（选对角线时九宫格全熄）；
+  // 对角线按对角线长缩放铺满，字号/边距不参与 → 行禁用降灰
   const isDiag = position === "diag-main" || position === "diag-reverse";
+  // 字号/边距：自由输入 + 即时校验（不再 onChange 即 clamp），提交时钳制
+  const fontSize = Number.parseInt(fontSizeText, 10);
+  const fontSizeErr = isDiag
+    ? null
+    : !Number.isFinite(fontSize) || fontSize < 5 || fontSize > 99
+      ? t2("字号需为 5–99 的整数")
+      : null;
+  const fontSizeOut = Number.isFinite(fontSize) ? Math.min(99, Math.max(5, fontSize)) : 14;
+  const margin = Number.parseInt(marginText, 10);
+  const marginErr = isDiag
+    ? null
+    : !Number.isFinite(margin) || margin < 0 || margin > 1000
+      ? t2("边距需为 0–1000 的整数")
+      : null;
+  const marginOut = Number.isFinite(margin) ? Math.min(1000, Math.max(0, margin)) : 20;
+  // 自定义页码范围：按清单首文件总页数预演（与提取页 parsePageSpec 同口径，
+  // Rust 端逐文档解析并容忍页数差异）
+  const isCustomRange = pageRange === "custom";
+  const [total, setTotal] = useState<number | null>(null);
+  useEffect(() => {
+    let live = true;
+    api.pdfPageCount(firstPath).then(
+      (n) => live && setTotal(n),
+      () => live && setTotal(-1),
+    );
+    return () => {
+      live = false;
+    };
+  }, [firstPath]);
+  const specParsed =
+    isCustomRange && total !== null && total > 0 && spec.trim()
+      ? parsePageSpec(spec, total)
+      : null;
+  const specErr = !isCustomRange
+    ? null
+    : !spec.trim()
+      ? t2("请输入页码范围")
+      : total === null
+        ? null
+        : total <= 0
+          ? t2("页数读取失败（文件可能损坏或加密）")
+          : specParsed?.error
+            ? specParsed.error
+            : specParsed && specParsed.pages.length === 0
+              ? t2("页码范围为空")
+              : null;
+  const rangeOut = isCustomRange ? spec.trim() : pageRange;
+  const valid = text.trim().length > 0 && !fontSizeErr && !marginErr && !specErr;
   const diagOpts: { value: string; label: string; title?: string }[] = [
     { value: "diag-main", label: t2("正对角线"), title: t2("文字沿左上→右下 45° 缩放铺满") },
     { value: "diag-reverse", label: t2("反对角线"), title: t2("文字沿右上→左下 45° 缩放铺满") },
@@ -523,16 +647,14 @@ export function PdfWatermarkDialog({
             />
           </div>
 
-          <span className="np-bren-k">{t2("字号（5–99）")}</span>
+          <span className="np-bren-k">{isDiag ? t2("字号（对角线不适用）") : t2("字号（5–99）")}</span>
           <div className="np-wm-ctl">
             <InputGroup
               size="small"
-              value={String(fontSize)}
+              value={fontSizeText}
               spellCheck={false}
-              onChange={(e) => {
-                const n = parseInt(e.target.value, 10);
-                if (!Number.isNaN(n)) setFontSize(Math.min(99, Math.max(5, n)));
-              }}
+              disabled={isDiag}
+              onChange={(e) => setFontSizeText(e.target.value)}
             />
           </div>
 
@@ -574,16 +696,14 @@ export function PdfWatermarkDialog({
             </div>
           </div>
 
-          <span className="np-bren-k">{t2("边距（像素）")}</span>
+          <span className="np-bren-k">{isDiag ? t2("边距（对角线不适用）") : t2("边距（pt，0–1000）")}</span>
           <div className="np-wm-ctl">
             <InputGroup
               size="small"
-              value={String(margin)}
+              value={marginText}
               spellCheck={false}
-              onChange={(e) => {
-                const n = parseInt(e.target.value, 10);
-                if (!Number.isNaN(n)) setMargin(Math.max(0, n));
-              }}
+              disabled={isDiag}
+              onChange={(e) => setMarginText(e.target.value)}
             />
           </div>
 
@@ -596,8 +716,19 @@ export function PdfWatermarkDialog({
                 { value: "all", label: t2("全部页面") },
                 { value: "odd", label: t2("奇数页") },
                 { value: "even", label: t2("偶数页") },
+                { value: "custom", label: t2("自定义") },
               ]}
             />
+            {isCustomRange && (
+              <InputGroup
+                className="np-wm-fill"
+                size="small"
+                value={spec}
+                spellCheck={false}
+                placeholder={t2("如 1-3,5,8-（8- 表示第 8 页到末页）")}
+                onChange={(e) => setSpec(e.target.value)}
+              />
+            )}
           </div>
 
           <span className="np-bren-k">{t2("页码格式")}</span>
@@ -651,9 +782,14 @@ export function PdfWatermarkDialog({
             </div>
           </div>
         </div>
+        {(fontSizeErr || marginErr || specErr) && (
+          <div className="np-dialog-error">
+            {[fontSizeErr, marginErr, specErr].filter(Boolean).join("；")}
+          </div>
+        )}
         <div className="np-dialog-muted">
           {t2(
-            "文字与输出名支持占位符，点击输入框下方的按钮即可插入；页码按「页码格式」渲染，[页面标签] 暂以页码代替。输出旁写 <名称>_水印.pdf，不覆盖原文件。",
+            "文字与输出名支持占位符，点击输入框下方的按钮即可插入；页码按「页码格式」渲染，[页面标签] 暂以页码代替。输出按「输出文件名」模板旁写 PDF，同名自动 (2) 递增，不覆盖原文件。",
           )}
           {t2("输出预览：{out}", { out: previewPath })}
         </div>
@@ -661,21 +797,34 @@ export function PdfWatermarkDialog({
       <Footer
         okText={t2("加水印")}
         disabled={!valid}
-        onOk={() =>
+        onOk={() => {
+          saveDialogPrefs("pdfWatermark", {
+            text: text.trim(),
+            fontName,
+            fontSize: fontSizeOut,
+            fontColor,
+            position,
+            transparency,
+            margin: marginOut,
+            pageRange: rangeOut,
+            pageNumberFormat,
+            datetimeFormat,
+            outName,
+          });
           onDone({
             paths: items,
             text: text.trim(),
             fontName,
-            fontSize,
+            fontSize: fontSizeOut,
             fontColor,
             position,
             transparency,
-            margin,
-            pageRange,
+            margin: marginOut,
+            pageRange: rangeOut,
             pageNumberFormat,
             datetimeFormat,
-          })
-        }
+          });
+        }}
         onCancel={() => onDone(null)}
       />
     </>
@@ -686,12 +835,14 @@ export function PdfWatermarkDialog({
 // 图片合并转 PDF / CSV 合并 / 文本合并共用：清单拖动定序 + 输出名 + 预览。
 // 三者此前只有一个输入文件名的 input 对话框，顺序既不可见也不可调。
 
-/** 各合并口味的文案与输出扩展名（标题在 DialogHost 集中映射） */
+/** 各合并口味的文案与输出扩展名（标题在 DialogHost 集中映射）；
+ *  fallbackStem = 智能默认名的回退干（单/多对象目录名不可用时） */
 const MERGE_FLAVORS = {
   images: {
     queueTitle: "合并顺序",
     ok: "合并",
     defName: "合并图片.pdf",
+    fallbackStem: "合并图片",
     ext: "pdf",
     note: "每张图片一页，按清单顺序合成 PDF（PNG/JPEG 均可）；输出旁写，不覆盖原文件。",
   },
@@ -699,6 +850,7 @@ const MERGE_FLAVORS = {
     queueTitle: "合并顺序",
     ok: "合并",
     defName: "合并表格.csv",
+    fallbackStem: "合并表格",
     ext: "csv",
     note: "按清单顺序拼接全部行，重复表头自动去除，输出 UTF-8 BOM；不覆盖原文件。",
   },
@@ -706,6 +858,7 @@ const MERGE_FLAVORS = {
     queueTitle: "合并顺序",
     ok: "合并",
     defName: "合并文本.txt",
+    fallbackStem: "合并文本",
     ext: "txt",
     note: "按清单顺序全文拼接，空行分隔，输出 UTF-8；不覆盖原文件。",
   },
@@ -713,6 +866,7 @@ const MERGE_FLAVORS = {
     queueTitle: "打包清单",
     ok: "压缩",
     defName: "归档.zip",
+    fallbackStem: "归档",
     ext: "zip",
     note: "文件平铺打包、文件夹含目录结构递归打包；输出旁写，不覆盖原文件。",
   },
@@ -762,10 +916,17 @@ export function MergeFilesDialog({
   const isZip = flavor === "zip";
   const [items, setItems] = useState<string[]>(() => pathsByNames(entries));
   // 压缩格式（仅 zip flavor）：zip = 进程内 Deflate、7z = 内嵌 7-Zip 可加密、
-  // targz = tar+gzip 组合；切格式时默认名跟随，自定义名只换尾部扩展名
-  const [format, setFormat] = useState<CompressFormat>("zip");
+  // targz = tar+gzip 组合；切格式时默认名跟随，自定义名只换尾部扩展名；
+  // 上次确认的格式与清单加密开关随 dialogPrefs 记忆（密码不入存）
+  const zipInit = loadDialogPrefs("zipCompress", {
+    format: "zip" as CompressFormat,
+    encryptHeader: false,
+  });
+  const [format, setFormat] = useState<CompressFormat>(() =>
+    zipInit.format === "7z" || zipInit.format === "targz" ? zipInit.format : "zip",
+  );
   const [password, setPassword] = useState("");
-  const [encryptHeader, setEncryptHeader] = useState(false);
+  const [encryptHeader, setEncryptHeader] = useState(() => !!zipInit.encryptHeader);
   const meta = FORMAT_META[format];
   const ext = isZip ? meta.ext : cfg.ext;
   const note = isZip ? meta.note : cfg.note;
@@ -783,11 +944,12 @@ export function MergeFilesDialog({
   }
 
   // 同名冲突内联校验（§4.9）：列输出目录现有名（首屏 2000 条；Rust 端
-  // zip_files 仍有 E_EXISTS 全量兜底，旁写绝不静默覆盖）
+  // available_name 仍有全量兜底，旁写绝不静默覆盖）。
+  // 2026-11-09 P1：自 zip 推广到全部 flavor（图片/CSV/文本合并此前无校验）
   const [existing, setExisting] = useState<Set<string> | null>(null);
   const dir = parentPath(entries[0]?.path ?? "");
   useEffect(() => {
-    if (!isZip || !dir) return;
+    if (!dir) return;
     const outDir: string = dir;
     let live = true;
     api
@@ -807,26 +969,27 @@ export function MergeFilesDialog({
     return () => {
       live = false;
     };
-  }, [isZip, dir]);
+  }, [dir]);
 
-  // 智能默认名（2026-11-08 用户需求）：压缩 flavor 下未手动改名时跟随清单——
-  // 单对象 = 对象名（文件去扩展名）、多对象 = 所在目录名；与现有名冲突自动
-  // (2) 递增；格式切换换扩展名。用户一旦手动改名即冻结
+  // 智能默认名（2026-11-08 用户需求，2026-11-09 P1 推广全 flavor）：未手动改名
+  // 时跟随清单——单对象 = 对象名（文件去扩展名）、多对象 = 所在目录名，回退
+  // 各口味语义干；与现有名冲突自动 (2) 递增；格式切换换扩展名。手动改名即冻结
+  const ext0 = isZip ? meta.ext : cfg.ext;
   useEffect(() => {
-    if (!isZip || nameEdited) return;
+    if (nameEdited) return;
     const infos = items.map((p) => ({
       name: fileNameOf(p),
       isDir: entries.find((e) => e.path === p)?.isDir ?? false,
     }));
-    const stem = smartArchiveStem(infos, dir ? fileNameOf(dir) : null);
-    let cand = `${stem}.${FORMAT_META[format].ext}`;
+    const stem = smartArchiveStem(infos, dir ? fileNameOf(dir) : null, cfg.fallbackStem);
+    let cand = `${stem}.${ext0}`;
     let n = 2;
     while (existing?.has(cand.toLowerCase()) && n < 100) {
-      cand = `${stem} (${n}).${FORMAT_META[format].ext}`;
+      cand = `${stem} (${n}).${ext0}`;
       n += 1;
     }
     setName(cand);
-  }, [isZip, nameEdited, items, existing, format, dir, entries]);
+  }, [nameEdited, items, existing, ext0, dir, entries, cfg.fallbackStem]);
 
   const trimmed = name.trim();
   // 缺扩展名时补上（与 Rust 端落名同口径；返回值即最终文件名）
@@ -855,6 +1018,11 @@ export function MergeFilesDialog({
         }
       : {}),
   });
+  const submit = () => {
+    // 压缩口味记忆格式与清单加密开关（密码永不入存）
+    if (isZip) saveDialogPrefs("zipCompress", { format, encryptHeader });
+    onDone(payload());
+  };
   return (
     <>
       <DialogBody>
@@ -883,7 +1051,7 @@ export function MergeFilesDialog({
                 setNameEdited(true);
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && valid) onDone(payload());
+                if (e.key === "Enter" && valid) submit();
               }}
             />
           </FormRow>
@@ -920,7 +1088,7 @@ export function MergeFilesDialog({
       <Footer
         okText={t2(cfg.ok)}
         disabled={!valid}
-        onOk={() => onDone(payload())}
+        onOk={submit}
         onCancel={() => onDone(null)}
       />
     </>
@@ -1020,6 +1188,7 @@ export function PdfPagesDialog({
           )}
           {t2("输出预览：{out}", { out: preview })}
           {!extract && t2("；原文件不动。")}
+          {t2("同名输出自动 (2) 递增。")}
         </div>
       </DialogBody>
       <Footer

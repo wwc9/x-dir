@@ -104,17 +104,30 @@ pub fn img_watermark(
     image_path: String,
     // 文字水印内容（image_path 为空时必填）
     text: String,
-    // true = 平铺，false = 右下角标
+    // true = 平铺，false = 按 pos 角标
     tile: bool,
     // 不透明度百分比 10–100
     opacity: u8,
     // 水印尺寸 = 短边 / scale_div（4–64）
     scale_div: u32,
+    // 文字水印颜色码（black/gray/red/white/green/yellow/blue/purple，同 PDF 水印色板）
+    color: String,
+    // 角标位置码（九宫格 left-top…right-bottom/center；非法值回落右下）
+    pos: String,
 ) -> Result<JobId, AppError> {
     reject_not_img(&paths)?;
     reject_batch_size(&paths, MAX_FILES, "图片")?;
     let text = text.trim().to_string();
     let image_path = image_path.trim().to_string();
+    let rgb = crate::pdf::stamp::parse_color(&color);
+    let wpos = crate::pdf::stamp::WmPos::parse(&pos)
+        .filter(|p| {
+            !matches!(
+                p,
+                crate::pdf::stamp::WmPos::DiagMain | crate::pdf::stamp::WmPos::DiagReverse
+            )
+        })
+        .unwrap_or(crate::pdf::stamp::WmPos::RightBottom);
     let opts = if image_path.is_empty() {
         if text.is_empty() || text.chars().count() > 40 {
             return Err(AppError::new("E_INVALID_NAME", "水印文字需为 1–40 个字符"));
@@ -125,6 +138,8 @@ pub fn img_watermark(
             tile,
             opacity: opacity.clamp(10, 100),
             scale_div: scale_div.clamp(4, 64),
+            rgb,
+            pos: wpos,
         }
     } else {
         if !path_exists(&image_path) || !is_img(&image_path) {
@@ -139,6 +154,8 @@ pub fn img_watermark(
             tile,
             opacity: opacity.clamp(10, 100),
             scale_div: scale_div.clamp(4, 64),
+            rgb,
+            pos: wpos,
         }
     };
     Ok(JobId {

@@ -43,13 +43,15 @@ export function samePathList(a: string[], b: string[]): boolean {
   return b.every((p) => sa.has(norm(p)));
 }
 
-/** 压缩包智能默认名干（不含扩展名，2026-11-08）：单对象 = 对象名（文件去
+/** 智能默认名干（不含扩展名，2026-11-08）：单对象 = 对象名（文件去
  *  扩展名、文件夹用全名），多对象 = 所在目录名；目录名不可用作文件名
- *  （盘根 "D:" / 非法字符）时回退「归档」。输入 items 取自压缩清单的路径
+ *  （盘根 "D:" / 非法字符）时回退 fallback（默认「归档」；合并类对话框
+ *  传各自语义名，2026-11-09 推广复用）。输入 items 取自清单的路径
  *  + 对应 isDir 标记，dirName = 所在目录的目录名（无法解析传 null） */
 export function smartArchiveStem(
   items: { name: string; isDir: boolean }[],
   dirName: string | null,
+  fallback = "归档",
 ): string {
   if (items.length === 1) {
     const { name, isDir } = items[0];
@@ -58,5 +60,5 @@ export function smartArchiveStem(
     return i > 0 ? name.slice(0, i) : name;
   }
   if (dirName && !dirName.includes(":") && isValidName(dirName)) return dirName;
-  return "归档";
+  return fallback;
 }

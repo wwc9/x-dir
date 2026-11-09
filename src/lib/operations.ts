@@ -671,6 +671,8 @@ export async function imgWatermark(entries: FileEntry[], dir: string): Promise<v
     tile: boolean;
     opacity: number;
     scaleDiv: number;
+    color: string;
+    pos: string;
   } | null>({ type: "imgWatermark", entries });
   if (!spec) return;
   const { paths, ...opts } = spec;

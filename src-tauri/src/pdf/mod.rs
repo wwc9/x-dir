@@ -14,6 +14,7 @@ use flate2::write::ZlibEncoder;
 use lopdf::{Document, Object, ObjectId, Stream, dictionary};
 
 use crate::fs::path::to_extended;
+use crate::jobs::pick::available_name;
 use crate::jobs::{EmitterState, FailItem, JobProgress, is_cancelled};
 
 fn zlib(data: &[u8]) -> Vec<u8> {
@@ -193,9 +194,11 @@ pub(crate) fn run_merge(
             return;
         }
     };
-    if let Err(e) = merged.save(to_extended(output)) {
+    // 旁写绝不静默覆盖：输出名撞现有文件时自动 (2) 递增（UI 已预校验，此处兜底）
+    let out_path = available_name(output);
+    if let Err(e) = merged.save(to_extended(&out_path)) {
         failed.push(FailItem {
-            path: output.to_string(),
+            path: out_path,
             message: e.to_string(),
             reason: None,
         });
@@ -481,9 +484,11 @@ pub(crate) fn run_merge_ex(
         {
             // 空白页插入失败已记入 failed，继续保存偶数差一页的合并产物
         }
-        if let Err(e) = merged.save(to_extended(&output)) {
+        // 旁写绝不静默覆盖：输出名撞现有文件时自动 (2) 递增
+        let out_path = available_name(&output);
+        if let Err(e) = merged.save(to_extended(&out_path)) {
             failed.push(FailItem {
-                path: output.clone(),
+                path: out_path,
                 message: e.to_string(),
                 reason: None,
             });
@@ -516,6 +521,8 @@ pub(crate) fn run_split(
     let pages: Vec<(u32, ObjectId)> = doc.get_pages().into_iter().collect();
     prog.total_files = pages.len() as u64;
     let stem = stem_of(path);
+    // 输出目录撞现有目录时自动 (2) 递增（重复拆分不混入旧页文件）
+    let out_dir = &available_name(out_dir);
     if let Err(e) = std::fs::create_dir_all(to_extended(out_dir)) {
         failed.push(FailItem {
             path: out_dir.to_string(),
@@ -582,7 +589,7 @@ pub(crate) fn run_watermark(
         } else {
             format!("{name}.pdf")
         };
-        let out = format!("{dir}\\{name}");
+        let out = available_name(&format!("{dir}\\{name}"));
         let file_stem = stem_of(p);
         let folder = parent_dir(p);
         let result = (|| -> Result<(), String> {
@@ -700,7 +707,9 @@ pub(crate) fn run_page_select(
             return Err("选择结果为空（全部页都被删除）".into());
         }
         let mut out = build_doc_from_pages(&doc, &keep)?;
-        out.save(to_extended(out_path))
+        // 旁写绝不静默覆盖：固定名（_提取/_删页）重复执行自动 (2) 递增
+        let out_path = available_name(out_path);
+        out.save(to_extended(&out_path))
             .map(|_| ())
             .map_err(|e| e.to_string())
     })();
@@ -715,10 +724,11 @@ pub(crate) fn run_page_select(
     em.progress(prog);
 }
 
-/// 旋转：全部页 /Rotate 在原值基础上加 degrees（原地保存，可反向旋转还原）。
-/// 原地保存走临时文件 + 原子改名（2026-11-01 审查修复：lopdf 的 save 以
-/// truncate+write 打开目标，直写原文件时保存中途失败（磁盘满/中断）即损坏
-/// 用户原件；模块内其他操作全部旁写，唯 rotate 是唯一原地路径）
+/// 旋转：全部页 /Rotate 在原值基础上加 degrees。2026-11-09 起改旁写
+/// "<stem>_旋转<度数>.pdf"（度数取顺时针等效值 90/180/270）——模块内其他
+/// 操作全部旁写，原地路径误触即改用户原件（2026-11-09 P1 评审定案）；
+/// 保存仍走临时文件 + 原子改名（lopdf save 以 truncate+write 打开目标，
+/// 中途失败不留半截文件）。输出名撞现有文件自动 (2) 递增。
 pub(crate) fn run_rotate(
     path: &str,
     degrees: i64,
@@ -729,6 +739,28 @@ pub(crate) fn run_rotate(
 ) {
     prog.total_files = 1;
     prog.current_path = path.to_string();
+    if let Err(e) = rotate_pdf_file(path, degrees, cancel) {
+        failed.push(FailItem {
+            path: path.to_string(),
+            message: e,
+            reason: None,
+        });
+    }
+    prog.done_files += 1;
+    em.progress(prog);
+}
+
+/// 旋转核心（独立于 EmitterState 便于单测）：旁写 "<stem>_旋转<eff>.pdf"
+/// （eff = 顺时针等效度数 90/180/270），原文件字节不动；保存走临时文件 +
+/// 原子改名，失败不留半截文件；输出名撞现有文件自动 (2) 递增
+fn rotate_pdf_file(path: &str, degrees: i64, cancel: &AtomicBool) -> Result<String, String> {
+    let eff = degrees.rem_euclid(360);
+    let out = available_name(&format!(
+        "{}\\{}_旋转{}.pdf",
+        parent_dir(path),
+        stem_of(path),
+        eff
+    ));
     let tmp = format!("{}\\{}.rotating.tmp", parent_dir(path), stem_of(path));
     let result = (|| -> Result<(), String> {
         let mut doc = Document::load(to_extended(path)).map_err(|e| e.to_string())?;
@@ -745,20 +777,12 @@ pub(crate) fn run_rotate(
             }
         }
         doc.save(to_extended(&tmp)).map_err(|e| e.to_string())?;
-        std::fs::rename(to_extended(&tmp), to_extended(path)).map_err(|e| e.to_string())
+        std::fs::rename(to_extended(&tmp), to_extended(&out)).map_err(|e| e.to_string())
     })();
     if result.is_err() {
         let _ = std::fs::remove_file(to_extended(&tmp));
     }
-    if let Err(e) = result {
-        failed.push(FailItem {
-            path: path.to_string(),
-            message: e,
-            reason: None,
-        });
-    }
-    prog.done_files += 1;
-    em.progress(prog);
+    result.map(|_| out)
 }
 
 /// 轻压缩：重新打包（对象去重 + 对象流压缩），旁写 "<stem>_压缩.pdf"
@@ -775,7 +799,7 @@ pub(crate) fn run_compress(
             return;
         }
         prog.current_path = p.clone();
-        let out = format!("{}\\{}_压缩.pdf", parent_dir(p), stem_of(p));
+        let out = available_name(&format!("{}\\{}_压缩.pdf", parent_dir(p), stem_of(p)));
         let result = (|| -> Result<(), String> {
             let mut doc = Document::load(to_extended(p)).map_err(|e| e.to_string())?;
             doc.compress(); // 对象去重 + 对象流化；失败则退化为仅重存
@@ -952,7 +976,7 @@ pub(crate) fn run_images_to_pdf(
         });
         return;
     }
-    if let Err(e) = out.save(to_extended(output)) {
+    if let Err(e) = out.save(to_extended(&available_name(output))) {
         failed.push(FailItem {
             path: output.to_string(),
             message: e.to_string(),
@@ -1026,6 +1050,40 @@ mod tests {
         });
         build_page_tree(&mut doc, vec![Object::Reference(page_id)]).unwrap();
         doc
+    }
+
+    #[test]
+    fn rotate_side_writes_original_untouched_and_increments() {
+        let cancel = Arc::new(AtomicBool::new(false));
+        let base = std::env::temp_dir().join(format!("xdir-pdfrot-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let src = base.join("doc.pdf");
+        let p = src.to_string_lossy().into_owned();
+        one_page_doc().save(to_extended(&p)).unwrap();
+        let before = std::fs::read(&src).unwrap();
+
+        // 逆时针 90°（degrees = -90）→ 旁写 _旋转270.pdf（顺时针等效值），原文件不动
+        let out = rotate_pdf_file(&p, -90, &cancel).unwrap();
+        assert!(out.ends_with("doc_旋转270.pdf"), "out = {out}");
+        assert_eq!(
+            std::fs::read(&src).unwrap(),
+            before,
+            "旋转后原文件字节不得改动"
+        );
+        let mut doc = Document::load(to_extended(&out)).unwrap();
+        let id = pages_in_order(&doc)[0];
+        if let Object::Dictionary(d) = doc.get_object_mut(id).unwrap() {
+            assert_eq!(d.get(b"Rotate").unwrap(), &Object::Integer(270));
+        } else {
+            panic!("页对象不是字典");
+        }
+
+        // 同度数重复执行：输出名 (2) 递增，绝不覆盖上次结果
+        let out2 = rotate_pdf_file(&p, -90, &cancel).unwrap();
+        assert!(out2.ends_with("doc_旋转270 (2).pdf"), "out2 = {out2}");
+
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]

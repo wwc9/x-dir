@@ -64,28 +64,35 @@ impl WmPos {
 }
 
 // ── 页面范围 ──
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum WmRange {
     All,
     Odd,
     Even,
+    /// 自定义页码范围表达式（如 "1-3,5,8-"）：按各文档实际页数逐文档解析
+    /// （与提取页 parse_page_ranges 同口径）；表达式非法/解析为空 = 不命中
+    Spec(String),
 }
 
 impl WmRange {
-    pub fn parse(s: &str) -> Option<Self> {
-        Some(match s {
+    /// 全量口径：未知码一律按自定义表达式解析（前端只发 all/odd/even/合法表达式）
+    pub fn parse(s: &str) -> Self {
+        match s {
             "all" => Self::All,
             "odd" => Self::Odd,
             "even" => Self::Even,
-            _ => return None,
-        })
+            other => Self::Spec(other.trim().to_string()),
+        }
     }
-    /// 页码 1 起算：奇数页 = 第 1/3/5… 页
-    pub fn hits(self, page: u32) -> bool {
+    /// 页码 1 起算：奇数页 = 第 1/3/5… 页；自定义表达式按文档总页数解析
+    pub fn hits(&self, page: u32, total: u32) -> bool {
         match self {
             Self::All => true,
             Self::Odd => page % 2 == 1,
             Self::Even => page.is_multiple_of(2),
+            Self::Spec(s) => super::parse_page_ranges(s, total)
+                .map(|v| v.contains(&page))
+                .unwrap_or(false),
         }
     }
 }
@@ -384,7 +391,7 @@ pub fn stamp_document_ex(
     let style = opts.clone();
 
     for (page_no, page_id) in pages {
-        if !opts.range.hits(page_no) {
+        if !opts.range.hits(page_no, total) {
             continue;
         }
         // 页面标签 v1：未解析 /PageLabels 时回落页码
@@ -732,9 +739,17 @@ mod tests {
 
     #[test]
     fn range_hits() {
-        assert!(WmRange::All.hits(1) && WmRange::All.hits(2));
-        assert!(WmRange::Odd.hits(1) && !WmRange::Odd.hits(2));
-        assert!(WmRange::Even.hits(2) && !WmRange::Even.hits(3));
+        assert!(WmRange::All.hits(1, 6) && WmRange::All.hits(2, 6));
+        assert!(WmRange::Odd.hits(1, 6) && !WmRange::Odd.hits(2, 6));
+        assert!(WmRange::Even.hits(2, 6) && !WmRange::Even.hits(3, 6));
+        // 自定义表达式按文档总页数解析："1-3,5" 命中 1/2/3/5、不命中 4/6
+        let spec = WmRange::Spec("1-3,5".into());
+        assert!(spec.hits(1, 6) && spec.hits(3, 6) && spec.hits(5, 6));
+        assert!(!spec.hits(4, 6) && !spec.hits(6, 6));
+        // 尾页省略写法 "8-"：6 页文档解析后 8 越界 → 不命中任何页
+        assert!(!WmRange::Spec("8-".into()).hits(1, 6));
+        // 非法表达式不命中（与提取页 parse_page_ranges 报错口径一致）
+        assert!(!WmRange::Spec("abc".into()).hits(1, 6));
     }
 
     #[test]
@@ -742,7 +757,8 @@ mod tests {
         assert_eq!(WmPos::parse("right-top"), Some(WmPos::RightTop));
         assert_eq!(WmPos::parse("diag-reverse"), Some(WmPos::DiagReverse));
         assert_eq!(WmPos::parse("nope"), None);
-        assert_eq!(WmRange::parse("even"), Some(WmRange::Even));
+        assert_eq!(WmRange::parse("even"), WmRange::Even);
+        assert_eq!(WmRange::parse("1,3-5"), WmRange::Spec("1,3-5".into()));
         assert_eq!(WmNumFmt::parse("cnfrac"), Some(WmNumFmt::CnFrac));
         assert_eq!(WmDtFmt::parse("dash"), Some(WmDtFmt::Dash));
         assert_eq!(parse_color("red"), [201, 56, 64]);

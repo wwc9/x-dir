@@ -1082,10 +1082,16 @@ export function FileList({
       case "pdfRemove":
         return { label: t("PDF 删除页…"), action: () => void removePdfPages(entry0, path) };
       case "pdfRotate":
+        // 三项口径（2026-11-09 P1：原 4 项中「逆时针 90°」与「270°」数学等效
+        // 重复）；统一发顺时针等效度数，Rust 旁写 _旋转<度数>.pdf 与菜单一致
         return {
           label: t("PDF 旋转 ▸"),
-          sub: [-90, 90, 180, 270].map((deg) => ({
-            label: deg < 0 ? t("逆时针 {d}°", { d: -deg }) : `${deg}°`,
+          sub: [
+            { deg: 90, label: t("顺时针 {d}°", { d: 90 }) },
+            { deg: 180, label: t("旋转 {d}°", { d: 180 }) },
+            { deg: 270, label: t("逆时针 {d}°", { d: 90 }) },
+          ].map(({ deg, label }) => ({
+            label,
             action: () => void rotatePdf(entry0, deg),
           })),
         };

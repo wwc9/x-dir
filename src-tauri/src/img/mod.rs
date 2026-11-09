@@ -55,12 +55,16 @@ pub struct WatermarkOpts {
     pub image_path: Option<String>,
     /// 文字水印内容（image_path 为 None 时必填，≤40 字符）
     pub text: String,
-    /// true = 平铺 45°（文字）/ 平铺阵列（图片）；false = 右下角标
+    /// true = 平铺 45°（文字）/ 平铺阵列（图片）；false = 按 pos 角标
     pub tile: bool,
     /// 不透明度百分比 10–100
     pub opacity: u8,
     /// 水印字号 = 图像短边 / font_div（文字水印；图片水印贴图宽 = 短边 / 贴图分母）
     pub scale_div: u32,
+    /// 文字水印颜色（与 PDF 水印同源 8 色板，2026-11-09 P2 补齐；贴图水印不生效）
+    pub rgb: [u8; 3],
+    /// 角标位置（九宫格，tile = false 时生效；对角线码回落右下——贴图无缩放铺满语义）
+    pub pos: crate::pdf::stamp::WmPos,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -485,9 +489,9 @@ pub(crate) fn run_watermark(
             });
             return;
         };
-        // 字号基准 96px 光栅化，贴图时按短边比例缩放
-        let bmp = crate::pdf::stamp::rasterize_text(&font, &opts.text, 96.0, [64, 64, 64]);
-        Some(rgba_from_stamp(&bmp, [64, 64, 64], opts.opacity))
+        // 字号基准 96px 光栅化，贴图时按短边比例缩放；颜色随 opts（2026-11-09 P2）
+        let bmp = crate::pdf::stamp::rasterize_text(&font, &opts.text, 96.0, opts.rgb);
+        Some(rgba_from_stamp(&bmp, opts.rgb, opts.opacity))
     } else {
         None
     };
@@ -522,7 +526,7 @@ pub(crate) fn run_watermark(
             let stamped = if opts.tile {
                 stamp_tiled(&img, &tile)
             } else {
-                stamp_corner(&img, &tile)
+                stamp_at_pos(&img, &tile, opts.pos)
             };
             write_out(
                 &out,
@@ -639,12 +643,24 @@ fn bilinear(img: &RgbaImage, x: f64, y: f64) -> image::Rgba<u8> {
     image::Rgba(px)
 }
 
-/// 右下角标：留 min_side/20 边距
-fn stamp_corner(img: &RgbaImage, tile: &RgbaImage) -> RgbaImage {
+/// 角标：九宫格位置（2026-11-09 P2 由固定右下扩展），留 min_side/20 边距；
+/// 对角线码（贴图无缩放铺满语义）回落右下
+fn stamp_at_pos(img: &RgbaImage, tile: &RgbaImage, pos: crate::pdf::stamp::WmPos) -> RgbaImage {
+    use crate::pdf::stamp::WmPos;
     let mut out = img.clone();
     let margin = (img.width().min(img.height()) / 20).max(4) as i64;
-    let x = img.width() as i64 - tile.width() as i64 - margin;
-    let y = img.height() as i64 - tile.height() as i64 - margin;
+    let (w, h) = (img.width() as i64, img.height() as i64);
+    let (bw, bh) = (tile.width() as i64, tile.height() as i64);
+    let x = match pos {
+        WmPos::LeftTop | WmPos::LeftMid | WmPos::LeftBottom => margin,
+        WmPos::MidTop | WmPos::Center | WmPos::MidBottom => ((w - bw) / 2).max(0),
+        _ => w - bw - margin,
+    };
+    let y = match pos {
+        WmPos::LeftTop | WmPos::MidTop | WmPos::RightTop => margin,
+        WmPos::LeftMid | WmPos::Center | WmPos::RightMid => ((h - bh) / 2).max(0),
+        _ => h - bh - margin,
+    };
     overlay_at(&mut out, tile, x.max(0), y.max(0));
     out
 }
@@ -883,6 +899,37 @@ fn copy_cell(canvas: &mut RgbaImage, cell_img: &RgbaImage, x: i64, y: i64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stamp_at_positions() {
+        // 200×200 白底 + 20×20 纯色贴图：九宫格三代表位置落点正确
+        // （margin = max(200/20, 4) = 10；右下起点 (170,170)、左上 (10,10)、正中 (90,90)）
+        let img = RgbaImage::from_pixel(200, 200, image::Rgba([255, 255, 255, 255]));
+        let tile = RgbaImage::from_pixel(20, 20, image::Rgba([201, 56, 64, 255]));
+        use crate::pdf::stamp::WmPos;
+        let out = stamp_at_pos(&img, &tile, WmPos::RightBottom);
+        assert_eq!(out.get_pixel(175, 175).0, [201, 56, 64, 255]);
+        assert_eq!(out.get_pixel(5, 5).0, [255, 255, 255, 255]);
+        let out = stamp_at_pos(&img, &tile, WmPos::LeftTop);
+        assert_eq!(out.get_pixel(15, 15).0, [201, 56, 64, 255]);
+        let out = stamp_at_pos(&img, &tile, WmPos::Center);
+        assert_eq!(out.get_pixel(95, 95).0, [201, 56, 64, 255]);
+    }
+
+    #[test]
+    fn watermark_text_color_applies() {
+        // rgba_from_stamp：指定 RGB 生效（不再硬编码灰），alpha = 覆盖率 × 不透明度
+        let bmp = crate::pdf::stamp::StampBitmap {
+            width: 2,
+            height: 1,
+            scale: 1.0,
+            rgb: vec![10, 20, 30, 10, 20, 30],
+            alpha: vec![255, 128],
+        };
+        let out = rgba_from_stamp(&bmp, [201, 56, 64], 50);
+        assert_eq!(out.get_pixel(0, 0).0, [201, 56, 64, 127]); // 255×50/100
+        assert_eq!(out.get_pixel(1, 0).0, [201, 56, 64, 64]); // 128×50/100
+    }
 
     #[test]
     fn sibling_out_appends_suffix_and_keeps_dir() {

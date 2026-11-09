@@ -5474,6 +5474,10 @@ body.np-col-resizing * {
 .np-wm-cell:hover {
   background: var(--np-hover);
 }
+.np-wm-cell:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 .np-wm-cell.on {
   background: var(--np-accent);
 }
