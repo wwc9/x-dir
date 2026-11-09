@@ -246,11 +246,13 @@ fn zip_mtime(meta: &std::fs::Metadata) -> Option<zip::DateTime> {
 /// 返回 true = 已取消（调用方停止整包并清半成品）。条目显式带源 mtime（修复
 /// 1980 纪元）；已压缩扩展名 Store；64KB 分块拷贝 = 单大文件内可取消 +
 /// done_bytes 细粒度
+#[allow(clippy::too_many_arguments)] // 递归树遍历语义完整口径，不宜拆
 fn add_path_to_zip<W: Write + Seek>(
     out: &mut zip::ZipWriter<W>,
     path: &str,
     arc_name: &str,
     files: &mut u64,
+    password: Option<&str>,
     cancel: &AtomicBool,
     prog: &mut JobProgress,
     failed: &mut Vec<FailItem>,
@@ -313,6 +315,7 @@ fn add_path_to_zip<W: Write + Seek>(
                 &child,
                 &format!("{dir_arc}{name}"),
                 files,
+                password,
                 cancel,
                 prog,
                 failed,
@@ -338,11 +341,20 @@ fn add_path_to_zip<W: Write + Seek>(
     } else {
         zip::CompressionMethod::Deflated
     };
-    let opt = match zip_mtime(&meta) {
-        Some(dt) => SimpleFileOptions::default()
+    // 密码 = WinZip AES-256（AE-2）：接收方需 7-Zip/WinRAR/好压等支持 AES zip
+    // 的解压工具（Windows 自带解压本就不支持任何加密 zip）
+    let opt: zip::write::FileOptions<'_, ()> = match (zip_mtime(&meta), password) {
+        (Some(dt), Some(pw)) => SimpleFileOptions::default()
+            .compression_method(method)
+            .with_aes_encryption(zip::AesMode::Aes256, pw)
+            .last_modified_time(dt),
+        (Some(dt), None) => SimpleFileOptions::default()
             .compression_method(method)
             .last_modified_time(dt),
-        None => SimpleFileOptions::default().compression_method(method),
+        (None, Some(pw)) => SimpleFileOptions::default()
+            .compression_method(method)
+            .with_aes_encryption(zip::AesMode::Aes256, pw),
+        (None, None) => SimpleFileOptions::default().compression_method(method),
     };
     if let Err(e) = out.start_file(arc_name, opt) {
         failed.push(FailItem {
@@ -392,6 +404,7 @@ fn add_path_to_zip<W: Write + Seek>(
 pub(crate) fn run_zip(
     paths: &[String],
     output: &str,
+    password: Option<&str>,
     cancel: &AtomicBool,
     prog: &mut JobProgress,
     em: &mut EmitterState,
@@ -429,6 +442,7 @@ pub(crate) fn run_zip(
             p,
             &file_name_of(p),
             &mut done,
+            password,
             cancel,
             prog,
             failed,
@@ -757,7 +771,7 @@ pub(crate) fn run_create(
     failed: &mut Vec<FailItem>,
 ) {
     match format {
-        CreateFormat::Zip => run_zip(paths, output, cancel, prog, em, failed),
+        CreateFormat::Zip => run_zip(paths, output, password, cancel, prog, em, failed),
         CreateFormat::TarGz => run_zip_targz(paths, output, cancel, prog, em, failed),
         CreateFormat::SevenZ => match sz_exe {
             Some(exe) => run_zip_7z(
@@ -837,6 +851,7 @@ mod tests {
             tmp.to_str().unwrap(),
             "root",
             &mut n,
+            None,
             &cancel,
             &mut prog,
             &mut failed,
@@ -886,6 +901,100 @@ mod tests {
         let (header, rows) = merge_csv_lines(&[a, b]);
         assert_eq!(header, "h1,h2");
         assert_eq!(rows, vec!["x,1", "y,2"]);
+    }
+
+    /// 加密 zip E2E（依赖内嵌 7z.exe，缺失跳过）：进程内 AES-256 写 →
+    /// 真 7z.exe 对密码解出内容、错密码失败、清单报 AES-256
+    #[test]
+    fn zip_aes_password_roundtrip_with_7z() {
+        let Some(exe) = crate::fs::sevenzip::sevenzip_exe_dev() else {
+            eprintln!("skip: 内嵌 7-Zip 未下载（tools/get-7zip.ps1）");
+            return;
+        };
+        let dir = std::env::temp_dir().join(format!("xdir-zipaes-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let zip_path = dir.join("enc.zip");
+        let f = std::fs::File::create(&zip_path).unwrap();
+        let mut out = zip::ZipWriter::new(f);
+        let mut n = 0;
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        let mut prog = crate::jobs::JobProgress {
+            job_id: 0,
+            phase: "running",
+            total_files: 0,
+            done_files: 0,
+            total_bytes: 0,
+            done_bytes: 0,
+            current_path: String::new(),
+            note: None,
+        };
+        let mut failed: Vec<FailItem> = Vec::new();
+        let src = dir.join("机密.txt");
+        std::fs::write(&src, b"top-secret").unwrap();
+        assert!(!add_path_to_zip(
+            &mut out,
+            src.to_str().unwrap(),
+            "机密.txt",
+            &mut n,
+            Some("pw123"),
+            &cancel,
+            &mut prog,
+            &mut failed,
+        ));
+        out.finish().unwrap();
+        assert!(failed.is_empty());
+
+        let args = |v: Vec<&str>| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        // 清单报 AES-256
+        let (outcome, listing) = crate::fs::sevenzip::run_7z(
+            &exe,
+            &args(vec!["l", "-ba", "-slt", "-p", zip_path.to_str().unwrap()]),
+            &cancel,
+            |_| {},
+        )
+        .unwrap();
+        assert_eq!(outcome, crate::fs::sevenzip::SevenZipOutcome::Ok);
+        assert!(listing.iter().any(|l| l.contains("AES-256")));
+        assert!(listing.iter().any(|l| l.starts_with("Path = ")));
+        // 对密码解出内容
+        let outdir = dir.join("out");
+        std::fs::create_dir_all(&outdir).unwrap();
+        let (outcome, _) = crate::fs::sevenzip::run_7z(
+            &exe,
+            &args(vec![
+                "x",
+                zip_path.to_str().unwrap(),
+                &format!("-o{}", outdir.display()),
+                "-y",
+                "-bso0",
+                "-ppw123",
+            ]),
+            &cancel,
+            |_| {},
+        )
+        .unwrap();
+        assert_eq!(outcome, crate::fs::sevenzip::SevenZipOutcome::Ok);
+        assert_eq!(
+            std::fs::read_to_string(outdir.join("机密.txt")).unwrap(),
+            "top-secret"
+        );
+        // 错密码 = NeedPassword 分类
+        let (outcome, _) = crate::fs::sevenzip::run_7z(
+            &exe,
+            &args(vec![
+                "x",
+                zip_path.to_str().unwrap(),
+                &format!("-o{}", dir.join("out2").display()),
+                "-y",
+                "-bso0",
+                "-pwrong",
+            ]),
+            &cancel,
+            |_| {},
+        )
+        .unwrap();
+        assert_eq!(outcome, crate::fs::sevenzip::SevenZipOutcome::NeedPassword);
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
@@ -1001,6 +1110,7 @@ mod tests {
             dir.to_str().unwrap(),
             "sub",
             &mut n,
+            None,
             &cancel,
             &mut prog,
             &mut failed,

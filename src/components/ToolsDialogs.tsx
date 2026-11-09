@@ -728,7 +728,7 @@ const FORMAT_META: Record<
   zip: {
     ext: "zip",
     defName: "归档.zip",
-    note: "Deflate 压缩；图片/视频/办公文档等已压缩格式自动直存（Store）提速。",
+    note: "Deflate 压缩；图片/视频/办公文档等已压缩格式自动直存（Store）提速；密码 = AES-256（接收方需 7-Zip/WinRAR/好压等解压）。",
   },
   "7z": {
     ext: "7z",
@@ -786,7 +786,8 @@ export function MergeFilesDialog({
       }
       return `${stem}.${FORMAT_META[f].ext}`;
     });
-    if (f !== "7z") {
+    if (f === "targz") {
+      // tar.gz 无加密概念：清空密码与开关（zip/7z 间切换保留）
       setPassword("");
       setEncryptHeader(false);
     }
@@ -840,7 +841,8 @@ export function MergeFilesDialog({
     ...(isZip
       ? {
           format,
-          password: format === "7z" && password ? password : undefined,
+          password:
+            (format === "7z" || format === "zip") && password ? password : undefined,
           encryptHeader: format === "7z" && password ? encryptHeader : undefined,
         }
       : {}),
@@ -874,7 +876,7 @@ export function MergeFilesDialog({
               }}
             />
           </FormRow>
-          {isZip && format === "7z" && (
+          {isZip && format !== "targz" && (
             <>
               <FormRow k={t2("密码")}>
                 <InputGroup
@@ -886,7 +888,7 @@ export function MergeFilesDialog({
                   onChange={(e) => setPassword(e.target.value)}
                 />
               </FormRow>
-              {password && (
+              {password && format === "7z" && (
                 <FormRow k="" wide>
                   <Checkbox
                     checked={encryptHeader}

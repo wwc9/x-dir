@@ -111,7 +111,14 @@ pub(crate) fn run_7z(
     mut on_progress: impl FnMut(u8),
 ) -> Result<(SevenZipOutcome, Vec<String>), SevenZipError> {
     let mut cmd = Command::new(exe);
-    cmd.args(args)
+    // -sccUTF-8：控制台输出强制 UTF-8（缺省跟随系统码页，中文系统 = GBK，
+    // 字节行读入会 lossy 乱码——清单 Path 名/错误文案都依赖正确解码）
+    let mut args: Vec<String> = {
+        let mut v = args.to_vec();
+        v.push("-sccUTF-8".into());
+        v
+    };
+    cmd.args(&mut args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -138,18 +145,22 @@ pub(crate) fn run_7z(
     };
     let mut reader = std::io::BufReader::new(stdout);
     let mut cancelled = false;
-    let mut line = String::new();
+    let mut buf: Vec<u8> = Vec::new();
     let mut stdout_lines: Vec<String> = Vec::new();
     loop {
         if is_cancelled(cancel) {
             cancelled = true;
             break;
         }
-        line.clear();
-        match reader.read_line(&mut line) {
+        buf.clear();
+        // 按字节读行：7z.exe 输出跟随系统码页（中文系统 = GBK），String::read_line
+        // 对非法 UTF-8 行直接 Err → 整个清单静默清空（zip 密码测试实测踩坑）
+        match reader.read_until(b'\n', &mut buf) {
             Ok(0) => break,
             Ok(_) => {
-                let trimmed = line.trim_end_matches(['\r', '\n']).to_string();
+                let trimmed = String::from_utf8_lossy(&buf)
+                    .trim_end_matches(['\r', '\n'])
+                    .to_string();
                 if let Some(p) = parse_progress_percent(&trimmed) {
                     on_progress(p);
                 }

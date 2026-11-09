@@ -322,7 +322,7 @@ M0 原型必须逐项验证该分解；若 WebView2 基础 > 140MB 或总数超�
 | 布局分割 | react-resizable-panels：`PanelGroup`/`Panel` 与 §6.3.1 分割树节点一一对应，只负责尺寸分配与拖动交互；数据源仍是自研 layoutTree.ts 纯函数；**禁用其 autoSaveId 持久化**（持久化走工作区 JSON，§6.9） |
 | Rust 依赖 | serde / serde_json、trash（回收站）、notify（目录监控，V2）、windows（Win32 基础 API；COM 集成留 V2+）、tauri-plugin-opener（默认程序打开）、tauri-plugin-log |
 | **压缩/解压引擎（2026-11-08 备案，§8 白名单外资产决策）** | 进程内：zip 2.x（MIT/Apache，deflate+time feature）、sevenz-rust 0.6（Apache-2.0）、tar 0.4 + flate2（MIT/Apache）。**内嵌资产：官方未修改 7-Zip 25.01 便携版（7z.exe + 7z.dll，~2.3MB）随 resources 分发**——LGPL-2.1 + unRAR 限制条款（白名单外，经用户 2026-11-08 决策接受）：命令行子进程调用（arm's length，项目代码零 LGPL 义务），仅用于解 rar/分卷/xz/bz2 与压缩 7z/加密归档；官方直链 + MSI 整包与产物文件三重 SHA-256 锁定（tools/get-7zip.ps1），许可声明（LGPL + unRAR restriction 全文）随 THIRD-PARTY-NOTICES.txt 分发；本应用及其用户只做解压方向用途，与 unRAR 限制（禁止重造 RAR 压缩）天然无冲突 |
-| 压缩/解压格式决策 | 解压 = zip/7z/tar/tar.gz/tgz/gz 进程内 + rar（含分卷）/xz/bz2 经内嵌 7-Zip；压缩 = zip（Deflate + 已压缩格式智能 Store + 条目 mtime）/7z（LZMA2 可 AES-256 加密+加密文件名）/tar.gz（进程内组合）。RAR 创建永不支持（unRAR 限制 + 无需求） |
+| 压缩/解压格式决策 | 解压 = zip/7z/tar/tar.gz/tgz/gz 进程内 + rar（含分卷）/xz/bz2 经内嵌 7-Zip；压缩 = zip（Deflate + 已压缩格式智能 Store + 条目 mtime + AES-256 密码加密 WinZip AE-2）/7z（LZMA2 可 AES-256 加密+加密文件名）/tar.gz（进程内组合，无加密概念）。RAR 创建永不支持（unRAR 限制 + 无需求） |
 | 剪贴板历史（§3.7） | clipboard-rs（MIT，监听信号源）+ rusqlite（MIT，bundled SQLite 持久化，项目首个数据库） |
 | 可选 | tauri-specta：由 Rust 类型自动生成 TS 绑定，避免双端手写漂移（建议启用） |
 
