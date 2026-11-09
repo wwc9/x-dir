@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { extColorCat, treemap } from "../treemap";
+import { treemap } from "../treemap";
 
 describe("矩形树图布局（treemap，2026-11-09 空间分析 WizTree 式改版）", () => {
   it("边角输入：空表/非正尺寸/全零尺寸 → 空布局", () => {
@@ -89,16 +89,3 @@ describe("矩形树图布局（treemap，2026-11-09 空间分析 WizTree 式改�
   });
 });
 
-describe("类型着色分类（extColorCat → --np-icon-* 色板）", () => {
-  it("文件夹恒金、常见扩展名归类、无扩展名/未知走 generic", () => {
-    expect(extColorCat("电影.mp4", false)).toBe("video");
-    expect(extColorCat("照片.JPG", false)).toBe("image"); // 大小写不敏感
-    expect(extColorCat("备份.7z", false)).toBe("archive");
-    expect(extColorCat("报表.xlsx", false)).toBe("table");
-    expect(extColorCat("合同.pdf", false)).toBe("pdf");
-    expect(extColorCat("main.ts", false)).toBe("code");
-    expect(extColorCat("文档", false)).toBe("generic");
-    expect(extColorCat("未知.xyz", false)).toBe("generic");
-    expect(extColorCat("随便什么名字", true)).toBe("folder");
-  });
-});

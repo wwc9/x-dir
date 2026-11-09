@@ -13,12 +13,35 @@ import {
   type EmptyScan,
 } from "../lib/ipc";
 import { formatBytes } from "../lib/format";
-import { fileIcon } from "../lib/fileIcons";
-import { extColorCat, treemap } from "../lib/treemap";
+import { extOf, fileIcon } from "../lib/fileIcons";
+import { treemap } from "../lib/treemap";
 import { fileNameOf, joinPath } from "../lib/path";
 import { DENSITY } from "../lib/tokens";
 import { deletePaths, transfer } from "../lib/operations";
+import { useIcons } from "../stores/icons";
+import { useSettings } from "../stores/settings";
 import { AppIcon } from "./AppIcon";
+
+/** 真实图标（realIcons 开启）：Rust 提取的位图 dataURL 淡入，np-icon-slot
+ *  预留位保行高（同 FileList FadeInIcon 口径，本地轻量副本免跨组件引用） */
+function RealIcon({ src }: { src: string }) {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setOn(true));
+    return () => cancelAnimationFrame(id);
+  }, [src]);
+  return (
+    <span className="np-icon-slot">
+      <img
+        className="np-realicon"
+        src={src}
+        alt=""
+        draggable={false}
+        style={{ opacity: on ? 1 : 0 }}
+      />
+    </span>
+  );
+}
 
 function Loading({ text }: { text: string }) {
   return (
@@ -233,8 +256,9 @@ export function EmptyScanDialog({ dir, onDone }: { dir: string; onDone(): void }
 }
 
 /** 空间分析（2026-11-09 WizTree 式改版）：上矩形树图（squarified 布局，面积
- *  ∝ 体积、--np-icon-* 类型着色；点击文件夹色块下钻、点击文件色块选中）+
- *  下体积清单（勾选文件/文件夹，删除到回收站）；逐层钻取与面包屑栈沿用 */
+ *  ∝ 体积、主题蓝浓淡随占比分级；点击文件夹色块下钻、点击文件色块选中）+
+ *  下体积清单（类型图标跟随「真实图标」设置；勾选文件/文件夹，删除到回收站）；
+ *  逐层钻取与面包屑栈沿用 */
 export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) {
   const [cwd, setCwd] = useState(dir);
   const [stack, setStack] = useState<string[]>([]);
@@ -243,6 +267,9 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
   const [sel, setSel] = useState<Set<string>>(new Set());
   const tmRef = useRef<HTMLDivElement | null>(null);
   const [tmBox, setTmBox] = useState({ w: 0, h: 0 });
+  const realIcons = useSettings((s) => s.realIcons);
+  const iconMap = useIcons((s) => s.icons);
+  const extMap = useIcons((s) => s.exts);
 
   useEffect(() => {
     let live = true;
@@ -269,6 +296,13 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
     setTmBox({ w: el.clientWidth, h: el.clientHeight });
     return () => ro.disconnect();
   }, []);
+
+  // 真实图标（realIcons 开启）：按可见清单批量请求（路径表优先、扩展名共享表
+  // 直渲染，miss 负缓存——同 FileList 机制）
+  useEffect(() => {
+    if (!realIcons || !rows?.length) return;
+    useIcons.getState().requestIcons(rows.map((r) => r.path));
+  }, [realIcons, rows]);
 
   const rects = useMemo(
     () =>
@@ -345,9 +379,8 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
             rects.map((rc) => {
               const r = byPath.get(rc.key);
               if (!r) return null;
-              const cat = extColorCat(r.name, r.isDir);
               const size = formatBytes(r.size);
-              // 浓淡随体积占比（2026-11-09 用户需求）：sqrt 压缩动态范围，
+              // 浓淡随体积占比（sqrt 压缩动态范围）：
               // 大项深、小项浅——背景 10–65%、描边 30–70% 两档线性映射
               const conc = Math.sqrt(total > 0 ? r.size / total : 0);
               const showName = rc.w >= 72 && rc.h >= 24;
@@ -358,7 +391,6 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
                   className={`np-dsiz-cell${r.isDir ? " is-dir" : ""}${
                     sel.has(rc.key) ? " is-sel" : ""
                   }`}
-                  data-cat={cat}
                   style={{
                     left: rc.x,
                     top: rc.y,
@@ -389,6 +421,10 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
         {!error && rows && rows.length > 0 && (
           <div className="np-dsiz-list">
             {rows.map((r) => {
+              // 图标跟随「真实图标」设置：开 = Rust 提取位图（路径表/扩展名共享表，
+              // 同文件列表口径）；关 = Lucide 语义色图标
+              const real =
+                iconMap[r.path] ?? extMap[extOf(r.name)] ?? undefined;
               const spec = fileIcon(r.name, r.isDir);
               return (
                 <div
@@ -410,11 +446,21 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
                     />
                   </span>
                   <span className="np-dsiz-ic">
-                    <AppIcon
-                      icon={spec.icon}
-                      size={DENSITY.iconSm}
-                      colorVar={spec.colorVar}
-                    />
+                    {realIcons ? (
+                      real ? (
+                        <RealIcon src={real} />
+                      ) : (
+                        // 真实图标模式下 Lucide 不参与（用户预期「全部用真实图标」，
+                        // miss 槽位保行高——同 FileList 口径）
+                        <span className="np-icon-slot" />
+                      )
+                    ) : (
+                      <AppIcon
+                        icon={spec.icon}
+                        size={DENSITY.iconSm}
+                        colorVar={spec.colorVar}
+                      />
+                    )}
                   </span>
                   <span
                     className={`np-dsiz-name np-ellipsis${r.isDir ? " is-dir" : ""}`}

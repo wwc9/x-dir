@@ -1,7 +1,7 @@
 // WizTree 式矩形树图（squarified treemap，Bruls et al. 2000）：面积 ∝ 体积，
 // 行沿剩余空隙的短边排布、以「最差长宽比不劣化」为行扩充判据，保证色块接近
 // 正方形可读。纯函数零依赖，配 vitest（面积守恒/比例界/边角输入锁定）。
-// 类型着色映射复用 index.css 的 --np-icon-* 语义色板（CSS 端按 data-cat 取色）。
+// 着色 = 主题蓝（--np-accent）+ 浓淡随体积占比（渲染端注入，见 np-dsiz-cell）。
 
 export interface TmItem {
   key: string;
@@ -101,32 +101,4 @@ export function treemap(items: TmItem[], width: number, height: number): TmRect[
       h: Math.max(0, Math.min(r.h, height - y)),
     };
   });
-}
-
-/** 类型着色分类（data-cat → CSS 取 --np-icon-* 语义色板）：文件夹金、视频红、
- *  图片蓝、音频紫、压缩包橙、PDF 红、表格绿、文档蓝、幻灯橙、代码青、字体粉、
- *  可执行紫、其余灰。取磁盘空间的大头类型优先列出 */
-export function extColorCat(name: string, isDir: boolean): string {
-  if (isDir) return "folder";
-  const i = name.lastIndexOf(".");
-  const ext = i >= 0 && i + 1 < name.length ? name.slice(i + 1).toLowerCase() : "";
-  if (!ext) return "generic";
-  const table: Record<string, string> = {
-    video: "mp4 mkv avi mov wmv flv webm m4v rmvb rm mpg mpeg 3gp vob m2ts",
-    image: "png jpg jpeg gif webp bmp tif tiff ico heic heif svg psd ai",
-    audio: "mp3 wav flac aac ogg m4a wma opus ape",
-    archive: "zip 7z rar tar gz bz2 xz tgz iso cab",
-    pdf: "pdf",
-    table: "xls xlsx xlsm xlsb ods csv tsv",
-    doc: "doc docx docm rtf odt pages",
-    slide: "ppt pptx pptm odp key",
-    code: "js mjs cjs ts tsx jsx py rs c h cpp hpp cs java go rb php swift kt html htm css json xml yml yaml toml ini sh bat ps1 vbs lua sql",
-    font: "ttf otf woff woff2 eot fon",
-    exe: "exe msi dll sys appx msix bin",
-    text: "txt md log eml",
-  };
-  for (const [cat, exts] of Object.entries(table)) {
-    if (exts.split(" ").includes(ext)) return cat;
-  }
-  return "generic";
 }

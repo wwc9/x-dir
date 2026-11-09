@@ -2515,8 +2515,9 @@ body.np-col-resizing * {
   margin-left: auto;
   flex: 0 0 auto;
 }
-/* 矩形树图（2026-11-09 WizTree 式改版）：面积 ∝ 体积，色块按 data-cat 取
-   --np-icon-* 语义色板淡染 + 同源描边；点击文件夹下钻、点击文件选中 */
+/* 矩形树图（2026-11-09 WizTree 式改版）：面积 ∝ 体积，主题蓝单色 +
+   浓淡随体积占比分级（2026-11-09 二次定案弃类型分色）；点击文件夹下钻、
+   点击文件选中 */
 .np-dsiz-tm {
   position: relative;
   flex: none;
@@ -2546,9 +2547,11 @@ body.np-col-resizing * {
   min-width: 0;
   overflow: hidden;
   cursor: pointer;
-  /* 浓淡随体积占比：--tm-bg/--tm-bd 由渲染端按 sqrt(占比) 注入（大项深小项浅） */
-  border: 1px solid color-mix(in srgb, var(--tm-c, var(--np-icon-generic)) var(--tm-bd, 55%), transparent);
-  background: color-mix(in srgb, var(--tm-c, var(--np-icon-generic)) var(--tm-bg, 15%), transparent);
+  /* 主题蓝 + 浓淡随体积占比：--tm-bg/--tm-bd 由渲染端按 sqrt(占比) 注入
+     （大项深小项浅，2026-11-09 用户定案弃类型分色改单色浓度分级） */
+  --tm-c: var(--np-accent);
+  border: 1px solid color-mix(in srgb, var(--tm-c) var(--tm-bd, 55%), transparent);
+  background: color-mix(in srgb, var(--tm-c) var(--tm-bg, 15%), transparent);
 }
 .np-dsiz-cell:hover {
   filter: brightness(1.1);
@@ -2569,48 +2572,6 @@ body.np-col-resizing * {
 .np-dsiz-cellsize {
   font-size: var(--np-font-sm);
   color: var(--np-muted);
-}
-.np-dsiz-cell[data-cat="folder"] {
-  --tm-c: var(--np-icon-folder);
-}
-.np-dsiz-cell[data-cat="video"] {
-  --tm-c: var(--np-icon-video);
-}
-.np-dsiz-cell[data-cat="image"] {
-  --tm-c: var(--np-icon-image);
-}
-.np-dsiz-cell[data-cat="audio"] {
-  --tm-c: var(--np-icon-audio);
-}
-.np-dsiz-cell[data-cat="archive"] {
-  --tm-c: var(--np-icon-archive);
-}
-.np-dsiz-cell[data-cat="pdf"] {
-  --tm-c: var(--np-icon-pdf);
-}
-.np-dsiz-cell[data-cat="table"] {
-  --tm-c: var(--np-icon-table);
-}
-.np-dsiz-cell[data-cat="doc"] {
-  --tm-c: var(--np-icon-doc);
-}
-.np-dsiz-cell[data-cat="slide"] {
-  --tm-c: var(--np-icon-slide);
-}
-.np-dsiz-cell[data-cat="code"] {
-  --tm-c: var(--np-icon-code);
-}
-.np-dsiz-cell[data-cat="font"] {
-  --tm-c: var(--np-icon-font);
-}
-.np-dsiz-cell[data-cat="exe"] {
-  --tm-c: var(--np-icon-exe);
-}
-.np-dsiz-cell[data-cat="text"] {
-  --tm-c: var(--np-icon-text);
-}
-.np-dsiz-cell[data-cat="generic"] {
-  --tm-c: var(--np-icon-generic);
 }
 .np-dsiz-hint {
   margin-bottom: var(--np-gutter);
