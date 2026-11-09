@@ -12,7 +12,7 @@ import {
   type DupGroup,
   type EmptyScan,
 } from "../lib/ipc";
-import { formatSize } from "../lib/format";
+import { formatBytes } from "../lib/format";
 import { extColorCat, treemap } from "../lib/treemap";
 import { fileNameOf, joinPath } from "../lib/path";
 import { DENSITY } from "../lib/tokens";
@@ -85,10 +85,10 @@ export function DuplicateDialog({ dir, onDone }: { dir: string; onDone(): void }
             {groups.map((g) => (
               <div key={g.hash}>
                 <div className="np-dup-head">
-                  <span>{formatSize({ isDir: false, size: g.size })}</span>
+                  <span>{formatBytes(g.size)}</span>
                   <span className="np-cell-muted">
                     × {g.paths.length} 份 · 可省{" "}
-                    {formatSize({ isDir: false, size: g.size * (g.paths.length - 1) })}
+                    {formatBytes(g.size * (g.paths.length - 1))}
                   </span>
                 </div>
                 {g.paths.map((p) => (
@@ -323,7 +323,7 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
           {rows && (
             <span className="np-cell-muted np-dsiz-total">
               {t("合计 {size} · {n} 项", {
-                size: formatSize({ isDir: true, size: total }),
+                size: formatBytes(total),
                 n: rows.length,
               })}
             </span>
@@ -345,7 +345,7 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
               const r = byPath.get(rc.key);
               if (!r) return null;
               const cat = extColorCat(r.name, r.isDir);
-              const size = formatSize({ isDir: r.isDir, size: r.size });
+              const size = formatBytes(r.size);
               const showName = rc.w >= 72 && rc.h >= 24;
               const showSize = rc.w >= 72 && rc.h >= 46;
               return (
@@ -415,7 +415,7 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
                   {r.isDir ? `${r.files} 项` : ""}
                 </span>
                 <span className="np-dsiz-size">
-                  {formatSize({ isDir: r.isDir, size: r.size })}
+                  {formatBytes(r.size)}
                 </span>
               </div>
             ))}
@@ -521,7 +521,7 @@ export function CompareDialog({
                 {i.rel}
                 <span className="np-cell-muted">
                   {" "}
-                  · {formatSize({ isDir: false, size: i.size })}
+                  · {formatBytes(i.size)}
                 </span>
               </span>
             }
