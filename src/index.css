@@ -4335,7 +4335,9 @@ body.np-col-resizing * {
 }
 .np-menued-label {
   flex: 1;
-  min-width: 0;
+  /* 2026-11-09：可读下限——名称不再被条件 chip 挤到一两个字（截断优先发生在
+     类型 chip 上，见 .np-menued-chip 收缩口径） */
+  min-width: 88px;
   font-size: var(--np-font-ui);
 }
 .np-menued-empty {
@@ -4517,7 +4519,10 @@ body.np-col-resizing * {
   color: var(--np-muted);
 }
 .np-menued-chip {
-  flex: 0 0 auto;
+  /* 2026-11-09：允许收缩（名称有 88px 可读下限后，空间不足时条件 chip 先压，
+     最长的类型 chip 截断最多——原 flex 0 0 auto 把全部挤压转嫁给名称） */
+  flex: 0 1 auto;
+  min-width: 0;
   max-width: 90px;
   color: var(--np-muted);
   background: var(--np-surface-2);

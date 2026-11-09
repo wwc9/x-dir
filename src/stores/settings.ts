@@ -365,6 +365,10 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     merged.extractDestDir = typeof merged.extractDestDir === "string" && merged.extractDestDir
       ? merged.extractDestDir
       : null;
+    // 「启用菜单」栏宽一次性迁移（2026-11-09 上限 480→720 / 默认 520）：旧档
+    // 等于旧上限 480 的值几乎都是「拖到头仍嫌窄」，提为新默认 520；其余存值
+    // （含刻意拖窄的）不动，用户仍可在新上限内自由拖拽
+    merged.menuedLeftWidth = merged.menuedLeftWidth === 480 ? 520 : merged.menuedLeftWidth;
     // 对话框参数记忆（2026-11-09）：仅收 string/number/boolean 值的对象表，
     // 脏值（嵌套对象/数组/null）整键剔除，防坏档污染对话框初始态
     merged.dialogPrefs = sanitizeDialogPrefs(merged.dialogPrefs);
