@@ -50,8 +50,14 @@ zip = { version = "2", default-features = false, features = ["deflate", "time", 
 # SystemTime -> zip::DateTime 转换（zip 不 re-export time；MIT/Apache-2.0，已在依赖树）
 time = "0.3"
 quick-xml = "0.37"
-# 工具箱：重复文件查找的 SHA-256 内容指纹（MIT）
+# 工具箱：重复文件查找的 SHA-256 内容指纹（MIT）；文件工具（2026-11-09
+# 功能库「工具」组）补 md-5/sha1（RustCrypto，MIT/Apache-2.0，已在依赖树）
+# 做校验值/校验文件、filetime（MIT/Apache-2.0，notify 同源）改时间戳——
+# 全部树内已有，零新外部代码
 sha2 = "0.10"
+md-5 = "0.11"
+sha1 = "0.10"
+filetime = "0.2"
 # PDF 处理（右键合并/拆分/水印/页级编辑/图片转PDF）：lopdf MIT，flate2 MIT/Apache-2.0；
 # ab_glyph Apache-2.0 负责水印文字光栅化（运行时读系统字体，不打包字体）；
 # jpeg-decoder MIT/Apache-2.0 负责 JPEG → RGB 解码（图片合并转 PDF）

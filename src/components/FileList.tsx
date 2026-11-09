@@ -19,7 +19,7 @@ import { formatElapsed, formatSize, formatTime } from "../lib/format";
 import { formatShortTime, selStats } from "../lib/selStats";
 import { extOf, fileIcon, typeName } from "../lib/fileIcons";
 import { DENSITY } from "../lib/tokens";
-import { isValidName, joinPath, parentPath, samePathList } from "../lib/path";
+import { isValidName, joinPath, parentPath, samePathList, relativeTo, stemOf, toExtendedLength, toForwardSlash, toQuoted } from "../lib/path";
 import { useUndo } from "../lib/undo";
 import { rectsIntersect, rowDropDest } from "../lib/hitTest";
 import { registerList } from "../lib/listRegistry";
@@ -27,10 +27,13 @@ import { useDnd } from "../stores/dnd";
 import {
   applyRenames,
   cleanOfficeMeta,
+  combineParts,
   compressPdfs,
   convertEncoding,
+  convertEol,
   createEntry,
   createFolders,
+  createLinks,
   deletePaths,
   exportListing,
   exportOfficeText,
@@ -977,6 +980,52 @@ export function FileList({
           label: t("复制名称"),
           action: () => copyText(sel.map((e2) => e2.name).join("\n"), "名称已复制"),
         };
+      case "copyNameStem":
+        return {
+          label: t("复制名称（无扩展名）"),
+          action: () =>
+            copyText(sel.map((e2) => stemOf(e2.name)).join("\n"), "名称已复制"),
+        };
+      // 复制路径变体（2026-11-09，对标 XYplorer/TC 多格式复制）：
+      // 空白处右键 = 当前目录路径的各格式变体
+      case "copyPathVariants": {
+        const items = sel.length ? selectedPaths() : [path];
+        return {
+          label: sel.length ? t("复制路径 ▸") : t("复制当前目录路径 ▸"),
+          sub: [
+            {
+              label: t("复制为正斜杠路径"),
+              action: () =>
+                copyText(items.map(toForwardSlash).join("\n"), "路径已复制"),
+            },
+            {
+              label: t("复制为带引号路径"),
+              action: () => copyText(items.map(toQuoted).join("\n"), "路径已复制"),
+            },
+            {
+              label: t("复制为扩展长路径（\\\\?\\）"),
+              action: () =>
+                copyText(items.map(toExtendedLength).join("\n"), "路径已复制"),
+            },
+            {
+              label: t("复制相对路径（相对当前目录）"),
+              action: () => {
+                const texts = items.map((p2) => relativeTo(p2, path) ?? p2);
+                copyText(texts.join("\n"), "路径已复制");
+              },
+            },
+            {
+              label: t("复制所在文件夹路径"),
+              action: () => {
+                const texts = sel.length
+                  ? [...new Set(sel.map((e2) => parentPath(e2.path) ?? path))]
+                  : [path];
+                copyText(texts.join("\n"), "路径已复制");
+              },
+            },
+          ],
+        };
+      }
       case "copyToPane":
       case "moveToPane": {
         const others = layout.tree
@@ -1124,6 +1173,15 @@ export function FileList({
             { label: t("转为 GBK"), action: () => void convertEncoding(sel, "gbk") },
           ],
         };
+      // 行尾转换（2026-11-09）：字节级重写不改编码，旁写 *_crlf/_lf.ext
+      case "eolConvert":
+        return {
+          label: t("行尾转换 ▸"),
+          sub: [
+            { label: t("转为 CRLF（Windows）"), action: () => void convertEol(sel, "crlf") },
+            { label: t("转为 LF（Unix）"), action: () => void convertEol(sel, "lf") },
+          ],
+        };
       case "csvMerge":
         return { label: t("CSV 合并…"), action: () => void mergeCsvs(sel, path) };
       case "xlsxMerge":
@@ -1131,7 +1189,19 @@ export function FileList({
       case "textMerge":
         return { label: t("文本合并…"), action: () => void mergeTexts(sel, path) };
       case "exportList":
-        return { label: t("导出文件清单…"), action: () => void exportListing(sel, path) };
+        return {
+          label: t("导出文件清单 ▸"),
+          sub: (
+            [
+              ["csv", "导出 CSV（表格数据）"],
+              ["md", "导出 Markdown 表格"],
+              ["txt", "导出纯文本（仅名称）"],
+            ] as const
+          ).map(([fmt, label]) => ({
+            label: t(label),
+            action: () => void exportListing(sel, path, fmt),
+          })),
+        };
       case "batchRename":
         return {
           label: t("批量重命名…"),
@@ -1199,6 +1269,47 @@ export function FileList({
             { label: t("按修改年月分组"), action: () => void organizeEntries(sel, path, "month") },
           ],
         };
+      // ── 工具（2026-11-09 功能库「工具」组）──
+      case "hashCalc":
+        return {
+          label: t("计算校验值…"),
+          action: () =>
+            void useUi.getState().openDialog({ type: "hashCalc", entries: sel }),
+        };
+      case "hashVerify":
+        return {
+          label: t("校验核对"),
+          action: () =>
+            void useUi.getState().openDialog({ type: "hashVerify", path: entry0.path }),
+        };
+      case "fileTouch":
+        return {
+          label: t("修改时间与属性…"),
+          action: () =>
+            void useUi.getState().openDialog({ type: "fileTouch", entries: sel }),
+        };
+      case "createLink":
+        return {
+          label: t("创建链接 ▸"),
+          sub: [
+            {
+              label: t("创建硬链接（同卷文件）"),
+              action: () => void createLinks(sel, true, forceBump),
+            },
+            {
+              label: t("创建符号链接（需管理员或开发者模式）"),
+              action: () => void createLinks(sel, false, forceBump),
+            },
+          ],
+        };
+      case "fileSplit":
+        return {
+          label: t("文件分割…"),
+          action: () =>
+            void useUi.getState().openDialog({ type: "fileSplit", entry: entry0 }),
+        };
+      case "fileCombine":
+        return { label: t("文件合并"), action: () => void combineParts(selectedPaths()) };
       case "newFolder":
         return { label: t("新建文件夹"), action: () => createEntry(path, "dir", forceBump) };
       case "newFile":

@@ -4,8 +4,8 @@
 
 import { api, type Policy } from "./ipc";
 import { fileNameOf, isValidName, joinPath, parentPath } from "./path";
-import { formatTime } from "./format";
 import { montageOutputName } from "./imgOps";
+import { buildListing, listingFileName, listingFilter, type ListingFormat } from "./listing";
 import { useJobs } from "../stores/jobs";
 import { usePanes } from "../stores/panes";
 import { useSettings } from "../stores/settings";
@@ -587,31 +587,77 @@ export async function organizeEntries(entries: FileEntry[], dir: string, mode: "
   }
 }
 
-/** 导出文件清单（名称/类型/大小/修改时间 CSV；原生保存框选择位置） */
-export async function exportListing(entries: FileEntry[], dir: string): Promise<void> {
+/** 导出文件清单（2026-11-09 三格式：CSV/Markdown/纯文本；原生保存框选位置） */
+export async function exportListing(
+  entries: FileEntry[],
+  dir: string,
+  fmt: ListingFormat = "csv",
+): Promise<void> {
   const { save } = await import("@tauri-apps/plugin-dialog");
   const target = await save({
-    defaultPath: joinPath(dir, "文件清单.csv"),
-    filters: [{ name: "CSV", extensions: ["csv"] }],
+    defaultPath: joinPath(dir, listingFileName(fmt)),
+    filters: [listingFilter(fmt)],
   });
   if (!target) return;
-  const esc = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
-  const rows = [
-    "名称,类型,大小(字节),修改时间",
-    ...entries.map((e) =>
-      [
-        esc(e.name),
-        e.isDir ? "文件夹" : esc(e.name.split(".").pop()?.toUpperCase() ?? "文件"),
-        e.isDir ? "" : String(e.size),
-        formatTime(e.mtimeMs),
-      ].join(","),
-    ),
-  ];
   try {
-    await api.saveTextFile(target, rows.join("\r\n"));
+    await api.saveTextFile(target, buildListing(entries, fmt));
     useUi.getState().toast("清单已导出");
   } catch (e) {
     useUi.getState().toast(`导出失败：${String(e)}`, "error");
+  }
+}
+
+/** 行尾转换（字节级重写不改编码，旁写 *_crlf/_lf.ext；入任务引擎） */
+export async function convertEol(entries: FileEntry[], to: "crlf" | "lf"): Promise<void> {
+  try {
+    const { jobId } = await api.convertEol(entries.map((e) => e.path), to);
+    useJobs.getState().register(
+      jobId,
+      "converteol",
+      null,
+      entries.map((e) => parentPath(e.path) ?? ""),
+    );
+  } catch (e) {
+    useUi.getState().toast(`行尾转换失败：${String(e)}`, "error");
+  }
+}
+
+/** 同目录旁建 NTFS 链接（硬链接/符号链接逐项执行，失败逐条提示不中断） */
+export async function createLinks(
+  entries: FileEntry[],
+  hard: boolean,
+  onDone: () => void,
+): Promise<void> {
+  let ok = 0;
+  const dirs = new Set<string>();
+  for (const e of entries) {
+    try {
+      await api.createLink(e.path, hard ? "hard" : "symlink");
+      ok += 1;
+      const par = parentPath(e.path);
+      if (par) dirs.add(par);
+    } catch (err) {
+      useUi.getState().toast(`创建链接"${e.name}"失败：${String(err)}`, "error");
+    }
+  }
+  if (ok) {
+    useUi.getState().toast(`已创建 ${ok} 个链接`);
+    onDone();
+  }
+}
+
+/** 合并分割部件（.crc 清单自动验签；入任务引擎） */
+export async function combineParts(paths: string[]): Promise<void> {
+  try {
+    const { jobId } = await api.combineParts(paths);
+    const dirs = new Set<string>();
+    for (const p of paths) {
+      const par = parentPath(p);
+      if (par) dirs.add(par);
+    }
+    useJobs.getState().register(jobId, "combine", null, [...dirs]);
+  } catch (e) {
+    useUi.getState().toast(`合并失败：${String(e)}`, "error");
   }
 }
 

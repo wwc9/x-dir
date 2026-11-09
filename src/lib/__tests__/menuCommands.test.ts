@@ -116,6 +116,51 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
     expect(builtinByKey("toggleHidden")?.supportsSel).toBe(false);
   });
 
+  it("工具组默认条件（2026-11-09 功能库扩充，防回归）", () => {
+    // 校验：仅文件可算；核对：单选校验文件（含 *SUMS 尾缀变体）
+    expect(builtinByKey("hashCalc")?.cond).toMatchObject({ target: "file" });
+    expect(builtinByKey("hashVerify")?.cond).toMatchObject({
+      target: "file",
+      maxCount: 1,
+      exts: "md5,sha1,sha256,sha512,md5sums,sha1sums,sha256sums,sha512sums",
+    });
+    // 时间属性：文件与文件夹皆可（目录改时间合法）；链接：不限对象（硬/符号二选一）
+    expect(builtinByKey("fileTouch")?.cond).toMatchObject({ target: "all" });
+    expect(builtinByKey("createLink")?.cond).toMatchObject({ target: "all" });
+    // 分割单选任意文件；合并 = ≥2 部件（.partNNN 尾缀无法枚举，不设 exts）
+    expect(builtinByKey("fileSplit")?.cond).toMatchObject({ target: "file", maxCount: 1 });
+    expect(builtinByKey("fileCombine")?.cond).toMatchObject({
+      target: "file",
+      minCount: 2,
+      maxCount: 0,
+    });
+    // 行尾转换：文本系 + 代码系扩展名（与编码转换的 csv,tsv,txt,md,log 不同口径）
+    expect(builtinByKey("eolConvert")?.cond).toMatchObject({
+      target: "file",
+      exts: expect.stringContaining("txt,md,csv,tsv,log"),
+    });
+    expect(builtinByKey("eolConvert")?.cond.exts).toContain("rs");
+    // 路径变体两面共享（空白处 = 当前目录路径的变体）；名称主干仅选中
+    expect(builtinByKey("copyPathVariants")?.supportsBlank).toBe(true);
+    expect(builtinByKey("copyNameStem")?.supportsBlank).toBe(false);
+    // 「工具」组六键聚齐且同组连续
+    const toolKeys = BUILTIN_FNS.filter((x) => x.group === "工具").map((x) => x.key);
+    expect(toolKeys).toEqual([
+      "hashCalc",
+      "hashVerify",
+      "fileTouch",
+      "createLink",
+      "fileSplit",
+      "fileCombine",
+    ]);
+  });
+
+  it("功能库一句话描述（desc）全覆盖：胶囊悬停提示不可缺", () => {
+    for (const f of BUILTIN_FNS) {
+      expect(f.desc.length).toBeGreaterThan(0);
+    }
+  });
+
   it("id 唯一且覆盖全部内置功能引用", () => {
     const entries = defaultMenuEntries();
     const ids = new Set(entries.map((e) => e.id));
@@ -151,8 +196,8 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
     }
   });
 
-  it("功能库分组（2026-11-09 合并精简）：组序固定、同组连续、窗格工具仅工具栏", () => {
-    // 展示组序 = 注册表首现顺序：按使用频率与逻辑流排列（12 组合并为 8 组）
+  it("功能库分组（2026-11-09 合并精简 + 工具组扩充）：组序固定、同组连续、窗格工具仅工具栏", () => {
+    // 展示组序 = 注册表首现顺序：按使用频率与逻辑流排列（8 组 + 2026-11-09 新增「工具」）
     const groups = [...new Set(BUILTIN_FNS.map((f) => f.group))];
     expect(groups).toEqual([
       "文件",
@@ -160,6 +205,7 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
       "窗格",
       "标记与系统",
       "整理",
+      "工具",
       "PDF",
       "图片处理",
       "办公与表格",
@@ -352,13 +398,14 @@ describe("默认工具栏布局（defaultToolbarEntries，2026-10-15 定案）",
 });
 
 describe("功能库目录（fnGroups / spyGroup，2026-10-15 A+B 改版）", () => {
-  it("fnGroups = 注册表首现顺序的 8 组（目录渲染顺序，2026-11-09 合并精简）", () => {
+  it("fnGroups = 注册表首现顺序的 9 组（目录渲染顺序，2026-11-09 合并精简 + 工具组）", () => {
     expect(fnGroups()).toEqual([
       "文件",
       "新建与视图",
       "窗格",
       "标记与系统",
       "整理",
+      "工具",
       "PDF",
       "图片处理",
       "办公与表格",

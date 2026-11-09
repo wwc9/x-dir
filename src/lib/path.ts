@@ -62,3 +62,38 @@ export function smartArchiveStem(
   if (dirName && !dirName.includes(":") && isValidName(dirName)) return dirName;
   return fallback;
 }
+
+// ── 复制路径变体（2026-11-09「复制路径 ▸」，对标 XYplorer/TC 多格式复制）──
+
+/** 反斜杠 → 正斜杠（Git Bash / WSL / Web 直用） */
+export function toForwardSlash(path: string): string {
+  return path.replace(/\\/g, "/");
+}
+
+/** 双引号包裹（粘进 cmd/PowerShell/文档时空格安全） */
+export function toQuoted(path: string): string {
+  return `"${path}"`;
+}
+
+/** 扩展长度前缀 \\?\（超长路径复制给工具用；UNC 路径走 \\?\UNC\ 前缀） */
+export function toExtendedLength(path: string): string {
+  if (path.startsWith("\\\\?\\")) return path;
+  if (path.startsWith("\\\\")) return `\\\\?\\UNC\\${path.slice(2)}`;
+  return `\\\\?\\${path}`;
+}
+
+/** 相对路径（相对 base 目录；不互为前缀时返回 null，调用方回落完整路径）。
+ *  大小写不敏感比对（Windows 文件系统惯例），保持原大小写输出 */
+export function relativeTo(path: string, base: string): string | null {
+  const norm = (s: string) => s.replace(/\\/g, "/").replace(/\/+$/, "");
+  const p = norm(path);
+  const b = norm(base);
+  if (!b || !p.toLowerCase().startsWith(`${b.toLowerCase()}/`)) return null;
+  return p.slice(b.length + 1).replace(/\//g, "\\");
+}
+
+/** 名称主干（去最后一个扩展名；隐藏文件 ".gitignore" 主干 = 全名） */
+export function stemOf(name: string): string {
+  const i = name.lastIndexOf(".");
+  return i > 0 ? name.slice(0, i) : name;
+}

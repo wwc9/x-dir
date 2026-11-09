@@ -7,8 +7,13 @@ import {
   isValidName,
   joinPath,
   parentPath ,
+  relativeTo,
   samePathList,
   smartArchiveStem,
+  stemOf,
+  toExtendedLength,
+  toForwardSlash,
+  toQuoted,
 } from "../path";
 
 describe("fileNameOf", () => {
@@ -141,5 +146,56 @@ describe("smartArchiveStem（压缩包智能默认名干，2026-11-08）", () =>
   });
   it("空清单走目录名/归档分支", () => {
     expect(smartArchiveStem([], "工作")).toBe("工作");
+  });
+});
+
+// ── 复制路径变体（2026-11-09「复制路径 ▸」，路径纯函数行为锁定）──
+describe("toForwardSlash / toQuoted", () => {
+  it("反斜杠全量转正斜杠", () => {
+    expect(toForwardSlash("E:\\a\\b\\c.txt")).toBe("E:/a/b/c.txt");
+    expect(toForwardSlash("C:\\")).toBe("C:/");
+  });
+  it("双引号包裹", () => {
+    expect(toQuoted("E:\\a b\\c.txt")).toBe('"E:\\a b\\c.txt"');
+  });
+});
+
+describe("toExtendedLength", () => {
+  it("本地盘加 \\\\?\\ 前缀", () => {
+    expect(toExtendedLength("E:\\a.txt")).toBe("\\\\?\\E:\\a.txt");
+  });
+  it("UNC 路径走 \\\\?\\UNC\\ 前缀", () => {
+    expect(toExtendedLength("\\\\srv\\share\\a.txt")).toBe(
+      "\\\\?\\UNC\\srv\\share\\a.txt",
+    );
+  });
+  it("已带前缀幂等", () => {
+    const p = "\\\\?\\E:\\a.txt";
+    expect(toExtendedLength(p)).toBe(p);
+  });
+});
+
+describe("relativeTo", () => {
+  it("子路径取相对（保持原大小写）", () => {
+    expect(relativeTo("E:\\Docs\\a\\b.txt", "E:\\Docs")).toBe("a\\b.txt");
+    expect(relativeTo("E:\\DOCS\\x.txt", "E:\\docs")).toBe("x.txt"); // 大小写不敏感比对
+  });
+  it("尾部斜杠的 base 也可命中", () => {
+    expect(relativeTo("E:\\Docs\\a.txt", "E:\\Docs\\")).toBe("a.txt");
+  });
+  it("非子路径/空 base 返回 null", () => {
+    expect(relativeTo("E:\\Other\\a.txt", "E:\\Docs")).toBeNull();
+    expect(relativeTo("E:\\Docs\\a.txt", "")).toBeNull();
+  });
+});
+
+describe("stemOf", () => {
+  it("去最后一个扩展名", () => {
+    expect(stemOf("archive.tar.gz")).toBe("archive.tar");
+    expect(stemOf("readme.txt")).toBe("readme");
+  });
+  it("隐藏文件/无扩展名主干 = 全名", () => {
+    expect(stemOf(".gitignore")).toBe(".gitignore");
+    expect(stemOf("Makefile")).toBe("Makefile");
   });
 });

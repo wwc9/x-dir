@@ -58,6 +58,12 @@ import {
   PdfWatermarkDialog,
   XlsxMergeDialog,
 } from "./ToolsDialogs";
+import {
+  HashCalcDialog,
+  HashVerifyDialog,
+  SplitDialog,
+  TouchDialog,
+} from "./FiletoolsDialogs";
 import { DENSITY } from "../lib/tokens";
 import { useUi, type DialogKind, type DialogSpec } from "../stores/ui";
 import { useSettings } from "../stores/settings";
@@ -69,6 +75,8 @@ import { useUndo } from "../lib/undo";
 const WIDE_TYPES = new Set<string>([
   "duplicates",
   "dirsizes",
+  "hashCalc",
+  "hashVerify",
   "compare",
   "emptyScan",
   "pdfMerge",
@@ -160,9 +168,17 @@ export function DialogHost() {
                           ? "宫格拼图"
                           : dialog?.type === "unlock"
                             ? "解除占用"
-                            : dialog?.type === "properties"
-                              ? "属性"
-                              : "";
+                            : dialog?.type === "hashCalc"
+                              ? "计算校验值"
+                              : dialog?.type === "hashVerify"
+                                ? "校验核对"
+                                : dialog?.type === "fileTouch"
+                                  ? "修改时间与属性"
+                                  : dialog?.type === "fileSplit"
+                                    ? "文件分割"
+                                    : dialog?.type === "properties"
+                                      ? "属性"
+                                      : "";
   // 标题图标：confirm/alert 按 kind；冲突预检固定警示；其余无图标
   const icon =
     dialog?.type === "confirm" || dialog?.type === "alert"
@@ -314,6 +330,19 @@ export function DialogHost() {
 
       {dialog?.type === "unlock" && (
         <UnlockDialog items={dialog.items} permanent={dialog.permanent} onDone={close} />
+      )}
+
+      {dialog?.type === "hashCalc" && (
+        <HashCalcDialog entries={dialog.entries} onDone={close} />
+      )}
+      {dialog?.type === "hashVerify" && (
+        <HashVerifyDialog path={dialog.path} onDone={close} />
+      )}
+      {dialog?.type === "fileTouch" && (
+        <TouchDialog entries={dialog.entries} onDone={close} />
+      )}
+      {dialog?.type === "fileSplit" && (
+        <SplitDialog entry={dialog.entry} onDone={close} />
       )}
 
       {dialog?.type === "imgCompress" && (

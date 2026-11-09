@@ -2489,6 +2489,55 @@ body.np-col-resizing * {
   min-height: var(--np-row-h);
   margin-bottom: 0;
 }
+/* 文件工具结果行（2026-11-09「工具」组：计算校验值 / 校验核对共用）：
+   状态徽标 + 名称 + 等宽哈希，行可点（复制单条），悬停轻染同 np-menued 胶囊语言 */
+.np-ht-row {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gutter);
+  min-height: var(--np-row-h);
+  padding: 0 4px;
+  border-radius: var(--np-radius);
+  cursor: pointer;
+}
+.np-ht-row:hover {
+  background: var(--np-hover);
+}
+.np-ht-st {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--np-ctl-h);
+  flex: 0 0 auto;
+  color: var(--np-muted);
+}
+.np-ht-ok {
+  color: var(--np-success);
+}
+.np-ht-bad {
+  color: var(--np-danger);
+}
+.np-ht-miss {
+  color: var(--np-muted);
+}
+.np-ht-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+}
+.np-ht-hash {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
 /* 体积条：名称左、比例条中、项数与数值右（TreeSize 式一行读全） */
 .np-dsiz-head {
   display: flex;

@@ -27,6 +27,8 @@ import {
   Copy,
   CornerLeftUp,
   Droplets,
+  Clock,
+  Combine,
   Eraser,
   ExternalLink,
   Eye,
@@ -42,11 +44,13 @@ import {
   FolderPlus,
   GitCompare,
   HardDrive,
+  Hash,
   Images,
   Info,
   LayoutList,
   Layers,
   LayoutTemplate,
+  Link2,
   List,
   ListChecks,
   ListOrdered,
@@ -64,14 +68,19 @@ import {
   ScanEye,
   Scissors,
   Search,
+  ShieldCheck,
+  Slash,
+  Split,
   Star,
   Table,
   Terminal,
+  Text,
   TextCursorInput,
   Trash,
   Trash2,
   Type,
   type LucideIcon,
+  WrapText,
 } from "lucide-react";
 
 import type { MenuCond, MenuEntry } from "../lib/ipc";
@@ -157,7 +166,9 @@ export const FN_ICONS: Record<string, LucideIcon> = {
   copy: Copy,
   paste: ClipboardPaste,
   copyPath: Route,
+  copyPathVariants: Slash,
   copyName: Type,
+  copyNameStem: Text,
   copyToPane: ArrowRightToLine,
   moveToPane: ArrowLeftRight,
   colorTag: Paintbrush,
@@ -201,6 +212,13 @@ export const FN_ICONS: Record<string, LucideIcon> = {
   splitV: Rows2,
   swap: ArrowLeftRight,
   organizeBy: FolderInput,
+  hashCalc: Hash,
+  hashVerify: ShieldCheck,
+  fileTouch: Clock,
+  createLink: Link2,
+  fileSplit: Split,
+  fileCombine: Combine,
+  eolConvert: WrapText,
 };
 
 /** 选中依赖三档（菜单与工具栏统一语义），对外措辞 =「启用时机」：
@@ -1095,13 +1113,16 @@ export function MenuEditor() {
                             onPointerDown={(e) =>
                               beginDrag(e, { src: "builtin", key: f.key })
                             }
-                            data-tip={
+                            data-tip={[
+                              f.desc ? t(f.desc) : null,
                               dual
                                 ? t("{label}（拖入菜单或工具栏对应区域；可两面共享）", {
                                     label: f.label,
                                   })
-                                : t("{label}（仅可拖入工具栏）", { label: f.label })
-                            }
+                                : t("{label}（仅可拖入工具栏）", { label: f.label }),
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
                           >
                             <AppIcon
                               icon={FN_ICONS[f.key] ?? List}

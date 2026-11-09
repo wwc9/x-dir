@@ -5,6 +5,7 @@ pub mod cliphist;
 pub mod config_cmds;
 pub mod drives;
 pub mod files;
+pub mod filetools_cmds;
 pub mod hotkeys;
 pub mod icons;
 pub mod img_cmds;

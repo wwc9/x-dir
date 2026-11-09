@@ -215,6 +215,40 @@ export interface CreateDirsResult {
   failed: { name: string; message: string }[];
 }
 
+// ── 文件工具（2026-11-09 功能库「工具」组，Rust commands/filetools_cmds.rs）──
+
+export type HashAlgo = "md5" | "sha1" | "sha256" | "sha512";
+
+/** 单文件哈希结果（hash = null 时 error 给出原因，逐行展示不中断批量） */
+export interface HashRow {
+  path: string;
+  name: string;
+  hash: string | null;
+  error: string | null;
+}
+
+/** 校验文件核对单行（status ∈ ok/mismatch/missing/error） */
+export interface VerifyRow {
+  name: string;
+  expected: string;
+  actual: string | null;
+  status: "ok" | "mismatch" | "missing" | "error";
+}
+
+/** 校验文件核对报告（algo = 按扩展名/哈希长度推断） */
+export interface VerifyReport {
+  algo: HashAlgo;
+  total: number;
+  okCount: number;
+  rows: VerifyRow[];
+}
+
+/** 时间戳/属性批改回执（best-effort：逐项失败不中断整批） */
+export interface MetaResult {
+  applied: number;
+  failed: { path: string; message: string }[];
+}
+
 export interface DriveInfo {
   letter: string;
   label: string;
@@ -926,6 +960,37 @@ export const api = {
    *  gz/xz/bz2 单文件流旁写内层名；password = 加密包密码（缺省 None） */
   extractArchives: (sources: string[], destDir: string, password?: string) =>
     cmd<{ jobId: number }>("extract_archives", { sources, destDir, password }),
+  // ── 文件工具（2026-11-09 功能库「工具」组）──
+  /** 批量哈希（MD5/SHA-1/SHA-256/SHA-512；逐行返回，单项失败不中断） */
+  hashFiles: (paths: string[], algo: HashAlgo) =>
+    cmd<HashRow[]>("hash_files", { paths, algo }),
+  /** 核对校验文件（GNU SUMS 格式，以清单所在目录为基准哈希比对） */
+  verifySumsFile: (path: string) => cmd<VerifyReport>("verify_sums_file", { path }),
+  /** 批改时间戳/属性（null = 保持不动；时间 = 毫秒时间戳） */
+  setFileMeta: (
+    paths: string[],
+    opts: {
+      mtimeMs?: number | null;
+      atimeMs?: number | null;
+      readonly?: boolean | null;
+      hidden?: boolean | null;
+    },
+  ) => cmd<MetaResult>("set_file_meta", { paths, ...opts }),
+  /** 同目录旁建 NTFS 链接（kind ∈ hard|symlink），返回新链接路径 */
+  createLink: (path: string, kind: "hard" | "symlink") =>
+    cmd<string>("create_link", { path, kind }),
+  /** 文件分割入任务引擎（partMb ∈ 0.1–10240 MB → .partNNN + .crc 清单） */
+  splitFile: (path: string, partMb: number) =>
+    cmd<{ jobId: number }>("split_file", { path, partMb }),
+  /** 合并 .part 分割部件入任务引擎（.crc 自动验签） */
+  combineParts: (paths: string[]) =>
+    cmd<{ jobId: number }>("combine_parts", { paths }),
+  /** 行尾转换（字节级重写不改编码，旁写 *_crlf/_lf.ext） */
+  convertEol: (paths: string[], to: "crlf" | "lf") =>
+    cmd<{ jobId: number }>("convert_eol", { paths, to }),
+  /** 保存校验清单（GNU SUMS 纯文本：无 BOM、LF 行尾） */
+  saveSumsFile: (path: string, content: string) =>
+    cmd<void>("save_sums_file", { path, content }),
   /** 重复文件查找（SHA-256 指纹） */
   findDuplicates: (dir: string) => cmd<DupGroup[]>("find_duplicates", { dir }),
   /** 空文件/空文件夹扫描（0 字节文件 + 字面空目录） */

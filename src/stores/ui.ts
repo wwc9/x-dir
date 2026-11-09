@@ -69,7 +69,15 @@ export type DialogSpec =
   /** PDF 提取页/删除页（2026-11-03 §4.9 对齐）：页数回显 + 范围解析预演 */
   | { type: "pdfPages"; mode: "extract" | "remove"; entry: FileEntry }
   /** 解除占用（2026-11-01）：删除撞上占用失败的路径入场，可关句柄后按原语义重删 */
-  | { type: "unlock"; items: string[]; permanent: boolean };;
+  | { type: "unlock"; items: string[]; permanent: boolean }
+  /** 计算校验值（2026-11-09 功能库「工具」组）：带选中文件入场，算法可切换 */
+  | { type: "hashCalc"; entries: FileEntry[] }
+  /** 校验核对（选中一个 .md5/.sha256 等校验文件，逐项哈希比对） */
+  | { type: "hashVerify"; path: string }
+  /** 修改时间与属性（批量改修改/访问时间、只读/隐藏位） */
+  | { type: "fileTouch"; entries: FileEntry[] }
+  /** 文件分割（按大小切块 + .crc 清单） */
+  | { type: "fileSplit"; entry: FileEntry };;
 
 /** 提示弹窗语义级别：info=主操作、warn=警示、danger=不可逆/错误 */
 export type DialogKind = "info" | "warn" | "danger";

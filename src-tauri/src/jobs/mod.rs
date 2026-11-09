@@ -154,6 +154,17 @@ pub enum JobKind {
     Extract {
         password: Option<String>,
     },
+    /// 文件分割（2026-11-09 功能库「工具」组）：每件 part_bytes 字节 →
+    /// <基底>.partNNN + <基底>.crc 清单（各件与总体 SHA-256）
+    SplitFile {
+        part_bytes: u64,
+    },
+    /// 分割部件合并：选中项反解基底/序号，.crc 验签后流式重组
+    CombineParts,
+    /// 行尾转换（字节级 0x0D/0x0A 重写不改编码），旁写 <stem>_crlf|_lf.<ext>
+    ConvertEol {
+        to: crate::fs::filetools::Eol,
+    },
     /// 图片压缩（Auto/JPEG/PNG8/无损优化），旁写 <stem>_压缩.<ext>
     ImgCompress {
         opts: crate::img::CompressOpts,
@@ -210,6 +221,14 @@ impl EmitterState {
             self.last = Instant::now();
             let _ = self.app.emit("job-progress", p);
         }
+    }
+}
+
+/// 文件工具 run_*（fs::filetools）的进度上报口径：任务引擎实现 = 节流真事件，
+/// 单测实现 = NullSink 静默（2026-11-09）
+impl crate::fs::filetools::ProgressSink for EmitterState {
+    fn progress(&mut self, p: &JobProgress) {
+        EmitterState::progress(self, p);
     }
 }
 
@@ -800,6 +819,50 @@ impl JobManager {
                         crate::img::run_montage(
                             &sources,
                             opts,
+                            &cancel,
+                            &mut prog,
+                            &mut em,
+                            &mut failed,
+                        );
+                    }
+                    JobKind::SplitFile { part_bytes } => {
+                        if let Some(first) = sources.first()
+                            && let Some(par) = parent_of(first)
+                        {
+                            dirty_dirs.push(par);
+                        }
+                        crate::fs::filetools::run_split_file(
+                            &sources[0],
+                            *part_bytes,
+                            &cancel,
+                            &mut prog,
+                            &mut em,
+                            &mut failed,
+                        );
+                    }
+                    JobKind::CombineParts => {
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        crate::fs::filetools::run_combine_parts(
+                            &sources,
+                            &cancel,
+                            &mut prog,
+                            &mut em,
+                            &mut failed,
+                        );
+                    }
+                    JobKind::ConvertEol { to } => {
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        crate::fs::filetools::run_convert_eol(
+                            &sources,
+                            *to,
                             &cancel,
                             &mut prog,
                             &mut em,
