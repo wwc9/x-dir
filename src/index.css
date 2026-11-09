@@ -4760,6 +4760,12 @@ body.np-col-resizing * {
   gap: var(--np-gap);
   min-width: 0;
 }
+/* 启用开关：Blueprint .bp6-control 默认 margin-bottom:8px 在单行卡内把开关
+   顶离行中轴（视觉偏上 ~4px），清零并对齐中轴（同 np-bren-headpath 口径） */
+.np-rs-head .bp6-switch {
+  margin-bottom: 0;
+  flex: none;
+}
 .np-rs-grip {
   display: inline-flex;
   align-items: center;
