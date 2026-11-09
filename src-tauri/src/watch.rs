@@ -1,5 +1,8 @@
-//! 目录监控（§6.8）：仅可见窗格挂 watcher（引用计数），事件 300ms 窗口聚合 +
-//! 700ms 冷却后作为"脏标记"回调，不携带元数据。watcher 丢弃后事件线程自然退出。
+//! 目录监控（§6.8）：仅可见窗格挂 watcher（引用计数），事件 150ms 窗口聚合 +
+//! 400ms 冷却后作为"脏标记"回调，不携带元数据。watcher 丢弃后事件线程自然退出。
+//! （2026-11-09 调优：300/700 → 150/400——Windows ReadDirectoryChangesW 连发
+//! 事件间隔通常 <10ms，150ms 聚合仍然充分，跨窗格拖放防闪烁由前端 250ms
+//! 合并窗（BUMP_AFFECTED_WINDOW_MS）兜底；X-Dir 内改名另有主动 bump 零防抖直达）
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -11,8 +14,8 @@ use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use crate::fs::path::{norm_key, to_extended};
 
 const MAX_WATCHES: usize = 24;
-const DEBOUNCE_MS: u64 = 300;
-const COOLDOWN_MS: u64 = 700;
+const DEBOUNCE_MS: u64 = 150;
+const COOLDOWN_MS: u64 = 400;
 /// 持续变更下防抖窗口的硬上限：解压/拷贝大文件时事件间隔可小于单次窗口，
 /// 不设上限会让刷新无限推迟
 const DEBOUNCE_MAX_MS: u64 = 2_000;
@@ -68,8 +71,8 @@ impl WatchManager {
         // 回调收到原始显示路径（dir-changed 事件前端按原始路径匹配窗格）；
         // 引用计数与 map 键用归一化形式。
         // 冷却不丢事件（2026-11-06 修订）：旧实现冷却期后 try_recv 清空积压——
-        // 冷却窗口（700ms）内到达的变更被静默丢弃，极端时序（上一轮触发刚过、
-        // 用户随即放入新文件）下该变更永远不产生 dir-changed，前端列表不刷。
+        // 冷却窗口（COOLDOWN_MS）内到达的变更被静默丢弃，极端时序（上一轮触发刚
+        // 过、用户随即放入新文件）下该变更永远不产生 dir-changed，前端列表不刷。
         // 现冷却结束检查积压：有则开新一轮聚合再触发一次，变更必达
         let p = path.to_string();
         std::thread::spawn(move || {
@@ -179,7 +182,7 @@ mod tests {
         let f = std::path::Path::new(&dir).join("a.txt");
         std::fs::write(&f, "1").unwrap();
         rx.recv_timeout(Duration::from_secs(3)).expect("首轮回调");
-        // 冷却中段（首轮触发后约 200ms < 700ms 冷却）再写
+        // 冷却中段（首轮触发后约 200ms < 400ms 冷却）再写
         std::fs::write(&f, "2").unwrap();
         let second = rx.recv_timeout(Duration::from_secs(3));
         assert!(second.is_ok(), "冷却期内的变更必须再触发一次回调");

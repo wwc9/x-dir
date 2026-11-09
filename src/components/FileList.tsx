@@ -1379,6 +1379,10 @@ export function FileList({
         });
       }
       forceBump();
+      // 同目录他窗格零防抖同步：仅本窗格刷新会让他窗格等 watcher 全链路
+      // （防抖 + 合并窗 + 重扫），主动 bump 250ms 合并窗直达
+      const dir = parentPath(entry.path);
+      if (dir) usePanes.getState().bumpAffected([dir]);
     } catch (e) {
       useUi.getState().toast(`重命名失败：${String(e)}`, "error");
     }

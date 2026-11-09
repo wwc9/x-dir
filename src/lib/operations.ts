@@ -7,6 +7,7 @@ import { fileNameOf, isValidName, joinPath, parentPath } from "./path";
 import { formatTime } from "./format";
 import { montageOutputName } from "./imgOps";
 import { useJobs } from "../stores/jobs";
+import { usePanes } from "../stores/panes";
 import { useSettings } from "../stores/settings";
 import { confirmDialog, useUi } from "../stores/ui";
 import { useUndo } from "./undo";
@@ -637,6 +638,11 @@ export async function applyRenames(
   if (okCount) {
     if (ops.length) useUndo.getState().push({ kind: "rename", ops });
     useUi.getState().toast(`已重命名 ${okCount} 项`);
+    // 同目录他窗格零防抖同步（批量重命名可在跨目录清单上执行，逐父目录去重）
+    const dirs = [
+      ...new Set(items.map((it) => parentPath(it.path)).filter((d): d is string => !!d)),
+    ];
+    if (dirs.length) usePanes.getState().bumpAffected(dirs);
     onDone();
   }
 }
