@@ -130,7 +130,7 @@ export const BUILTIN_FNS: BuiltinFn[] = [
   { key: "csvMerge", label: "CSV 合并", desc: "多 CSV 合并自动去重表头", group: "办公与表格", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2, exts: "csv,tsv" }) },
   { key: "xlsxMerge", label: "Excel 合并", desc: "多工作簿合并为一份", group: "办公与表格", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2, exts: "xlsx,xlsm,xls,xlsb,ods" }) },
   { key: "textMerge", label: "文本合并", desc: "文本按选中顺序拼接", group: "办公与表格", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2, exts: "txt,md,log" }) },
-  { key: "exportList", label: "导出文件清单 ▸", desc: "导出选中项/整个文件夹清单（直存当前文件夹）", group: "办公与表格", area: "both", supportsSel: true, supportsBlank: true, cond: C({}) },
+  { key: "exportList", label: "导出文件清单", desc: "导出 CSV 清单，直存当前文件夹", group: "办公与表格", area: "both", supportsSel: true, supportsBlank: true, cond: C({}) },
 ];
 
 export function builtinByKey(key: string): BuiltinFn | undefined {

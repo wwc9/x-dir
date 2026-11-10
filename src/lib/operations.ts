@@ -2,7 +2,7 @@
 // V2：nativeFileOps 开启时走 IFileOperation，冲突由系统对话框处理，
 // 此处跳过预检对话框（policy 传 rename 仅作原生失败回退时的兜底语义）。
 
-import { api, type ListingFormat, type Policy, type RenameOutcome } from "./ipc";
+import { api, type Policy, type RenameOutcome } from "./ipc";
 import { fileNameOf, isValidName, joinPath, parentPath } from "./path";
 import { montageOutputName } from "./imgOps";;
 import { useJobs } from "../stores/jobs";
@@ -586,19 +586,19 @@ export async function organizeEntries(entries: FileEntry[], dir: string, mode: "
   }
 }
 
-/** 导出文件清单（2026-11-10 增强：免保存框直写当前文件夹，重名 "(2)" 递增；
- *  空白处右键 entries 为空 = 整树递归导出整个文件夹，文件夹行含子树体积） */
+/** 导出文件清单（2026-11-10 增强：免保存框直写当前文件夹，文件名随文件夹名，
+ *  重名 "(2)" 递增；仅 CSV——2026-11-10 二次定案去掉格式子菜单。空白处右键
+ *  entries 为空 = 整树递归导出整个文件夹，文件夹行含子树体积） */
 export async function exportListing(
   entries: FileEntry[],
   dir: string,
-  fmt: ListingFormat = "csv",
 ): Promise<void> {
   const recursive = entries.length === 0;
   try {
     const r = await api.exportListing(
       entries.map((e) => e.path),
       dir,
-      fmt,
+      "csv",
       recursive,
     );
     const name = fileNameOf(r.path);

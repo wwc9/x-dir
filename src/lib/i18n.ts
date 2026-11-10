@@ -136,7 +136,6 @@ const EN: Record<string, string> = {
   "CSV 合并": "Merge CSVs",
   "Excel 合并": "Merge Excel files",
   "文本合并": "Merge text files",
-  "导出文件清单": "Export file list",
 
   // ── 功能分组（定制页聚类标题，2026-11-09 合并精简为 8 组）──
   "文件": "Files",
@@ -159,7 +158,7 @@ const EN: Record<string, string> = {
   "文件合并": "Combine parts",
   "行尾转换 ▸": "Line endings ▸",
   "编码转换 ▸": "Convert encoding ▸",
-  "导出文件清单 ▸": "Export file list ▸",
+  "导出文件清单": "Export file list",
   // 描述（顺序同注册表；en 悬停提示，zh 源串即文案）
   "用系统默认程序打开": "Open with the default app",
   "在当前窗格新标签页打开此文件夹": "Open this folder in a new tab",
@@ -246,14 +245,7 @@ const EN: Record<string, string> = {
   "创建符号链接（需管理员或开发者模式）": "Create symbolic link (admin/Dev Mode required)",
   "转为 CRLF（Windows）": "Convert to CRLF (Windows)",
   "转为 LF（Unix）": "Convert to LF (Unix)",
-  "导出 CSV（表格数据）": "Export CSV (spreadsheet data)",
-  "导出 Markdown 表格": "Export Markdown table",
-  "导出纯文本（仅名称）": "Export plain text (names only)",
-  "导出 CSV（整个文件夹）": "Export CSV (entire folder)",
-  "导出 Markdown 表格（整个文件夹）": "Export Markdown table (entire folder)",
-  "导出纯文本（整个文件夹）": "Export plain text (entire folder)",
-  "导出选中项/整个文件夹清单（直存当前文件夹）":
-    "Export selected items / whole folder listing (saved into the folder)",
+  "导出 CSV 清单，直存当前文件夹": "Export a CSV listing, saved into the current folder",
   "计算校验值…": "Compute checksum…",
   "修改时间与属性…": "Timestamps & attributes…",
   "文件分割…": "Split file…",
