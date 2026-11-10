@@ -1265,14 +1265,16 @@ export function ExportListingDialog({
             />
           </FormRow>
           <FormRow k={t2("文件名")}>
-            <InputGroup
-              size="small"
-              value={name}
-              spellCheck={false}
-              autoFocus
-              onChange={(e) => setName(e.target.value)}
-              rightElement={<span className="np-dialog-muted">.{fmt}</span>}
-            />
+            <span className="np-filext">
+              <InputGroup
+                size="small"
+                value={name}
+                spellCheck={false}
+                autoFocus
+                onChange={(e) => setName(e.target.value)}
+              />
+              <span className="np-dialog-muted">.{fmt}</span>
+            </span>
           </FormRow>
         </div>
         {!nameOk && (

@@ -4714,17 +4714,19 @@ body.np-col-resizing * {
   font-size: var(--np-font-ui);
   color: var(--np-muted);
 }
-.np-bren-form.is-cols .np-bren-field > .bp6-input-group {
-  width: 100%;
-  max-width: 280px;
-}
-/* 输入框右侧单位后缀与输入文字同轴（2026-11-10 用户反馈）：Blueprint
-   .bp6-input-action 默认 top:0 钉在输入框顶，输入文字却垂直居中——上下
-   撑满后 flex 居中，后缀与文字共用水平中轴 */
-.np-bren-form.is-cols .bp6-input-group > .bp6-input-action {
-  bottom: 0;
-  display: flex;
+/* 文件名行「输入框 + 单位后缀」组合：后缀不进 Blueprint rightElement（其
+   action 容器 absolute top:0 钉顶，两轮对齐修正都不如并排 flex 直观）——
+   并排 + align-items center 与输入框共用同一水平中轴 */
+.np-filext {
+  display: inline-flex;
   align-items: center;
+  gap: var(--np-gutter);
+  width: 100%;
+  max-width: 320px;
+}
+.np-filext > .bp6-input-group {
+  flex: 1 1 auto;
+  width: auto;
 }
 /* Blueprint 表单控件自带 margin-bottom 8px（.bp6-control），参数表单行距由
    网格 gap 统一供给，控入内边距清零（2026-11-10 用户反馈首行下间隔偏大） */
