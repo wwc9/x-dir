@@ -7,7 +7,7 @@ use super::files::AppError;
 use super::jobs_cmds::JobId;
 use crate::AppState;
 use crate::fs::entry::path_exists;
-use crate::fs::path::to_extended;
+use crate::fs::path::{is_valid_name, to_extended};
 use crate::jobs::{JobKind, Policy};
 
 fn is_pdf(path: &str) -> bool {
@@ -85,20 +85,65 @@ pub fn pdf_merge(
     })
 }
 
+/// PDF 拆分（2026-11-10 参数化）：method ∈ pages|bookmarks；按页数时
+/// n_pages ≥1（每 N 页一份）；按书签时 bookmark_level = 0 即顶级书签
+/// （层级为空自动取最深层，无书签在任务执行时报错）；naming_rule 占位符
+/// [原文件名]/[序号]/[页码]，空 = 默认「[原文件名]-[序号]」，渲染样例
+/// 非法名即时报错；save_to_folder = 结果存进源文件名子文件夹（out_dir
+/// 由前端按该开关算好：子夹目录或所在目录）
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // 拆分参数面板五项 + 路径/目录，同 pdf_watermark 口径
 pub fn pdf_split(
     app: AppHandle,
     state: State<'_, AppState>,
     path: String,
     out_dir: String,
+    method: String,
+    n_pages: u32,
+    bookmark_level: u32,
+    naming_rule: String,
+    save_to_folder: bool,
 ) -> Result<JobId, AppError> {
     reject_not_pdf(std::slice::from_ref(&path))?;
+    let by_pages = match method.as_str() {
+        "pages" => true,
+        "bookmarks" => false,
+        _ => return Err(AppError::new("E_INVALID_NAME", "不支持的拆分方式")),
+    };
+    if by_pages && n_pages == 0 {
+        return Err(AppError::new("E_INVALID_NAME", "每 N 页必须 ≥ 1"));
+    }
     if out_dir.trim().is_empty() {
         return Err(AppError::new("E_INVALID_NAME", "输出目录无效"));
     }
+    let rule = naming_rule.trim().to_string();
+    let rule = if rule.is_empty() {
+        "[原文件名]-[序号]".to_string()
+    } else {
+        rule
+    };
+    // 命名规则即时校验：按首份样例渲染（页码 1-1）检查文件名合法性
+    let stem = crate::pdf::stem_of(&path);
+    let sample = crate::pdf::render_split_name(&rule, &stem, 1, 1, 1);
+    let sample_base = sample.strip_suffix(".pdf").unwrap_or(&sample);
+    if !is_valid_name(sample_base) {
+        return Err(AppError::new(
+            "E_INVALID_NAME",
+            format!("命名规则渲染出的文件名无效：{sample}"),
+        ));
+    }
     Ok(JobId {
         job_id: state.jobs.enqueue(
-            JobKind::PdfSplit { out_dir },
+            JobKind::PdfSplit {
+                out_dir,
+                opts: crate::pdf::SplitOpts {
+                    by_pages,
+                    n_pages,
+                    bookmark_level,
+                    naming_rule: rule,
+                    save_to_folder,
+                },
+            },
             vec![path],
             None,
             Policy::Skip,

@@ -24,12 +24,162 @@ fn zlib(data: &[u8]) -> Vec<u8> {
 }
 
 /// 文件名去扩展名（"a.b.pdf" → "a.b"）
-fn stem_of(path: &str) -> String {
+pub(crate) fn stem_of(path: &str) -> String {
     let name = crate::fs::path::file_name_of(path);
     match name.rfind('.') {
         Some(i) if i > 0 => name[..i].to_string(),
         _ => name,
     }
+}
+
+// ── PDF 拆分参数化（2026-11-10：按页数 N / 按书签层级 + 命名规则 + 子文件夹）──
+
+/// 拆分参数（JobKind::PdfSplit 携带）
+#[derive(Clone, Debug, PartialEq)]
+pub struct SplitOpts {
+    /// true = 按页数拆分（每 n_pages 页一份）；false = 按书签层级拆分
+    pub by_pages: bool,
+    /// 每 N 页一份（仅按页数；≥1，命令层校验）
+    pub n_pages: u32,
+    /// 书签层级（仅按书签；0 = 顶级书签，层级为空自动取最深层）
+    pub bookmark_level: u32,
+    /// 命名规则：占位符 [原文件名] [序号] [页码]，自动补 .pdf
+    pub naming_rule: String,
+    /// true = 结果存进以源文件名命名的子文件夹
+    pub save_to_folder: bool,
+}
+
+/// 按页数切区间：(start, end) 1-based 闭区间，末份不足 N 页取余
+pub fn split_ranges(total: u32, n_pages: u32) -> Vec<(u32, u32)> {
+    let n = n_pages.max(1);
+    let mut ranges = Vec::new();
+    let mut start = 1;
+    while start <= total {
+        let end = (start + n - 1).min(total);
+        ranges.push((start, end));
+        start = end + 1;
+    }
+    ranges
+}
+
+/// 命名规则渲染：[原文件名]/[序号]（第几份）/[页码]（起始页-结束页，单页只写
+/// 一数字）；自动补 .pdf。未知占位符原样保留（用户自定义文字的一部分）
+pub fn render_split_name(rule: &str, stem: &str, seq: usize, start: u32, end: u32) -> String {
+    let page = if start == end {
+        start.to_string()
+    } else {
+        format!("{start}-{end}")
+    };
+    let name = rule
+        .replace("[原文件名]", stem)
+        .replace("[序号]", &seq.to_string())
+        .replace("[页码]", &page);
+    if name.to_ascii_lowercase().ends_with(".pdf") {
+        name
+    } else {
+        format!("{name}.pdf")
+    }
+}
+
+/// 大纲项 → 1-based 目标页号（直引页面 Reference；命名目标等无法解析的跳过）
+fn outline_page(dict: &lopdf::Dictionary, page_num: &HashMap<ObjectId, u32>) -> Option<u32> {
+    let dest = match dict.get(b"Dest") {
+        Ok(o) => o.clone(),
+        Err(_) => {
+            let action = dict.get(b"A").ok()?.clone();
+            match action {
+                Object::Dictionary(a) => a.get(b"D").ok()?.clone(),
+                _ => return None,
+            }
+        }
+    };
+    match dest {
+        Object::Array(items) => items
+            .first()
+            .and_then(|o| o.as_reference().ok())
+            .and_then(|pid| page_num.get(&pid).copied()),
+        Object::Reference(pid) => page_num.get(&pid).copied(),
+        _ => None,
+    }
+}
+
+/// 递归遍历大纲链：node = 当前项（或 Outlines 根，depth 0），记录 (深度, 目标页)。
+/// 走 First（下一层）与 Next（同层兄弟）；visited 防病态环；深度/条数双上限
+fn walk_outline(
+    doc: &Document,
+    node: ObjectId,
+    depth: u32,
+    page_num: &HashMap<ObjectId, u32>,
+    items: &mut Vec<(u32, u32)>,
+    seen: &mut HashSet<ObjectId>,
+) {
+    if depth > 64 || items.len() > 10_000 || !seen.insert(node) {
+        return;
+    }
+    let dict = match doc.get_dictionary(node) {
+        Ok(d) => d,
+        Err(_) => return,
+    };
+    if let Some(p) = outline_page(dict, page_num) {
+        items.push((depth, p));
+    }
+    if let Ok(Object::Reference(first)) = dict.get(b"First") {
+        walk_outline(doc, *first, depth + 1, page_num, items, seen);
+    }
+    if let Ok(Object::Reference(next)) = dict.get(b"Next") {
+        walk_outline(doc, *next, depth, page_num, items, seen);
+    }
+}
+
+/// 按书签层级切页区间：level = 0 → 顶级书签；该层级无可解析书签自动取最深
+/// 层；首个书签前的页并入第一份；PDF 无书签 → Err("PDF 没有书签…")
+pub fn bookmark_page_ranges(
+    doc: &Document,
+    level: u32,
+    total: u32,
+) -> Result<Vec<(u32, u32)>, String> {
+    let page_num: HashMap<ObjectId, u32> =
+        doc.get_pages().into_iter().map(|(n, id)| (id, n)).collect();
+    let outlines = doc
+        .catalog()
+        .map_err(|_| "PDF 结构不可读".to_string())?
+        .get(b"Outlines")
+        .ok()
+        .and_then(|o| o.as_reference().ok())
+        .ok_or_else(|| "PDF 没有书签，无法按书签拆分".to_string())?;
+    let mut items: Vec<(u32, u32)> = Vec::new();
+    let mut seen = HashSet::new();
+    walk_outline(doc, outlines, 0, &page_num, &mut items, &mut seen);
+    // 用户层级 L → 树深度 L+1（Outlines 根 = 0）；层级为空自动取最深有书签层
+    let want = level + 1;
+    let mut bounds: Vec<u32> = items
+        .iter()
+        .filter_map(|(d, p)| (*d == want).then_some(*p))
+        .collect();
+    if bounds.is_empty() {
+        let deep = items.iter().map(|(d, _)| *d).max().unwrap_or(0);
+        bounds = items
+            .iter()
+            .filter_map(|(d, p)| (*d == deep).then_some(*p))
+            .collect();
+    }
+    bounds.sort_unstable();
+    bounds.dedup();
+    bounds.retain(|p| (1..=total).contains(p));
+    if bounds.is_empty() {
+        return Err("书签存在但目标页无法解析".to_string());
+    }
+    if bounds[0] > 1 {
+        bounds.insert(0, 1);
+    }
+    let mut ranges = Vec::new();
+    for (i, &s) in bounds.iter().enumerate() {
+        let e = bounds.get(i + 1).map(|b| b - 1).unwrap_or(total);
+        if s <= e {
+            ranges.push((s, e));
+        }
+    }
+    Ok(ranges)
 }
 
 /// 把 src 中 roots 可达的对象搬入 dst 并重映射引用。roots = (原对象 id, 已克隆对象，
@@ -498,10 +648,13 @@ pub(crate) fn run_merge_ex(
     }
 }
 
-/// 拆分：每页一个独立 PDF，输出 out_dir\\<stem>_p0001.pdf…
+/// 拆分（2026-11-10 参数化）：按页数 N 或书签层级切区间，逐区间导出独立
+/// PDF；命名规则渲染 + available_name (2) 递增；save_to_folder = 存进以源
+/// 文件名命名的子文件夹（撞名 (2) 递增），否则直接输出到 out_dir
 pub(crate) fn run_split(
     path: &str,
     out_dir: &str,
+    opts: &SplitOpts,
     cancel: &AtomicBool,
     prog: &mut JobProgress,
     em: &mut EmitterState,
@@ -518,31 +671,58 @@ pub(crate) fn run_split(
             return;
         }
     };
-    let pages: Vec<(u32, ObjectId)> = doc.get_pages().into_iter().collect();
-    prog.total_files = pages.len() as u64;
+    let total = doc.get_pages().len() as u32;
+    let ranges = if opts.by_pages {
+        split_ranges(total, opts.n_pages.max(1))
+    } else {
+        match bookmark_page_ranges(&doc, opts.bookmark_level, total) {
+            Ok(r) => r,
+            Err(e) => {
+                failed.push(FailItem {
+                    path: path.to_string(),
+                    message: e,
+                    reason: None,
+                });
+                return;
+            }
+        }
+    };
+    prog.total_files = ranges.len() as u64;
     let stem = stem_of(path);
-    // 输出目录撞现有目录时自动 (2) 递增（重复拆分不混入旧页文件）
-    let out_dir = &available_name(out_dir);
-    if let Err(e) = std::fs::create_dir_all(to_extended(out_dir)) {
+    let page_ids_all = doc.get_pages();
+    // 子文件夹模式：目录可能不存在 → available_name (2) 递增；直存模式目录
+    // 必已存在，不能再递增（否则输出进 " (2)" 副本目录）
+    let out_dir = if opts.save_to_folder {
+        available_name(out_dir)
+    } else {
+        out_dir.to_string()
+    };
+    if opts.save_to_folder
+        && let Err(e) = std::fs::create_dir_all(to_extended(&out_dir))
+    {
         failed.push(FailItem {
-            path: out_dir.to_string(),
+            path: out_dir.clone(),
             message: e.to_string(),
             reason: None,
         });
         return;
     }
-    for (num, page_id) in pages {
+    for (i, &(start, end)) in ranges.iter().enumerate() {
         if is_cancelled(cancel) {
             return;
         }
-        prog.current_path = format!("{stem} 第 {num} 页");
-        let out_path = format!("{}\\{}_p{num:04}.pdf", to_extended(out_dir).display(), stem);
+        let seq = i + 1;
+        let name = render_split_name(&opts.naming_rule, &stem, seq, start, end);
+        prog.current_path = name.clone();
+        let out_path = available_name(&format!("{}\\{}", to_extended(&out_dir).display(), name));
         let result = (|| -> Result<(), String> {
-            let mut out = Document::with_version("1.5");
-            let new_page = transfer_page(&doc, page_id, &mut out)
-                .ok_or_else(|| "页面对象不可读".to_string())?;
-            build_page_tree(&mut out, vec![Object::Reference(new_page)])?;
-            out.save(&out_path).map(|_| ()).map_err(|e| e.to_string())
+            let page_ids: Vec<ObjectId> = (start..=end)
+                .filter_map(|n| page_ids_all.get(&n).copied())
+                .collect();
+            let mut out = build_doc_from_pages(&doc, &page_ids)?;
+            out.save(to_extended(&out_path))
+                .map(|_| ())
+                .map_err(|e| e.to_string())
         })();
         if let Err(e) = result {
             failed.push(FailItem {
@@ -1394,5 +1574,184 @@ mod tests {
             panic!("page not dict");
         }
         std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    // ── PDF 拆分参数化（2026-11-10）──
+    #[test]
+    fn split_ranges_chunks() {
+        assert_eq!(split_ranges(7, 3), vec![(1, 3), (4, 6), (7, 7)]);
+        assert_eq!(split_ranges(4, 1), vec![(1, 1), (2, 2), (3, 3), (4, 4)]);
+        assert_eq!(split_ranges(3, 10), vec![(1, 3)]); // N 超总页数
+        assert_eq!(split_ranges(6, 2), vec![(1, 2), (3, 4), (5, 6)]);
+    }
+
+    #[test]
+    fn render_name_placeholders() {
+        assert_eq!(
+            render_split_name("[原文件名]-[序号]", "测试", 2, 5, 6),
+            "测试-2.pdf"
+        );
+        assert_eq!(
+            render_split_name("[原文件名]-[页码]", "测试", 1, 1, 3),
+            "测试-1-3.pdf"
+        );
+        assert_eq!(
+            render_split_name("[原文件名]-[页码]", "测试", 3, 3, 3),
+            "测试-3.pdf"
+        );
+        // 单页只写一数字；已带 .pdf 后缀不双补；未知文字原样保留
+        assert_eq!(render_split_name("清单.pdf", "x", 1, 1, 1), "清单.pdf");
+        assert_eq!(
+            render_split_name("报告 [序号] 号", "x", 2, 1, 1),
+            "报告 2 号.pdf"
+        );
+    }
+
+    /// 4 页文档 + 三级大纲：顶级(深度1) A→p1、B→p3、C→p4；A 子层(深度2) p1、p2
+    fn doc_with_outline() -> Document {
+        let mut doc = Document::with_version("1.5");
+        let mut kids = Vec::new();
+        for _ in 0..4 {
+            let pid = doc.add_object(dictionary! { "Type" => "Page" });
+            kids.push(Object::Reference(pid));
+        }
+        build_page_tree(&mut doc, kids).unwrap();
+        fn page_ref(doc: &Document, n: u32) -> Object {
+            for (num, id) in doc.get_pages() {
+                if num == n {
+                    return Object::Reference(id);
+                }
+            }
+            Object::Null
+        }
+        let outlines = doc.add_object(dictionary! { "Type" => "Outlines" });
+        doc.catalog_mut()
+            .unwrap()
+            .set(b"Outlines", Object::Reference(outlines));
+        let b_a = doc.add_object(dictionary! { "Title" => "A", "Parent" => Object::Reference(outlines), "Dest" => page_ref(&doc, 1) });
+        let b_b = doc.add_object(dictionary! { "Title" => "B", "Parent" => Object::Reference(outlines), "Dest" => page_ref(&doc, 3) });
+        let b_c = doc.add_object(dictionary! { "Title" => "C", "Parent" => Object::Reference(outlines), "Dest" => page_ref(&doc, 4) });
+        let c1 = doc.add_object(dictionary! { "Title" => "A-1", "Parent" => Object::Reference(b_a), "Dest" => page_ref(&doc, 1) });
+        let c2 = doc.add_object(dictionary! { "Title" => "A-2", "Parent" => Object::Reference(b_a), "Dest" => page_ref(&doc, 2) });
+        doc.get_dictionary_mut(outlines)
+            .unwrap()
+            .set(b"First", Object::Reference(b_a));
+        doc.get_dictionary_mut(outlines)
+            .unwrap()
+            .set(b"Last", Object::Reference(b_c));
+        doc.get_dictionary_mut(outlines)
+            .unwrap()
+            .set(b"Count", Object::Integer(5));
+        doc.get_dictionary_mut(b_a)
+            .unwrap()
+            .set(b"Next", Object::Reference(b_b));
+        doc.get_dictionary_mut(b_a)
+            .unwrap()
+            .set(b"First", Object::Reference(c1));
+        doc.get_dictionary_mut(b_a)
+            .unwrap()
+            .set(b"Last", Object::Reference(c2));
+        doc.get_dictionary_mut(b_b)
+            .unwrap()
+            .set(b"Prev", Object::Reference(b_a));
+        doc.get_dictionary_mut(b_b)
+            .unwrap()
+            .set(b"Next", Object::Reference(b_c));
+        doc.get_dictionary_mut(b_c)
+            .unwrap()
+            .set(b"Prev", Object::Reference(b_b));
+        doc.get_dictionary_mut(c1)
+            .unwrap()
+            .set(b"Next", Object::Reference(c2));
+        doc
+    }
+
+    #[test]
+    fn bookmark_levels_and_fallback() {
+        let doc = doc_with_outline();
+        {
+            let ba = doc
+                .get_dictionary(b_a_marker_of(&doc))
+                .cloned()
+                .unwrap_or_default();
+            eprintln!("[diag] b_a = {:?}", ba);
+        }
+        fn b_a_marker_of(doc: &Document) -> ObjectId {
+            let outlines = doc
+                .catalog()
+                .unwrap()
+                .get(b"Outlines")
+                .unwrap()
+                .as_reference()
+                .unwrap();
+            let o = doc.get_dictionary(outlines).unwrap();
+            match o.get(b"First").unwrap() {
+                Object::Reference(id) => *id,
+                _ => panic!("no first"),
+            }
+        }
+        // 顶级（level 0）：p1、p3、p4；p3 前的 p1-2 并入第一份
+        assert_eq!(
+            bookmark_page_ranges(&doc, 0, 4).unwrap(),
+            vec![(1, 2), (3, 3), (4, 4)]
+        );
+        // 子层（level 1）：A 的子书签 p1、p2 → 两份 = [p1]、[p2..末页]
+        assert_eq!(
+            bookmark_page_ranges(&doc, 1, 4).unwrap(),
+            vec![(1, 1), (2, 4)]
+        );
+        // level 5 为空 → 自动取最深有书签层（1）
+        assert_eq!(
+            bookmark_page_ranges(&doc, 5, 4).unwrap(),
+            vec![(1, 1), (2, 4)]
+        );
+    }
+
+    #[test]
+    fn bookmark_first_gap_merged() {
+        // 唯一书签指向 p3 → bounds = [1,3]，两份 = [p1-2]、[p3-4]
+        let mut doc = Document::with_version("1.5");
+        let mut kids = Vec::new();
+        for _ in 0..4 {
+            let pid = doc.add_object(dictionary! { "Type" => "Page" });
+            kids.push(Object::Reference(pid));
+        }
+        build_page_tree(&mut doc, kids).unwrap();
+        fn page_ref(doc: &Document, n: u32) -> Object {
+            for (num, id) in doc.get_pages() {
+                if num == n {
+                    return Object::Reference(id);
+                }
+            }
+            Object::Null
+        }
+        let outlines = doc.add_object(dictionary! { "Type" => "Outlines" });
+        doc.catalog_mut()
+            .unwrap()
+            .set(b"Outlines", Object::Reference(outlines));
+        let b = doc.add_object(dictionary! { "Title" => "第三章", "Parent" => Object::Reference(outlines), "Dest" => page_ref(&doc, 3) });
+        doc.get_dictionary_mut(outlines)
+            .unwrap()
+            .set(b"First", Object::Reference(b));
+        doc.get_dictionary_mut(outlines)
+            .unwrap()
+            .set(b"Last", Object::Reference(b));
+        assert_eq!(
+            bookmark_page_ranges(&doc, 0, 4).unwrap(),
+            vec![(1, 2), (3, 4)]
+        );
+    }
+
+    #[test]
+    fn no_outline_errors() {
+        let mut doc = Document::with_version("1.5");
+        let kids: Vec<Object> = (0..2)
+            .map(|_| Object::Reference(doc.add_object(dictionary! { "Type" => "Page" })))
+            .collect();
+        build_page_tree(&mut doc, kids).unwrap();
+        assert_eq!(
+            bookmark_page_ranges(&doc, 0, 2).unwrap_err().to_string(),
+            "PDF 没有书签，无法按书签拆分"
+        );
     }
 }

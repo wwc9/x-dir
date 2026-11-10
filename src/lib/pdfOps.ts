@@ -78,3 +78,49 @@ export function pagesToSpec(pages: number[]): string {
   }
   return parts.join(",");
 }
+
+// ── PDF 拆分参数化（2026-11-10）：面板选项结构 + 命名规则渲染预演。
+//    输出落名的权威实现在 Rust pdf::render_split_name（cargo test 锁定），
+//    此处同口径镜像仅供面板预演与校验，改占位符两处必须同改 ──
+
+export type PdfSplitMethod = "pages" | "bookmarks";
+
+export interface PdfSplitOptions {
+  method: PdfSplitMethod;
+  /** 每 N 页一份（仅按页数拆分；≥1） */
+  nPages: number;
+  /** 书签层级（仅按书签拆分；0 = 顶级，层级为空后端自动取最深） */
+  bookmarkLevel: number;
+  /** 命名规则（不含扩展名；占位符 [原文件名] [序号] [页码]） */
+  namingRule: string;
+  /** 结果存进源文件名子文件夹 */
+  saveToFolder: boolean;
+}
+
+export const PDF_SPLIT_DEFAULT_RULE = "[原文件名]-[序号]";
+
+/** 命名规则渲染预演（与 Rust render_split_name 同口径）：[原文件名]/[序号]/
+ *  [页码]（起始-结束，单页只写一数字），自动补 .pdf；未知占位符原样保留 */
+export function renderPdfSplitName(
+  rule: string,
+  stem: string,
+  seq: number,
+  start: number,
+  end: number,
+): string {
+  const page = start === end ? String(start) : `${start}-${end}`;
+  const name = rule
+    .split("[原文件名]")
+    .join(stem)
+    .split("[序号]")
+    .join(String(seq))
+    .split("[页码]")
+    .join(page);
+  return name.toLowerCase().endsWith(".pdf") ? name : `${name}.pdf`;
+}
+
+/** 按页数拆分的份数预演 */
+export function pdfSplitParts(total: number, nPages: number): number {
+  const n = Math.max(1, Math.floor(nPages));
+  return total <= 0 ? 0 : Math.ceil(total / n);
+}

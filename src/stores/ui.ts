@@ -80,7 +80,10 @@ export type DialogSpec =
   | { type: "fileSplit"; entry: FileEntry }
   /** 导出文件清单参数面板（2026-11-10）：entries 空 = 空白处语境（导出整个
    *  文件夹），否则导出选中项；回执 ExportListingOptions 给 runExportListing */
-  | { type: "exportListing"; entries: FileEntry[]; dir: string };;
+  | { type: "exportListing"; entries: FileEntry[]; dir: string }
+  /** PDF 拆分参数面板（2026-11-10 参数化）：按页数 N / 按书签层级 + 命名
+   *  规则 + 子文件夹选项，回执 PdfSplitOptions 给 runPdfSplit */
+  | { type: "pdfSplit"; entry: FileEntry; dir: string };;
 
 /** 提示弹窗语义级别：info=主操作、warn=警示、danger=不可逆/错误 */
 export type DialogKind = "info" | "warn" | "danger";

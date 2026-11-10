@@ -53,6 +53,7 @@ import { NpSelect } from "./NpSelect";
 import {
   ExportListingDialog,
   MergeFilesDialog,
+  PdfSplitDialog,
   NewFoldersDialog,
   PdfMergeDialog,
   PdfPagesDialog,
@@ -121,7 +122,9 @@ export function DialogHost() {
   const title =
     dialog?.type === "exportListing"
       ? "导出文件清单"
-      : dialog?.type === "filesMerge"
+      : dialog?.type === "pdfSplit"
+        ? "PDF 拆分"
+        : dialog?.type === "filesMerge"
       ? dialog.flavor === "images"
         ? "图片合并为 PDF"
         : dialog.flavor === "csv"
@@ -346,6 +349,9 @@ export function DialogHost() {
       )}
       {dialog?.type === "fileSplit" && (
         <SplitDialog entry={dialog.entry} onDone={close} />
+      )}
+      {dialog?.type === "pdfSplit" && (
+        <PdfSplitDialog entry={dialog.entry} dir={dialog.dir} onDone={(v) => resolve(v)} />
       )}
       {dialog?.type === "exportListing" && (
         <ExportListingDialog

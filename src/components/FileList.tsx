@@ -36,6 +36,7 @@ import {
   createLinks,
   deletePaths,
   runExportListing,
+  runPdfSplit,
   exportOfficeText,
   extractPdfPages,
   imagesToPdf,
@@ -55,12 +56,12 @@ import {
   organizeEntries,
   removePdfPages,
   rotatePdf,
-  splitPdf,
   transfer,
   watermarkPdfs,
   zipEntries,
 } from "../lib/operations";
 import type { ExportListingOptions } from "../lib/listing";
+import type { PdfSplitOptions } from "../lib/pdfOps";
 import { builtinByKey, entryVisible, type MenuArea } from "../lib/menuCommands";
 import { dfsPanes } from "../lib/layoutTree";
 import { useClipboard } from "../stores/clipboard";
@@ -1124,7 +1125,22 @@ export function FileList({
           action: () => void mergePdfs(sel, path, "folders"),
         };
       case "pdfSplit":
-        return { label: t("PDF 拆分为单页…"), action: () => void splitPdf(entry0, path) };
+        // 参数面板（2026-11-10 参数化）：拆分方式/页数或书签层级/命名规则/子文件夹
+        return {
+          label: t("PDF 拆分"),
+          action: () => {
+            void useUi
+              .getState()
+              .openDialog<PdfSplitOptions & { outDir: string } | null>({
+                type: "pdfSplit",
+                entry: entry0,
+                dir: path,
+              })
+              .then((opts) => {
+                if (opts) void runPdfSplit(entry0, path, opts);
+              });
+          },
+        };
       case "pdfWatermark":
         return { label: t("PDF 加水印…"), action: () => void watermarkPdfs(sel, path) };
       case "pdfExtract":

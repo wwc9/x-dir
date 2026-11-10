@@ -5,7 +5,8 @@
 import { api, type Policy, type RenameOutcome } from "./ipc";
 import type { ExportListingOptions } from "./listing";
 import { fileNameOf, isValidName, joinPath, parentPath } from "./path";
-import { montageOutputName } from "./imgOps";;
+import { montageOutputName } from "./imgOps";
+import type { PdfSplitOptions } from "./pdfOps";;
 import { useJobs } from "../stores/jobs";
 import { usePanes } from "../stores/panes";
 import { useSettings } from "../stores/settings";
@@ -205,20 +206,26 @@ export async function mergePdfs(
   }
 }
 
-/** 单个 PDF 拆分为单页文件，输出到 "<名称>_分页" 子文件夹 */
-export async function splitPdf(entry: FileEntry, dir: string): Promise<void> {
+/** 执行 PDF 拆分（2026-11-10 参数面板定案）：saveToFolder = 存进源文件名
+ *  子文件夹（避免多文件拆分混在一起），否则直存所在目录；重名 (2) 递增 */
+export async function runPdfSplit(
+  entry: FileEntry,
+  dir: string,
+  opts: PdfSplitOptions,
+): Promise<void> {
   try {
-    const count = await api.pdfPageCount(entry.path);
     const stem = fileNameOf(entry.path).replace(/\.pdf$/i, "");
-    const outName = `${stem}_分页`;
-    const ok = await confirmDialog({
-      title: "PDF 拆分",
-      message: `《${fileNameOf(entry.path)}》共 ${count} 页，将拆为 ${count} 个单页 PDF，存入"${outName}"文件夹。继续？`,
-      okText: "拆分",
-    });
-    if (!ok) return;
-    const { jobId } = await api.pdfSplit(entry.path, joinPath(dir, outName));
-    useJobs.getState().register(jobId, "pdfsplit", joinPath(dir, outName), [dir]);
+    const outDir = opts.saveToFolder ? joinPath(dir, stem) : dir;
+    const { jobId } = await api.pdfSplit(
+      entry.path,
+      outDir,
+      opts.method,
+      opts.nPages,
+      opts.bookmarkLevel,
+      opts.namingRule,
+      opts.saveToFolder,
+    );
+    useJobs.getState().register(jobId, "pdfsplit", outDir, [dir]);
   } catch (e) {
     useUi.getState().toast(`拆分失败：${String(e)}`, "error");
   }

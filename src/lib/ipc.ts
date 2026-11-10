@@ -777,8 +777,28 @@ export const api = {
       autoInsertBlankPage,
       blankPagePosition,
     }),
-  pdfSplit: (path: string, outDir: string) =>
-    cmd<{ jobId: number }>("pdf_split", { path, outDir }),
+  /** PDF 拆分（2026-11-10 参数化）：method ∈ pages|bookmarks；pages 模式每
+   *  nPages 页一份，bookmarks 模式按 bookmarkLevel 层级（0=顶级，空取最深）；
+   *  namingRule 占位符 [原文件名][序号][页码] 自动补 .pdf；saveToFolder =
+   *  存进源文件名子文件夹（outDir 传该子夹路径） */
+  pdfSplit: (
+    path: string,
+    outDir: string,
+    method: "pages" | "bookmarks",
+    nPages: number,
+    bookmarkLevel: number,
+    namingRule: string,
+    saveToFolder: boolean,
+  ) =>
+    cmd<{ jobId: number }>("pdf_split", {
+      path,
+      outDir,
+      method,
+      nPages,
+      bookmarkLevel,
+      namingRule,
+      saveToFolder,
+    }),
   /** PDF 加水印参数（2026-10-22 参数化）：文字支持占位符 [原文件名]
    *  [原文件夹名] [页码] [页面标签] [日期时间]；字体 4 种（嵌入渲染）、
    *  8 色、11 位置（九宫格 + 对角线）、透明度 0–10、页范围、页码/日期格式 */

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { pagesToSpec, parsePageSpec, pdfMenuState } from "../pdfOps";
+import {
+  pagesToSpec,
+  parsePageSpec,
+  pdfMenuState,
+  pdfSplitParts,
+  renderPdfSplitName,
+} from "../pdfOps";
 
 const f = (name: string) => ({ name, isDir: false });
 const d = (name: string) => ({ name, isDir: true });
@@ -95,5 +101,25 @@ describe("页号集合 → 区间表达式（pagesToSpec）", () => {
     const r = parsePageSpec(spec, 10);
     expect(r.error).toBeUndefined();
     expect(parsePageSpec(pagesToSpec(r.pages), 10).pages).toEqual(r.pages);
+  });
+});
+
+// ── PDF 拆分命名渲染（与 Rust pdf::render_split_name 同口径镜像）──
+describe("renderPdfSplitName / pdfSplitParts", () => {
+  it("默认规则：[原文件名]-[序号] + 自动补 .pdf", () => {
+    expect(renderPdfSplitName("[原文件名]-[序号]", "测试", 2, 5, 6)).toBe("测试-2.pdf");
+  });
+  it("[页码] 起始-结束，单页只写一数字", () => {
+    expect(renderPdfSplitName("[原文件名]-[页码]", "测试", 1, 1, 3)).toBe("测试-1-3.pdf");
+    expect(renderPdfSplitName("[原文件名]-[页码]", "测试", 3, 3, 3)).toBe("测试-3.pdf");
+  });
+  it("已带 .pdf 后缀不双补；未知占位符原样保留", () => {
+    expect(renderPdfSplitName("清单.pdf", "x", 1, 1, 1)).toBe("清单.pdf");
+    expect(renderPdfSplitName("报告 [序号] 号", "x", 2, 1, 1)).toBe("报告 2 号.pdf");
+  });
+  it("pdfSplitParts = ceil(total / nPages)", () => {
+    expect(pdfSplitParts(7, 3)).toBe(3);
+    expect(pdfSplitParts(4, 1)).toBe(4);
+    expect(pdfSplitParts(3, 10)).toBe(1);
   });
 });

@@ -89,9 +89,11 @@ pub enum JobKind {
         blank_first: bool,
         output: String,
     },
-    /// PDF 拆分单页 → out_dir 输出目录
+    /// PDF 拆分（2026-11-10 参数化）：按页数 N / 按书签层级 + 命名规则 +
+    /// 子文件夹选项；out_dir = save_to_folder 时为源文件名子文件夹（执行时创建）
     PdfSplit {
         out_dir: String,
+        opts: crate::pdf::SplitOpts,
     },
     /// PDF 文字水印（2026-10-22 参数化：占位符/字体/颜色/位置/透明度/页范围）
     PdfWatermark {
@@ -510,14 +512,19 @@ impl JobManager {
                             &mut failed,
                         );
                     }
-                    JobKind::PdfSplit { out_dir } => {
+                    JobKind::PdfSplit { out_dir, opts } => {
+                        // 脏目录 = 输出目录及其父（子文件夹模式执行时才创建）
                         if let Some(par) = parent_of(out_dir) {
                             dirty_dirs.push(par);
+                        }
+                        if opts.save_to_folder {
+                            dirty_dirs.push(out_dir.clone());
                         }
                         if let Some(first) = sources.first() {
                             crate::pdf::run_split(
                                 first,
                                 out_dir,
+                                opts,
                                 &cancel,
                                 &mut prog,
                                 &mut em,

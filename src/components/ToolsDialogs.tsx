@@ -21,7 +21,14 @@ import { PosGrid } from "./WmPosGrid";
 import { DENSITY } from "../lib/tokens";
 import { QueueSection, nameOf, pathsByNames } from "./FileQueue";
 import { fileNameOf, isValidName, joinPath, parentPath, smartArchiveStem } from "../lib/path";
-import { pagesToSpec, parsePageSpec } from "../lib/pdfOps";
+import {
+  PDF_SPLIT_DEFAULT_RULE,
+  pagesToSpec,
+  parsePageSpec,
+  renderPdfSplitName,
+  type PdfSplitMethod,
+  type PdfSplitOptions,
+} from "../lib/pdfOps";
 
 function FormRow({
   k,
@@ -1303,6 +1310,141 @@ export function ExportListingDialog({
             content,
             fmt,
             fileName: name.trim() || exportListingDefaultName(dir),
+          });
+        }}
+        onCancel={() => onDone(null)}
+      />
+    </>
+  );
+}
+
+/** PDF 拆分参数面板（2026-11-10 参数化）：拆分方式（按页数 N / 按书签层级，
+ *  行级关联禁用）+ 命名规则（占位符 [原文件名] [序号] [页码]）+ 存入子文件
+ *  夹 Switch，确认后由 operations.runPdfSplit 入任务引擎；全部参数随
+ *  settings.dialogPrefs 记忆 */
+export function PdfSplitDialog({
+  entry,
+  dir,
+  onDone,
+}: {
+  entry: FileEntry;
+  dir: string;
+  onDone(v: (PdfSplitOptions & { outDir: string }) | null): void;
+}) {
+  const t2 = useT();
+  const prefs = loadDialogPrefs("pdfSplit", {
+    method: "pages",
+    nPages: 1,
+    bookmarkLevel: 0,
+    namingRule: PDF_SPLIT_DEFAULT_RULE,
+    saveToFolder: false,
+  });
+  const [method, setMethod] = useState<PdfSplitMethod>(
+    prefs.method === "bookmarks" ? "bookmarks" : "pages",
+  );
+  const num = (v: number, fb: number, min: number) =>
+    Number.isFinite(v) && v >= min ? Math.floor(v) : fb;
+  const [nPages, setNPages] = useState(num(Number(prefs.nPages), 1, 1));
+  const [bookmarkLevel, setBookmarkLevel] = useState(
+    num(Number(prefs.bookmarkLevel), 0, 0),
+  );
+  const [namingRule, setNamingRule] = useState(
+    typeof prefs.namingRule === "string" && prefs.namingRule.trim()
+      ? prefs.namingRule
+      : PDF_SPLIT_DEFAULT_RULE,
+  );
+  const [saveToFolder, setSaveToFolder] = useState(prefs.saveToFolder === true);
+  const stem = fileNameOf(entry.path).replace(/\.pdf$/i, "");
+  const nameOk = isValidName(
+    renderPdfSplitName(namingRule.trim() || PDF_SPLIT_DEFAULT_RULE, stem, 1, 1, 1).replace(
+      /\.pdf$/i,
+      "",
+    ),
+  );
+  return (
+    <>
+      <DialogBody>
+        <div className="np-bren-form is-cols">
+          <FormRow k={t2("拆分方式")}>
+            <Seg<PdfSplitMethod>
+              value={method}
+              onChange={setMethod}
+              options={[
+                { value: "pages", label: t2("按页数拆分") },
+                { value: "bookmarks", label: t2("按书签拆分") },
+              ]}
+            />
+          </FormRow>
+          <FormRow k={t2("每 N 页")}>
+            <InputGroup
+              size="small"
+              value={String(nPages)}
+              disabled={method !== "pages"}
+              spellCheck={false}
+              onChange={(e) => setNPages(num(Number(e.currentTarget.value), nPages, 1))}
+            />
+          </FormRow>
+          <FormRow k={t2("书签层级")}>
+            <InputGroup
+              size="small"
+              value={String(bookmarkLevel)}
+              disabled={method !== "bookmarks"}
+              spellCheck={false}
+              onChange={(e) =>
+                setBookmarkLevel(num(Number(e.currentTarget.value), bookmarkLevel, 0))
+              }
+            />
+          </FormRow>
+          <FormRow k={t2("命名规则")} wide>
+            <InputGroup
+              size="small"
+              value={namingRule}
+              spellCheck={false}
+              onChange={(e) => setNamingRule(e.currentTarget.value)}
+            />
+            <span className="np-dialog-muted">.pdf</span>
+          </FormRow>
+          <FormRow k={t2("存入子文件夹")} wide>
+            <Checkbox
+              checked={saveToFolder}
+              onChange={(e) => setSaveToFolder(e.currentTarget.checked)}
+              label={t2("按原文件名建子文件夹（批量拆分建议开启，避免文件混杂）")}
+            />
+          </FormRow>
+        </div>
+        {!nameOk && (
+          <div className="np-dialog-muted is-err">
+            {t2("命名规则渲染出的文件名含非法字符")}
+          </div>
+        )}
+        <div className="np-dialog-muted">
+          {t2("占位符：[原文件名] [序号] [页码]（起始-结束），自动补 .pdf；输出预演：")}
+          {method === "pages"
+            ? t2("每 {n} 页一份", { n: nPages })
+            : t2("按书签层级 {l} 拆分，份量由书签决定", { l: bookmarkLevel })}
+          {" → "}
+          {renderPdfSplitName(namingRule.trim() || PDF_SPLIT_DEFAULT_RULE, stem, 1, 1, 1)} …
+        </div>
+        <div className="np-dialog-muted">{t2("直存 {dir}，重名自动 (2) 递增", { dir })}</div>
+      </DialogBody>
+      <Footer
+        okText={t2("拆分")}
+        disabled={!nameOk}
+        onOk={() => {
+          saveDialogPrefs("pdfSplit", {
+            method,
+            nPages,
+            bookmarkLevel,
+            namingRule: namingRule.trim() || PDF_SPLIT_DEFAULT_RULE,
+            saveToFolder,
+          });
+          onDone({
+            method,
+            nPages,
+            bookmarkLevel,
+            namingRule: namingRule.trim() || PDF_SPLIT_DEFAULT_RULE,
+            saveToFolder,
+            outDir: saveToFolder ? joinPath(dir, stem) : dir,
           });
         }}
         onCancel={() => onDone(null)}
