@@ -1217,20 +1217,17 @@ export function ExportListingDialog({
 }) {
   const t2 = useT();
   const blank = entries.length === 0;
+  // 格式不记忆（2026-11-10 用户定案）：每次打开恒默认 XLSX，记住的旧格式
+  // 不反压默认；穿透/内容仍随 settings.dialogPrefs 记忆
   const prefs = loadDialogPrefs("exportListing", {
     recursive: blank,
     content: "all",
-    fmt: "xlsx",
   });
   const [recursive, setRecursive] = useState(prefs.recursive === true);
   const [content, setContent] = useState<"all" | "files" | "dirs">(
     prefs.content === "files" || prefs.content === "dirs" ? prefs.content : "all",
   );
-  const [fmt, setFmt] = useState<ListingFormat>(
-    prefs.fmt === "xlsx" || prefs.fmt === "csv" || prefs.fmt === "md" || prefs.fmt === "txt"
-      ? prefs.fmt
-      : "xlsx",
-  );
+  const [fmt, setFmt] = useState<ListingFormat>("xlsx");
   const [name, setName] = useState(() => exportListingDefaultName(dir));
   const nameOk = isValidName(name.trim());
   return (
@@ -1298,7 +1295,7 @@ export function ExportListingDialog({
         okText={t2("导出")}
         disabled={!nameOk}
         onOk={() => {
-          saveDialogPrefs("exportListing", { recursive, content, fmt });
+          saveDialogPrefs("exportListing", { recursive, content });
           onDone({
             recursive,
             content,

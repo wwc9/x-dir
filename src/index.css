@@ -4708,6 +4708,12 @@ body.np-col-resizing * {
 .np-bren-form.is-cols .np-bren-field {
   display: contents;
 }
+/* 双列变体内参数标题升正文字号（13px）：与选项列并排，11px 辅助小字
+   视觉大小/中轴都不齐（2026-11-10 用户反馈）；层级区分靠 muted 色 */
+.np-bren-form.is-cols > .np-bren-field > .np-bren-k {
+  font-size: var(--np-font-ui);
+  color: var(--np-muted);
+}
 .np-bren-form.is-cols .np-bren-field > .bp6-input-group {
   width: 100%;
   max-width: 280px;
