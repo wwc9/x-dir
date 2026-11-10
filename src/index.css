@@ -5498,7 +5498,9 @@ body.np-col-resizing * {
   min-height: var(--np-row-h);
   padding: 0 6px;
   border-radius: var(--np-radius);
-  font-size: var(--np-font-sm);
+  /* 清单行是内容文字 = 正文 13px（2026-11-10 用户反馈字号不一：原辅助
+     11px 与同面板参数区/说明行混排）；序号 pos 仍 11px muted 附属 */
+  font-size: var(--np-font-ui);
   color: var(--np-fg);
   min-width: 0;
 }
@@ -5544,6 +5546,11 @@ body.np-col-resizing * {
   align-items: baseline;
   gap: var(--np-gutter);
   margin-bottom: 4px;
+}
+/* 分节标题（处理顺序/合并顺序/合并范围）= 正文 13px：与旁侧灰字提示及
+   参数标题同档（2026-11-10 用户反馈字号不一；层级靠 muted 色） */
+.np-pdfmsec .np-bren-k {
+  font-size: var(--np-font-ui);
 }
 .np-pdfmform {
   display: grid;
