@@ -10,11 +10,21 @@ use super::entry::{
     FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_READONLY, FILE_ATTRIBUTE_SYSTEM, FileAttrs,
     systemtime_to_unix_ms,
 };
-use super::path::{file_name_of, to_extended};
+use super::path::{file_name_of, is_valid_name, to_extended};
 
 /// 行数上限（防病态目录树拖死导出；analyze.rs MAX_FILES 同量级）。
 /// 超限整体中止报错而非静默截断——清单用于留档核对，缺行即失真
 pub const MAX_ROWS: usize = 200_000;
+
+/// 导出文件基名 = 当前文件夹名（2026-11-10 用户定案：清单按所在文件夹命名）。
+/// 尾反斜杠由 file_name_of 容忍；盘根（"D:"）/非法名回落「文件清单」
+pub fn listing_base_name(dir: &str) -> String {
+    let n = file_name_of(dir);
+    if n.is_empty() || !is_valid_name(&n) {
+        return "文件清单".to_string();
+    }
+    n
+}
 
 /// 行收集失败两类（命令层映射 AppError）
 #[derive(Debug)]
@@ -566,6 +576,15 @@ mod tests {
             Err(CollectError::Unreadable)
         ));
         cleanup(&dir);
+    }
+
+    // ── 导出基名 ──
+    #[test]
+    fn base_name_follows_folder() {
+        assert_eq!(listing_base_name("D:\\工作\\收益预算"), "收益预算");
+        assert_eq!(listing_base_name("D:\\工作\\收益预算\\"), "收益预算"); // 尾反斜杠
+        assert_eq!(listing_base_name("D:\\"), "文件清单"); // 盘根 "D:" 非法名回落
+        assert_eq!(listing_base_name(""), "文件清单");
     }
 
     fn join_test(dir: &str, name: &str) -> String {

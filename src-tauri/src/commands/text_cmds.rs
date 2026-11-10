@@ -272,7 +272,9 @@ pub fn export_listing(
         }
     })?;
     let content = crate::fs::listing::build_listing(&rows, &fmt);
-    let target = crate::jobs::pick::available_name(&join_name(&dir, &format!("文件清单.{ext}")));
+    // 文件名随当前文件夹名（2026-11-10 用户定案）；盘根等非法名回落「文件清单」
+    let base = crate::fs::listing::listing_base_name(&dir);
+    let target = crate::jobs::pick::available_name(&join_name(&dir, &format!("{base}.{ext}")));
     let mut bytes = vec![0xEF, 0xBB, 0xBF];
     bytes.extend_from_slice(content.as_bytes());
     std::fs::write(to_extended(&target), bytes)?;
