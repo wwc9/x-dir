@@ -13,6 +13,7 @@ import { Button, Checkbox, DialogBody, DialogFooter, InputGroup, Slider } from "
 import { ArrowRight } from "lucide-react";
 
 import { FOLDER_BATCH_CAP, planFolders } from "../lib/folderBatch";
+import { exportListingDefaultName, type ExportListingOptions } from "../lib/listing";
 import { loadDialogPrefs, saveDialogPrefs } from "../lib/dialogPrefs";
 import { AppIcon } from "./AppIcon";
 import { Seg } from "./ImgDialogs";
@@ -1195,6 +1196,113 @@ export function PdfPagesDialog({
         okText={extract ? t2("提取") : t2("删除并另存")}
         disabled={!valid}
         onOk={() => onDone(spec.trim())}
+        onCancel={() => onDone(null)}
+      />
+    </>
+  );
+}
+
+/** 导出文件清单参数面板（2026-11-10 五次定案）：穿透子文件夹 / 导出内容
+ *  （文件·文件夹·全部）/ 导出格式 / 文件名（内联校验），确认后由
+ *  operations.runExportListing 直存当前文件夹（文件名随文件夹名回落）；
+ *  穿透/内容/格式随 settings.dialogPrefs 记忆，文件名按目录现算不记忆 */
+export function ExportListingDialog({
+  entries,
+  dir,
+  onDone,
+}: {
+  entries: FileEntry[];
+  dir: string;
+  onDone(v: ExportListingOptions | null): void;
+}) {
+  const t2 = useT();
+  const blank = entries.length === 0;
+  const prefs = loadDialogPrefs("exportListing", {
+    recursive: blank,
+    content: "all",
+    fmt: "csv",
+  });
+  const [recursive, setRecursive] = useState(prefs.recursive === true);
+  const [content, setContent] = useState<"all" | "files" | "dirs">(
+    prefs.content === "files" || prefs.content === "dirs" ? prefs.content : "all",
+  );
+  const [fmt, setFmt] = useState<"csv" | "md" | "txt">(
+    prefs.fmt === "md" || prefs.fmt === "txt" ? prefs.fmt : "csv",
+  );
+  const [name, setName] = useState(() => exportListingDefaultName(dir));
+  const nameOk = isValidName(name.trim());
+  return (
+    <>
+      <DialogBody>
+        <div className="np-bren-form">
+          <FormRow k={t2("范围")} wide>
+            <span className="np-dialog-muted np-ellipsis">
+              {blank
+                ? t2("当前文件夹整个目录") + t2(recursive ? "（含子文件夹）" : "（仅直接子项）")
+                : t2("选中的 {n} 项", { n: entries.length })}
+            </span>
+          </FormRow>
+          <FormRow k={t2("穿透子文件夹")} wide>
+            <Checkbox
+              checked={recursive}
+              onChange={(e) => setRecursive(e.currentTarget.checked)}
+              label={t2("递归包含所有子文件夹内容")}
+            />
+          </FormRow>
+          <FormRow k={t2("导出内容")}>
+            <Seg<"all" | "files" | "dirs">
+              value={content}
+              onChange={setContent}
+              options={[
+                { value: "all", label: t2("文件和文件夹") },
+                { value: "files", label: t2("仅文件") },
+                { value: "dirs", label: t2("仅文件夹") },
+              ]}
+            />
+          </FormRow>
+          <FormRow k={t2("导出格式")}>
+            <Seg<"csv" | "md" | "txt">
+              value={fmt}
+              onChange={setFmt}
+              options={[
+                { value: "csv", label: "CSV", title: t2("表格数据，Excel 友好") },
+                { value: "md", label: "Markdown", title: t2("人类可读表格") },
+                { value: "txt", label: t2("纯文本"), title: t2("完整路径一行一个") },
+              ]}
+            />
+          </FormRow>
+          <FormRow k={t2("文件名")} wide>
+            <InputGroup
+              size="small"
+              value={name}
+              spellCheck={false}
+              autoFocus
+              onChange={(e) => setName(e.target.value)}
+            />
+            <span className="np-dialog-muted">.{fmt}</span>
+            {!nameOk && (
+              <span className="np-dialog-muted is-err">
+                {t2("名称含非法字符或为 Windows 保留名")}
+              </span>
+            )}
+          </FormRow>
+        </div>
+        <div className="np-dialog-muted">
+          {t2("直存 {dir}，与现有文件重名自动 (2) 递增", { dir })}
+        </div>
+      </DialogBody>
+      <Footer
+        okText={t2("导出")}
+        disabled={!nameOk}
+        onOk={() => {
+          saveDialogPrefs("exportListing", { recursive, content, fmt });
+          onDone({
+            recursive,
+            content,
+            fmt,
+            fileName: name.trim() || exportListingDefaultName(dir),
+          });
+        }}
         onCancel={() => onDone(null)}
       />
     </>

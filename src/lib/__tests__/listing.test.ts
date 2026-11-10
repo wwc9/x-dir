@@ -1,9 +1,20 @@
-// lib/listing.ts 重复文件清单导出回归测试（2026-11-09「查找重复文件」增强）：
-// dupWaste 口径与 CSV 转义。文件清单导出（CSV/MD/TXT 列集）已移至 Rust
-// fs/listing.rs，格式口径由 cargo test 锁定（2026-11-10）。
+// lib/listing.ts 清单导出纯函数回归测试：默认文件名推算 + 重复文件 CSV
+// （dupWaste/转义）。文件清单的行收集与三格式构建在 Rust fs/listing.rs，
+// 格式口径由 cargo test 锁定（2026-11-10）。
 import { describe, expect, it } from "vitest";
 
-import { buildDupCsv, dupWaste } from "../listing";
+import { buildDupCsv, dupWaste, exportListingDefaultName } from "../listing";
+
+describe("exportListingDefaultName", () => {
+  it("默认名 = 文件夹名-文件清单；尾反斜杠容忍", () => {
+    expect(exportListingDefaultName("D:\\工作\\收益预算")).toBe("收益预算-文件清单");
+    expect(exportListingDefaultName("D:\\工作\\收益预算\\")).toBe("收益预算-文件清单");
+  });
+  it("盘根/空名回落「文件清单」", () => {
+    expect(exportListingDefaultName("D:\\")).toBe("文件清单");
+    expect(exportListingDefaultName("")).toBe("文件清单");
+  });
+});
 
 describe("buildDupCsv / dupWaste", () => {
   const GROUPS = [

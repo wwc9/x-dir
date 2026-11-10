@@ -77,7 +77,10 @@ export type DialogSpec =
   /** 修改时间与属性（批量改修改/访问时间、只读/隐藏位） */
   | { type: "fileTouch"; entries: FileEntry[] }
   /** 文件分割（按大小切块 + .crc 清单） */
-  | { type: "fileSplit"; entry: FileEntry };;
+  | { type: "fileSplit"; entry: FileEntry }
+  /** 导出文件清单参数面板（2026-11-10）：entries 空 = 空白处语境（导出整个
+   *  文件夹），否则导出选中项；回执 ExportListingOptions 给 runExportListing */
+  | { type: "exportListing"; entries: FileEntry[]; dir: string };;
 
 /** 提示弹窗语义级别：info=主操作、warn=警示、danger=不可逆/错误 */
 export type DialogKind = "info" | "warn" | "danger";

@@ -236,32 +236,37 @@ pub struct ExportedListing {
     pub count: usize,
 }
 
-/// 导出文件清单（2026-11-10 增强）：免保存框直写 dir 下「文件清单.<fmt>」，
-/// 重名 available_name 递增不覆盖。recursive = 空白处右键整树递归（文件夹行
-/// 含子树体积），否则按 paths 逐项（保持选中顺序）。UTF-8 BOM + CRLF（Excel
-/// 中文表头可读）。同步轻量命令（save_text_file 同口径，跑异步命令线程）；
-/// 行数超 MAX_ROWS 整体中止——清单用于留档核对，静默截断即失真
+/// 导出文件清单（2026-11-10 五次定案参数面板）：免保存框直写 dir 下
+/// 「<file_name>.<fmt>」，file_name 空 = 回落「<文件夹名>-文件清单」，非法名
+/// E_INVALID_NAME，重名 available_name 递增不覆盖。content ∈ all|files|dirs
+/// 内容筛选；recursive = 穿透子文件夹（选中文件夹行后跟子树；空白处整树/
+/// 直接子项由它决定）。fmt ∈ csv|md|txt。行数超 MAX_ROWS 整体中止
 #[tauri::command]
 pub fn export_listing(
     paths: Vec<String>,
     dir: String,
+    file_name: String,
     fmt: String,
+    content: String,
     recursive: bool,
 ) -> Result<ExportedListing, AppError> {
     let ext = match fmt.as_str() {
         "csv" | "md" | "txt" => fmt.as_str(),
         _ => return Err(AppError::new("E_INVALID_NAME", "不支持的清单格式")),
     };
+    let keep_dirs = match content.as_str() {
+        "all" => None,
+        "files" => Some(false),
+        "dirs" => Some(true),
+        _ => return Err(AppError::new("E_INVALID_NAME", "无效的内容筛选参数")),
+    };
     if !path_exists(&dir) {
         return Err(AppError::new("E_NOT_FOUND", format!("目录不存在：{dir}")));
     }
-    let rows = if recursive {
-        crate::fs::listing::collect_tree(&dir, crate::fs::listing::MAX_ROWS)
+    let mut rows = if paths.is_empty() {
+        crate::fs::listing::collect_tree(&dir, recursive, crate::fs::listing::MAX_ROWS)
     } else {
-        if paths.is_empty() {
-            return Err(AppError::new("E_NOT_FOUND", "未选中任何条目"));
-        }
-        crate::fs::listing::collect_selected(&paths, &dir)
+        crate::fs::listing::collect_selected(&paths, &dir, recursive, crate::fs::listing::MAX_ROWS)
     }
     .map_err(|e| match e {
         crate::fs::listing::CollectError::TooMany(cap) => {
@@ -271,12 +276,25 @@ pub fn export_listing(
             AppError::new("E_NOT_FOUND", "所选条目均无法读取")
         }
     })?;
-    let content = crate::fs::listing::build_listing(&rows, &fmt);
-    // 文件名随当前文件夹名（2026-11-10 用户定案）；盘根等非法名回落「文件清单」
-    let base = crate::fs::listing::listing_base_name(&dir);
+    crate::fs::listing::retain_content(&mut rows, keep_dirs);
+    if rows.is_empty() {
+        return Err(AppError::new("E_NOT_FOUND", "筛选后无条目可导出"));
+    }
+    let trimmed = file_name.trim();
+    let base = if trimmed.is_empty() {
+        crate::fs::listing::listing_base_name(&dir)
+    } else if is_valid_name(trimmed) {
+        trimmed.to_string()
+    } else {
+        return Err(AppError::new(
+            "E_INVALID_NAME",
+            format!("文件名含非法字符或为 Windows 保留名：{trimmed}"),
+        ));
+    };
+    let content_text = crate::fs::listing::build_listing(&rows, &fmt);
     let target = crate::jobs::pick::available_name(&join_name(&dir, &format!("{base}.{ext}")));
     let mut bytes = vec![0xEF, 0xBB, 0xBF];
-    bytes.extend_from_slice(content.as_bytes());
+    bytes.extend_from_slice(content_text.as_bytes());
     std::fs::write(to_extended(&target), bytes)?;
     Ok(ExportedListing {
         count: rows.len(),

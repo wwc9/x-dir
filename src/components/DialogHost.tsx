@@ -51,6 +51,7 @@ import {
 } from "./ImgDialogs";
 import { NpSelect } from "./NpSelect";
 import {
+  ExportListingDialog,
   MergeFilesDialog,
   NewFoldersDialog,
   PdfMergeDialog,
@@ -343,6 +344,13 @@ export function DialogHost() {
       )}
       {dialog?.type === "fileSplit" && (
         <SplitDialog entry={dialog.entry} onDone={close} />
+      )}
+      {dialog?.type === "exportListing" && (
+        <ExportListingDialog
+          entries={dialog.entries}
+          dir={dialog.dir}
+          onDone={(v) => resolve(v)}
+        />
       )}
 
       {dialog?.type === "imgCompress" && (

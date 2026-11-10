@@ -35,7 +35,7 @@ import {
   createFolders,
   createLinks,
   deletePaths,
-  exportListing,
+  runExportListing,
   exportOfficeText,
   extractPdfPages,
   imagesToPdf,
@@ -60,6 +60,7 @@ import {
   watermarkPdfs,
   zipEntries,
 } from "../lib/operations";
+import type { ExportListingOptions } from "../lib/listing";
 import { builtinByKey, entryVisible, type MenuArea } from "../lib/menuCommands";
 import { dfsPanes } from "../lib/layoutTree";
 import { useClipboard } from "../stores/clipboard";
@@ -1189,12 +1190,23 @@ export function FileList({
       case "textMerge":
         return { label: t("文本合并…"), action: () => void mergeTexts(sel, path) };
       case "exportList":
-        // 单击直出 CSV（2026-11-10 二次定案：仅保留 CSV 一种，去掉格式子菜单）。
-        // 空白处 = 整树递归导出当前文件夹（「此电脑」页禁用）；选中 = 仅选中项
+        // 参数面板（2026-11-10 五次定案）：穿透/内容筛选/格式/文件名确认后
+        // 导出。空白处 = 整个文件夹语境（默认穿透）（「此电脑」页禁用）
         return {
           label: t("导出文件清单"),
           disabled: sel.length === 0 && isThisPc,
-          action: () => void exportListing(sel, path),
+          action: () => {
+            void useUi
+              .getState()
+              .openDialog<ExportListingOptions | null>({
+                type: "exportListing",
+                entries: sel,
+                dir: path,
+              })
+              .then((opts) => {
+                if (opts) void runExportListing(sel, path, opts);
+              });
+          },
         };
       case "batchRename":
         return {

@@ -1,10 +1,29 @@
-// 重复文件清单导出（2026-11-09「查找重复文件」增强）：前端持有重复组数据，
-// CSV 文本就地构建。文件清单导出（2026-11-10）已整体移至 Rust fs/listing.rs
-// ——列表分页下发前端只持有当前页，整文件夹递归必须后端收集，列集也随单源。
+// 清单导出共享类型与纯函数（2026-11-10 参数面板）。文件清单的行收集与
+// 三格式构建在 Rust fs/listing.rs 单源（列表分页下发前端只持有当前页），
+// 这里只放对话框参数结构与默认文件名推算。
 
 import type { DupGroup } from "./ipc";
+import { fileNameOf, isValidName } from "./path";
 
 const esc = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+
+/** 导出文件清单参数（参数面板回执；与 Rust export_listing 命令同名参数同语义） */
+export interface ExportListingOptions {
+  /** 穿透子文件夹（选中文件夹展开子树；空白处 = 整树 vs 仅直接子项） */
+  recursive: boolean;
+  /** 导出内容：全部 / 仅文件 / 仅文件夹 */
+  content: "all" | "files" | "dirs";
+  fmt: "csv" | "md" | "txt";
+  /** 文件名（不含扩展名；空 = 回落默认） */
+  fileName: string;
+}
+
+/** 默认文件名 = 「文件夹名-文件清单」（与 Rust listing_base_name 同口径；
+ *  盘根等非法名回落「文件清单」） */
+export function exportListingDefaultName(dir: string): string {
+  const n = fileNameOf(dir);
+  return isValidName(n) ? `${n}-文件清单` : "文件清单";
+}
 
 /** 可释放空间合计（每组 = 体积 × (份数 - 1)，保留一份口径） */
 export function dupWaste(groups: DupGroup[]): number {

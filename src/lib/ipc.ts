@@ -1028,11 +1028,26 @@ export const api = {
   /** 保存文本文件（UTF-8 BOM；导出文件清单用） */
   saveTextFile: (path: string, content: string) =>
     cmd<void>("save_text_file", { path, content }),
-  /** 导出文件清单（2026-11-10 增强）：免保存框直写 dir 下「文件清单.<fmt>」，
-   *  重名自动 "(2)" 递增；recursive = 整树递归（文件夹行含子树体积），
-   *  否则按 paths 逐项。UTF-8 BOM + CRLF */
-  exportListing: (paths: string[], dir: string, fmt: ListingFormat, recursive: boolean) =>
-    cmd<ExportedListing>("export_listing", { paths, dir, fmt, recursive }),
+  /** 导出文件清单（2026-11-10 参数面板）：免保存框直写 dir 下
+   *  「<fileName>.<fmt>」（空名回落「文件夹名-文件清单」，非法名报错），
+   *  重名自动 "(2)" 递增；content ∈ all|files|dirs 内容筛选；
+   *  recursive = 穿透子文件夹。UTF-8 BOM + CRLF */
+  exportListing: (
+    paths: string[],
+    dir: string,
+    fileName: string,
+    fmt: ListingFormat,
+    content: "all" | "files" | "dirs",
+    recursive: boolean,
+  ) =>
+    cmd<ExportedListing>("export_listing", {
+      paths,
+      dir,
+      fileName,
+      fmt,
+      content,
+      recursive,
+    }),
   /** 截图（§3.6）：开始一次会话（定格光标所在显示器 + 打开覆盖窗） */
   shotBegin: () => cmd<void>("shot_begin"),
   /** 关闭截图覆盖窗（完成 / 取消收尾） */
