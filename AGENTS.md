@@ -11,7 +11,7 @@
 
 | 文档 | 内容 | 何时必读 |
 |---|---|---|
-| [docs/agents/ui-standards.md](docs/agents/ui-standards.md) | §4 详版：设计 token（--np-* 唯一取值来源）、组件选用优先级、密度规范、图标规范（Lucide/AppIcon 四档）、新增 UI 流程、二级页面统一规范 | 新增或修改任何 UI、引入任何颜色/字号/间距/图标 |
+| [docs/agents/ui-standards.md](docs/agents/ui-standards.md) | §4 详版：设计 token（--np-* 唯一取值来源）、组件选用优先级、密度规范、图标规范（Lucide/AppIcon 四档）、新增 UI 流程（先读规范 = 第 0 步）、二级页面统一规范（标题必有/Blueprint 紧凑化）、参数面板双列对齐细则（is-cols 网格/横向中轴/自带样式覆盖清单） | **绘制或更新任何 UI 界面前硬性必读（2026-11-10 定案）**：新增功能、改样式、调布局、新增/修改对话框一律先通读并按验收口径自查；引入任何颜色/字号/间距/图标同样必读 |
 | [docs/agents/features.md](docs/agents/features.md) | §4.3 已采用清单：全部功能域的组件选型、模块归属、实现定案与注意事项（预览/搜索/任务引擎/右键菜单/PDF/图片/办公批处理等） | 改造既有功能、新增功能、动后端命令前查现状 |
 
 ## 1. 工具链强制
@@ -37,10 +37,11 @@
 
 ## 4. 组件标准（速览，详版见 docs/agents/ui-standards.md）
 
+- **绘制或更新任何 UI 界面前必须先读 `docs/agents/ui-standards.md`（2026-11-10 定案为硬性要求）**：新功能、改样式、调布局、新增/修改对话框一律先通读该文档（重点 §4.4 密度、§4.7 二级页面、§4.9 参数面板对齐细则），完成后按其验收口径自查；规范未覆盖的视觉偏差（如控件自带默认样式导致的字号/行距/对齐问题）修完后必须把结论补回该文档条款
 - 所有颜色、字号、行高、间距、圆角、阴影只允许定义在 `src/index.css` 的 `--np-*` CSS 变量里；组件样式禁止裸值
 - Blueprint 内置优先，没有的 token 化自研（np-* 前缀）；图标唯一来源 lucide-react，唯一渲染入口 `components/AppIcon.tsx`（四档尺寸，按钮里 sm/文件 md）
-- 全局密度 small：列表行高 28、控件高 24、正文 13px、辅助 11px；二级页面（Dialog/浮层）按 §4.7 统一规范
-- 新增/修改 UI 的流程与验收：先查 features.md 现状 → 再查 ui-standards.md；PR 中出现裸色值/裸像素即打回
+- 全局密度 small：列表行高 28、控件高 24、正文 13px、辅助 11px；二级页面（Dialog/浮层）按 §4.7 统一规范；**Blueprint 控件自带默认样式（文案 14px、margin-bottom 8px、指示器偏移）必须显式覆盖**（覆盖清单见 ui-standards §4.7/§4.9）
+- 新增/修改 UI 的流程与验收：先查 features.md 现状 → 再查 ui-standards.md（§4.6 流程第 0 步）；PR 中出现裸色值/裸像素即打回
 
 ## 5. 目录约定
 
