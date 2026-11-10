@@ -113,18 +113,24 @@
   - **布局**：双列用 `np-bren-form.is-cols`（grid `max-content + 1fr` 两列轨；
     `np-bren-field` 转 `display: contents` 使标签/控件直接成为两列网格项）——
     标题列按最宽标签自动定轨（i18n 安全，EN 长标签不破版），标题列与选项列
-    **各自左对齐**；**每行必须单控件**（单位后缀并入 `InputGroup rightElement`，
-    红字校验提示移到表单下方独立行），多控件行会错轨
+    **各自左对齐**；**每行必须单控件**——「输入框 + 单位后缀」等组合控件用
+    `np-filext` 并排 flex 容器打包（`inline-flex + align-items: center + gap`，
+    输入框 `flex: 1`，如导出清单的 文件名+.xlsx），红字校验提示移到表单下方
+    独立行，多控件行会错轨
   - **横向中轴对齐**：全部行按 `--np-ctl-h` 基线 `min-height + align-self: center`
     拉齐；**仅此不够**——标题 span 与 Checkbox 是 block 盒，盒子居中了盒内文本
     仍从顶部排布，必须再转 `inline-flex + align-items: center` 才真正同轴
     （文字中线与 Seg/输入框一致）
-  - **Blueprint 自带样式三处必覆盖**（不覆盖即出现字号/行距/对齐偏差）：
+  - **Blueprint 自带样式三处必覆盖 + 一处必规避**（不覆盖即出现字号/行距/对齐偏差）：
     ① 控件文案默认 14px → `.np-dialog .bp6-checkbox` 等显式对齐正文 13px；
     ② `.bp6-control` 自带 `margin-bottom: 8px` → 参数表单内清零（行距只由
     网格 gap 供给，禁止控件自带边距参与节奏）；③ 复选框指示器自带
     `margin-top: -3px`（行内排版基线补偿）→ flex 居中语境归零（隐藏 input 为
-    `position: absolute` 不参与 flex，转 flex 安全）
+    `position: absolute` 不参与 flex，转 flex 安全）；④ **单位后缀禁用
+    `InputGroup rightElement`**——其 action 容器 `position: absolute; top: 0`
+    钉死输入框顶部，与输入文字的垂直居中链路相互独立，像素级 CSS 修正两轮
+    皆失败（2026-11-10 导出清单教训），结构性规避 = `np-filext` 并排 flex
+    容器（对齐由构造保证）
   - **参数标题字号**：与选项并排的行标题用**正文 13px**（`--np-font-ui`，muted
     色区分层级）；11px 辅助字（`--np-font-sm`）只用于独立说明行，不得用于
     双列面板的行标题（与选项并排时大小/中轴视觉皆不齐）
