@@ -4730,6 +4730,18 @@ body.np-col-resizing * {
   min-height: var(--np-ctl-h);
   align-self: center;
 }
+/* 标题与选项横向中轴对齐（2026-11-10 用户反馈）：标题 span 与 Checkbox 是
+   block 盒——min-height 只居中盒子本身、盒内文本仍从顶排；转 flex 让文本
+   在 24px 基线内垂直居中，标题/复选框/分段/输入框共用同一水平中轴 */
+.np-bren-form.is-cols > .np-bren-field > .np-bren-k,
+.np-bren-form.is-cols .np-bren-field > .bp6-control {
+  display: inline-flex;
+  align-items: center;
+}
+/* 指示器自带 margin-top -3px（行内基线补偿），flex 居中后归零防上偏 */
+.np-bren-form.is-cols .bp6-control-indicator {
+  margin-top: 0;
+}
 /* Blueprint 表单控件自带文案默认 14px，二级页面内统一紧凑到正文 13px
    （§4.4 字号两档；2026-11-10 导出清单面板用户反馈） */
 .np-dialog .bp6-checkbox {
