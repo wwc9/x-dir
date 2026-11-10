@@ -78,7 +78,10 @@
 - **承载与圆角**：Dialog = `np-dialog`（`--np-radius-pane` + `--np-surface` + `--np-shadow`，三段全透明，footer 以 `--np-hairline` 分隔；2026-11-03 起与窗格卡片同档、随设置可调）；页内浮层（下拉/弹出面板）= `PopoverNext` + `Menu` 的 surface 卡片（`--np-radius-lg` + `--np-shadow`）；禁用原生 select 弹层与经典 Popover
 - **高度**：控件（按钮/输入/NpSelect 触发钮）统一 `--np-ctl-h: 24px`；列表行 `--np-row-h: 28px`；紧凑间距 `--np-gap: 4px`、区块间距 `--np-gutter: 6px`；分区线 = 1px `--np-hairline`（如 `.np-set-sep`）
 - **颜色**：面板底 `--np-surface`；填充控件（输入框/触发钮/凹陷列表）`--np-surface-2`；悬停 `--np-hover`；打开/激活态 = surface 底 + accent 淡染描边（`0 0 0 2px` 45% 透明 accent，同 np-nav 输入框焦点态）；文字 `--np-fg`、辅助 `--np-muted`；accent 只用于激活与主操作，danger 只用于删除类动作
-- **字号**：正文 `--np-font-ui: 13px`、标签/辅助说明 `--np-font-sm: 11px`
+- **字号**：正文 `--np-font-ui: 13px`、标签/辅助说明 `--np-font-sm: 11px`；**Blueprint
+  控件自带文案（Checkbox/Switch/Radio label 等）默认 14px，进入二级页面必须显式
+  紧凑化对齐两档**（`.np-dialog .bp6-checkbox` 全局覆盖已落地，2026-11-10 导出清单
+  面板用户反馈补条款）；行节奏以 `--np-ctl-h` 为统一基线，行内控件高度不一时拉齐居中
 - **交互风格**：填充式输入；下拉一律 `NpSelect`（选中项 Check 标记、开态箭头旋转 180°）；图标经 `ic()`/`AppIcon`（§4.5）；按钮焦点态按 index.css「全局按钮焦点态」
 - **验收口径**：二级界面内不得出现未经样式化的原生系统控件（原生 select 弹层、系统菜单、默认描边控件）；新组件先查 §4.3 清单，取值全部走 `--np-*` token（§4.1）
 
