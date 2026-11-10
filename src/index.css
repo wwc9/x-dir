@@ -5484,6 +5484,9 @@ body.np-col-resizing * {
   max-height: 168px;
   overflow-y: auto;
   margin-top: 4px;
+  /* 区块间距（§4.7/§4.9）：清单区与后续参数区/说明行之间由本边距供给，
+     此前为 0——列表框直接贴住策略行（2026-11-10 用户反馈） */
+  margin-bottom: var(--np-gutter);
   padding: 5px;
   border-radius: var(--np-radius);
   background: var(--np-surface-2);

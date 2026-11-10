@@ -142,7 +142,9 @@
     saveDialogPrefs）；**用户点名"某项为默认"的参数不持久化**（每次打开恒为
     该默认，记忆值会反压新默认；本次清除数据治标不治本），其余参数记忆
 - **结构三段**：① 待处理清单/预览区置顶（surface-2 凹陷列表，路径单行省略、
-  悬停 title 全文）；② 参数区（np-bren-form 行 + np-dialog-muted 说明收尾）；
+  悬停 title 全文；清单容器 `np-pdfmlist` 自带 `margin-bottom: --np-gutter`
+  供给与参数区的区块间距——此前为 0，列表框直接贴住策略行，2026-11-10 用户
+  反馈补）；② 参数区（np-bren-form 行 + np-dialog-muted 说明收尾）；
   ③ Footer（主操作 accent + 取消）。数据经 DialogSpec 直传（entries），
   onDone 返回结构化结果（含 paths 顺序）。
 - **列数**：参数 ≤4 行用 1 列（np-bren-form 纵排）；≥5 行用 2 列网格
