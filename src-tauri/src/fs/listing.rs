@@ -16,14 +16,15 @@ use super::path::{file_name_of, is_valid_name, to_extended};
 /// 超限整体中止报错而非静默截断——清单用于留档核对，缺行即失真
 pub const MAX_ROWS: usize = 200_000;
 
-/// 导出文件基名 = 当前文件夹名（2026-11-10 用户定案：清单按所在文件夹命名）。
-/// 尾反斜杠由 file_name_of 容忍；盘根（"D:"）/非法名回落「文件清单」
+/// 导出文件基名 = 「文件夹名-文件清单」（2026-11-10 用户定案：如
+/// 收益预算 → 收益预算-文件清单.csv）。尾反斜杠由 file_name_of 容忍；
+/// 盘根（"D:"）/非法名/空名回落「文件清单」（无文件夹名可冠）
 pub fn listing_base_name(dir: &str) -> String {
     let n = file_name_of(dir);
     if n.is_empty() || !is_valid_name(&n) {
         return "文件清单".to_string();
     }
-    n
+    format!("{n}-文件清单")
 }
 
 /// 行收集失败两类（命令层映射 AppError）
@@ -581,8 +582,11 @@ mod tests {
     // ── 导出基名 ──
     #[test]
     fn base_name_follows_folder() {
-        assert_eq!(listing_base_name("D:\\工作\\收益预算"), "收益预算");
-        assert_eq!(listing_base_name("D:\\工作\\收益预算\\"), "收益预算"); // 尾反斜杠
+        assert_eq!(listing_base_name("D:\\工作\\收益预算"), "收益预算-文件清单");
+        assert_eq!(
+            listing_base_name("D:\\工作\\收益预算\\"),
+            "收益预算-文件清单"
+        ); // 尾反斜杠
         assert_eq!(listing_base_name("D:\\"), "文件清单"); // 盘根 "D:" 非法名回落
         assert_eq!(listing_base_name(""), "文件清单");
     }
