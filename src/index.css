@@ -4697,6 +4697,24 @@ body.np-col-resizing * {
 .np-bren-form > .np-wide {
   flex-basis: 100%;
 }
+/* 双列参数面板变体（is-cols）：标题列按最宽标签定轨、选项列各自左对齐
+   （2026-11-10 导出清单面板；field 转 display:contents 后，标签/控件成为
+   网格两列的项——每行必须单控件，后缀走 InputGroup rightElement） */
+.np-bren-form.is-cols {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--np-gutter);
+}
+.np-bren-form.is-cols .np-bren-field {
+  display: contents;
+}
+.np-bren-form.is-cols .np-bren-field > .bp6-input-group {
+  width: 100%;
+  max-width: 280px;
+}
+.np-dialog-muted.is-err {
+  color: var(--np-danger);
+}
 .np-bren-field > .bp6-input-group {
   width: 120px;
 }

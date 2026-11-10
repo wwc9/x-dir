@@ -1234,8 +1234,8 @@ export function ExportListingDialog({
   return (
     <>
       <DialogBody>
-        <div className="np-bren-form">
-          <FormRow k={t2("穿透子文件夹")} wide>
+        <div className="np-bren-form is-cols">
+          <FormRow k={t2("穿透子文件夹")}>
             <Checkbox
               checked={recursive}
               onChange={(e) => setRecursive(e.currentTarget.checked)}
@@ -1264,22 +1264,22 @@ export function ExportListingDialog({
               ]}
             />
           </FormRow>
-          <FormRow k={t2("文件名")} wide>
+          <FormRow k={t2("文件名")}>
             <InputGroup
               size="small"
               value={name}
               spellCheck={false}
               autoFocus
               onChange={(e) => setName(e.target.value)}
+              rightElement={<span className="np-dialog-muted">.{fmt}</span>}
             />
-            <span className="np-dialog-muted">.{fmt}</span>
-            {!nameOk && (
-              <span className="np-dialog-muted is-err">
-                {t2("名称含非法字符或为 Windows 保留名")}
-              </span>
-            )}
           </FormRow>
         </div>
+        {!nameOk && (
+          <div className="np-dialog-muted is-err">
+            {t2("名称含非法字符或为 Windows 保留名")}
+          </div>
+        )}
         <div className="np-dialog-muted">
           {blank
             ? t2(recursive
