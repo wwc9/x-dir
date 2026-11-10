@@ -1235,13 +1235,6 @@ export function ExportListingDialog({
     <>
       <DialogBody>
         <div className="np-bren-form">
-          <FormRow k={t2("范围")} wide>
-            <span className="np-dialog-muted np-ellipsis">
-              {blank
-                ? t2("当前文件夹整个目录") + t2(recursive ? "（含子文件夹）" : "（仅直接子项）")
-                : t2("选中的 {n} 项", { n: entries.length })}
-            </span>
-          </FormRow>
           <FormRow k={t2("穿透子文件夹")} wide>
             <Checkbox
               checked={recursive}
@@ -1288,7 +1281,14 @@ export function ExportListingDialog({
           </FormRow>
         </div>
         <div className="np-dialog-muted">
-          {t2("直存 {dir}，与现有文件重名自动 (2) 递增", { dir })}
+          {blank
+            ? t2(recursive
+                ? "导出当前文件夹（含子文件夹），直存 {dir}，重名自动 (2) 递增"
+                : "导出当前文件夹（仅直接子项），直存 {dir}，重名自动 (2) 递增", { dir })
+            : t2("导出选中 {n} 项，直存 {dir}，重名自动 (2) 递增", {
+                n: entries.length,
+                dir,
+              })}
         </div>
       </DialogBody>
       <Footer

@@ -4692,6 +4692,11 @@ body.np-col-resizing * {
   gap: var(--np-gutter);
   min-width: 0;
 }
+/* wide = 独占整行（FormRow 文档语义；np-bren-form 是 flex-wrap，
+   不补这条规则时窄行会并排——2026-11-10 导出清单面板修正） */
+.np-bren-form > .np-wide {
+  flex-basis: 100%;
+}
 .np-bren-field > .bp6-input-group {
   width: 120px;
 }

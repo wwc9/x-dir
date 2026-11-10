@@ -257,13 +257,13 @@ const EN: Record<string, string> = {
   "人类可读表格": "Human-readable table",
   "纯文本": "Plain text",
   "完整路径一行一个": "One full path per line",
-  "当前文件夹整个目录": "the entire current folder",
-  "（含子文件夹）": " (with subfolders)",
-  "（仅直接子项）": " (direct children only)",
-  "选中的 {n} 项": "{n} selected items",
   "导出": "Export",
-  "直存 {dir}，与现有文件重名自动 (2) 递增":
-    "Saved straight into {dir}; name conflicts auto-increment with (2)",
+  "导出当前文件夹（含子文件夹），直存 {dir}，重名自动 (2) 递增":
+    "Exports the current folder (with subfolders) into {dir}; name conflicts auto-increment with (2)",
+  "导出当前文件夹（仅直接子项），直存 {dir}，重名自动 (2) 递增":
+    "Exports the current folder (direct children only) into {dir}; name conflicts auto-increment with (2)",
+  "导出选中 {n} 项，直存 {dir}，重名自动 (2) 递增":
+    "Exports {n} selected items into {dir}; name conflicts auto-increment with (2)",
   "计算校验值…": "Compute checksum…",
   "修改时间与属性…": "Timestamps & attributes…",
   "文件分割…": "Split file…",

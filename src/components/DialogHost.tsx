@@ -119,7 +119,9 @@ export function DialogHost() {
       : "info";
 
   const title =
-    dialog?.type === "filesMerge"
+    dialog?.type === "exportListing"
+      ? "导出文件清单"
+      : dialog?.type === "filesMerge"
       ? dialog.flavor === "images"
         ? "图片合并为 PDF"
         : dialog.flavor === "csv"
