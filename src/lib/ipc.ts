@@ -215,6 +215,15 @@ export interface CreateDirsResult {
   failed: { name: string; message: string }[];
 }
 
+/** 导出文件清单回执（path = 实际落点，重名自动 "(2)" 递增；count = 行数） */
+export interface ExportedListing {
+  path: string;
+  count: number;
+}
+
+/** 导出文件清单格式（Rust fs/listing.rs 三格式；CSV/MD 列集一致） */
+export type ListingFormat = "csv" | "md" | "txt";
+
 // ── 文件工具（2026-11-09 功能库「工具」组，Rust commands/filetools_cmds.rs）──
 
 export type HashAlgo = "md5" | "sha1" | "sha256" | "sha512";
@@ -1019,6 +1028,11 @@ export const api = {
   /** 保存文本文件（UTF-8 BOM；导出文件清单用） */
   saveTextFile: (path: string, content: string) =>
     cmd<void>("save_text_file", { path, content }),
+  /** 导出文件清单（2026-11-10 增强）：免保存框直写 dir 下「文件清单.<fmt>」，
+   *  重名自动 "(2)" 递增；recursive = 整树递归（文件夹行含子树体积），
+   *  否则按 paths 逐项。UTF-8 BOM + CRLF */
+  exportListing: (paths: string[], dir: string, fmt: ListingFormat, recursive: boolean) =>
+    cmd<ExportedListing>("export_listing", { paths, dir, fmt, recursive }),
   /** 截图（§3.6）：开始一次会话（定格光标所在显示器 + 打开覆盖窗） */
   shotBegin: () => cmd<void>("shot_begin"),
   /** 关闭截图覆盖窗（完成 / 取消收尾） */

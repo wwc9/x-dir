@@ -1188,20 +1188,25 @@ export function FileList({
         return { label: t("Excel 合并…"), action: () => void mergeXlsx(sel, path) };
       case "textMerge":
         return { label: t("文本合并…"), action: () => void mergeTexts(sel, path) };
-      case "exportList":
+      case "exportList": {
+        // 空白处右键 = 整树递归导出当前文件夹（文件夹行含子树体积，「此电脑」
+        // 页无实目录禁用）；选中 = 仅选中项（保持选中顺序）
+        const blank = sel.length === 0;
         return {
           label: t("导出文件清单 ▸"),
           sub: (
             [
-              ["csv", "导出 CSV（表格数据）"],
-              ["md", "导出 Markdown 表格"],
-              ["txt", "导出纯文本（仅名称）"],
+              ["csv", blank ? "导出 CSV（整个文件夹）" : "导出 CSV（表格数据）"],
+              ["md", blank ? "导出 Markdown 表格（整个文件夹）" : "导出 Markdown 表格"],
+              ["txt", blank ? "导出纯文本（整个文件夹）" : "导出纯文本（仅名称）"],
             ] as const
           ).map(([fmt, label]) => ({
             label: t(label),
+            disabled: blank && isThisPc,
             action: () => void exportListing(sel, path, fmt),
           })),
         };
+      }
       case "batchRename":
         return {
           label: t("批量重命名…"),

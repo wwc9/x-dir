@@ -350,6 +350,14 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     merged.menuEntries = stripCustomEntries(merged.menuEntries ?? []);
     // 基础固定功能归一化（2026-10-15）：任何旧档/导入档都保证七项基础功能常驻
     merged.menuEntries = ensureFixedEntries(merged.menuEntries ?? []);
+    // 导出文件清单升级迁移（2026-11-10）：启用时机 sel → both——空白处右键
+    // 整树递归导出随本版新增，存量条目停留在 sel 则新能力永远不可见；
+    // 渲染端 supportsBlank 已开，此处仅翻启用时机
+    merged.menuEntries = (merged.menuEntries ?? []).map((en) =>
+      en.kind === "builtin" && en.id === "builtin:exportList" && en.area === "sel"
+        ? { ...en, area: "both" as const }
+        : en,
+    );
     // 窗格工具栏迁移（2026-10-15）：旧 paneTools（key 表）→ toolbarEntries（MenuEntry）；
     // 缺失时用出厂布局（全部内置功能均可入工具栏，未知 key 由渲染端按注册表过滤）
     if ((saved as { toolbarEntries?: unknown } | null)?.toolbarEntries === undefined) {

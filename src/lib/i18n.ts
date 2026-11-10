@@ -249,6 +249,11 @@ const EN: Record<string, string> = {
   "导出 CSV（表格数据）": "Export CSV (spreadsheet data)",
   "导出 Markdown 表格": "Export Markdown table",
   "导出纯文本（仅名称）": "Export plain text (names only)",
+  "导出 CSV（整个文件夹）": "Export CSV (entire folder)",
+  "导出 Markdown 表格（整个文件夹）": "Export Markdown table (entire folder)",
+  "导出纯文本（整个文件夹）": "Export plain text (entire folder)",
+  "导出选中项/整个文件夹清单（直存当前文件夹）":
+    "Export selected items / whole folder listing (saved into the folder)",
   "计算校验值…": "Compute checksum…",
   "修改时间与属性…": "Timestamps & attributes…",
   "文件分割…": "Split file…",

@@ -2,10 +2,9 @@
 // V2：nativeFileOps 开启时走 IFileOperation，冲突由系统对话框处理，
 // 此处跳过预检对话框（policy 传 rename 仅作原生失败回退时的兜底语义）。
 
-import { api, type Policy, type RenameOutcome } from "./ipc";
+import { api, type ListingFormat, type Policy, type RenameOutcome } from "./ipc";
 import { fileNameOf, isValidName, joinPath, parentPath } from "./path";
-import { montageOutputName } from "./imgOps";
-import { buildListing, listingFileName, listingFilter, type ListingFormat } from "./listing";
+import { montageOutputName } from "./imgOps";;
 import { useJobs } from "../stores/jobs";
 import { usePanes } from "../stores/panes";
 import { useSettings } from "../stores/settings";
@@ -587,21 +586,29 @@ export async function organizeEntries(entries: FileEntry[], dir: string, mode: "
   }
 }
 
-/** 导出文件清单（2026-11-09 三格式：CSV/Markdown/纯文本；原生保存框选位置） */
+/** 导出文件清单（2026-11-10 增强：免保存框直写当前文件夹，重名 "(2)" 递增；
+ *  空白处右键 entries 为空 = 整树递归导出整个文件夹，文件夹行含子树体积） */
 export async function exportListing(
   entries: FileEntry[],
   dir: string,
   fmt: ListingFormat = "csv",
 ): Promise<void> {
-  const { save } = await import("@tauri-apps/plugin-dialog");
-  const target = await save({
-    defaultPath: joinPath(dir, listingFileName(fmt)),
-    filters: [listingFilter(fmt)],
-  });
-  if (!target) return;
+  const recursive = entries.length === 0;
   try {
-    await api.saveTextFile(target, buildListing(entries, fmt));
-    useUi.getState().toast("清单已导出");
+    const r = await api.exportListing(
+      entries.map((e) => e.path),
+      dir,
+      fmt,
+      recursive,
+    );
+    const name = fileNameOf(r.path);
+    useUi
+      .getState()
+      .toast(
+        recursive
+          ? `整个文件夹清单已导出：${name}（${r.count} 项）`
+          : `清单已导出：${name}（${r.count} 项）`,
+      );
   } catch (e) {
     useUi.getState().toast(`导出失败：${String(e)}`, "error");
   }

@@ -217,7 +217,8 @@ impl NowCtx {
 }
 
 /// 本地时区偏移（本地毫秒 − UTC 毫秒）：GetLocalTime 与同一瞬间 UTC 差值
-fn local_utc_offset_ms(now_ms: u64) -> i64 {
+/// （pub(crate)：listing.rs fmt_ts 的 API 失败回落路径复用）
+pub(crate) fn local_utc_offset_ms(now_ms: u64) -> i64 {
     #[cfg(windows)]
     {
         use windows::Win32::System::SystemInformation::GetLocalTime;
@@ -248,8 +249,9 @@ fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
-/// 自 1970-01-01 的天数 → (y, m, d)（days_from_civil 逆变换）
-fn civil_from_days(z: i64) -> (i64, u32, u32) {
+/// 自 1970-01-01 的天数 → (y, m, d)（days_from_civil 逆变换；
+/// pub(crate)：listing.rs fmt_ts 回落路径复用）
+pub(crate) fn civil_from_days(z: i64) -> (i64, u32, u32) {
     let z = z + 719_468;
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
     let doe = z - era * 146_097;

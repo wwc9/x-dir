@@ -227,3 +227,57 @@ pub fn save_text_file(path: String, content: String) -> Result<(), AppError> {
     std::fs::write(to_extended(&join_name(&parent, &name)), bytes)?;
     Ok(())
 }
+
+/// 导出文件清单回执：实际落点（重名 available_name 递增）+ 行数
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportedListing {
+    pub path: String,
+    pub count: usize,
+}
+
+/// 导出文件清单（2026-11-10 增强）：免保存框直写 dir 下「文件清单.<fmt>」，
+/// 重名 available_name 递增不覆盖。recursive = 空白处右键整树递归（文件夹行
+/// 含子树体积），否则按 paths 逐项（保持选中顺序）。UTF-8 BOM + CRLF（Excel
+/// 中文表头可读）。同步轻量命令（save_text_file 同口径，跑异步命令线程）；
+/// 行数超 MAX_ROWS 整体中止——清单用于留档核对，静默截断即失真
+#[tauri::command]
+pub fn export_listing(
+    paths: Vec<String>,
+    dir: String,
+    fmt: String,
+    recursive: bool,
+) -> Result<ExportedListing, AppError> {
+    let ext = match fmt.as_str() {
+        "csv" | "md" | "txt" => fmt.as_str(),
+        _ => return Err(AppError::new("E_INVALID_NAME", "不支持的清单格式")),
+    };
+    if !path_exists(&dir) {
+        return Err(AppError::new("E_NOT_FOUND", format!("目录不存在：{dir}")));
+    }
+    let rows = if recursive {
+        crate::fs::listing::collect_tree(&dir, crate::fs::listing::MAX_ROWS)
+    } else {
+        if paths.is_empty() {
+            return Err(AppError::new("E_NOT_FOUND", "未选中任何条目"));
+        }
+        crate::fs::listing::collect_selected(&paths, &dir)
+    }
+    .map_err(|e| match e {
+        crate::fs::listing::CollectError::TooMany(cap) => {
+            AppError::new("E_LIMIT", format!("条目超过导出上限（{cap}），已中止"))
+        }
+        crate::fs::listing::CollectError::Unreadable => {
+            AppError::new("E_NOT_FOUND", "所选条目均无法读取")
+        }
+    })?;
+    let content = crate::fs::listing::build_listing(&rows, &fmt);
+    let target = crate::jobs::pick::available_name(&join_name(&dir, &format!("文件清单.{ext}")));
+    let mut bytes = vec![0xEF, 0xBB, 0xBF];
+    bytes.extend_from_slice(content.as_bytes());
+    std::fs::write(to_extended(&target), bytes)?;
+    Ok(ExportedListing {
+        count: rows.len(),
+        path: target,
+    })
+}

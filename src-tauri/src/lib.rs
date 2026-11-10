@@ -239,6 +239,7 @@ pub fn run() {
             commands::text_cmds::merge_xlsx,
             commands::text_cmds::zip_files,
             commands::text_cmds::save_text_file,
+            commands::text_cmds::export_listing,
             commands::archive_cmds::extract_archives,
             commands::filetools_cmds::hash_files,
             commands::filetools_cmds::verify_sums_file,

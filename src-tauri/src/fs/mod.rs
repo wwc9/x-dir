@@ -3,6 +3,7 @@ pub mod archive;
 pub mod cache;
 pub mod entry;
 pub mod filetools;
+pub mod listing;
 pub mod matcher;
 pub mod path;
 pub mod search;
