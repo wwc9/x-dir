@@ -102,7 +102,7 @@ export function NewFoldersDialog({
   return (
     <>
       <DialogBody>
-        <div className="np-bren-form">
+        <div className="np-bren-form is-cols">
           <FormRow k={t2("方式")}>
             <Seg<"lines" | "pattern">
               value={mode}
@@ -125,7 +125,7 @@ export function NewFoldersDialog({
             onChange={(e) => setText(e.target.value)}
           />
         ) : (
-          <div className="np-bren-form">
+          <div className="np-bren-form is-cols">
             <FormRow k={t2("模板")}>
               <InputGroup
                 size="small"

@@ -222,7 +222,7 @@ export function CompressDialog({
     <>
       <DialogBody>
         <QueueSection title={t2("处理顺序")} items={items} onChange={setItems} />
-        <div className="np-bren-form">
+        <div className="np-bren-form is-cols">
           <FormRow k={t2("策略")}>
             <Seg
               value={target}
@@ -482,7 +482,7 @@ export function ConvertDialog({
     <>
       <DialogBody>
         <QueueSection title={t2("处理顺序")} items={items} onChange={setItems} />
-        <div className="np-bren-form">
+        <div className="np-bren-form is-cols">
           <FormRow k={t2("目标格式")}>
             <NpSelect
               value={target}

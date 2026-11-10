@@ -155,7 +155,7 @@ export function HashCalcDialog({
   return (
     <>
       <DialogBody>
-        <div className="np-bren-form">
+        <div className="np-bren-form is-cols">
           <span className="np-bren-field">
             <span className="np-bren-k">{t2("算法")}</span>
             <Seg<HashAlgo> value={algo} onChange={pickAlgo} options={ALGOS} />
@@ -402,7 +402,7 @@ export function TouchDialog({
             n: entries.length,
           })}
         </div>
-        <div className="np-bren-form">
+        <div className="np-bren-form is-cols">
           <span className="np-bren-field">
             <span className="np-bren-k">{t2("修改时间")}</span>
             <Seg<TimeMode>
@@ -522,7 +522,7 @@ export function SplitDialog({
   return (
     <>
       <DialogBody>
-        <div className="np-bren-form">
+        <div className="np-bren-form is-cols">
           <span className="np-bren-field">
             <span className="np-bren-k">{t2("部件大小")}</span>
             <NpSelect

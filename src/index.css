@@ -5543,13 +5543,25 @@ body.np-col-resizing * {
   margin-bottom: 4px;
 }
 .np-pdfmform {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 10px 12px;
   margin: 10px 0 var(--np-gutter);
 }
-.np-pdfmform .np-bren-field {
-  width: 100%;
+/* §4.9 双列对齐细则（2026-11-10 统一适用 is-cols/np-pdfmform/np-wm-form）：
+   参数行标题升正文字号（11px 辅助字不与选项并排）+ 行内中轴对齐（field 盒
+   转 flex 盒内居中，block 盒只居中自身文本仍从顶排） */
+.np-pdfmform > .np-bren-field > .np-bren-k,
+.np-wm-form > .np-bren-field > .np-bren-k {
+  font-size: var(--np-font-ui);
+  color: var(--np-muted);
+}
+.np-pdfmform > .np-bren-field,
+.np-wm-form > .np-bren-field {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--np-ctl-h);
+  align-self: center;
 }
 .np-pdfmform .np-bren-field > .bp6-input-group {
   flex: 1;
@@ -5562,7 +5574,7 @@ body.np-col-resizing * {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px 12px;
-  align-items: start;
+  align-items: center;
 }
 .np-pdfmform.np-two-col .np-wide {
   grid-column: 1 / -1;
@@ -5586,7 +5598,7 @@ body.np-col-resizing * {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
   gap: 10px 12px;
-  align-items: start;
+  align-items: center;
   margin: 10px 0 var(--np-gutter);
 }
 /* 标签行高对齐单行控件（24px），多行控件格内顶对齐 */
