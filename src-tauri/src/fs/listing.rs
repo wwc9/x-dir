@@ -269,13 +269,68 @@ fn format_bytes(n: u64) -> String {
     }
 }
 
-/// 构建清单全文（行尾 CRLF；UTF-8 BOM 由命令层加——Excel 中文表头必需）
-pub fn build_listing(rows: &[ListingRow], fmt: &str) -> String {
+/// 构建清单内容（2026-11-10 增 XLSX）：文本三格式为 UTF-8 文本（BOM 由命令
+/// 层加——Excel 中文表头必需），xlsx 为二进制容器直出
+pub fn build_listing(rows: &[ListingRow], fmt: &str) -> ListingPayload {
     match fmt {
-        "md" => build_md(rows),
-        "txt" => build_txt(rows),
-        _ => build_csv(rows),
+        "md" => ListingPayload::Text(build_md(rows)),
+        "txt" => ListingPayload::Text(build_txt(rows)),
+        "xlsx" => ListingPayload::Xlsx(build_xlsx(rows)),
+        _ => ListingPayload::Text(build_csv(rows)),
     }
+}
+
+/// 清单载荷：Text = csv/md/txt 文本；Xlsx = 工作簿字节
+pub enum ListingPayload {
+    Text(String),
+    Xlsx(Vec<u8>),
+}
+
+/// XLSX 工作簿（rust_xlsxwriter 0.99，树内 Excel 合并同款依赖）：表头行 +
+/// 数据行，体积列为真数字（审计可直接求和/筛选），首行冻结、列宽自适应后
+/// 对名称/路径三列封顶。默认工作表名「文件清单」
+fn build_xlsx(rows: &[ListingRow]) -> Vec<u8> {
+    let mut wb = rust_xlsxwriter::Workbook::new();
+    let ws = wb.add_worksheet();
+    let _ = ws.set_name("文件清单");
+    const HEADERS: [&str; 10] = [
+        "序号",
+        "名称",
+        "扩展名",
+        "是否文件夹",
+        "大小(字节)",
+        "修改时间",
+        "创建时间",
+        "属性",
+        "相对路径",
+        "完整路径",
+    ];
+    for (c, h) in HEADERS.iter().enumerate() {
+        let _ = ws.write_string(0, c as u16, *h);
+    }
+    for (i, r) in rows.iter().enumerate() {
+        let row = (i + 1) as u32;
+        let _ = ws.write_number(row, 0, (i + 1) as f64);
+        let _ = ws.write_string(row, 1, &r.name);
+        let _ = ws.write_string(row, 2, ext_of(&r.name));
+        let _ = ws.write_string(row, 3, is_dir_text(r.is_dir));
+        // 文件夹无体积语义（非递归 0 / 空子树）留空；0 字节文件写真 0
+        if !(r.is_dir && r.size == 0) {
+            let _ = ws.write_number(row, 4, r.size as f64);
+        }
+        let _ = ws.write_string(row, 5, fmt_ts(r.mtime_ms));
+        let _ = ws.write_string(row, 6, fmt_ts(r.ctime_ms));
+        let _ = ws.write_string(row, 7, attrs_text(r));
+        let _ = ws.write_string(row, 8, &r.rel);
+        let _ = ws.write_string(row, 9, &r.path);
+    }
+    let _ = ws.autofit();
+    // 自适应后对长文本三列封顶（超长路径不把工作表撑成 read 时横向爆宽）
+    let _ = ws.set_column_width(1, 30);
+    let _ = ws.set_column_width(8, 40);
+    let _ = ws.set_column_width(9, 70);
+    let _ = ws.set_freeze_panes(1, 0);
+    wb.save_to_buffer().unwrap_or_default()
 }
 
 fn build_txt(rows: &[ListingRow]) -> String {
@@ -513,6 +568,44 @@ mod tests {
             row("b.txt", "E:\\d", false, 2, false, false),
         ];
         assert_eq!(build_txt(&rows), "E:\\d\\a.txt\r\nE:\\d\\b.txt");
+    }
+
+    // ── XLSX 构建 ──
+    #[test]
+    fn xlsx_readback_header_and_rows() {
+        let rows = [
+            row("报告.docx", "E:\\d", false, 12345, false, false),
+            row("子夹", "E:\\d", true, 0, false, false),
+            row("空.bin", "E:\\d", false, 0, false, false),
+        ];
+        let bytes = build_xlsx(&rows);
+        assert!(bytes.starts_with(b"PK"), "xlsx 为 zip 容器");
+        let path = std::env::temp_dir().join(format!(
+            "xdir-listing-xlsx-{}-readback.xlsx",
+            std::process::id()
+        ));
+        std::fs::write(&path, &bytes).unwrap();
+        let mut book = calamine::open_workbook_auto(&path).expect("calamine 可读回");
+        use calamine::Reader;
+        let range = book
+            .worksheet_range("文件清单")
+            .expect("默认工作表名 = 文件清单");
+        let cell = |r: u32, c: u32| range.get_value((r, c)).map(|v| v.to_string());
+        assert_eq!(cell(0, 0).as_deref(), Some("序号"));
+        assert_eq!(cell(0, 4).as_deref(), Some("大小(字节)"));
+        assert_eq!(cell(1, 1).as_deref(), Some("报告.docx"));
+        assert_eq!(cell(1, 2).as_deref(), Some("docx"));
+        assert_eq!(cell(1, 3).as_deref(), Some("否"));
+        assert_eq!(cell(1, 4).as_deref(), Some("12345")); // 数值列
+        assert_eq!(cell(2, 3).as_deref(), Some("是"));
+        assert_eq!(
+            cell(2, 4).as_deref(),
+            Some(""),
+            "文件夹体积留空（空单元格）"
+        );
+        assert_eq!(cell(3, 4).as_deref(), Some("0"), "0 字节文件写真 0");
+        assert_eq!(range.height(), 4); // 表头 + 3 行
+        let _ = std::fs::remove_file(&path);
     }
 
     // ── 内容筛选 ──

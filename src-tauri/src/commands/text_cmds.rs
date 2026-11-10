@@ -251,7 +251,7 @@ pub fn export_listing(
     recursive: bool,
 ) -> Result<ExportedListing, AppError> {
     let ext = match fmt.as_str() {
-        "csv" | "md" | "txt" => fmt.as_str(),
+        "csv" | "md" | "txt" | "xlsx" => fmt.as_str(),
         _ => return Err(AppError::new("E_INVALID_NAME", "不支持的清单格式")),
     };
     let keep_dirs = match content.as_str() {
@@ -291,11 +291,17 @@ pub fn export_listing(
             format!("文件名含非法字符或为 Windows 保留名：{trimmed}"),
         ));
     };
-    let content_text = crate::fs::listing::build_listing(&rows, &fmt);
     let target = crate::jobs::pick::available_name(&join_name(&dir, &format!("{base}.{ext}")));
-    let mut bytes = vec![0xEF, 0xBB, 0xBF];
-    bytes.extend_from_slice(content_text.as_bytes());
-    std::fs::write(to_extended(&target), bytes)?;
+    match crate::fs::listing::build_listing(&rows, &fmt) {
+        crate::fs::listing::ListingPayload::Text(text) => {
+            let mut bytes = vec![0xEF, 0xBB, 0xBF];
+            bytes.extend_from_slice(text.as_bytes());
+            std::fs::write(to_extended(&target), bytes)?;
+        }
+        crate::fs::listing::ListingPayload::Xlsx(book) => {
+            std::fs::write(to_extended(&target), book)?;
+        }
+    }
     Ok(ExportedListing {
         count: rows.len(),
         path: target,

@@ -221,8 +221,8 @@ export interface ExportedListing {
   count: number;
 }
 
-/** 导出文件清单格式（Rust fs/listing.rs 三格式；CSV/MD 列集一致） */
-export type ListingFormat = "csv" | "md" | "txt";
+/** 导出文件清单格式（Rust fs/listing.rs 四格式：xlsx 工作簿 / CSV / MD / txt） */
+export type ListingFormat = "xlsx" | "csv" | "md" | "txt";
 
 // ── 文件工具（2026-11-09 功能库「工具」组，Rust commands/filetools_cmds.rs）──
 

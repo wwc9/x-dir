@@ -8,7 +8,7 @@
 // 页码范围解析预演纯函数在 lib/pdfOps（与 Rust parse_page_ranges 同口径）。
 import { useEffect, useMemo, useState } from "react";
 import { t, useT } from "../lib/i18n";
-import { api, type FileEntry } from "../lib/ipc";
+import { api, type FileEntry, type ListingFormat } from "../lib/ipc";
 import { Button, Checkbox, DialogBody, DialogFooter, InputGroup, Slider } from "@blueprintjs/core";
 import { ArrowRight } from "lucide-react";
 
@@ -1220,14 +1220,16 @@ export function ExportListingDialog({
   const prefs = loadDialogPrefs("exportListing", {
     recursive: blank,
     content: "all",
-    fmt: "csv",
+    fmt: "xlsx",
   });
   const [recursive, setRecursive] = useState(prefs.recursive === true);
   const [content, setContent] = useState<"all" | "files" | "dirs">(
     prefs.content === "files" || prefs.content === "dirs" ? prefs.content : "all",
   );
-  const [fmt, setFmt] = useState<"csv" | "md" | "txt">(
-    prefs.fmt === "md" || prefs.fmt === "txt" ? prefs.fmt : "csv",
+  const [fmt, setFmt] = useState<ListingFormat>(
+    prefs.fmt === "xlsx" || prefs.fmt === "csv" || prefs.fmt === "md" || prefs.fmt === "txt"
+      ? prefs.fmt
+      : "xlsx",
   );
   const [name, setName] = useState(() => exportListingDefaultName(dir));
   const nameOk = isValidName(name.trim());
@@ -1254,10 +1256,11 @@ export function ExportListingDialog({
             />
           </FormRow>
           <FormRow k={t2("导出格式")}>
-            <Seg<"csv" | "md" | "txt">
+            <Seg<ListingFormat>
               value={fmt}
               onChange={setFmt}
               options={[
+                { value: "xlsx", label: "XLSX", title: t2("Excel 工作簿（默认）") },
                 { value: "csv", label: "CSV", title: t2("表格数据，Excel 友好") },
                 { value: "md", label: "Markdown", title: t2("人类可读表格") },
                 { value: "txt", label: t2("纯文本"), title: t2("完整路径一行一个") },

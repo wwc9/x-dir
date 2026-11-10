@@ -4712,6 +4712,11 @@ body.np-col-resizing * {
   width: 100%;
   max-width: 280px;
 }
+/* Blueprint 表单控件自带 margin-bottom 8px（.bp6-control），参数表单行距由
+   网格 gap 统一供给，控入内边距清零（2026-11-10 用户反馈首行下间隔偏大） */
+.np-bren-form .bp6-control {
+  margin: 0;
+}
 /* 行节奏统一：每行按控件高基线拉齐（Checkbox ~20px / Seg·输入 24px 混排时
    行高不一——2026-11-10 导出清单面板用户反馈） */
 .np-bren-form.is-cols .np-bren-field > *,

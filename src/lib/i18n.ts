@@ -254,6 +254,7 @@ const EN: Record<string, string> = {
   "仅文件夹": "Folders only",
   "导出格式": "Format",
   "表格数据，Excel 友好": "Spreadsheet data, Excel-friendly",
+  "Excel 工作簿（默认）": "Excel workbook (default)",
   "人类可读表格": "Human-readable table",
   "纯文本": "Plain text",
   "完整路径一行一个": "One full path per line",

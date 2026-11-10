@@ -2,7 +2,7 @@
 // 三格式构建在 Rust fs/listing.rs 单源（列表分页下发前端只持有当前页），
 // 这里只放对话框参数结构与默认文件名推算。
 
-import type { DupGroup } from "./ipc";
+import type { DupGroup, ListingFormat } from "./ipc";
 import { fileNameOf, isValidName } from "./path";
 
 const esc = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
@@ -13,7 +13,7 @@ export interface ExportListingOptions {
   recursive: boolean;
   /** 导出内容：全部 / 仅文件 / 仅文件夹 */
   content: "all" | "files" | "dirs";
-  fmt: "csv" | "md" | "txt";
+  fmt: ListingFormat;
   /** 文件名（不含扩展名；空 = 回落默认） */
   fileName: string;
 }
