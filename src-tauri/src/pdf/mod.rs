@@ -344,6 +344,9 @@ pub(crate) fn run_merge(
             return;
         }
     };
+    // 跨源流去重（2026-11-11）：逐源搬运的同字体内嵌 N 份是合并产物最大肥肉
+    // （用户实测 14×261KB 同字体），transfer 的去重只在单源内生效
+    dedup_streams(&mut merged);
     // 旁写绝不静默覆盖：输出名撞现有文件时自动 (2) 递增（UI 已预校验，此处兜底）
     let out_path = available_name(output);
     if let Err(e) = merged.save(to_extended(&out_path)) {
@@ -619,6 +622,8 @@ pub(crate) fn run_merge_ex(
                 continue;
             }
         };
+        // 跨源流去重（2026-11-11）：同 run_merge——逐源搬运的同字体 N 份去重
+        dedup_streams(&mut merged);
         // 空白页凑偶数：总页数为奇数时按指定位置补 A4 空白页
         if opts.auto_blank
             && merged.get_pages().len() % 2 == 1
@@ -965,7 +970,13 @@ fn rotate_pdf_file(path: &str, degrees: i64, cancel: &AtomicBool) -> Result<Stri
     result.map(|_| out)
 }
 
-/// 轻压缩：重新打包（对象去重 + 对象流压缩），旁写 "<stem>_压缩.pdf"
+/// 轻压缩（2026-11-11 重写为真无损管线）：旧实现 doc.compress() 只压「尚无
+/// Filter」的流——真实 PDF 流全部已压 = 空操作（用户实测合并结果毫无变化）。
+/// 新管线三步：① 流对象内容指纹去重（合并场景同一字体内嵌 N 份是最大肥肉：
+/// 用户文件 14×261KB 同字体，解压后 4.23MB 纯重复）；② 单 FlateDecode 流
+/// L9 重压缩（变小才替换）；③ 图像/加密等非 Flate 滤镜不动（无损保证）。
+/// 进度 = 逐流字节回任务岛（total_bytes×2 覆盖去重+重压两阶段），
+/// 大文件不再 0% 卡死
 pub(crate) fn run_compress(
     paths: &[String],
     cancel: &AtomicBool,
@@ -979,14 +990,9 @@ pub(crate) fn run_compress(
             return;
         }
         prog.current_path = p.clone();
+        prog.done_bytes = 0;
         let out = available_name(&format!("{}\\{}_压缩.pdf", parent_dir(p), stem_of(p)));
-        let result = (|| -> Result<(), String> {
-            let mut doc = Document::load(to_extended(p)).map_err(|e| e.to_string())?;
-            doc.compress(); // 对象去重 + 对象流化；失败则退化为仅重存
-            doc.save(to_extended(&out))
-                .map(|_| ())
-                .map_err(|e| e.to_string())
-        })();
+        let result = compress_pdf_file(p, &out, cancel, prog, em);
         if let Err(e) = result {
             failed.push(FailItem {
                 path: p.clone(),
@@ -997,6 +1003,164 @@ pub(crate) fn run_compress(
         prog.done_files += 1;
         em.progress(prog);
     }
+}
+
+/// 轻压缩核心（独立于任务上下文便于单测）：去重 + L9 重压缩后旁写 out。
+/// em 走 ProgressSink（引擎 = EmitterState 节流事件 / 单测 = NullSink 静默）。
+/// 返回 (去重流数, 重压节省字节数)
+fn compress_pdf_file(
+    path: &str,
+    out: &str,
+    cancel: &AtomicBool,
+    prog: &mut JobProgress,
+    em: &mut dyn crate::fs::filetools::ProgressSink,
+) -> Result<(usize, u64), String> {
+    let mut doc = Document::load(to_extended(path)).map_err(|e| e.to_string())?;
+    if doc.is_encrypted() {
+        return Err("PDF 已加密，请先解密再压缩".into());
+    }
+    // 流对象清单（BTreeMap 迭代序稳定）；总字节 = 各流 raw 长度和 ×2
+    // （阶段①去重指纹 + 阶段②重压缩各计一遍）
+    let stream_ids: Vec<ObjectId> = doc
+        .objects
+        .iter()
+        .filter(|(_, o)| matches!(o, Object::Stream(_)))
+        .map(|(id, _)| *id)
+        .collect();
+    let raw_total: u64 = stream_ids
+        .iter()
+        .filter_map(|id| doc.get_object(*id).ok())
+        .map(|o| match o {
+            Object::Stream(s) => s.content.len() as u64,
+            _ => 0,
+        })
+        .sum();
+    prog.total_bytes = raw_total.saturating_mul(2);
+
+    // ── 阶段①：内容指纹去重（合并场景同一字体内嵌 N 份是最大肥肉）──
+    let deduped = dedup_streams(&mut doc);
+    prog.done_bytes += raw_total;
+    em.progress(prog);
+
+    // ── 阶段②：单 FlateDecode（无 DecodeParms）流 L9 重压缩，变小才替换；
+    // 无 Filter 流压成 Flate（lopdf Stream::compress 同语义）；其余滤镜
+    // （DCT/CCITT/JPX 图像、加密流）原样保留——无损承诺 ──
+    let mut saved: u64 = 0;
+    for &id in &stream_ids {
+        if is_cancelled(cancel) {
+            return Err("已取消".into());
+        }
+        // 已被去重删除的流：get_object_mut 落空自然跳过
+        let raw_len = match doc.get_object(id) {
+            Ok(Object::Stream(s)) => s.content.len() as u64,
+            _ => 0,
+        };
+        if let Ok(Object::Stream(s)) = doc.get_object_mut(id) {
+            let flate_only = matches!(
+                s.dict.get(b"Filter"),
+                Ok(Object::Name(n)) if n.as_slice() == b"FlateDecode"
+            ) || matches!(
+                s.dict.get(b"Filter"),
+                Ok(Object::Array(a))
+                    if a.len() == 1
+                        && matches!(&a[0], Object::Name(n) if n.as_slice() == b"FlateDecode")
+            );
+            let no_parms = !matches!(
+                s.dict.get(b"DecodeParms"),
+                Ok(Object::Dictionary(_)) | Ok(Object::Array(_))
+            );
+            let has_filter = s.dict.get(b"Filter").is_ok();
+            if (flate_only && no_parms) || !has_filter {
+                let decoded = if has_filter {
+                    s.decompressed_content_with_limit(512 * 1024 * 1024)
+                } else {
+                    Ok(s.content.clone())
+                };
+                if let Ok(decoded) = decoded {
+                    use flate2::write::ZlibEncoder;
+                    let mut enc = ZlibEncoder::new(Vec::new(), Compression::best());
+                    let _ = enc.write_all(&decoded);
+                    if let Ok(best) = enc.finish()
+                        && best.len() < s.content.len()
+                    {
+                        saved += (s.content.len() - best.len()) as u64;
+                        s.set_content(best);
+                        if !has_filter {
+                            s.dict.set("Filter", "FlateDecode");
+                        }
+                    }
+                }
+            }
+        }
+        prog.done_bytes += raw_len;
+        em.progress(prog);
+    }
+    let out_path = available_name(out);
+    // 临时文件放输出目录旁（与 out 同盘）——rename 跨盘会 os error 17；
+    // 现实调用 out 与源同目录，此为防御（测试/未来调用方传异盘 out 也安全）
+    let tmp = format!(
+        "{}\\{}.compressing.tmp",
+        parent_dir(&out_path),
+        stem_of(&out_path)
+    );
+    doc.save(to_extended(&tmp)).map_err(|e| e.to_string())?;
+    std::fs::rename(to_extended(&tmp), to_extended(&out_path)).map_err(|e| e.to_string())?;
+    Ok((deduped, saved))
+}
+
+/// 流对象内容指纹去重（轻压缩阶段① + 合并收尾共用）：raw 字节 MD5 + 滤镜
+/// 相关字典项（Filter/DecodeParms）同指纹才视为同流（/Length 不参与——同
+/// 内容可能带不同陈旧 Length，写盘时由 writer 修正）。重复流重映射到首份
+/// 并删除，引用经全对象 + trailer /Root 重写（复用 transfer 的 rewrite_refs）。
+/// 返回去重流数。残留 id 空洞合法，无需重编号
+pub(crate) fn dedup_streams(doc: &mut Document) -> usize {
+    use md5::{Digest as _, Md5};
+    let stream_ids: Vec<ObjectId> = doc
+        .objects
+        .iter()
+        .filter(|(_, o)| matches!(o, Object::Stream(_)))
+        .map(|(id, _)| *id)
+        .collect();
+    let mut seen: std::collections::HashMap<(u64, [u8; 16]), ObjectId> =
+        std::collections::HashMap::new();
+    let mut remap: std::collections::HashMap<ObjectId, ObjectId> = std::collections::HashMap::new();
+    for id in stream_ids {
+        if let Ok(Object::Stream(s)) = doc.get_object(id) {
+            let fp_dict = format!(
+                "{:?}|{:?}",
+                s.dict.get(b"Filter").ok(),
+                s.dict.get(b"DecodeParms").ok()
+            );
+            let mut h = Md5::new();
+            h.update(fp_dict.as_bytes());
+            h.update(&s.content);
+            let key = (s.content.len() as u64, h.finalize().into());
+            match seen.get(&key) {
+                Some(&keep) => {
+                    remap.insert(id, keep);
+                }
+                None => {
+                    seen.insert(key, id);
+                }
+            }
+        }
+    }
+    if remap.is_empty() {
+        return 0;
+    }
+    for obj in doc.objects.values_mut() {
+        let taken = std::mem::replace(obj, Object::Null);
+        *obj = rewrite_refs(taken, &remap);
+    }
+    let trailer = std::mem::take(&mut doc.trailer);
+    doc.trailer = match rewrite_refs(Object::Dictionary(trailer), &remap) {
+        Object::Dictionary(d) => d,
+        _ => unreachable!("trailer 必为字典"),
+    };
+    for &dup in remap.keys() {
+        doc.objects.remove(&dup);
+    }
+    remap.len()
 }
 
 // ──────────────── 插入空白页 / 加密 / 解密（2026-11-11 功能库 PDF 组扩充） ────────────────
@@ -2422,6 +2586,166 @@ mod tests {
             "错误口令不得解密"
         );
 
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    // ── 轻压缩重写（2026-11-11）：跨源去重 / L9 重压缩 / 图像流不动 / 进度字节 ──
+    struct NullSink;
+    impl crate::fs::filetools::ProgressSink for NullSink {
+        fn progress(&mut self, _p: &JobProgress) {}
+    }
+
+    /// 单页文档 + 一个指定内容的大流（FontFile 风格：FlateDecode + 压缩载荷），
+    /// 页 /Contents 引用它以模拟真实引用链
+    fn doc_with_stream(content: &[u8], compress_payload: bool) -> Document {
+        let mut doc = Document::with_version("1.5");
+        let payload = if compress_payload {
+            let mut enc = ZlibEncoder::new(Vec::new(), Compression::fast());
+            let _ = enc.write_all(content);
+            enc.finish().unwrap()
+        } else {
+            content.to_vec()
+        };
+        let stream = Object::Stream(Stream::new(
+            dictionary! {
+                "Filter" => "FlateDecode",
+                "Length" => payload.len() as i64,
+            },
+            payload,
+        ));
+        let stream_id = doc.add_object(stream);
+        let content_id = doc.add_object(Object::Stream(Stream::new(
+            dictionary! {},
+            format!("q /F0 12 Tf Q").into_bytes(),
+        )));
+        let page_id = doc.add_object(dictionary! {
+            "Type" => "Page",
+            "MediaBox" => Object::Array(vec![
+                Object::Integer(0),
+                Object::Integer(0),
+                Object::Integer(612),
+                Object::Integer(792),
+            ]),
+            "Contents" => Object::Reference(content_id),
+            "Resources" => dictionary! {
+                "Font" => dictionary! { "F0" => Object::Reference(stream_id) },
+            },
+        });
+        build_page_tree(&mut doc, vec![Object::Reference(page_id)]).unwrap();
+        doc
+    }
+
+    fn prog() -> JobProgress {
+        JobProgress {
+            job_id: 0,
+            phase: "running",
+            total_files: 0,
+            done_files: 0,
+            total_bytes: 0,
+            done_bytes: 0,
+            current_path: String::new(),
+            note: None,
+        }
+    }
+
+    #[test]
+    fn dedup_streams_merges_identical_font_programs() {
+        let big = vec![7u8; 50_000];
+        let a = doc_with_stream(&big, true);
+        let b = doc_with_stream(&big, true);
+        let mut merged = merge_docs(vec![&a, &b]).unwrap();
+        assert_eq!(merged.get_pages().len(), 2);
+        let before = merged.objects.len();
+        let removed = dedup_streams(&mut merged);
+        assert_eq!(removed, 2, "同字体流 + 同页内容流各去重一份");
+        assert!(merged.objects.len() < before);
+        // 引用重写后仍可枚举两页（Kids / Contents / Resources 链完整）
+        assert_eq!(merged.get_pages().len(), 2);
+    }
+
+    #[test]
+    fn compress_dedups_and_recompresses_with_progress_bytes() {
+        let tmp = std::env::temp_dir().join(format!("xdir-pdflz-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        // 模拟跨源合并产物：同一段 50KB 可压载荷（如同一字体）内嵌两份
+        let big = vec![9u8; 50_000];
+        let a = doc_with_stream(&big, true);
+        let b = doc_with_stream(&big, true);
+        let mut merged = merge_docs(vec![&a, &b]).unwrap();
+        let src = tmp.join("m.pdf");
+        merged.save(&src).unwrap();
+        let sp = src.to_string_lossy().into_owned();
+        let raw_len = std::fs::metadata(&src).unwrap().len();
+
+        let cancel = Arc::new(AtomicBool::new(false));
+        let mut prog = prog();
+        let mut em = NullSink;
+        let out = format!("{}\\{}_压缩.pdf", tmp.to_string_lossy(), "m");
+        let (deduped, saved) = compress_pdf_file(&sp, &out, &cancel, &mut prog, &mut em).unwrap();
+        assert!(deduped >= 1, "至少去重同字体流");
+        assert!(prog.total_bytes > 0, "字节级进度已供给任务岛");
+        let out_len = std::fs::metadata(&out).unwrap().len();
+        assert!(
+            out_len < raw_len,
+            "去重后产物必须变小：{} -> {}",
+            raw_len,
+            out_len
+        );
+        let _ = saved;
+        // 产物可读且页数不变
+        let reloaded = Document::load(to_extended(&out)).unwrap();
+        assert_eq!(reloaded.get_pages().len(), 2);
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn compress_keeps_non_flate_image_streams_intact() {
+        let tmp = std::env::temp_dir().join(format!("xdir-pdldct-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        // DCTDecode（JPEG）流：内容不可重压，必须原样保留
+        let mut doc = Document::with_version("1.5");
+        let jpeg_like = vec![0xFFu8, 0xD8, 0xE0]
+            .into_iter()
+            .chain(0u8..=255)
+            .collect::<Vec<u8>>();
+        let img = Object::Stream(Stream::new(
+            dictionary! {
+                "Filter" => "DCTDecode",
+                "Subtype" => "Image",
+                "Length" => jpeg_like.len() as i64,
+            },
+            jpeg_like.clone(),
+        ));
+        let img_id = doc.add_object(img);
+        let page_id = doc.add_object(dictionary! {
+            "Type" => "Page",
+            "Resources" => dictionary! {
+                "XObject" => dictionary! { "Im0" => Object::Reference(img_id) },
+            },
+        });
+        build_page_tree(&mut doc, vec![Object::Reference(page_id)]).unwrap();
+        let src = tmp.join("img.pdf");
+        doc.save(&src).unwrap();
+
+        let cancel = Arc::new(AtomicBool::new(false));
+        let mut prog = prog();
+        let mut em = NullSink;
+        let out = format!("{}\\img_压缩.pdf", tmp.to_string_lossy());
+        compress_pdf_file(&src.to_string_lossy(), &out, &cancel, &mut prog, &mut em).unwrap();
+        let reloaded = Document::load(to_extended(&out)).unwrap();
+        let kept = reloaded
+            .objects
+            .values()
+            .find_map(|o| match o {
+                Object::Stream(s)
+                    if matches!(s.dict.get(b"Filter"), Ok(Object::Name(n)) if n.as_slice() == b"DCTDecode") =>
+                {
+                    Some(&s.content)
+                }
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(*kept, jpeg_like, "DCT 图像流字节不得改动");
         std::fs::remove_dir_all(&tmp).unwrap();
     }
 }

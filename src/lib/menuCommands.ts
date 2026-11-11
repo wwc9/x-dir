@@ -114,7 +114,7 @@ export const BUILTIN_FNS: BuiltinFn[] = [
   { key: "pdfExtract", label: "PDF 提取页", desc: "抽取指定页另存新文件", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", maxCount: 1, exts: "pdf" }) },
   { key: "pdfRemove", label: "PDF 删除页", desc: "删除指定页另存新文件", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", maxCount: 1, exts: "pdf" }) },
   { key: "pdfRotate", label: "PDF 旋转", desc: "全部页旋转（可逆向还原）", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", maxCount: 1, exts: "pdf" }) },
-  { key: "pdfCompress", label: "PDF 轻压缩", desc: "对象去重轻量压缩", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "pdf" }) },
+  { key: "pdfCompress", label: "PDF 轻压缩", desc: "无损瘦身：同内容流去重（合并同字体）+ L9 重压缩", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "pdf" }) },
   { key: "pdfWatermark", label: "PDF 加水印", desc: "文字水印平铺/角标", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "pdf" }) },
   { key: "pdfInsertBlank", label: "PDF 插入空白页", desc: "12 种模式插补 A4 空白页（凑偶数/凑倍数/指定页码）", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "pdf" }) },
   { key: "pdfToPng", label: "PDF 转图片", desc: "逐页转 PNG（页范围/分辨率/加密口令）", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "pdf" }) },
