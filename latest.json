@@ -1,0 +1,13 @@
+{
+    "version":  "0.1.6",
+    "notes":  [
+                  "见 Release 说明"
+              ],
+    "pub_date":  "2026-11-11T10:08:26Z",
+    "platforms":  {
+                      "windows-x86_64":  {
+                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRa0NJNWIrWTdXWWdpQURRYkUxeVlaRmx1eDlpQjN0b09EQTdwSXBReDBMT3JVbWY3RGVUZXJ0bVZOVG5tc2JvcTV0T0l6bUs2WTRsSzE3cXJwd1RlSnJBZ0E1dWRHa2dRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0MzkxNzA1CWZpbGU6WC1EaXJfMC4xLjZfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMS42CmlvTjVGZURyM3BPN1ZxQWt0bldzQmdINTZKZzZoWHdKQkZBSDhiME5TVG0wbXQwTVFLbFJuUG5QbkFYQzR4MVRFY2VKN3U1aFN1Y3c1UnRMQ2ROVkRBPT0K",
+                                             "url":  "https://gitee.com/wwc9/x-dir/releases/download/v0.1.6/X-Dir_0.1.6_x64-setup.exe"
+                                         }
+                  }
+}
