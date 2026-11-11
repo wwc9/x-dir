@@ -321,9 +321,13 @@ fn encode_png(img: &RgbaImage) -> Result<Vec<u8>, String> {
 
 /// PNG8：color_quant NeuQuant 调色板量化（≤256 色 + 逐色 alpha），经 png crate
 /// 写 indexed PNG（PLTE+tRNS）。image crate 的 PNG 编码器不支持调色板输出。
+/// 2026-11-11 用户反馈「压缩后一片空白」根因 = NeuQuant::new 两参写反
+/// （samplefac=256 越界 + colors=1 → 整图坍缩单色调色板）；正确签名
+/// (samplefac, colors)，samplefac 1–30 越小质量越好越慢，10 = 业界常用
+/// 均衡档（image crate 官方示例同值）
 fn encode_png8(img: &RgbaImage) -> Result<Vec<u8>, String> {
     let pixels = img.clone().into_raw();
-    let nq = color_quant::NeuQuant::new(256, 1, &pixels);
+    let nq = color_quant::NeuQuant::new(10, 256, &pixels);
     let cmap = nq.color_map_rgba();
     let (w, h) = (img.width(), img.height());
     let mut indexed: Vec<u8> = Vec::with_capacity((w * h) as usize);
@@ -1074,5 +1078,90 @@ mod tests {
         assert_eq!((cell.width(), cell.height()), (100, 100));
         // 四角是底色（图居中不满铺）
         assert_eq!(cell.get_pixel(0, 0).0, [255, 255, 255, 255]);
+    }
+
+    // ── PNG8 量化回归（2026-11-11 用户反馈空白根因 = NeuQuant 参数写反）──
+    /// 64×64 RGB 渐变 + 半透明角块（覆盖逐色 alpha 路径）
+    fn gradient_image() -> RgbaImage {
+        let mut img = RgbaImage::new(64, 64);
+        for y in 0..64 {
+            for x in 0..64 {
+                img.put_pixel(
+                    x,
+                    y,
+                    image::Rgba([(x * 4) as u8, (y * 4) as u8, ((x + y) * 2) as u8, 255]),
+                );
+            }
+        }
+        for y in 0..8 {
+            for x in 0..8 {
+                img.put_pixel(x, y, image::Rgba([255, 0, 0, 128]));
+            }
+        }
+        img
+    }
+
+    #[test]
+    fn png8_output_is_real_palette_not_single_color() {
+        let img = gradient_image();
+        let bytes = encode_png8(&img).unwrap();
+        // 解码 indexed PNG：调色板必须非平凡（>1 色），索引必须多样
+        let mut dec = png::Decoder::new(std::io::Cursor::new(&bytes));
+        dec.set_transformations(png::Transformations::IDENTITY);
+        let mut reader = dec.read_info().unwrap();
+        let info = reader.info().clone();
+        let palette = info.palette.clone().unwrap_or_default();
+        assert!(
+            palette.len() >= 3 * 16,
+            "调色板应有至少 16 色（实得 {} 字节 = {} 色）",
+            palette.len(),
+            palette.len() / 3
+        );
+        assert_eq!(
+            info.color_type,
+            png::ColorType::Indexed,
+            "输出应为 indexed PNG"
+        );
+        let mut buf = vec![0u8; reader.output_buffer_size().unwrap()];
+        reader.next_frame(&mut buf).unwrap();
+        let distinct: std::collections::HashSet<u8> = buf.iter().copied().collect();
+        assert!(
+            distinct.len() >= 16,
+            "索引应覆盖多个色板项（实得 {} 种）",
+            distinct.len()
+        );
+        // 像素回验：渐变两端颜色量化后仍近似（容差 24/通道，256 色量化下远小于此）
+        let decoded = image::RgbaImage::from_raw(64, 64, {
+            let mut rgba = Vec::with_capacity(64 * 64 * 4);
+            for &idx in &buf {
+                let base = idx as usize * 3;
+                let alpha = info.trns.as_ref().map(|t| t[idx as usize]).unwrap_or(255);
+                rgba.extend_from_slice(&[
+                    palette[base],
+                    palette[base + 1],
+                    palette[base + 2],
+                    alpha,
+                ]);
+            }
+            rgba
+        })
+        .unwrap();
+        // NeuQuant 渐变上固有量化误差可达 ±30+/通道，48 为合理回归容差
+        let tl = decoded.get_pixel(40, 0).0;
+        assert!(
+            (tl[0] as i32 - 160).abs() < 48
+                && (tl[1] as i32).abs() < 48
+                && (tl[2] as i32 - 80).abs() < 48,
+            "左上（160,0,80）应近似还原：{:?}",
+            tl
+        );
+        let br = decoded.get_pixel(63, 63).0;
+        assert!(
+            (br[0] as i32 - 252).abs() < 48
+                && (br[1] as i32 - 252).abs() < 48
+                && (br[2] as i32 - 250).abs() < 48,
+            "右下（252,252,250）应近似还原：{:?}",
+            br
+        );
     }
 }
