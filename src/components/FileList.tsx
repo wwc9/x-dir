@@ -88,7 +88,7 @@ import {
   type ColWidths,
 } from "../lib/columns";
 import { AppIcon } from "./AppIcon";
-import { HardDrive, Monitor } from "lucide-react";
+import { HardDrive, Monitor, Move } from "lucide-react";
 import { ColGrip, colDragClickGuard, type ColResizeCtl } from "./ColGrip";
 
 const DND_MIME = "application/x-xdir";
@@ -1751,7 +1751,9 @@ export function FileList({
         </div>
       )}
 
-      {/* 列表体（虚拟滚动） */}
+      {/* 列表体（虚拟滚动）——外层 wrap 提供 relative 定位域：拖放徽标锚定
+          内容区底部中央（方案 S2 淡染浮标，2026-11-11），不随滚动、不吃拖放 */}
+      <div className="np-rows-wrap">
       <div
         ref={scrollRef}
         className={`np-rows ${viewMode === "details" && contentW > width ? "np-scroll-x" : ""} ${dropHover ? "np-drop-hover" : ""}`}
@@ -2018,6 +2020,16 @@ export function FileList({
             ))}
           </div>
         )}
+      </div>
+
+      {/* 拖放徽标（S2 浮标）：accent 实底 pill 直述动作；pointer-events none
+          不吃拖放/点击；文案与状态条提示逐字一致（§4.8 镜像） */}
+      {dropHover && (
+        <span className="np-drop-badge">
+          <AppIcon icon={Move} size={DENSITY.iconSm} />
+          {t("释放以放入")}
+        </span>
+      )}
       </div>
 
       {/* 首字母跳转回显（type-ahead）：输入缓冲 + 序位/总数 + 命中条目，悬于状态

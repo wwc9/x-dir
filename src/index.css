@@ -2251,9 +2251,39 @@ body.np-col-resizing * {
 .np-gsearch-list.np-scroll-x {
   overflow-x: auto;
 }
+/* 拖放目标提示（2026-11-11 方案 S2「淡染浮标」定案，取代原 2px 实线内描边）：
+   内容区只铺 accent 5% 淡染，动作徽标浮于内容区底部中央（.np-rows-wrap 提供
+   relative 定位域；徽标 pointer-events none 不吃拖放/点击）；状态条
+   「释放以放入」文字保留兜底 */
 .np-drop-hover {
-  box-shadow: color-mix(in srgb, var(--np-accent) 70%, transparent) 0 0 0 2px inset;
+  background: color-mix(in srgb, var(--np-accent) 5%, transparent);
   border-radius: var(--np-radius);
+}
+.np-rows-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.np-drop-badge {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 12px;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-accent);
+  color: var(--np-accent-fg);
+  font-size: var(--np-font-ui);
+  white-space: nowrap;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--np-accent) 35%, transparent);
+  pointer-events: none;
 }
 /* 框选橡皮筋（虚拟内容层内绝对定位）：强调色细描边 + 极淡填充，不吃指针事件 */
 .np-marquee {
