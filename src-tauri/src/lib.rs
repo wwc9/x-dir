@@ -267,6 +267,7 @@ pub fn run() {
             commands::config_cmds::load_workspace,
             commands::config_cmds::save_workspace,
             commands::config_cmds::delete_workspace,
+            commands::config_cmds::rename_workspace,
             commands::config_cmds::export_config,
             commands::config_cmds::import_config,
             commands::update::fetch_update_manifest,

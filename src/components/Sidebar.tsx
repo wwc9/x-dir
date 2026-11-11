@@ -5,6 +5,7 @@ import {
   Inbox,
   PanelLeftClose,
   PanelLeftOpen,
+  Pencil,
   Save,
   SaveAll,
   Trash2,
@@ -509,6 +510,37 @@ export function Sidebar() {
     refresh();
   }
 
+  /** 重命名方案（2026-11-11）：同名冲突由后端拒绝（红字 toast，不静默覆盖）；
+   *  成功后顺序表原地换名（保留拖动排序），当前选中名跟随 */
+  async function rename(name: string) {
+    const next = await useUi.getState().openDialog<string | null>({
+      type: "input",
+      title: "重命名方案",
+      label: "方案名称",
+      initial: name,
+      okText: "重命名",
+    });
+    if (!next || next === name) return;
+    if (next === DEFAULT_SCHEME) {
+      useUi.getState().toast("“默认方案”是内置方案，请换一个名字", "error");
+      return;
+    }
+    try {
+      await api.renameWorkspace(name, next);
+      const order = useSettings.getState().workspaceOrder;
+      if (order.includes(name)) {
+        useSettings
+          .getState()
+          .update({ workspaceOrder: order.map((n) => (n === name ? next : n)) });
+      }
+      if (current === name) setCurrent(next);
+      useUi.getState().toast(`方案已重命名为“${next}”`);
+      refresh();
+    } catch (e) {
+      useUi.getState().toast(`重命名失败：${String(e)}`, "error");
+    }
+  }
+
   function startResize(e: React.MouseEvent) {
     e.preventDefault();
     const handle = (e.currentTarget as HTMLElement);
@@ -710,6 +742,16 @@ export function Sidebar() {
                 </span>
               )}
               <span className="np-side-name">{it.name}</span>
+              <button
+                className="np-side-ren"
+                data-tip={t("重命名方案")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void rename(it.name);
+                }}
+              >
+                <AppIcon icon={Pencil} size={DENSITY.iconXs} />
+              </button>
               <button
                 className="np-side-del"
                 data-tip={t("删除方案")}

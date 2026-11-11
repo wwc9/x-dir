@@ -153,6 +153,20 @@ export function ClipHistWindow() {
     }).then((f) => {
       unlistenEv = f;
     });
+    // 配置导入热同步（2026-11-11 审计补）：常驻浮窗是独立 WebView、不随主窗
+    // 设置热重载——导入含主题/直接粘贴偏好变更时重读 settings 立即跟随
+    let unImported: (() => void) | undefined;
+    void listen("config-imported", () => {
+      void api
+        .getSettings()
+        .then((st) => {
+          setDirectPaste(st?.cliphistDirectPaste ?? true);
+          applyTheme(st?.theme ?? "system");
+        })
+        .catch(() => undefined);
+    }).then((f) => {
+      unImported = f;
+    });
     let unFocus: (() => void) | undefined;
     const focusSearch = () => {
       // WebView2 激活序列会在原生焦点落定后把 activeElement 重置为 body：
@@ -221,6 +235,7 @@ export function ClipHistWindow() {
     return () => {
       offs.forEach((f) => f());
       unlistenEv?.();
+      unImported?.();
       unFocus?.();
       window.clearInterval(focusGuard);
       window.removeEventListener("focus", focusSearch);

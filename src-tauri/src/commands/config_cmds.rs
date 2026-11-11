@@ -196,6 +196,69 @@ pub fn delete_workspace(name: String) -> Result<(), String> {
     std::fs::remove_file(p).map_err(|e| e.to_string())
 }
 
+/// 重命名前置校验（纯函数，cargo test 锁定冲突口径）：旧档必须存在、
+/// 新名不得与现有档同名（重命名绝不静默覆盖，与 save_workspace 的
+/// 「保存即覆盖」语义区分）
+fn rename_check(src_exists: bool, dst_exists: bool, old: &str, new: &str) -> Result<(), String> {
+    if !src_exists {
+        return Err(format!("方案“{old}”不存在"));
+    }
+    if dst_exists {
+        return Err(format!("方案“{new}”已存在，请换一个名字"));
+    }
+    Ok(())
+}
+
+/// 重命名布局方案（2026-11-11）：文档内 name 字段同步改写后落新档、删旧档。
+/// 先写新档（临时文件 + rename 原子落盘）再删旧档——中途崩溃最多残留双档，
+/// 不会丢方案
+#[tauri::command]
+pub fn rename_workspace(old: String, new: String) -> Result<(), String> {
+    let new = sanitize_name(&new);
+    if new == "未命名" {
+        return Err("方案名不能为空".into());
+    }
+    let dir = workspaces_dir();
+    let src = dir.join(format!("{}.json", sanitize_name(&old)));
+    let dst = dir.join(format!("{new}.json"));
+    rename_check(
+        src.exists(),
+        dst.exists(),
+        sanitize_name(&old).as_str(),
+        new.as_str(),
+    )?;
+    let mut v: Value =
+        serde_json::from_str(&std::fs::read_to_string(&src).map_err(|e| e.to_string())?)
+            .map_err(|e| format!("方案档损坏：{e}"))?;
+    if let Some(obj) = v.as_object_mut() {
+        obj.insert("name".into(), Value::from(new.clone()));
+    }
+    let tmp = dst.with_extension("json.tmp");
+    serde_json::to_string_pretty(&v)
+        .map_err(|e| e.to_string())
+        .and_then(|s| std::fs::write(&tmp, s).map_err(|e| e.to_string()))?;
+    std::fs::rename(&tmp, &dst).map_err(|e| format!("写入失败：{e}"))?;
+    std::fs::remove_file(&src).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rename_check;
+
+    #[test]
+    fn rename_rejects_missing_src_and_collision() {
+        assert!(rename_check(true, false, "a", "b").is_ok());
+        assert_eq!(
+            rename_check(false, false, "a", "b").unwrap_err(),
+            "方案“a”不存在"
+        );
+        assert_eq!(
+            rename_check(true, true, "a", "b").unwrap_err(),
+            "方案“b”已存在，请换一个名字"
+        );
+    }
+}
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportSummary {
@@ -270,8 +333,12 @@ fn atomic_write_json(p: &std::path::Path, v: &Value) -> Result<(), String> {
 
 /// 导入配置包（export_config 的逆向）：整体覆盖 settings.json 与 workspaces/*.json。
 /// 仅接受 app == "x-dir" 的导出；version 高于当前实现时拒绝（防未知结构静默破坏）。
+/// 成功后广播 config-imported（2026-11-11 审计补）：常驻剪贴板浮窗是独立
+/// WebView、不随主窗设置热重载——导入含主题/直接粘贴偏好变更时由本事件
+/// 触发浮窗重读 settings 立即跟随
 #[tauri::command]
-pub fn import_config(path: String) -> Result<ImportSummary, String> {
+pub fn import_config(app: tauri::AppHandle, path: String) -> Result<ImportSummary, String> {
+    use tauri::Emitter;
     let text = std::fs::read_to_string(&path).map_err(|e| format!("读取失败：{e}"))?;
     let v: Value = serde_json::from_str(&text).map_err(|e| format!("不是有效的 JSON：{e}"))?;
     if v.get("app").and_then(|x| x.as_str()) != Some("x-dir") {
@@ -300,6 +367,7 @@ pub fn import_config(path: String) -> Result<ImportSummary, String> {
             ws_count += 1;
         }
     }
+    let _ = app.emit("config-imported", ());
     Ok(ImportSummary {
         workspaces: ws_count,
         imported_settings: v.get("settings").is_some(),

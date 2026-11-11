@@ -934,6 +934,9 @@ export const api = {
   saveWorkspace: (name: string, tree: unknown) =>
     cmd<void>("save_workspace", { name, tree }),
   deleteWorkspace: (name: string) => cmd<void>("delete_workspace", { name }),
+  /** 重命名布局方案（2026-11-11）：同名冲突拒绝（不静默覆盖），文档 name 字段同步改写 */
+  renameWorkspace: (oldName: string, newName: string) =>
+    cmd<void>("rename_workspace", { old: oldName, new: newName }),
   /** 快速预览：按编码探测读文本（上限 8MB = 后端 TEXT_READ_CAP；maxBytes 为 u32 勿传更大值） */
   previewReadText: (path: string, maxBytes: number) =>
     cmd<PreviewTextResult>("preview_read_text", { path, maxBytes }),
