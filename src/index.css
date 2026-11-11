@@ -249,7 +249,8 @@ body {
    描边勾选 chip（design/wm-seg-proposals.html），替代 surface-2 轨道 + accent
    实心填充——纯文字多段时唯一选中信号太弱，且 accent 整块填充会吞掉语义色
    （水印颜色行选「红」时按蓝底）：无轨道，每项独立 chip 描边兜边界，
-   选中 = sel 淡染底 + accent 描边 + accent 字重 600 + ✓ 前缀，三重信号；
+   选中 = sel 淡染底 + accent 字重 600 + ✓ 前缀（2026-11-11 用户定案：去掉
+   accent 描边——「只要蓝色背景，不要边框」，边框置透明保持与未选项同宽）；
    设置/菜单编辑/工具箱对话框通用 */
 .np-seg {
   gap: var(--np-gutter);
@@ -275,7 +276,7 @@ body {
 .bp6-button-group.np-seg .bp6-button.bp6-active.bp6-active:hover {
   background-color: var(--np-sel);
   background-image: none;
-  border-color: var(--np-accent);
+  border-color: transparent;
   color: var(--np-accent);
   font-weight: 600;
 }
@@ -6500,8 +6501,8 @@ body.np-col-resizing * {
    面板窗（clipboard.html 轻量入口），视觉对齐弹层统一规范（§4.7）——
    surface 卡 + border ring（Popover 同脸）、列表行/选中/悬停对齐文件列表
    np-row 口径（sel 淡染底 + accent 文字）、类型分段复用 np-seg 配方
-   （描边勾选 chip：sel 底 + accent 描边 + 600 + ✓ 前缀）；置顶条目排前，
-   行内动作按钮（置顶/删除）悬停与选中行常显。
+   （勾选 chip：sel 底 + accent 600 + ✓ 前缀，无描边——2026-11-11 全局定案）；
+   置顶条目排前，行内动作按钮（置顶/删除）悬停与选中行常显。
    ══════════════════════════════════════════════════════════════ */
 .np-clip {
   display: flex;
