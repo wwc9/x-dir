@@ -1,11 +1,11 @@
 {
-  "version": "0.1.7",
-  "notes": "见 Release 说明",
-  "pub_date": "2026-11-11T12:01:02Z",
-  "platforms": {
-    "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRa0NJNWIrWTdXWWl5ekt0ajBRZEFJbllzOGZJcnREUFlIbGh5RWJFbVNrWHljOHlyYVVWODNRQjBYUVFheElXenBzRmJ5N1VoSlhJak5vNXl3aUJPWUJ6Uk9XT3VrNkFjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0Mzk3ODA1CWZpbGU6WC1EaXJfMC4xLjdfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMS43ClRoYlNOUGpUSjlXcklsZi9PSjZUaU9WZyt1a3V3UDF4L1AyMTZCR1ZBZzZqN2o1S3RIL1dHOGJzNFBhZGdhUG1uTVhDU2VYY2NIcVVMdU1KbjBnRENRPT0K",
-      "url": "https://gitee.com/wwc9/x-dir/releases/download/v0.1.7/X-Dir_0.1.7_x64-setup.exe"
-    }
-  }
+    "version":  "0.1.7",
+    "notes":  "见 Release 说明",
+    "pub_date":  "2026-11-11T13:52:53Z",
+    "platforms":  {
+                      "windows-x86_64":  {
+                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRa0NJNWIrWTdXWW9nNFBCQVY0TDVaYWk1U3BHU1U3RkMvYTZCcmQ1RkhjQTZxRk1hOFRBVWI2RFQ3UWp0M1hoQUVnKzR0NEprbElhdmVSeXhTV0N1YU10a1pMNXdvdmdVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NDA1MTcyCWZpbGU6WC1EaXJfMC4xLjdfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMS43ClZGaFQydEl0VGFWVDZUWmxpeFVmZGY5ejh0QkRacnpCdldpcWZNWXh0TVpkT2lQeGxIM1JQTVJxYTgwUGkyWG9NU2cwQkxqL2NWVUtpUHBRT0U4b0J3PT0K",
+                                             "url":  "https://gitee.com/wwc9/x-dir/releases/download/v0.1.7/X-Dir_0.1.7_x64-setup.exe"
+                                         }
+                  }
 }
