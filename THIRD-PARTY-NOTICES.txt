@@ -1,7 +1,7 @@
 THIRD-PARTY NOTICES FOR X-Dir
 ========================================================================================================================
 
-X-Dir v0.1.5 · Copyright (c) 2026 wwwwwc · 本软件以 MIT 许可证发布（全文见附录）。
+X-Dir v0.1.6 · Copyright (c) 2026 wwwwwc · 本软件以 MIT 许可证发布（全文见附录）。
 
 本文件汇总随 X-Dir 一并再分发的全部第三方组件的归属与许可信息：
   · Rust crates —— 编译进 x-dir.exe（含传递依赖，已按 Windows x64 目标过滤）
@@ -9,10 +9,10 @@ X-Dir v0.1.5 · Copyright (c) 2026 wwwwwc · 本软件以 MIT 许可证发布（
 各条目按「名称 版本 — 许可证 — 仓库 — 版权人」列出；标准许可证全文统一收录于附录，
 条目不再逐个内嵌。非标准许可证（或未识别 SPDX）的条目在其下方内嵌原文。
 
-由 tools/gen-third-party-notices.mjs 生成于 2026-11-09；依赖变更后请重新生成。
+由 tools/gen-third-party-notices.mjs 生成于 2026-11-11；依赖变更后请重新生成。
 
 
-RUST CRATES（编译进 x-dir.exe）（418 项）
+RUST CRATES（编译进 x-dir.exe）（458 项）
 ------------------------------------------------------------------------------------------------------------------------
 · ab_glyph 0.2.32 — Apache-2.0 — https://github.com/alexheretic/ab-glyph
   Copyright Alex Butler <alexheretic@gmail.com>
@@ -47,6 +47,8 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
   Copyright (c) 2022 The Arboard contributors
 · atoi_simd 0.18.1 — MIT OR Apache-2.0 — https://github.com/RoDmitry/atoi_simd
   Copyright 2022-NOW Dmitry Rodionov / Copyright (c) 2022 Dmitry Rodionov
+· atomic-waker 1.1.2 — Apache-2.0 OR MIT — https://github.com/smol-rs/atomic-waker
+  Copyright (c) 2016 Alex Crichton / Copyright (c) 2017 The Tokio Authors
 · autocfg 1.5.1 — Apache-2.0 OR MIT — https://github.com/cuviper/autocfg
   Copyright (c) 2018 Josh Stone
 · base64 0.22.1 — MIT OR Apache-2.0 — https://github.com/marshallpierce/rust-base64
@@ -93,7 +95,7 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
   Copyright (c) 2015 Andrew Gallant
 · bytes 1.12.1 — MIT — https://github.com/tokio-rs/bytes
   Copyright (c) 2018 Carl Lerche
-· calamine 0.36.1 — MIT — https://github.com/tafia/calamine
+· calamine 0.38.0 — MIT — https://github.com/tafia/calamine
   Copyright Johann Tuffe <tafia973@gmail.com>
 · camino 1.2.6 — MIT OR Apache-2.0 — https://github.com/camino-rs/camino
   Copyright Without Boats <saoirse@without.boats>, Ashley Williams <ashley666ashley@gmail.com>, Steve Klabnik <steve@steveklabnik.com>, Rain <rain@sunshowers.io>
@@ -137,6 +139,8 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
 · const-oid 0.10.2 — Apache-2.0 OR MIT — https://github.com/RustCrypto/formats
   Copyright (c) 2020-2026 The RustCrypto Project Developers
 · constant_time_eq 0.3.1 — CC0-1.0 OR MIT-0 OR Apache-2.0 — https://github.com/cesarb/constant_time_eq
+  Copyright Cesar Eduardo Barros <cesarb@cesarb.eti.br>
+· constant_time_eq 0.6.1 — CC0-1.0 OR MIT-0 OR Apache-2.0 — https://codeberg.org/cesarb/constant_time_eq
   Copyright Cesar Eduardo Barros <cesarb@cesarb.eti.br>
 · cookie 0.18.2 — MIT OR Apache-2.0 — https://github.com/SergioBenitez/cookie-rs
   Copyright 2017 Sergio Benitez / Copyright 2014 Alex Chricton / Copyright (c) 2017 Sergio Benitez
@@ -262,8 +266,24 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
   Copyright (c) 2013-2016 The rust-url developers
 · funty 2.0.0 — MIT — https://github.com/myrrlyn/funty
   Copyright (c) 2020 myrrlyn (Alexander Payne)
+· futures-channel 0.3.34 — MIT OR Apache-2.0 — https://github.com/rust-lang/futures-rs
+  Copyright (c) 2016 Alex Crichton / Copyright (c) 2017 The Tokio Authors
+· futures-core 0.3.34 — MIT OR Apache-2.0 — https://github.com/rust-lang/futures-rs
+  Copyright (c) 2016 Alex Crichton / Copyright (c) 2017 The Tokio Authors
+· futures-io 0.3.34 — MIT OR Apache-2.0 — https://github.com/rust-lang/futures-rs
+  Copyright (c) 2016 Alex Crichton / Copyright (c) 2017 The Tokio Authors
+· futures-macro 0.3.34 — MIT OR Apache-2.0 — https://github.com/rust-lang/futures-rs
+  Copyright (c) 2016 Alex Crichton / Copyright (c) 2017 The Tokio Authors
+· futures-sink 0.3.34 — MIT OR Apache-2.0 — https://github.com/rust-lang/futures-rs
+  Copyright (c) 2016 Alex Crichton / Copyright (c) 2017 The Tokio Authors
+· futures-task 0.3.34 — MIT OR Apache-2.0 — https://github.com/rust-lang/futures-rs
+  Copyright (c) 2016 Alex Crichton / Copyright (c) 2017 The Tokio Authors
+· futures-util 0.3.34 — MIT OR Apache-2.0 — https://github.com/rust-lang/futures-rs
+  Copyright (c) 2016 Alex Crichton / Copyright (c) 2017 The Tokio Authors
 · generic-array 0.14.7 — MIT — https://github.com/fizyk20/generic-array.git
   Copyright (c) 2015 Bartłomiej Kamiński
+· getrandom 0.2.17 — MIT OR Apache-2.0 — https://github.com/rust-random/getrandom
+  Copyright (c) 2018-2024 The rust-random Project Developers / Copyright (c) 2014 The Rust Project Developers
 · getrandom 0.3.4 — MIT OR Apache-2.0 — https://github.com/rust-random/getrandom
   Copyright (c) 2018-2025 The rust-random Project Developers / Copyright (c) 2014 The Rust Project Developers
 · getrandom 0.4.3 — MIT OR Apache-2.0 — https://github.com/rust-random/getrandom
@@ -294,10 +314,22 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
   Copyright (c) 2014 The html5ever Project Developers
 · http 1.5.0 — MIT OR Apache-2.0 — https://github.com/hyperium/http
   Copyright 2017 http-rs authors / Copyright (c) 2017 http-rs authors
+· http-body 1.1.0 — MIT — https://github.com/hyperium/http-body
+  Copyright (c) 2019-2026 Sean McArthur & Hyper Contributors
+· http-body-util 0.1.5 — MIT — https://github.com/hyperium/http-body
+  Copyright (c) 2019-2026 Sean McArthur & Hyper Contributors
 · http-range 0.1.5 — MIT — https://github.com/bancek/rust-http-range.git
   Copyright (c) 2016 Luka Zakrajšek
+· httparse 1.10.1 — MIT OR Apache-2.0 — https://github.com/seanmonstar/httparse
+  Copyright (c) 2015-2025 Sean McArthur
 · hybrid-array 0.4.15 — MIT OR Apache-2.0 — https://github.com/RustCrypto/hybrid-array
   Copyright (c) 2022-2026 The RustCrypto Project Developers
+· hyper 1.12.0 — MIT — https://github.com/hyperium/hyper
+  Copyright (c) 2014-2026 Sean McArthur
+· hyper-rustls 0.27.10 — Apache-2.0 OR ISC OR MIT — https://github.com/rustls/hyper-rustls
+  Copyright (c) 2016, Joseph Birr-Pixton <jpixton@gmail.com> / Copyright (c) 2016 Joseph Birr-Pixton <jpixton@gmail.com>
+· hyper-util 0.1.21 — MIT — https://github.com/hyperium/hyper-util
+  Copyright (c) 2023-2025 Sean McArthur
 · ico 0.5.0 — MIT — https://github.com/mdsteele/rust-ico
   Copyright (c) 2018 Matthew D. Steele
 · icu_collections 2.3.0 — Unicode-3.0 — https://github.com/unicode-org/icu4x
@@ -333,6 +365,8 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
   Copyright (c) 2022 The RustCrypto Project Developers / Copyright (c) 2022 Artyom Pavlov
 · inout 0.2.2 — MIT OR Apache-2.0 — https://github.com/RustCrypto/utils
   Copyright (c) 2022-2025 The RustCrypto Project Developers / Copyright (c) 2022 Artyom Pavlov
+· ipnet 2.12.2 — MIT OR Apache-2.0 — https://github.com/krisprice/ipnet
+  Copyright 2017 Juniper Networks, Inc.
 · is_terminal_polyfill 1.70.2 — MIT OR Apache-2.0 — https://github.com/polyfill-rs/is_terminal_polyfill
 · itoa 1.0.18 — MIT OR Apache-2.0 — https://github.com/dtolnay/itoa
   Copyright David Tolnay <dtolnay@gmail.com>
@@ -384,6 +418,8 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
   Copyright (c) 2020 Yevhenii Reizner / Copyright (c) 2015 Dan Burkert
 · mime 0.3.17 — MIT OR Apache-2.0 — https://github.com/hyperium/mime
   Copyright (c) 2014 Sean McArthur
+· minisign-verify 0.3.0 — MIT — https://github.com/jedisct1/rust-minisign-verify
+  Copyright (c) 2019-2025 Frank Denis / Copyright (c) 2006-2009 Graydon Hoare / Copyright (c) 2009-2013 Mozilla Foundation
 · miniz_oxide 0.8.9 — MIT OR Zlib OR Apache-2.0 — https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide
   Copyright 2013-2014 RAD Game Tools and Valve Software / Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC / Copyright (c) 2017 Frommi
 · miniz_oxide 0.9.1 — MIT OR Zlib OR Apache-2.0 — https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide
@@ -465,7 +501,6 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
 · quick-error 2.0.1 — MIT/Apache-2.0 — http://github.com/tailhook/quick-error
   Copyright (c) 2015 The quick-error Developers
 · quick-xml 0.37.5 — MIT — https://github.com/tafia/quick-xml
-· quick-xml 0.41.0 — MIT — https://github.com/tafia/quick-xml
 · quick-xml 0.42.0 — MIT — https://github.com/tafia/quick-xml
 · quote 1.0.47 — MIT OR Apache-2.0 — https://github.com/dtolnay/quote
   Copyright David Tolnay <dtolnay@gmail.com>
@@ -495,10 +530,14 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
   Copyright (c) 2014 The Rust Project Developers
 · regex-syntax 0.8.11 — MIT OR Apache-2.0 — https://github.com/rust-lang/regex
   Copyright (c) 2014 The Rust Project Developers
+· reqwest 0.13.5 — MIT OR Apache-2.0 — https://github.com/seanmonstar/reqwest
+  Copyright 2016 Sean McArthur / Copyright (c) 2016-2026 Sean McArthur
 · rfd 0.16.0 — MIT — https://github.com/PolyMeilex/rfd
   Copyright (c) 2022 Bartłomiej Maryńczak
 · rgb 0.8.53 — MIT — https://github.com/kornelski/rust-rgb
   Copyright (c) 2019 Kornel
+· ring 0.17.14 — Apache-2.0 AND ISC — https://github.com/briansmith/ring
+  Copyright (c) 2009 The Go Authors. All rights reserved. / Copyright 2015 The Chromium Authors. All rights reserved. / Copyright 2015-2025 Brian Smith.
 · rusqlite 0.32.1 — MIT — https://github.com/rusqlite/rusqlite
   Copyright (c) 2014-2021 The rusqlite developers
 · rust_xlsxwriter 0.99.1 — MIT OR Apache-2.0 — https://github.com/jmcnamara/rust_xlsxwriter
@@ -507,6 +546,14 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
   Copyright (c) 2016 The Rust Project Developers
 · rustc-hash 2.1.3 — Apache-2.0 OR MIT — https://github.com/rust-lang/rustc-hash
   Copyright The Rust Project Developers
+· rustls 0.23.46 — Apache-2.0 OR ISC OR MIT — https://github.com/rustls/rustls
+  Copyright (c) 2016, Joseph Birr-Pixton <jpixton@gmail.com> / Copyright (c) 2016 Joseph Birr-Pixton <jpixton@gmail.com>
+· rustls-pki-types 1.16.0 — MIT OR Apache-2.0 — https://github.com/rustls/pki-types
+  Copyright 2023 Dirkjan Ochtman / Copyright (c) 2023 Dirkjan Ochtman <dirkjan@ochtman.nl>
+· rustls-platform-verifier 0.7.1 — MIT OR Apache-2.0 — https://github.com/rustls/rustls-platform-verifier
+  Copyright (c) 2022 1Password
+· rustls-webpki 0.103.16 — ISC — https://github.com/rustls/webpki
+  Copyright 2015 Brian Smith.
 · rustversion 1.0.23 — MIT OR Apache-2.0 — https://github.com/dtolnay/rustversion
   Copyright David Tolnay <dtolnay@gmail.com>
 · same-file 1.0.6 — Unlicense/MIT — https://github.com/BurntSushi/same-file
@@ -565,6 +612,8 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
   Copyright Hans Kratz <hans@appfour.com>
 · siphasher 1.0.4 — MIT OR Apache-2.0 — https://github.com/jedisct1/rust-siphash
   Copyright 2012-2016 The Rust Project Developers. / Copyright 2016-2026 Frank Denis.
+· slab 0.4.12 — MIT — https://github.com/tokio-rs/slab
+  Copyright (c) 2019 Carl Lerche
 · smallvec 1.16.3 — MIT OR Apache-2.0 — https://github.com/servo/rust-smallvec
   Copyright (c) 2018 The Servo Project Developers
 · socket2 0.6.5 — MIT OR Apache-2.0 — https://github.com/rust-lang/socket2
@@ -587,6 +636,8 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
   Copyright David Tolnay <dtolnay@gmail.com>
 · syn 3.0.7 — MIT OR Apache-2.0 — https://github.com/dtolnay/syn
   Copyright David Tolnay <dtolnay@gmail.com>
+· sync_wrapper 1.0.2 — Apache-2.0 — https://github.com/Actyx/sync_wrapper
+  Copyright Actyx AG <developer@actyx.io>
 · synstructure 0.14.0 — MIT — https://github.com/mystor/synstructure
   Copyright 2016 Nika Layzell
 · tao 0.37.1 — Apache-2.0 — https://github.com/tauri-apps/tao
@@ -617,6 +668,10 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
   Copyright (c) 2017 - Present Tauri Apps Contributors
 · tauri-plugin-opener 2.7.0 — Apache-2.0 OR MIT — https://github.com/tauri-apps/plugins-workspace
   Copyright (c) 2017 - Present Tauri Apps Contributors
+· tauri-plugin-process 2.4.0 — Apache-2.0 OR MIT — https://github.com/tauri-apps/plugins-workspace
+  Copyright (c) 2017 - Present Tauri Apps Contributors
+· tauri-plugin-updater 2.14.1 — Apache-2.0 OR MIT — https://github.com/tauri-apps/plugins-workspace
+  Copyright (c) 2017 - Present Tauri Apps Contributors
 · tauri-runtime 2.12.1 — Apache-2.0 OR MIT — https://github.com/tauri-apps/tauri
   Copyright (c) 2017 - Present Tauri Apps Contributors
 · tauri-runtime-wry 2.12.1 — Apache-2.0 OR MIT — https://github.com/tauri-apps/tauri
@@ -625,6 +680,8 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
   Copyright (c) 2017 - Present Tauri Apps Contributors
 · tauri-winres 0.3.6 — MIT — https://github.com/tauri-apps/winres
   Copyright (c) 2023 - Present Tauri Apps Contributors / Copyright (c) 2016 Max Resch
+· tempfile 3.27.0 — MIT OR Apache-2.0 — https://github.com/Stebalien/tempfile
+  Copyright (c) 2015 Steven Allen
 · tendril 0.5.1 — MIT OR Apache-2.0 — https://github.com/servo/html5ever
   Copyright (c) 2015 Keegan McAllister
 · terminal_size 0.4.4 — MIT OR Apache-2.0 — https://github.com/eminence/terminal-size
@@ -649,10 +706,22 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
   Copyright Lokathor <zefria@gmail.com>
 · tokio 1.53.2 — MIT — https://github.com/tokio-rs/tokio
   Copyright Tokio Contributors <team@tokio.rs>
+· tokio-rustls 0.26.6 — MIT OR Apache-2.0 — https://github.com/rustls/tokio-rustls
+  Copyright 2017 quininer kel / Copyright (c) 2017 quininer kel
+· tokio-util 0.7.20 — MIT — https://github.com/tokio-rs/tokio
+  Copyright Tokio Contributors <team@tokio.rs>
 · toml 1.1.8+spec-1.1.0 — MIT OR Apache-2.0 — https://github.com/toml-rs/toml
 · toml_datetime 1.1.2+spec-1.1.0 — MIT OR Apache-2.0 — https://github.com/toml-rs/toml
 · toml_parser 1.1.5+spec-1.1.0 — MIT OR Apache-2.0 — https://github.com/toml-rs/toml
 · toml_writer 1.1.3+spec-1.1.0 — MIT OR Apache-2.0 — https://github.com/toml-rs/toml
+· tower 0.5.3 — MIT — https://github.com/tower-rs/tower
+  Copyright (c) 2019 Tower Contributors
+· tower-http 0.6.11 — MIT — https://github.com/tower-rs/tower-http
+  Copyright (c) 2019-2021 Tower Contributors
+· tower-layer 0.3.3 — MIT — https://github.com/tower-rs/tower
+  Copyright (c) 2019 Tower Contributors
+· tower-service 0.3.3 — MIT — https://github.com/tower-rs/tower
+  Copyright (c) 2019 Tower Contributors
 · tracing 0.1.44 — MIT — https://github.com/tokio-rs/tracing
   Copyright (c) 2019 Tokio Contributors
 · tracing-attributes 0.1.31 — MIT — https://github.com/tokio-rs/tracing
@@ -663,9 +732,13 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
   Copyright 2019 Artúr Barnabás Kovács
 · tray-icon 0.25.1 — MIT OR Apache-2.0 — https://github.com/tauri-apps/tray-icon
   Copyright (c) 2022-2022 Tauri Programme within The Commons Conservancy
+· try-lock 0.2.5 — MIT — https://github.com/seanmonstar/try-lock
+  Copyright (c) 2018-2023 Sean McArthur / Copyright (c) 2016 Alex Crichton
 · ttf-parser 0.25.1 — MIT OR Apache-2.0 — https://github.com/harfbuzz/ttf-parser
   Copyright (c) 2018 Yevhenii Reizner
 · typed-path 0.12.3 — MIT OR Apache-2.0 — https://github.com/chipsenkbeil/typed-path
+  Copyright Chip Senkbeil <chip@senkbeil.org>
+· typed-path 0.13.0 — MIT OR Apache-2.0 — https://github.com/chipsenkbeil/typed-path
   Copyright Chip Senkbeil <chip@senkbeil.org>
 · typeid 1.0.3 — MIT OR Apache-2.0 — https://github.com/dtolnay/typeid
   Copyright David Tolnay <dtolnay@gmail.com>
@@ -681,6 +754,8 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
   Copyright (c) 2015 The Rust Project Developers
 · unicode-segmentation 1.13.3 — MIT OR Apache-2.0 — https://github.com/unicode-rs/unicode-segmentation
   Copyright (c) 2015 The Rust Project Developers
+· untrusted 0.9.0 — ISC — https://github.com/briansmith/untrusted
+  Copyright Brian Smith <brian@briansmith.org>
 · url 2.5.8 — MIT OR Apache-2.0 — https://github.com/servo/rust-url
   Copyright (c) 2013-2025 The rust-url developers
 · urlpattern 0.6.0 — MIT — https://github.com/denoland/rust-urlpattern
@@ -701,6 +776,8 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
   Copyright (c) 2019 nabijaczleweli
 · walkdir 2.5.0 — Unlicense/MIT — https://github.com/BurntSushi/walkdir
   Copyright (c) 2015 Andrew Gallant
+· want 0.3.2 — MIT — https://github.com/seanmonstar/want
+  Copyright (c) 2018-2019 Sean McArthur
 · web_atoms 0.2.6 — MIT OR Apache-2.0 — https://github.com/servo/html5ever
   Copyright (c) 2014 The html5ever Project Developers
 · web-time 1.1.0 — MIT OR Apache-2.0 — https://github.com/daxpedda/web-time
@@ -736,6 +813,7 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
   Copyright Microsoft
 · windows-link 0.2.1 — MIT OR Apache-2.0 — https://github.com/microsoft/windows-rs
 · windows-numerics 0.3.1 — MIT OR Apache-2.0 — https://github.com/microsoft/windows-rs
+· windows-registry 0.6.1 — MIT OR Apache-2.0 — https://github.com/microsoft/windows-rs
 · windows-result 0.3.4 — MIT OR Apache-2.0 — https://github.com/microsoft/windows-rs
   Copyright Microsoft
 · windows-result 0.4.1 — MIT OR Apache-2.0 — https://github.com/microsoft/windows-rs
@@ -793,6 +871,8 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
   Copyright (c) 2014 Mathijs van de Nes
 · zip 8.6.0 — MIT — https://github.com/zip-rs/zip2
   Copyright (c) 2014 Mathijs van de Nes
+· zip 9.5.1 — MIT — https://github.com/zip-rs/zip2
+  Copyright (c) 2014 Mathijs van de Nes
 · zlib-rs 0.6.8 — Zlib — https://github.com/trifectatechfoundation/zlib-rs
   (C) 2024 Trifecta Tech Foundation
 · zmij 1.0.23 — MIT — https://github.com/dtolnay/zmij
@@ -803,7 +883,7 @@ RUST CRATES（编译进 x-dir.exe）（418 项）
 · zune-jpeg 0.5.15 — MIT OR Apache-2.0 OR Zlib — https://github.com/etemesi254/zune-image/tree/dev/crates/zune-jpeg
   Copyright caleb <etemesicaleb@gmail.com>
 
-NPM PACKAGES（打包进前端资源）（58 项）
+NPM PACKAGES（打包进前端资源）（60 项）
 ------------------------------------------------------------------------------------------------------------------------
 · @babel/runtime 7.29.10 — MIT — https://github.com/babel/babel.git
   Copyright (c) 2014-present Sebastian McKenzie and other contributors
@@ -836,6 +916,8 @@ NPM PACKAGES（打包进前端资源）（58 项）
   Copyright (c) 2017 - Present Tauri Apps Contributors
 · @tauri-apps/plugin-dialog 2.8.2 — MIT OR Apache-2.0 — https://github.com/tauri-apps/plugins-workspace
 · @tauri-apps/plugin-opener 2.7.0 — MIT OR Apache-2.0 — https://github.com/tauri-apps/plugins-workspace
+· @tauri-apps/plugin-process 2.4.0 — MIT OR Apache-2.0 — https://github.com/tauri-apps/plugins-workspace
+· @tauri-apps/plugin-updater 2.14.1 — MIT OR Apache-2.0 — https://github.com/tauri-apps/plugins-workspace
 · camel-case 4.1.2 — MIT — git://github.com/blakeembrey/change-case.git
   Copyright (c) 2014 Blake Embrey (hello@blakeembrey.com)
 · capital-case 1.0.4 — MIT — git://github.com/blakeembrey/change-case.git
