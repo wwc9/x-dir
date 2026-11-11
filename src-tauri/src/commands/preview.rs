@@ -1469,7 +1469,11 @@ fn sheet_sections(path: &str) -> Result<(Vec<OfficeSection>, bool), String> {
         let range = wb
             .worksheet_range(name)
             .map_err(|e| format!("读取工作表 {name} 失败：{e}"))?;
-        let (text, truncated) = range_to_text(&range, SHEET_ROW_CAP, SECTION_CHAR_CAP);
+        // 数字格式（numFmt）随值同源读取（calamine 0.38，XLSX 系；其余格式
+        // 返回空表 → 单元格回落 General 渲染，2026-11-11 表格预览增强）
+        let styles = wb.worksheet_style(name).ok();
+        let (text, truncated) =
+            range_to_text(&range, styles.as_ref(), SHEET_ROW_CAP, SECTION_CHAR_CAP);
         sections.push(OfficeSection {
             merges: merge_sheets.get(i).cloned().unwrap_or_default(),
             title: name.clone(),
@@ -1738,43 +1742,31 @@ fn cell_addr(a: &str) -> Option<(u32, u32)> {
     Some((row - 1, col - 1))
 }
 
-/// 单元格 → 预览文本（纯函数）：整数去小数尾、布尔 TRUE/FALSE；日期单元格
-/// 转可读字符串（2026-10-18 修：原先直接 as_f64 显示成 Excel 序列数 45867）；
-/// 单元格内换行/制表符替换为空格——制表符分隔文本化时它们会冲乱行列结构
-/// （实测 WPS 合并格内的多行文本把整表行错位，2026-10-17）
-pub fn cell_display(d: &calamine::Data) -> String {
-    use calamine::Data;
-    let raw = match d {
-        Data::Empty => String::new(),
-        Data::String(s) => s.clone(),
-        Data::Int(i) => i.to_string(),
-        Data::Float(f) => fmt_float(*f),
-        Data::Bool(b) => if *b { "TRUE" } else { "FALSE" }.into(),
-        // 与 Excel 合并管线同语义：日期/时长转可读字符串（免 chrono）
-        Data::DateTime(dt) => crate::fs::xlsx::format_datetime(dt),
-        Data::DateTimeIso(s) | Data::DurationIso(s) => s.clone(),
-        Data::Error(e) => e.to_string(),
-    };
-    clean_cell_text(raw)
-}
-
-fn fmt_float(f: f64) -> String {
-    if f.fract() == 0.0 && f.abs() < 1e15 {
-        format!("{}", f as i64)
-    } else {
-        format!("{f}")
-    }
-}
-
-/// 工作表范围 → 制表符分隔文本（纯函数）：行数与字符数双上限
+/// 工作表范围 → 制表符分隔文本（纯函数）：行数与字符数双上限。
+/// styles = 同表 StyleRange（calamine 0.38，XLSX 系）——有格式码的单元格按
+/// numFmt 渲染（小数位/百分数/千分位/日期口径随文件），无码走 General
 pub fn range_to_text(
     range: &calamine::Range<calamine::Data>,
+    styles: Option<&calamine::StyleRange>,
     max_rows: usize,
     cap_chars: usize,
 ) -> (String, bool) {
+    let start = range.start().unwrap_or((0, 0));
     let rows: Vec<Vec<String>> = range
         .rows()
-        .map(|row| row.iter().map(cell_display).collect())
+        .enumerate()
+        .map(|(ri, row)| {
+            row.iter()
+                .enumerate()
+                .map(|(ci, cell)| {
+                    let code = styles
+                        .and_then(|s| s.get((start.0 + ri as u32, start.1 + ci as u32)))
+                        .and_then(|st| st.number_format.as_ref())
+                        .map(|nf| nf.format_code.as_str());
+                    clean_cell_text(crate::sheet_fmt::display_for(cell, code))
+                })
+                .collect()
+        })
         .collect();
     matrix_to_text(rows, max_rows, cap_chars)
 }
@@ -3629,7 +3621,7 @@ mod tests {
             calamine::Cell::new((1, 0), Data::Float(2.5)),
             calamine::Cell::new((1, 1), Data::Empty),
         ]);
-        let (text, truncated) = range_to_text(&range, 100, 1 << 20);
+        let (text, truncated) = range_to_text(&range, None, 100, 1 << 20);
         assert!(!truncated);
         // 稀疏范围按最宽行补齐空单元格
         assert_eq!(text, "名称\t3\tTRUE\n2.5\t\t\n");
@@ -4010,12 +4002,22 @@ c,d
 
     #[test]
     fn cell_display_flattens_embedded_breaks() {
-        use super::cell_display;
+        use super::clean_cell_text;
+        use crate::sheet_fmt::display_for;
         use calamine::Data;
         // WPS 合并格内的多行文本：换行/制表符替换为空格，不冲乱行列分隔结构
-        assert_eq!(cell_display(&Data::String("1\n2\n3".into())), "1 2 3");
-        assert_eq!(cell_display(&Data::String("a\tb".into())), "a b");
-        assert_eq!(cell_display(&Data::String("x\r\ny".into())), "x y");
+        assert_eq!(
+            clean_cell_text(display_for(&Data::String("1\n2\n3".into()), None)),
+            "1 2 3"
+        );
+        assert_eq!(
+            clean_cell_text(display_for(&Data::String("a\tb".into()), None)),
+            "a b"
+        );
+        assert_eq!(
+            clean_cell_text(display_for(&Data::String("x\r\ny".into()), None)),
+            "x y"
+        );
     }
 
     #[test]
@@ -4390,15 +4392,48 @@ mod office_tests {
     }
 
     #[test]
+    /// 端到端（2026-11-11 表格预览增强）：rust_xlsxwriter 写带 numFmt 的
+    /// 真实 xlsx → sheet_sections 全链路 → 百分数/小数位/千分位按格式渲染
+    #[test]
+    fn sheet_preview_applies_number_formats() {
+        use rust_xlsxwriter::{Format, Workbook};
+        let dir = std::env::temp_dir().join("xdir_sheet_fmt_e2e");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("fmt_e2e.xlsx");
+        let mut wb = Workbook::new();
+        let ws = wb.add_worksheet();
+        let pct = Format::new().set_num_format("0.00%");
+        let dec = Format::new().set_num_format("0.00");
+        let grp = Format::new().set_num_format("#,##0.00");
+        ws.write_number_with_format(0, 0, 0.0819348994483414, &pct)
+            .unwrap();
+        ws.write_number_with_format(0, 1, -2191.50375371322, &dec)
+            .unwrap();
+        ws.write_number_with_format(0, 2, 1234567.891, &grp)
+            .unwrap();
+        wb.save(&path).unwrap();
+        let (sections, _) = sheet_sections(path.to_str().unwrap()).unwrap();
+        let text = &sections[0].text;
+        assert!(text.contains("8.19%"), "percent: {text:?}");
+        assert!(text.contains("-2191.50"), "decimal: {text:?}");
+        assert!(text.contains("1,234,567.89"), "grouping: {text:?}");
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     fn cell_display_renders_dates_not_serials() {
+        use crate::sheet_fmt::display_for;
         use calamine::{ExcelDateTime, ExcelDateTimeType};
         let dt = ExcelDateTime::new(1.0, ExcelDateTimeType::DateTime, false);
         assert_eq!(
-            cell_display(&calamine::Data::DateTime(dt)),
+            display_for(&calamine::Data::DateTime(dt), None),
             "1900-01-01 00:00:00"
         );
         let dur = ExcelDateTime::new(0.5, ExcelDateTimeType::TimeDelta, false);
-        assert_eq!(cell_display(&calamine::Data::DateTime(dur)), "12:00:00");
+        assert_eq!(
+            display_for(&calamine::Data::DateTime(dur), None),
+            "12:00:00"
+        );
     }
 
     // ── OFD 抽取（2026-11-03）：内存构造最小 OFD（GB/T 33190 结构）──

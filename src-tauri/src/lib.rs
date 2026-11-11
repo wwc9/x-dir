@@ -13,6 +13,7 @@ mod native_ops;
 mod office;
 mod ole_dnd;
 mod pdf;
+mod sheet_fmt;
 mod watch;
 
 use fs::cache::SnapshotCache;
