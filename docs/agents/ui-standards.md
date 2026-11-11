@@ -183,9 +183,14 @@
 - **结构三段**：① 待处理清单/预览区置顶（surface-2 凹陷列表，路径单行省略、
   悬停 title 全文；清单容器 `np-pdfmlist` 自带 `margin-bottom: --np-gutter`
   供给与参数区的区块间距——此前为 0，列表框直接贴住策略行，2026-11-10 用户
-  反馈补）；② 参数区（np-bren-form 行 + np-dialog-muted 说明收尾）；
-  ③ Footer（主操作 accent + 取消）。数据经 DialogSpec 直传（entries），
-  onDone 返回结构化结果（含 paths 顺序）。
+  反馈补）；② 参数区（np-bren-form 行）；③ **解释收尾 = `np-dialog-note`
+  （2026-11-11 用户定案「解释性文字要有单独样式，条理清晰」，取代裸
+  np-dialog-muted 收尾）**：hairline 与参数区一刀切 + 行结构——每条信息独立
+  一行（`np-dialog-note-row`），输出预览独立成行且超长省略悬停全文
+  （`np-dialog-note-path`）；11px muted 同 np-dialog-muted。表单**中途**的
+  短说明/清单区表头（如「处理文件」标题、校验清单统计头）仍用 np-dialog-muted，
+  不加 hairline；④ Footer（主操作 accent + 取消）。数据经 DialogSpec 直传
+  （entries），onDone 返回结构化结果（含 paths 顺序）。
 - **列数**：参数 ≤4 行用 1 列（np-bren-form 纵排）；≥5 行用 2 列网格
   （`np-pdfmform.np-two-col`，短控件成对、长控件/多选项行 `wide` 独占整行）。
 - **输入控件**：一律走全局统一基线（§4.8 承载 + 填充式 surface-2/聚焦 ring），
@@ -208,9 +213,10 @@
 - **参数行关联禁用（2026-11-03 定案）**：某参数在当前模式下不被执行端
   读取时整行禁用（`Seg disabled` + 标签本即 muted），如 PNG8/无损优化目标
   下的质量档、非 JPEG 目标格式下的质量档——不显示"看似可调实则无效"的控件。
-- **说明收尾带输出预览（2026-11-03 定案）**：np-dialog-muted 收尾段除旁写
-  规则外附「输出预览：{路径}」（取清单首项所在目录；自动命名的以当前时刻
-  示例）；单文件功能（PDF 提取/删页）以文件行 + 页数回显替代待处理清单。
+- **说明收尾带输出预览（2026-11-03 定案；2026-11-11 载体升级 np-dialog-note）**：
+  收尾段除旁写规则外附「输出预览：{路径}」（取清单首项所在目录；自动命名的
+  以当前时刻示例），预览行独立成行（note-path 超长省略 + title 全文）；
+  单文件功能（PDF 提取/删页）以文件行 + 页数回显替代待处理清单。
 - **落地范围（2026-11-03）**：图片五件套 / Excel 合并 / 通用合并（图片转
   PDF、CSV、文本、zip 打包）/ PDF 提取页、删除页全部对齐三段式；此前仅有
   PDF 合并与加水印符合。待处理清单共享组件 = `components/FileQueue.tsx`

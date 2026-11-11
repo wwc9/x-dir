@@ -535,15 +535,18 @@ export function SplitDialog({
             />
           </span>
         </div>
-        <div className="np-dialog-muted">
-          {t2("共 {size} → 预计 {n} 个部件", {
-            size: entry.isDir ? "—" : formatBytes(entry.size),
-            n: parts,
-          })}
-          <br />
-          {t2("输出预览：{name}.part001… + {name}.crc（SHA-256 完整性清单）", {
-            name: entry.name,
-          })}
+        <div className="np-dialog-note">
+          <span className="np-dialog-note-row">
+            {t2("共 {size} → 预计 {n} 个部件", {
+              size: entry.isDir ? "—" : formatBytes(entry.size),
+              n: parts,
+            })}
+          </span>
+          <span className="np-dialog-note-row">
+            {t2("输出预览：{name}.part001… + {name}.crc（SHA-256 完整性清单）", {
+              name: entry.name,
+            })}
+          </span>
         </div>
       </DialogBody>
       <Footer okText={t2("开始分割")} disabled={busy} onOk={apply} onCancel={onDone} />

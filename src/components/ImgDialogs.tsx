@@ -85,8 +85,9 @@ function FormRow({
   );
 }
 
+/** 面板解释收尾（§4.9 np-dialog-note：hairline 与参数区分隔 + 每条信息独立成行） */
 function Hint({ children }: { children: React.ReactNode }) {
-  return <div className="np-dialog-muted">{children}</div>;
+  return <div className="np-dialog-note">{children}</div>;
 }
 
 /** 对话框页脚：取消 + 主操作（intent 二映射 = primary 实心）；
@@ -270,13 +271,20 @@ export function CompressDialog({
           />
         </div>
         <Hint>
-          {t2(
-            "为 {n} 张图片压缩，旁写 *_压缩.jpg / *_压缩.png，不覆盖原文件；EXIF 方向已烘焙进像素。",
-            { n: items.length },
+          <span className="np-dialog-note-row">
+            {t2(
+              "为 {n} 张图片压缩，旁写 *_压缩.jpg / *_压缩.png，不覆盖原文件；EXIF 方向已烘焙进像素。",
+              { n: items.length },
+            )}
+          </span>
+          {png8 && (
+            <span className="np-dialog-note-row">
+              {t2("PNG8 质量映射调色板色彩数（75 ≈ 192 色）：高质量更清晰、低质量更小。")}
+            </span>
           )}
-          {png8 &&
-            t2("PNG8 质量映射调色板色彩数（75 ≈ 192 色）：高质量更清晰、低质量更小。")}
-          {t2("输出预览：{out}", { out: outPreview(items, "_压缩", ext) })}
+          <span className="np-dialog-note-row np-dialog-note-path" title={outPreview(items, "_压缩", ext)}>
+            {t2("输出预览：{out}", { out: outPreview(items, "_压缩", ext) })}
+          </span>
         </Hint>
       </DialogBody>
       <Footer
@@ -451,10 +459,14 @@ export function WatermarkDialog({
         </div>
         {missing && <div className="np-dialog-error">{missing}</div>}
         <Hint>
-          {t2("为 {n} 张图片加水印，旁写 *_水印.扩展名（保持原格式），同名自动 (2) 递增，不覆盖原文件。", {
-            n: items.length,
-          })}
-          {t2("输出预览：{out}", { out: outPreview(items, "_水印") })}
+          <span className="np-dialog-note-row">
+            {t2("为 {n} 张图片加水印，旁写 *_水印.扩展名（保持原格式），同名自动 (2) 递增，不覆盖原文件。", {
+              n: items.length,
+            })}
+          </span>
+          <span className="np-dialog-note-row np-dialog-note-path" title={outPreview(items, "_水印")}>
+            {t2("输出预览：{out}", { out: outPreview(items, "_水印") })}
+          </span>
         </Hint>
       </DialogBody>
       <Footer
@@ -543,11 +555,15 @@ export function ConvertDialog({
           />
         </div>
         <Hint>
-          {t2("为 {n} 张图片转换格式，旁写 *_转换.{ext}，不覆盖原文件。", {
-            n: items.length,
-            ext,
-          })}
-          {t2("输出预览：{out}", { out: outPreview(items, "_转换", ext) })}
+          <span className="np-dialog-note-row">
+            {t2("为 {n} 张图片转换格式，旁写 *_转换.{ext}，不覆盖原文件。", {
+              n: items.length,
+              ext,
+            })}
+          </span>
+          <span className="np-dialog-note-row np-dialog-note-path" title={outPreview(items, "_转换", ext)}>
+            {t2("输出预览：{out}", { out: outPreview(items, "_转换", ext) })}
+          </span>
         </Hint>
       </DialogBody>
       <Footer
@@ -647,10 +663,14 @@ export function ResizeDialog({
         </div>
         {err && <div className="np-dialog-error">{err}</div>}
         <Hint>
-          {t2("为 {n} 张图片调整尺寸，宽高比恒定，旁写 *_缩放.扩展名（保持原格式）。", {
-            n: items.length,
-          })}
-          {t2("输出预览：{out}", { out: outPreview(items, "_缩放") })}
+          <span className="np-dialog-note-row">
+            {t2("为 {n} 张图片调整尺寸，宽高比恒定，旁写 *_缩放.扩展名（保持原格式）。", {
+              n: items.length,
+            })}
+          </span>
+          <span className="np-dialog-note-row np-dialog-note-path" title={outPreview(items, "_缩放")}>
+            {t2("输出预览：{out}", { out: outPreview(items, "_缩放") })}
+          </span>
         </Hint>
       </DialogBody>
       <Footer
@@ -766,15 +786,23 @@ export function MontageDialog({
           </FormRow>
         </div>
         <Hint>
-          {t2("按清单顺序拼合 {n} 张（{rows} 行 × {cols} 列，画布 {w}×{h}px）→", {
-            n: used.length,
-            rows: grid.rows,
-            cols,
-            w: outW,
-            h: outH,
-          })}
-          {t2("输出预览：{out}", { out: preview })}
-          {items.length > MONTAGE_MAX ? t2("（超出 {max} 张的部分不会拼入）", { max: MONTAGE_MAX }) : ""}
+          <span className="np-dialog-note-row">
+            {t2("按清单顺序拼合 {n} 张（{rows} 行 × {cols} 列，画布 {w}×{h}px）。", {
+              n: used.length,
+              rows: grid.rows,
+              cols,
+              w: outW,
+              h: outH,
+            })}
+          </span>
+          {items.length > MONTAGE_MAX && (
+            <span className="np-dialog-note-row">
+              {t2("（超出 {max} 张的部分不会拼入）", { max: MONTAGE_MAX })}
+            </span>
+          )}
+          <span className="np-dialog-note-row np-dialog-note-path" title={preview}>
+            {t2("输出预览：{out}", { out: preview })}
+          </span>
         </Hint>
       </DialogBody>
       <Footer

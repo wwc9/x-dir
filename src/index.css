@@ -2438,6 +2438,29 @@ body.np-col-resizing * {
   color: var(--np-muted);
   margin-bottom: 6px;
 }
+/* 面板解释收尾（2026-11-11 用户定案「解释性文字要有单独样式，条理清晰」）：
+   参数对话框底部的说明/预览块——hairline 与参数区一刀切，每条信息独立成行
+   （区别于表单中途的 np-dialog-muted 短说明），输出预览行独立且超长省略
+   （title 悬停全文）。行组件 = np-dialog-note-row，路径行加 note-path */
+.np-dialog-note {
+  border-top: 1px solid var(--np-hairline);
+  padding-top: var(--np-gutter);
+  margin-top: var(--np-gutter);
+  margin-bottom: 0;
+  display: grid;
+  gap: 3px;
+  font-size: var(--np-font-sm);
+  line-height: 1.5;
+  color: var(--np-muted);
+}
+.np-dialog-note-row {
+  display: block;
+}
+.np-dialog-note-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* 确认弹窗「以后不再确认」勾选（2026-11-05）：消息下方、小密度行高，
    覆盖 .bp6-control 默认 line-height 30 / margin-bottom 8 的宽松节奏 */
 .np-dialog-remember {

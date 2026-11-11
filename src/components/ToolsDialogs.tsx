@@ -194,15 +194,17 @@ export function NewFoldersDialog({
             </div>
           )}
         </div>
-        <div className="np-dialog-muted">
-          {t2("将在 {dir} 下创建 {n} 个文件夹（与现有项重名时自动加序号）", {
-            dir,
-            n: okNames.length,
-          })}
-          {errCount > 0 && t2("，{n} 项非法或重名（红色标出）", { n: errCount })}
-          {plan.length > 200 && t2("（仅预览前 200 行）")}
-          {okNames.length >= FOLDER_BATCH_CAP &&
-            t2("，单次上限 {n} 个", { n: FOLDER_BATCH_CAP })}
+        <div className="np-dialog-note">
+          <span className="np-dialog-note-row">
+            {t2("将在 {dir} 下创建 {n} 个文件夹（与现有项重名时自动加序号）", {
+              dir,
+              n: okNames.length,
+            })}
+            {errCount > 0 && t2("，{n} 项非法或重名（红色标出）", { n: errCount })}
+            {plan.length > 200 && t2("（仅预览前 200 行）")}
+            {okNames.length >= FOLDER_BATCH_CAP &&
+              t2("，单次上限 {n} 个", { n: FOLDER_BATCH_CAP })}
+          </span>
         </div>
       </DialogBody>
       <Footer
@@ -270,12 +272,16 @@ export function XlsxMergeDialog({
             />
           </FormRow>
         </div>
-        <div className="np-dialog-muted">
-          {t2(
-            "按清单顺序合并 {n} 个工作簿（xlsx/xlsm/xls/xlsb/ods 均可读，统一输出 .xlsx），旁写新文件不覆盖原文件。",
-            { n: entries.length },
-          )}
-          {t2("输出预览：{out}", { out: preview })}
+        <div className="np-dialog-note">
+          <span className="np-dialog-note-row">
+            {t2(
+              "按清单顺序合并 {n} 个工作簿（xlsx/xlsm/xls/xlsb/ods 均可读，统一输出 .xlsx），旁写新文件不覆盖原文件。",
+              { n: entries.length },
+            )}
+          </span>
+          <span className="np-dialog-note-row np-dialog-note-path" title={preview}>
+            {t2("输出预览：{out}", { out: preview })}
+          </span>
         </div>
       </DialogBody>
       <Footer
@@ -449,13 +455,21 @@ export function PdfMergeDialog({
           )}
         </div>
         {err && <div className="np-dialog-error">{err}</div>}
-        <div className="np-dialog-muted">
-          {variant === "files"
-            ? t2("输出预览：{out}", { out: output })
-            : t2("按文件夹分别合并：{n} 个范围，各组输出 合并结果-<文件夹名>-<时间戳>.pdf", {
+        <div className="np-dialog-note">
+          {variant === "files" ? (
+            <span className="np-dialog-note-row np-dialog-note-path" title={output}>
+              {t2("输出预览：{out}", { out: output })}
+            </span>
+          ) : (
+            <span className="np-dialog-note-row">
+              {t2("按文件夹分别合并：{n} 个范围，各组输出 合并结果-<文件夹名>-<时间戳>.pdf", {
                 n: entries.length,
               })}
-          {t2("；缺失或不可读的文件自动跳过，不覆盖原文件。")}
+            </span>
+          )}
+          <span className="np-dialog-note-row">
+            {t2("缺失或不可读的文件自动跳过，不覆盖原文件。")}
+          </span>
         </div>
       </DialogBody>
       <Footer
@@ -803,11 +817,15 @@ export function PdfWatermarkDialog({
             {[fontSizeErr, marginErr, specErr].filter(Boolean).join("；")}
           </div>
         )}
-        <div className="np-dialog-muted">
-          {t2(
-            "文字与输出名支持占位符，点击输入框下方的按钮即可插入；页码按「页码格式」渲染，[页面标签] 暂以页码代替。输出按「输出文件名」模板旁写 PDF，同名自动 (2) 递增，不覆盖原文件。",
-          )}
-          {t2("输出预览：{out}", { out: previewPath })}
+        <div className="np-dialog-note">
+          <span className="np-dialog-note-row">
+            {t2(
+              "文字与输出名支持占位符，点击输入框下方的按钮即可插入；页码按「页码格式」渲染，[页面标签] 暂以页码代替。输出按「输出文件名」模板旁写 PDF，同名自动 (2) 递增，不覆盖原文件。",
+            )}
+          </span>
+          <span className="np-dialog-note-row np-dialog-note-path" title={previewPath}>
+            {t2("输出预览：{out}", { out: previewPath })}
+          </span>
         </div>
       </DialogBody>
       <Footer
@@ -1088,9 +1106,11 @@ export function MergeFilesDialog({
           )}
         </div>
         {err && <div className="np-dialog-error">{err}</div>}
-        <div className="np-dialog-muted">
-          {t2(note)}
-          {t2("输出预览：{out}", { out: preview })}
+        <div className="np-dialog-note">
+          <span className="np-dialog-note-row">{t2(note)}</span>
+          <span className="np-dialog-note-row np-dialog-note-path" title={preview}>
+            {t2("输出预览：{out}", { out: preview })}
+          </span>
         </div>
       </DialogBody>
       <Footer
@@ -1181,9 +1201,9 @@ export function PdfPagesDialog({
         {wipeAll && (
           <div className="np-dialog-error">{t2("至少保留 1 页，不能删除全部页面")}</div>
         )}
-        <div className="np-dialog-muted">
+        <div className="np-dialog-note">
           {valid && total !== null && (
-            <>
+            <span className="np-dialog-note-row">
               {extract
                 ? t2("将提取 {n} 页（{brief}）为新文件", { n: pages?.length, brief })
                 : t2("将删除 {n} 页（{brief}），其余 {k} 页另存为新文件", {
@@ -1191,12 +1211,16 @@ export function PdfPagesDialog({
                     brief,
                     k: total - (pages?.length ?? 0),
                   })}
-              <br />
-            </>
+            </span>
           )}
-          {t2("输出预览：{out}", { out: preview })}
-          {!extract && t2("；原文件不动。")}
-          {t2("同名输出自动 (2) 递增。")}
+          <span className="np-dialog-note-row np-dialog-note-path" title={preview}>
+            {t2("输出预览：{out}", { out: preview })}
+          </span>
+          <span className="np-dialog-note-row">
+            {extract
+              ? t2("同名输出自动 (2) 递增。")
+              : t2("原文件不动，同名输出自动 (2) 递增。")}
+          </span>
         </div>
       </DialogBody>
       <Footer
@@ -1289,15 +1313,17 @@ export function ExportListingDialog({
             {t2("名称含非法字符或为 Windows 保留名")}
           </div>
         )}
-        <div className="np-dialog-muted">
-          {blank
-            ? t2(recursive
-                ? "导出当前文件夹（含子文件夹），直存 {dir}，重名自动 (2) 递增"
-                : "导出当前文件夹（仅直接子项），直存 {dir}，重名自动 (2) 递增", { dir })
-            : t2("导出选中 {n} 项，直存 {dir}，重名自动 (2) 递增", {
-                n: entries.length,
-                dir,
-              })}
+        <div className="np-dialog-note">
+          <span className="np-dialog-note-row">
+            {blank
+              ? t2(recursive
+                  ? "导出当前文件夹（含子文件夹），直存 {dir}，重名自动 (2) 递增"
+                  : "导出当前文件夹（仅直接子项），直存 {dir}，重名自动 (2) 递增", { dir })
+              : t2("导出选中 {n} 项，直存 {dir}，重名自动 (2) 递增", {
+                  n: entries.length,
+                  dir,
+                })}
+          </span>
         </div>
       </DialogBody>
       <Footer
@@ -1419,15 +1445,19 @@ export function PdfSplitDialog({
             {t2("命名规则渲染出的文件名含非法字符")}
           </div>
         )}
-        <div className="np-dialog-muted">
-          {t2("占位符：[原文件名] [序号] [页码]（起始-结束），自动补 .pdf；输出预演：")}
-          {method === "pages"
-            ? t2("每 {n} 页一份", { n: nPages })
-            : t2("按书签层级 {l} 拆分，份量由书签决定", { l: bookmarkLevel })}
-          {" → "}
-          {renderPdfSplitName(namingRule.trim() || PDF_SPLIT_DEFAULT_RULE, stem, 1, 1, 1)} …
+        <div className="np-dialog-note">
+          <span className="np-dialog-note-row">
+            {t2("占位符：[原文件名] [序号] [页码]（起始-结束），自动补 .pdf；输出预演：")}
+            {method === "pages"
+              ? t2("每 {n} 页一份", { n: nPages })
+              : t2("按书签层级 {l} 拆分，份量由书签决定", { l: bookmarkLevel })}
+            {" → "}
+            {renderPdfSplitName(namingRule.trim() || PDF_SPLIT_DEFAULT_RULE, stem, 1, 1, 1)} …
+          </span>
+          <span className="np-dialog-note-row np-dialog-note-path" title={dir}>
+            {t2("直存 {dir}，重名自动 (2) 递增", { dir })}
+          </span>
         </div>
-        <div className="np-dialog-muted">{t2("直存 {dir}，重名自动 (2) 递增", { dir })}</div>
       </DialogBody>
       <Footer
         okText={t2("拆分")}
@@ -1565,10 +1595,11 @@ export function PdfInsertBlankDialog({
           )}
         </div>
         {specErr && <div className="np-dialog-error">{specErr}</div>}
-        <div className="np-dialog-muted">
-          {blankHint}
-          {" · "}
-          {t2("输出预览：{out}", { out: `${stem}_插页.pdf` })}
+        <div className="np-dialog-note">
+          <span className="np-dialog-note-row">{blankHint}</span>
+          <span className="np-dialog-note-row np-dialog-note-path" title={`${stem}_插页.pdf`}>
+            {t2("输出预览：{out}", { out: `${stem}_插页.pdf` })}
+          </span>
         </div>
       </DialogBody>
       <Footer
@@ -1686,14 +1717,23 @@ export function PdfToPngDialog({
           </FormRow>
         </div>
         {rangeErr && <div className="np-dialog-error">{rangeErr}</div>}
-        <div className="np-dialog-muted">
-          {t2("DPI 越高越清晰（默认 150；72 屏显 / 300 印刷）· 页号文件名补零排序 ·")}
-          {t2("输出预览：{out}", {
-            out: saveToFolder
+        <div className="np-dialog-note">
+          <span className="np-dialog-note-row">
+            {t2("DPI 越高越清晰（默认 150；72 屏显 / 300 印刷），页号文件名补零排序。")}
+          </span>
+          <span
+            className="np-dialog-note-row np-dialog-note-path"
+            title={saveToFolder
               ? `${pdfPngDirName(stem)}\\${pdfPngFileName(stem, 1, 1)} …`
-              : `${pdfPngFileName(stem, 1, 1)} …`,
-          })}
-          {dir ? t2("（存于 {dir}）", { dir }) : ""}
+              : `${pdfPngFileName(stem, 1, 1)} …`}
+          >
+            {t2("输出预览：{out}", {
+              out: saveToFolder
+                ? `${pdfPngDirName(stem)}\\${pdfPngFileName(stem, 1, 1)} …`
+                : `${pdfPngFileName(stem, 1, 1)} …`,
+            })}
+            {dir ? t2("（存于 {dir}）", { dir }) : ""}
+          </span>
         </div>
       </DialogBody>
       <Footer
@@ -1801,9 +1841,13 @@ export function PdfEncryptDialog({
           </FormRow>
         </div>
         {err && <div className="np-dialog-error">{err}</div>}
-        <div className="np-dialog-muted">
-          {t2("三个开关默认全开 = 禁止打印/复制/编辑（权限密码持有者不受限）·")}
-          {t2("输出预览：{out}", { out: `${stem}_加密.pdf` })}
+        <div className="np-dialog-note">
+          <span className="np-dialog-note-row">
+            {t2("三个开关默认全开 = 禁止打印/复制/编辑（权限密码持有者不受限）。")}
+          </span>
+          <span className="np-dialog-note-row np-dialog-note-path" title={`${stem}_加密.pdf`}>
+            {t2("输出预览：{out}", { out: `${stem}_加密.pdf` })}
+          </span>
         </div>
       </DialogBody>
       <Footer
@@ -1859,9 +1903,13 @@ export function PdfDecryptDialog({
           </FormRow>
         </div>
         {err && <div className="np-dialog-error">{err}</div>}
-        <div className="np-dialog-muted">
-          {t2("未加密的文件自动跳过并计入失败回执 ·")}
-          {t2("输出预览：{out}", { out: `${stem}_解密.pdf` })}
+        <div className="np-dialog-note">
+          <span className="np-dialog-note-row">
+            {t2("未加密的文件自动跳过并计入失败回执。")}
+          </span>
+          <span className="np-dialog-note-row np-dialog-note-path" title={`${stem}_解密.pdf`}>
+            {t2("输出预览：{out}", { out: `${stem}_解密.pdf` })}
+          </span>
         </div>
       </DialogBody>
       <Footer
