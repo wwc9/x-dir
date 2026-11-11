@@ -16,6 +16,8 @@ import {
   fnGroups,
   isFixedEntryId,
   parseExts,
+  PDF_MENU_KEYS,
+  seedPdfEntries,
   spyGroup,
   stripCustomEntries,
 } from "../menuCommands";
@@ -288,6 +290,78 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
       minCount: 2,
       exts: "xlsx,xlsm,xls,xlsb,ods",
     });
+  });
+});
+
+describe("PDF 功能族入驻默认菜单（PDF_MENU_KEYS / seedPdfEntries，2026-11-11 定案）", () => {
+  it("PDF_MENU_KEYS = 注册表 PDF 组九键（含图片合并转 PDF，家族聚齐）", () => {
+    expect(PDF_MENU_KEYS).toEqual([
+      "pdfMerge",
+      "pdfMergeFolders",
+      "imgToPdf",
+      "pdfSplit",
+      "pdfExtract",
+      "pdfRemove",
+      "pdfRotate",
+      "pdfCompress",
+      "pdfWatermark",
+    ]);
+  });
+
+  it("出厂布局整组入驻：复制名称之后、删除尾块之前，逐条带注册表默认条件", () => {
+    const entries = defaultMenuEntries();
+    const ids = entries.map((e) => e.id);
+    const first = ids.indexOf("builtin:pdfMerge");
+    const last = ids.indexOf("builtin:pdfWatermark");
+    expect(first).toBeGreaterThan(0);
+    expect(ids.slice(first, last + 1)).toEqual(PDF_MENU_KEYS.map((k) => `builtin:${k}`));
+    // 前邻复制名称块（sep 分隔），后接删除尾块
+    expect(entries[first - 1]?.kind).toBe("sep");
+    expect(ids[first - 2]).toBe("builtin:copyName");
+    expect(entries[last + 1]?.kind).toBe("sep");
+    const afterSep = ids.slice(last + 1).find((id) => id.startsWith("builtin:"));
+    expect(afterSep).toBe("builtin:delete");
+    // 区域 = 注册表默认（sel），条件逐键相等（含 exts/数量上下限）
+    PDF_MENU_KEYS.forEach((key, i) => {
+      const en = entries[first + i];
+      const fn = builtinByKey(key)!;
+      expect(en.area).toBe("sel");
+      expect(en.cond).toEqual(fn.cond);
+    });
+  });
+
+  it("seedPdfEntries：存量布局缺失的 PDF 键按注册表默认追加在末尾", () => {
+    const legacy = defaultMenuEntries().filter(
+      (e) => !e.id.startsWith("builtin:") || !PDF_MENU_KEYS.includes(e.id.slice("builtin:".length)),
+    );
+    const seeded = seedPdfEntries(legacy);
+    expect(seeded.slice(0, legacy.length)).toEqual(legacy);
+    expect(seeded.slice(legacy.length).map((e) => e.id)).toEqual(
+      PDF_MENU_KEYS.map((k) => `builtin:${k}`),
+    );
+    for (const en of seeded.slice(legacy.length)) {
+      expect(en.kind).toBe("builtin");
+      expect(en.area).toBe("sel");
+      expect(en.cond).toEqual(builtinByKey(en.id.slice("builtin:".length))!.cond);
+    }
+  });
+
+  it("seedPdfEntries：已有键不重复；重复调用幂等", () => {
+    // 布局中已带 pdfSplit（如 2026-11-10 手动拖入的存量档）：只补其余八键
+    const legacy = defaultMenuEntries().filter(
+      (e) => !e.id.startsWith("builtin:") || !PDF_MENU_KEYS.includes(e.id.slice("builtin:".length)),
+    );
+    const withSplit = [...legacy, {
+      id: "builtin:pdfSplit",
+      kind: "builtin" as const,
+      area: "sel" as const,
+      cond: { target: "file" as const, minCount: 2, maxCount: 0, exts: "" },
+    }];
+    const once = seedPdfEntries(withSplit);
+    expect(once.filter((e) => e.id === "builtin:pdfSplit").length).toBe(1);
+    expect(once[legacy.length]?.id).toBe("builtin:pdfSplit");
+    expect(once.length).toBe(withSplit.length + PDF_MENU_KEYS.length - 1);
+    expect(seedPdfEntries(once)).toEqual(once);
   });
 });
 

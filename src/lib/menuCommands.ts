@@ -137,6 +137,13 @@ export function builtinByKey(key: string): BuiltinFn | undefined {
   return BUILTIN_FNS.find((f) => f.key === key);
 }
 
+/** PDF 功能族（2026-11-11 定案：整组入驻右键菜单）：注册表 PDF 组全部键，
+ *  出厂布局整组带入 + 存量档一次性补种（seedPdfEntries）；自注册表按组派生，
+ *  组内增删成员时默认布局/补种自动跟进，无需另改两处 */
+export const PDF_MENU_KEYS: string[] = BUILTIN_FNS.filter((f) => f.group === "PDF").map(
+  (f) => f.key,
+);
+
 /** 功能库分组（2026-10-15 A+B 改版）：展示顺序 = 注册表首现顺序（同组连续，
  *  vitest 固定断言）；目录跳转与胶囊墙按此渲染 */
 export function fnGroups(): string[] {
@@ -397,7 +404,9 @@ function presetBuilder() {
 }
 
 /** 出厂菜单布局（2026-10-15 用户定版：常见基础功能，资源管理器惯例排序；
- *  PDF/互传/标记等进阶功能留在功能库自行拖入）。
+ *  2026-11-11 定案修订：PDF 功能族整组入驻——基础块后、删除/改名尾块前，
+ *  逐条携带注册表默认条件（右键单个 PDF 只现适用的六键，图片只现图片转 PDF）；
+ *  互传/标记等其他进阶功能仍留功能库自行拖入。
  *  粘贴一条两用（area=both）：选中语境排在复制旁，空白语境排在新建前 */
 export function defaultMenuEntries(): MenuEntry[] {
   const { e, sep } = presetBuilder();
@@ -411,11 +420,31 @@ export function defaultMenuEntries(): MenuEntry[] {
     e("copyPath", "sel"),
     e("copyName", "sel"),
     sep("both"),
+    ...PDF_MENU_KEYS.map((key) => e(key, "sel")),
+    sep("both"),
     e("delete", "sel"),
     e("rename", "sel"),
     e("new", "blank"),
     e("properties", "sel"),
   ];
+}
+
+/** 存量档补种（2026-11-11 定案）：PDF 功能族入驻出厂菜单后，已保存布局
+ *  一次性追加缺失的 PDF 组条目（注册表默认区域/条件，追加在末尾，可在
+ *  编辑器拖动排序）。由 settings.load 的 pdfMenuSeeded 标记保证只跑一次——
+ *  此后用户在编辑器里删减的 PDF 条目重启不回填（尊重自定义，区别于固定项） */
+export function seedPdfEntries(entries: MenuEntry[]): MenuEntry[] {
+  const out = [...entries];
+  const seen = new Set(entries.map((en) => en.id));
+  for (const key of PDF_MENU_KEYS) {
+    const id = `builtin:${key}`;
+    if (seen.has(id)) continue;
+    const fn = builtinByKey(key);
+    if (!fn) continue;
+    out.push({ id, kind: "builtin", area: fn.area, cond: { ...fn.cond } });
+    seen.add(id);
+  }
+  return out;
 }
 
 /** 旧档清理（2026-10-14 定案：命令模板功能下线）：剔除引用自定义命令的菜单条目。

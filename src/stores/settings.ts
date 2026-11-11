@@ -14,6 +14,7 @@ import {
   defaultToolbarEntries,
   ensureFixedEntries,
   ensureToolbarAddr,
+  seedPdfEntries,
   stripCustomEntries,
 } from "../lib/menuCommands";
 import { zoomClamp } from "../lib/zoom";
@@ -51,6 +52,7 @@ function toPlain(s: SettingsStore): Settings {  return {
     favorites: s.favorites,
     customCommands: s.customCommands,
     menuEntries: s.menuEntries,
+    pdfMenuSeeded: s.pdfMenuSeeded,
     renameSchemes: s.renameSchemes,
     menuedLeftWidth: s.menuedLeftWidth,
     realIcons: s.realIcons,
@@ -358,6 +360,13 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
         ? { ...en, area: "both" as const }
         : en,
     );
+    // PDF 功能族入驻迁移（2026-11-11）：存量布局一次性补种缺失的 PDF 组条目
+    // （注册表默认区域/条件，追加在末尾）；标记随档持久化——补种过后编辑器
+    // 里删减的 PDF 条目重启不回填（尊重自定义，出厂布局本身已整组自带）
+    if (!merged.pdfMenuSeeded) {
+      merged.menuEntries = seedPdfEntries(merged.menuEntries ?? []);
+      merged.pdfMenuSeeded = true;
+    }
     // 窗格工具栏迁移（2026-10-15）：旧 paneTools（key 表）→ toolbarEntries（MenuEntry）；
     // 缺失时用出厂布局（全部内置功能均可入工具栏，未知 key 由渲染端按注册表过滤）
     if ((saved as { toolbarEntries?: unknown } | null)?.toolbarEntries === undefined) {

@@ -375,6 +375,9 @@ export interface Settings {
   customCommands: CustomCommand[];
   /** 右键菜单布局（有序条目：内置功能/自定义命令/分割线，含出现条件） */
   menuEntries: MenuEntry[];
+  /** PDF 功能族入驻菜单的一次性补种标记（2026-11-11）：true 后编辑器删减的
+   *  PDF 条目不再回填（seedPdfEntries 只在标记为假时执行） */
+  pdfMenuSeeded: boolean;
   /** 批量重命名方案（规则链预设：方案面板保存/套用/删除，随 settings.json 持久化） */
   renameSchemes: RenameScheme[];
   /** 右键菜单编辑器左栏（启用菜单）宽（px，两栏间可拖，钳制 240–480） */
@@ -533,6 +536,7 @@ export const DEFAULT_SETTINGS: Settings = {
   customCommands: [],
   // 出厂布局由 settings.load 的迁移填充（defaultMenuEntries，含旧命令条目化）
   menuEntries: [],
+  pdfMenuSeeded: false,
   renameSchemes: [],
   // 定制页「启用菜单」栏默认宽（2026-11-09 用户反馈 300→520，上限 720）
   menuedLeftWidth: 520,
