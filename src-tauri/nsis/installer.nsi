@@ -1,7 +1,8 @@
 ; 定制模板（2026-11-11）：基于 @tauri-apps/cli 2.12.1 自带模板
 ; （tauri-apps/tauri@tauri-cli-v2.12.1 crates/tauri-bundler .../nsis/installer.nsi）
 ; 仅一处改动 = 重装选择页默认勾选翻转：升级/降级默认「不卸载，直接安装」（覆盖
-; 安装，免卸载界面、任务栏固定图标与配置保留），同版本重装仍默认卸载重装。
+; 安装，免卸载界面、任务栏固定图标与配置保留），同版本重装仍默认卸载重装；
+; 另一处改动 = .onInit 升级静默直通（见下方 .onInit 注释）。
 ; 升级 tauri CLI 时如官方模板有更新，需同步本文件并保留本改动。
 Unicode true
 ManifestDPIAware true
