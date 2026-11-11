@@ -59,7 +59,11 @@ interface DriveLite {
   label: string;
 }
 
-/** 自绘顶栏：logo + 工具命令 + 拖拽区（活动路径 pill）+ 窗口控制，合为一行 */
+/** 自绘顶栏（2026-11-11 方案 A 三段居中定案）：grid 1fr auto 1fr 三段——
+ *  左 = 品牌 + 弹层组（浏览记录/收藏/布局预设）+ 模式组（导航树/全盘搜索/
+ *  截图/剪贴板）；中 = 灵动岛严格水平居中；右 = 应用级（定制/设置/关于）+
+ *  系统态（缩放/主题/语言）+ 窗口控制。段容器与段尾 np-tb-fill 弹性补白
+ *  均带拖拽区：顶栏空白处可拖动窗口、双击最大化/还原 */
 export function TitleBar() {
   const [drives, setDrives] = useState<DriveLite[]>([]);
   const [known, setKnown] = useState<Record<string, string>>({});
@@ -173,6 +177,9 @@ export function TitleBar() {
     if (tabId) usePanes.getState().navigate(tabId, path);
   }
 
+  /** 空白拖拽区双击 = 最大化/还原（三段各自的弹性补白与中段共享同一处理） */
+  const toggleMaxDbl = () => void getCurrentWindow().toggleMaximize();
+
   return (
     <header
       className="np-titlebar"
@@ -197,11 +204,14 @@ export function TitleBar() {
           }
         }}
     >
+      {/* ── 左段：品牌 + 弹层组 + 模式组 ── */}
+      <div className="np-tb-side np-tb-l" data-tauri-drag-region>
       {/* 品牌标：九宫格对角渐变（与应用/任务栏图标同源，BrandLogo 与「关于」浮窗共用） */}
       <span className="np-logo">
         <BrandLogo />
       </span>
       <span className="np-title">X-Dir</span>
+      <span className="np-tb-sep" aria-hidden />
 
       <PopoverNext
         isOpen={histOpen}
@@ -447,6 +457,34 @@ export function TitleBar() {
         }}
       />
 
+      {/* 左段尾弹性拖拽补白：接管左段右侧大片空白（拖动窗口 / 双击最大化） */}
+      <span
+        className="np-tb-fill"
+        data-tauri-drag-region
+        onDoubleClick={toggleMaxDbl}
+        data-tip={t("拖动窗口 · 双击最大化/还原")}
+      />
+      </div>
+
+      {/* ── 中段：灵动岛（活动路径 pill / 任务通道），严格水平居中 ── */}
+      <div
+        className="np-tb-mid"
+        data-tauri-drag-region
+        onDoubleClick={toggleMaxDbl}
+        data-tip={t("拖动窗口 · 双击最大化/还原")}
+      >
+        <IslandPill path={activePath} />
+      </div>
+
+      {/* ── 右段：应用级（定制/设置/关于）+ 系统态（缩放/主题/语言）+ 窗口控制 ── */}
+      <div className="np-tb-side np-tb-r" data-tauri-drag-region>
+      <span
+        className="np-tb-fill"
+        data-tauri-drag-region
+        onDoubleClick={toggleMaxDbl}
+        data-tip={t("拖动窗口 · 双击最大化/还原")}
+      />
+
       <Button
         minimal
         size="small"
@@ -460,9 +498,6 @@ export function TitleBar() {
             : useUi.getState().openMenuPage()
         }
       />
-
-      {/* 语义分组分隔：模式切换组 | 应用级组 */}
-      <span className="np-tb-sep" aria-hidden />
 
       <Button
         minimal
@@ -497,14 +532,9 @@ export function TitleBar() {
         <AboutBadgeDot />
       </Button>
 
-      <div
-        className="np-drag"
-        data-tauri-drag-region
-        onDoubleClick={() => void getCurrentWindow().toggleMaximize()}
-        data-tip={t("拖动窗口 · 双击最大化/还原")}
-      >
-        <IslandPill path={activePath} />
-      </div>
+      {/* 语义分组分隔：应用级组 | 系统态组（原中央拖拽区已拆为三段各自的
+          np-tb-fill 弹性补白，2026-11-11 三段居中定案） */}
+      <span className="np-tb-sep" aria-hidden />
 
       {/* 界面缩放指示：右簇首位常驻，点击重置 100%（Ctrl+滚轮/Ctrl+加减 调整后在此确认） */}
       <button
@@ -567,6 +597,7 @@ export function TitleBar() {
       >
         <AppIcon icon={X} size={DENSITY.iconSm} />
       </button>
+      </div>
     </header>
   );
 }
