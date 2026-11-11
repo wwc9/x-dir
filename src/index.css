@@ -962,15 +962,16 @@ body:has(
   overflow-y: auto;
   overflow-x: hidden;
 }
-/* 侧边栏/导航树拖拽把手：与窗格分隔条（.np-sep-v）同语言——
-   骑在面板与沟槽边界上的 6px 热区内居中一条 2px 细竖线（线落在 8px 沟槽正中），
-   平时隐形，悬停/拖拽浮现强调色 */
+/* 侧边栏/导航树拖拽把手：与窗格分隔条（.np-sep-v）同语言——6px 热区
+   中心对准面板右缘与沟槽的分界中线（right = -(gutter/2 + 3px)，随
+   --np-gutter 可调自适应，与 .np-side-split 占位带居中同口径），
+   居中一条 2px 细竖线；平时隐形，悬停/拖拽浮现强调色 */
 .np-side-resize,
 .np-tree-resize {
   position: absolute;
   top: 0;
   bottom: 0;
-  right: -7px;
+  right: calc(var(--np-gutter) / -2 - 3px);
   width: 6px;
   display: flex;
   align-items: center;
