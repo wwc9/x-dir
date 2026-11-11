@@ -533,6 +533,24 @@ Function .onInit
   !if "${INSTALLMODE}" == "both"
     !insertmacro MULTIUSER_INIT
   !endif
+
+  ; 升级静默直通（2026-11-11 定案，本模板第二处改动）：交互双击 + 检测到旧
+  ; 安装 → 自重启为静默模式零界面覆盖安装（运行中的旧版经 RestartManager
+  ; 自动收尾），装完自动启动应用后本实例退出；静默实例（更新器调用）不再
+  ; 二次转派——启动由调用方负责（updater 路径 = 前端 relaunch）。
+  ; ${Silent} = LogicLib 特殊形式（运行时静默态）；勿写 $Silent（NSIS 无此
+  ; 内置变量，makensis warning 6000）
+  ${IfNot} ${Silent}
+    ReadRegStr $0 SHCTX "${UNINSTKEY}" "UninstallString"
+    ${If} $0 != ""
+      ReadRegStr $1 SHCTX "${UNINSTKEY}" "InstallLocation"
+      ExecWait '"$EXEPATH" /S'
+      ${If} ${FileExists} "$1\${MAINBINARYNAME}.exe"
+        Exec '"$1\${MAINBINARYNAME}.exe"'
+      ${EndIf}
+      Quit
+    ${EndIf}
+  ${EndIf}
 FunctionEnd
 
 
