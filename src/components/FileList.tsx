@@ -32,6 +32,7 @@ import {
   convertEncoding,
   convertEol,
   createEntry,
+  createFolderInline as createFolderInlineOp,
   createFolders,
   createLinks,
   decryptPdfs,
@@ -623,17 +624,28 @@ export function FileList({
 
   const rows = virtualizer.getVirtualItems();
 
-  // 新建文件夹滚动定位（2026-11-11 Explorer 式创建）：editing 行进入 entries
-  // 后滚到视口内——虚拟行未渲染则行内重命名输入不存在，必须先滚到位
+  // 行内重命名目标滚动定位（2026-11-11 Explorer 式新建文件夹）：editing 行
+  // 进入 entries 后滚到视口内——虚拟行未渲染则重命名输入不存在。新建入口在
+  // Pane 工具栏（setEditing 早于行渲染）与 FileList 右键/快捷键两处，统一在
+  // 此收口滚动；已在清单中的行（F2 重命名）本就可见，不触发
   const pendingRevealRef = useRef<string | null>(null);
+  const prevEditingRef = useRef<string | null>(null);
   useEffect(() => {
+    if (
+      editing &&
+      prevEditingRef.current !== editing &&
+      !entries.some((e) => e.path === editing)
+    ) {
+      pendingRevealRef.current = editing;
+    }
+    prevEditingRef.current = editing;
     const p = pendingRevealRef.current;
-    if (!p) return;
+    if (!p || p !== editing) return;
     const idx = entries.findIndex((e) => e.path === p);
     if (idx < 0) return;
     pendingRevealRef.current = null;
     virtualizer.scrollToIndex(Math.floor(idx / perRow), { align: "center" });
-  }, [entries, virtualizer, perRow]);
+  }, [entries, editing, virtualizer, perRow]);
 
   // 滚动分页：按需补齐可见页（铁律 1/3）。依赖含 pages：软刷新会先丢弃
   // 第 0 页以外的旧页，可视窗落在被丢弃页时靠本 effect 重新拉取
@@ -1522,29 +1534,18 @@ export function FileList({
       .setSelected(tabId, entries.map((e) => e.path), entries[0]?.path ?? null);
   }
 
-  /** 新建文件夹（2026-11-11 用户定案改 Explorer 式）：不走弹窗——直接以
-   *  「新建文件夹」落盘，重名自动 (2) 递增（同 Explorer 口径），创建后立即
-   *  进入行内重命名（pendingReveal 驱动滚动定位）。搜索/过滤激活时 entries
-   *  非全量清单，去重可能不全 → Rust 端同名报错兜底（错误 toast） */
+  /** 新建文件夹（2026-11-11 用户定案改 Explorer 式）：直建 + 行内重命名。
+   *  委托 operations.createFolderInline（重名 (2) 递增 + undo push）；
+   *  滚动定位由 pendingReveal effect 统一收口（editing 早于行渲染） */
   async function createFolderInline(dir: string) {
-    const names = new Set(entries.map((e) => e.name.toLowerCase()));
-    const base = t("新建文件夹");
-    let name = base;
-    for (let n = 2; names.has(name.toLowerCase()) && n < 100; n += 1) {
-      name = `${base} (${n})`;
-    }
-    try {
-      await api.createDir(dir, name);
-      const full = joinPath(dir, name);
-      // 新建可逆：撤销 = 移入回收站（与原弹窗链路同 undo 结构）
-      useUndo.getState().push({ kind: "newfolder", path: full });
-      pendingRevealRef.current = full;
-      forceBump();
-      // 先置 editing：行随刷新渲染即呈行内重命名态（滚动由 reveal effect 接管）
-      usePanes.getState().setEditing(tabId, full);
-    } catch (e) {
-      useUi.getState().toast(`创建失败：${String(e)}`, "error");
-    }
+    const full = await createFolderInlineOp(
+      dir,
+      entries.map((e) => e.name),
+    );
+    if (!full) return;
+    pendingRevealRef.current = full;
+    forceBump();
+    usePanes.getState().setEditing(tabId, full);
   }
 
   async function commitRename(entry: FileEntry, newName: string) {

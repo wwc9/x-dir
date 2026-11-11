@@ -20,7 +20,7 @@ import { api, THIS_PC, type FileEntry, type MenuEntry, type ViewMode } from "../
 import { builtinByKey, entryVisible, type BuiltinFn } from "../lib/menuCommands";
 import { getList } from "../lib/listRegistry";
 import { fileNameOf, joinPath } from "../lib/path";
-import { createEntry } from "../lib/operations";
+import { createFolderInline } from "../lib/operations";
 import { dfsPanes, type PaneNode } from "../lib/layoutTree";
 import { useLayout } from "../stores/layout";
 import { usePanes } from "../stores/panes";
@@ -355,7 +355,17 @@ export function Pane({ pane }: { pane: PaneNode }) {
         usePanes.getState().up(tabId);
         break;
       case "newFolder":
-        void createEntry(path, "dir", () => usePanes.getState().bumpRefresh(tabId));
+        // Explorer 式（2026-11-11 用户定案）：直建 + 行内重命名；滚动定位由
+        // FileList 的 pendingReveal effect 统一收口（setEditing 早于行渲染）。
+        // 重名去重清单 = FileList getSnapshot 的当前目录条目
+        void createFolderInline(
+          path,
+          getList(tabId)?.getSnapshot()?.entries.map((e) => e.name) ?? [],
+        ).then((full) => {
+          if (!full) return;
+          usePanes.getState().bumpRefresh(tabId);
+          usePanes.getState().setEditing(tabId, full);
+        });
         break;
       case "refresh":
         usePanes.getState().bumpRefresh(tabId);

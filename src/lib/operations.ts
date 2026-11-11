@@ -172,6 +172,31 @@ export async function createEntry(
   }
 }
 
+/** 新建文件夹 Explorer 式（2026-11-11 用户定案）：不走弹窗——直接以
+ *  「新建文件夹」落盘（重名自动 (2) 递增，同 Explorer 口径），返回新路径供
+ *  调用方进入行内重命名（setEditing）。existingNames = 当前目录名清单
+ *  （大小写不敏感去重；搜索/过滤态非全量清单时可能漏重名 → Rust 端同名
+ *  报错兜底） */
+export async function createFolderInline(
+  parentDir: string,
+  existingNames: string[],
+): Promise<string | null> {
+  const names = new Set(existingNames.map((n) => n.toLowerCase()));
+  let name = "新建文件夹";
+  for (let n = 2; names.has(name.toLowerCase()) && n < 100; n += 1) {
+    name = `新建文件夹 (${n})`;
+  }
+  try {
+    await api.createDir(parentDir, name);
+    // 新建可逆：撤销 = 移入回收站（与弹窗链路同 undo 结构）
+    useUndo.getState().push({ kind: "newfolder", path: joinPath(parentDir, name) });
+    return joinPath(parentDir, name);
+  } catch (e) {
+    useUi.getState().toast(`创建失败：${String(e)}`, "error");
+    return null;
+  }
+}
+
 /// ── PDF 处理（lopdf，走任务引擎）：合并 / 拆分单页 / 文字水印 ──
 
 /** 按选中序合并为一个 PDF，输出到当前目录（同名覆盖） */
