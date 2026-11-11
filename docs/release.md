@@ -31,28 +31,35 @@ NSIS 首次打包需下载工具链，国内网络易超时——脚本会降级
 
 ## 3. 发行说明 `release-notes.md`（双端同源，分类编号 + 双语）
 
-写到 `dist-release/v<版本>/release-notes.md`，**格式硬性要求**：🟢新增 / 🔵改进 / 🔴修复 三段分类编号；
-内容简洁明了（每条 = 加粗短标题 + 一句话）；**每条中文行下一行附对应英文**（英文行缩进 3 空格，与条目同段渲染）：
+写到 `dist-release/v<版本>/release-notes.md`，**格式硬性要求**：✨ 新增 / ⚡ 改进 / 🐛 修复 三段分类编号；
+内容简洁明了（每条 = 加粗短标题 + 一句话）；**每条中文行下一行附对应英文行**（英文行缩进 3 空格，与条目同段渲染）。
+定稿范本（v0.1.7，2026-11-11 用户钦定风格）：
 
 ```markdown
-## 🟢 新增 / Added
+## ✨ 新增
 
-1. **应用内一键覆盖更新** —— 「关于」浮窗发现新版本后自动下载安装，配置全保留，完成自动重启
-   **In-app one-click update** — auto download & install from About panel, config kept, auto restart
-2. ……
+1. **应用内一键覆盖更新** —— 「关于」浮窗一键下载安装新版，配置全保留，完成后自动重启
+   **In-app one-click update** — install the new version from the About panel, config kept, auto restart
+2. **表格预览数字格式渲染** —— 小数、百分数、千分位与日期按文件内格式显示
+   **Spreadsheet number formatting** — cells render per the file's formats, dates as real dates
 
-## 🔵 改进 / Improved
+## ⚡ 改进
 
-5. **……** —— ……
-   **……** — ……
+5. **安装包升级改为覆盖安装** —— 双击新版安装包原地覆盖升级，装完自动启动
+   **In-place installer upgrade** — the new setup upgrades over the old install and auto-launches
+6. **新建文件夹改为资源管理器同款** —— 直接创建并进入行内重命名，重名自动加序号
+   **Explorer-style new folder** — creates at once with inline rename, duplicates auto-numbered
 
-## 🔴 修复 / Fixed
+## 🐛 修复
 
-11. **……** —— ……
-    **……** — ……
+11. **右键不再弹出浏览器调试菜单** —— 未接管区域不再弹出 WebView2 默认右键菜单
+    **No WebView2 debug menu** — right-click on unhandled areas no longer shows the default menu
+12. **界面细节** —— 剪贴板浮窗顶栏间距收紧，分割预览长名不再折行
+    **UI polish** — tighter clipboard widget spacing; split preview no longer wraps long names
 ```
 
-编号全局连续（新增从 1、改进接续、修复接续）；内容取材 = `update.json` notes + 本轮提交记录，按上述口径精炼改写。
+编号全局连续（新增从 1、改进接续、修复接续）；英文行不机械直译，按「短标题 —— 一句话」口径重写得更凝练；
+内容取材 = `update.json` notes + 本轮提交记录，按上述口径精炼改写。
 
 ## 4. Gitee 端：浏览器自动化（ZCode 内置浏览器，IAB）
 

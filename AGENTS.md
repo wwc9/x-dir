@@ -104,6 +104,7 @@
   **Gitee 走浏览器自动化**（内置浏览器登录态常驻，附件页面内 512KB 分块注入 Dropzone + 手动 `processQueue()`）→
   **GitHub 走 `tools/publish-release.ps1`**（GITHUB_TOKEN 已 setx 持久化，脚本自动读 release-notes.md）→
   `latest.json` 复制仓库根提交推送（双端 raw 端点即 updater 端点，即刻生效）
-- **发行说明格式硬性要求**：🟢新增 / 🔵改进 / 🔴修复 三段分类编号（全局连续）；内容简洁明了
-  （每条 = 加粗短标题 + 一句话）；**每条中文行下一行缩进附一行对应英文**；
+- **发行说明格式硬性要求**：✨ 新增 / ⚡ 改进 / 🐛 修复 三段分类编号（全局连续）；内容简洁明了
+  （每条 = 加粗短标题 + 一句话）；**每条中文行下一行缩进附一行对应英文**（范本见 docs/release.md §3，
+  v0.1.7 用户钦定风格）；
   双端同源 = 该 release-notes.md（Gitee 描述框直填，GitHub 脚本自动读取）
