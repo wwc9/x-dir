@@ -355,17 +355,14 @@ export function Pane({ pane }: { pane: PaneNode }) {
         usePanes.getState().up(tabId);
         break;
       case "newFolder":
-        // Explorer 式（2026-11-11 用户定案）：直建 + 行内重命名；滚动定位由
-        // FileList 的 pendingReveal effect 统一收口（setEditing 早于行渲染）。
-        // 重名去重清单 = FileList getSnapshot 的当前目录条目
+        // Explorer 式（2026-11-11 用户定案）：乐观插入合成行立即上屏 + 行内
+        // 重命名；重名清单 = FileList getSnapshot 当前目录条目，滚动定位由
+        // FileList 的 pendingReveal effect 统一收口
         void createFolderInline(
           path,
           getList(tabId)?.getSnapshot()?.entries.map((e) => e.name) ?? [],
-        ).then((full) => {
-          if (!full) return;
-          usePanes.getState().bumpRefresh(tabId);
-          usePanes.getState().setEditing(tabId, full);
-        });
+          tabId,
+        );
         break;
       case "refresh":
         usePanes.getState().bumpRefresh(tabId);

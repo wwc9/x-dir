@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Sort, ViewMode } from "../lib/ipc";
+import type { FileEntry, Sort, ViewMode } from "../lib/ipc";
 import { parentPath } from "../lib/path";
 import { useHistory } from "./history";
 import { useLayout } from "./layout";
@@ -15,6 +15,9 @@ export interface TabUi {
   refreshTick: number;
   total: number;
   editing: string | null;
+  /** 乐观插入的新建文件夹合成行（2026-11-11 Explorer 式新建）：createDir 在途
+   *  时先上屏（点击到出现零延迟），软刷新带回真实条目（同 path）后让位 */
+  pendingNew: FileEntry | null;
   /** 当前目录加载错误（地址栏标红依据，§6.10） */
   error: string | null;
   /** V2 递归搜索：非 null = 搜索模式（值为查询词） */
@@ -88,6 +91,8 @@ interface PanesStore {
   setSort(tabId: string, sort: Sort): void;
   setSelected(tabId: string, selected: string[], anchor: string | null): void;
   setEditing(tabId: string, editing: string | null): void;
+  /** 乐观插入合成行（新建文件夹 Explorer 式）：null = 清除 */
+  setPendingNew(tabId: string, entry: FileEntry | null): void;
   setTotal(tabId: string, total: number): void;
   setError(tabId: string, error: string | null): void;
   setSearch(tabId: string, query: string | null): void;
@@ -136,6 +141,7 @@ export const usePanes = create<PanesStore>()((set, get) => ({
           refreshTick: 0,
           total: 0,
           editing: null,
+          pendingNew: null,
           error: null,
           search: null,
         searchType: "all",
@@ -157,6 +163,7 @@ export const usePanes = create<PanesStore>()((set, get) => ({
         history,
         historyIndex: history.length - 1,
         editing: null,
+        pendingNew: null,
         error: null,
         search: null,
         searchType: "all",
@@ -215,6 +222,10 @@ export const usePanes = create<PanesStore>()((set, get) => ({
 
   setEditing(tabId, editing) {
     set((s) => ({ tabs: patch(s.tabs, tabId, { editing }) }));
+  },
+
+  setPendingNew(tabId, entry) {
+    set((s) => ({ tabs: patch(s.tabs, tabId, { pendingNew: entry }) }));
   },
 
   setTotal(tabId, total) {

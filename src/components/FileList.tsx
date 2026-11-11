@@ -289,6 +289,7 @@ export function FileList({
   const selected = ui?.selected ?? [];
   const refreshTick = ui?.refreshTick ?? 0;
   const editing = ui?.editing ?? null;
+  const pendingNew = ui?.pendingNew ?? null;
   const search = ui?.search ?? null;
   // 视图内过滤（Ctrl+E）：null = 关闭；非空词经 Rust 端 nameFilter 就地收窄
   const filter = ui?.filter ?? null;
@@ -359,7 +360,7 @@ export function FileList({
       .requestIcons(entries.slice(0, 48).map((e) => e.path), true);
   };
 
-  const entries: FileEntry[] = useMemo(() => {
+  const baseEntries: FileEntry[] = useMemo(() => {
     if (searchActive) return searchRes?.entries ?? [];
     if (isThisPc) return driveEntries(drives ?? []);
     const flat: FileEntry[] = [];
@@ -367,7 +368,32 @@ export function FileList({
     return flat;
   }, [pages, drives, isThisPc, searchActive, searchRes]);
 
-  const count = isThisPc ? (drives?.length ?? 0) : searchActive ? entries.length : total;
+  // 乐观插入（2026-11-11 Explorer 式新建文件夹）：createDir 在途时合成行追加
+  // 在清单尾立即上屏（点击到出现零延迟）；软刷新带回真实条目（同 path）后
+  // 自动让位；换目录即弃
+  const optimisticActive =
+    !!pendingNew && !baseEntries.some((e) => e.path === pendingNew.path);
+  const entries: FileEntry[] = useMemo(
+    () => (optimisticActive ? [...baseEntries, pendingNew!] : baseEntries),
+    [baseEntries, optimisticActive, pendingNew],
+  );
+  const count =
+    isThisPc
+      ? (drives?.length ?? 0)
+      : searchActive
+        ? entries.length
+        : total + (optimisticActive ? 1 : 0);
+
+  // 真实条目随软刷新到达 → 合成行让位
+  useEffect(() => {
+    if (pendingNew && baseEntries.some((e) => e.path === pendingNew.path)) {
+      usePanes.getState().setPendingNew(tabId, null);
+    }
+  }, [baseEntries, pendingNew, tabId]);
+  // 换目录即弃（合成行不能带进别的目录）
+  useEffect(() => {
+    usePanes.getState().setPendingNew(tabId, null);
+  }, [path, tabId]);
 
   const drivesFree = useMemo(() => {
     const m = new Map<string, number>();
@@ -378,7 +404,10 @@ export function FileList({
   const entryAt = (i: number): FileEntry | undefined => {
     if (searchActive) return entries[i];
     if (isThisPc) return entries[i];
-    return pages.get(Math.floor(i / PAGE_SIZE))?.[i % PAGE_SIZE];
+    const fromPage = pages.get(Math.floor(i / PAGE_SIZE))?.[i % PAGE_SIZE];
+    if (fromPage) return fromPage;
+    // 乐观插入的合成行在已加载页之后
+    return optimisticActive && i === baseEntries.length ? pendingNew : undefined;
   };
 
   // 选中/定位用：路径 → 当前视图位置（搜索结果跨目录同名时名字会撞，必须按路径）
@@ -624,28 +653,39 @@ export function FileList({
 
   const rows = virtualizer.getVirtualItems();
 
-  // 行内重命名目标滚动定位（2026-11-11 Explorer 式新建文件夹）：editing 行
-  // 进入 entries 后滚到视口内——虚拟行未渲染则重命名输入不存在。新建入口在
-  // Pane 工具栏（setEditing 早于行渲染）与 FileList 右键/快捷键两处，统一在
-  // 此收口滚动；已在清单中的行（F2 重命名）本就可见，不触发
+  // 行内重命名目标滚动定位（2026-11-11 Explorer 式新建文件夹）：editing 变化
+  // 时行已可见则不动（F2 重命名），不在视口 / 尚未到达（乐观插入 + 软刷新在
+  // 途 / Pane 工具栏入口 setEditing 早于行渲染）则挂起，行出现即居中——虚拟
+  // 行未渲染则重命名输入不存在，必须先滚到位
   const pendingRevealRef = useRef<string | null>(null);
   const prevEditingRef = useRef<string | null>(null);
   useEffect(() => {
-    if (
-      editing &&
-      prevEditingRef.current !== editing &&
-      !entries.some((e) => e.path === editing)
-    ) {
-      pendingRevealRef.current = editing;
-    }
+    if (!editing || prevEditingRef.current === editing) return;
     prevEditingRef.current = editing;
+    const idx = entries.findIndex((e) => e.path === editing);
+    if (idx < 0) {
+      pendingRevealRef.current = editing;
+      return;
+    }
+    pendingRevealRef.current = null;
+    const sc = scrollRef.current;
+    const top = idx * rowH;
+    const viewTop = sc?.scrollTop ?? 0;
+    const viewBot = viewTop + (sc?.clientHeight ?? 0);
+    if (top < viewTop || top + rowH > viewBot) {
+      virtualizer.scrollToIndex(Math.floor(idx / perRow), { align: "center" });
+    }
+  }, [editing, entries, virtualizer, perRow, rowH]);
+
+  // 挂起的行随软刷新到达 → 居中定位
+  useEffect(() => {
     const p = pendingRevealRef.current;
-    if (!p || p !== editing) return;
+    if (!p) return;
     const idx = entries.findIndex((e) => e.path === p);
     if (idx < 0) return;
     pendingRevealRef.current = null;
     virtualizer.scrollToIndex(Math.floor(idx / perRow), { align: "center" });
-  }, [entries, editing, virtualizer, perRow]);
+  }, [entries, virtualizer, perRow]);
 
   // 滚动分页：按需补齐可见页（铁律 1/3）。依赖含 pages：软刷新会先丢弃
   // 第 0 页以外的旧页，可视窗落在被丢弃页时靠本 effect 重新拉取
@@ -1534,19 +1574,15 @@ export function FileList({
       .setSelected(tabId, entries.map((e) => e.path), entries[0]?.path ?? null);
   }
 
-  /** 新建文件夹（2026-11-11 用户定案改 Explorer 式）：直建 + 行内重命名。
-   *  委托 operations.createFolderInline（重名 (2) 递增 + undo push）；
-   *  滚动定位由 pendingReveal effect 统一收口（editing 早于行渲染） */
-  async function createFolderInline(dir: string) {
-    const full = await createFolderInlineOp(
+  /** 新建文件夹（2026-11-11 用户定案改 Explorer 式）：乐观插入 + 行内重命名，
+   *  编排收敛在 operations.createFolderInline（Pane 工具栏入口同款，点击到
+   *  出现零延迟） */
+  const createFolderInline = (dir: string) =>
+    void createFolderInlineOp(
       dir,
       entries.map((e) => e.name),
+      tabId,
     );
-    if (!full) return;
-    pendingRevealRef.current = full;
-    forceBump();
-    usePanes.getState().setEditing(tabId, full);
-  }
 
   async function commitRename(entry: FileEntry, newName: string) {
     usePanes.getState().setEditing(tabId, null);
