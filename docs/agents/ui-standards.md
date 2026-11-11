@@ -184,12 +184,13 @@
   悬停 title 全文；清单容器 `np-pdfmlist` 自带 `margin-bottom: --np-gutter`
   供给与参数区的区块间距——此前为 0，列表框直接贴住策略行，2026-11-10 用户
   反馈补）；② 参数区（np-bren-form 行）；③ **解释收尾 = `np-dialog-note`
-  （2026-11-11 用户定案「解释性文字要有单独样式，条理清晰」，取代裸
-  np-dialog-muted 收尾）**：hairline 与参数区一刀切 + 行结构——每条信息独立
-  一行（`np-dialog-note-row`），输出预览独立成行且超长省略悬停全文
+  左竖线引用式（2026-11-11 用户定案「解释性文字要有单独样式，条理清晰」，
+  三方案比选后定稿，取代裸 np-dialog-muted 收尾）**：左侧 2px
+  `--np-accent-border` 竖线（与拖拽条细线同源）= 引用块隐喻，行结构——每条
+  信息独立一行（`np-dialog-note-row`），输出预览独立成行且超长省略悬停全文
   （`np-dialog-note-path`）；11px muted 同 np-dialog-muted。表单**中途**的
   短说明/清单区表头（如「处理文件」标题、校验清单统计头）仍用 np-dialog-muted，
-  不加 hairline；④ Footer（主操作 accent + 取消）。数据经 DialogSpec 直传
+  不加竖线；④ Footer（主操作 accent + 取消）。数据经 DialogSpec 直传
   （entries），onDone 返回结构化结果（含 paths 顺序）。
 - **列数**：参数 ≤4 行用 1 列（np-bren-form 纵排）；≥5 行用 2 列网格
   （`np-pdfmform.np-two-col`，短控件成对、长控件/多选项行 `wide` 独占整行）。

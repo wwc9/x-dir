@@ -2438,15 +2438,16 @@ body.np-col-resizing * {
   color: var(--np-muted);
   margin-bottom: 6px;
 }
-/* 面板解释收尾（2026-11-11 用户定案「解释性文字要有单独样式，条理清晰」）：
-   参数对话框底部的说明/预览块——hairline 与参数区一刀切，每条信息独立成行
-   （区别于表单中途的 np-dialog-muted 短说明），输出预览行独立且超长省略
-   （title 悬停全文）。行组件 = np-dialog-note-row，路径行加 note-path */
+/* 面板解释收尾（2026-11-11 用户定案「解释性文字要有单独样式，条理清晰」，
+   三方案比选后定 方案 B 左竖线引用式）：参数对话框底部的说明/预览块——
+   左侧 2px 强调色竖线（--np-accent-border，与拖拽条细线同源）= 引用块隐喻，
+   每条信息独立成行（区别于表单中途的 np-dialog-muted 短说明），输出预览行
+   独立且超长省略（title 悬停全文）。行组件 = np-dialog-note-row，
+   路径行加 note-path */
 .np-dialog-note {
-  border-top: 1px solid var(--np-hairline);
-  padding-top: var(--np-gutter);
   margin-top: var(--np-gutter);
-  margin-bottom: 0;
+  padding: 2px 0 2px 9px;
+  border-left: 2px solid var(--np-accent-border);
   display: grid;
   gap: 3px;
   font-size: var(--np-font-sm);
