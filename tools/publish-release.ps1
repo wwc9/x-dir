@@ -100,4 +100,4 @@ if ($env:GITHUB_TOKEN) {
 }
 
 Write-Host ""
-Write-Host "发布完成：双端 Release v$Tag 已建并挂产物；latest.json 的 url 与 Gitee 直链一致，应用内一键更新即刻可用"
+Write-Host "发布完成：双端 Release v$Version 已建并挂产物；latest.json 的 url 与 Gitee 直链一致，应用内一键更新即刻可用"
