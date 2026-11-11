@@ -1234,6 +1234,9 @@ export const api = {
     cmd<void>("cliphist_set_maximized", { maximized }),
   /** 剪贴板历史：顶栏设置钮——唤起主窗并直达设置面板（浮窗收起） */
   cliphistOpenSettings: () => cmd<void>("cliphist_open_settings"),
+  /** 一键更新看门狗（2026-11-12）：下载前拉起分离进程——等安装器退出后确保新版
+   *  重启（NSIS /R 自启的兜底，/R 成功时看门狗检测到实例静默退出绝不多开） */
+  spawnUpdateWatchdog: (version: string) => cmd<void>("spawn_update_watchdog", { version }),
   /** 剪贴板历史：图片 OCR 取字（T2-4；识别文本写回剪贴板并返回） */
   cliphistOcr: (id: number) => cmd<string>("cliphist_ocr", { id }),
   /** 剪贴板历史：图片条目原图 dataURL（T2-1 放大预览） */

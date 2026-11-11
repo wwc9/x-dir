@@ -172,3 +172,105 @@ mod tests {
         assert!(parse_manifest("not json", "Gitee").is_err());
     }
 }
+
+/// 一键更新看门狗（2026-11-12 用户反馈「更新完成后没有提示、未自动重开」）：
+/// NSIS 模板的 /R 自启实测未生效，改为下载前由前端先拉起本看门狗（分离进程
+/// CREATE_NO_WINDOW，随父退出存活）：① 等安装器进程出现（下载需时长，钳 120s）；
+/// ② 等安装器退出（钳 180s）；③ 落定后应用未运行则启动新版——插件 /R 自启
+/// 成功时此处检测到实例直接静默退出，绝不多开；失败则兜底重启。
+/// 安装器文件名口径 = build-release.ps1 产物 `X-Dir_{版本}_x64-setup.exe`
+/// （进程名无扩展名）。
+#[tauri::command]
+pub fn spawn_update_watchdog(version: String) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let exe = std::env::current_exe()
+        .map_err(|e| format!("取应用路径失败：{e}"))?
+        .to_string_lossy()
+        .replace('\'', "''");
+    let setup = format!("X-Dir_{version}_x64-setup");
+    let script = format!(
+        "$setup = '{setup}'; $exe = '{exe}'; \
+         $p = $null; \
+         for ($i = 0; $i -lt 120; $i++) {{ $p = Get-Process -Name $setup -ErrorAction SilentlyContinue; if ($p) {{ break }}; Start-Sleep 1 }}; \
+         if (-not $p) {{ exit }}; \
+         Wait-Process -Id $p.Id -Timeout 180 -ErrorAction SilentlyContinue; \
+         Start-Sleep -Seconds 2; \
+         for ($i = 0; $i -lt 10; $i++) {{ if (Get-Process -Name 'x-dir' -ErrorAction SilentlyContinue) {{ exit }}; Start-Sleep 1 }}; \
+         Start-Process -FilePath $exe",
+    );
+    std::process::Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            &script,
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("看门狗启动失败：{e}"))
+}
+
+/// 更新状态文件结构（config/update-state.json）：仅记录上次运行版本
+/// （运行态，非用户配置——不随 export_config 导出，同 clipboard.db 口径）
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateState {
+    last_version: String,
+}
+
+/// 纯判定：旧状态 → 升级回执（from ≠ current 且 old 存在时 Some(from, current)）。
+/// 配单测（锁 JSON 解析与版本变化口径）。
+fn update_notice(state_text: Option<&str>, current: &str) -> Option<(String, String)> {
+    let old = state_text
+        .and_then(|t| serde_json::from_str::<UpdateState>(t).ok())
+        .map(|s| s.last_version)?;
+    if old != current {
+        Some((old, current.to_string()))
+    } else {
+        None
+    }
+}
+
+/// 启动时记录/对比运行版本（2026-11-12 用户反馈「更新完成后没有提示」）：
+/// 与上次运行版本不同 → 发 app-updated 事件，前端灵动岛回执「已更新到 vX」，
+/// 让静默更新完成有感知；状态写回 config/update-state.json。
+pub fn check_app_updated(app: &tauri::AppHandle) {
+    use tauri::Emitter;
+    let current = app.package_info().version.to_string();
+    let p = crate::config::config_root().join("update-state.json");
+    let notice = update_notice(std::fs::read_to_string(&p).ok().as_deref(), &current);
+    if let Ok(new_text) = serde_json::to_string(&serde_json::json!({ "lastVersion": current })) {
+        let _ = std::fs::write(&p, new_text);
+    }
+    if let Some((from, to)) = notice {
+        let _ = app.emit("app-updated", serde_json::json!({ "from": from, "to": to }));
+    }
+}
+
+#[cfg(test)]
+mod state_tests {
+    use super::*;
+
+    #[test]
+    fn update_notice_basic() {
+        assert_eq!(
+            update_notice(Some(r#"{"lastVersion":"0.1.7"}"#), "0.1.8"),
+            Some(("0.1.7".into(), "0.1.8".into()))
+        );
+        assert_eq!(
+            update_notice(Some(r#"{"lastVersion":"0.1.8"}"#), "0.1.8"),
+            None
+        );
+    }
+
+    #[test]
+    fn update_notice_tolerates_missing_or_broken_state() {
+        assert_eq!(update_notice(None, "0.1.8"), None);
+        assert_eq!(update_notice(Some("not json"), "0.1.8"), None);
+        assert_eq!(update_notice(Some("{}"), "0.1.8"), None);
+    }
+}

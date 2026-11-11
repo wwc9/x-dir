@@ -102,6 +102,9 @@ pub fn run() {
             // 上次会话/贴图残留的临时 PNG 清理（截图会话文件随收场即删，
             // 崩溃/强杀残留由此兜底）
             commands::shot::cleanup_stale();
+            // 静默更新完成感知（2026-11-12 用户反馈「更新后没有提示」）：
+            // 启动对比上次运行版本，变化即发 app-updated（前端灵动岛回执「已更新到」）
+            commands::update::check_app_updated(_app.handle());
             // 截图覆盖窗预热（§3.6 性能，2026-10-27）：常驻隐藏窗在启动
             // 2.5s 后后台建好、页面 idle 待命，热键按下只剩捕获+贴图，首按
             // 即达百毫秒级（PixPin 口径）。预热失败不致命，热键路径会现场补建
@@ -279,6 +282,7 @@ pub fn run() {
             commands::config_cmds::export_config,
             commands::config_cmds::import_config,
             commands::update::fetch_update_manifest,
+            commands::update::spawn_update_watchdog,
             commands::terminal::open_terminal,
             commands::watch::watch_dir,
             commands::watch::unwatch_dir,

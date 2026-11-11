@@ -238,6 +238,23 @@ export default function App() {
   // 自绘悬浮提示全局单例（2026-10-21 定案 · 方案 B）：替代原生 title，见 lib/tooltip.ts
   useEffect(() => initTooltip(), []);
 
+  // 静默更新完成感知（2026-11-12 用户反馈「更新后没有提示」）：Rust 启动时
+  // 对比上次运行版本，变化即发 app-updated → 灵动岛回执「已更新到」，
+  // 一键更新（退出 → NSIS 安装 → 看门狗/自启重启）落地后用户有明确感知
+  useEffect(() => {
+    let off: (() => void) | undefined;
+    void listen<{ from: string; to: string }>("app-updated", ({ payload }) => {
+      useIsland
+        .getState()
+        .pushReceipt("ok", `X-Dir 已更新到 v${payload.to}（原 v${payload.from}），配置全部保留`, {
+          dwellMs: 6000,
+        });
+    }).then((f) => {
+      off = f;
+    });
+    return () => off?.();
+  }, []);
+
   return (
     <div className="np-shell">
       {/* 窗缘盖板×4（2026-10-17 顶缘 / 2026-10-21 扩四缘并拆小条）：弹层 portal 触发
