@@ -2911,6 +2911,29 @@ body.np-col-resizing * {
 }
 .np-about-name {
   font-weight: 600;
+  font-size: var(--np-font-ui);
+}
+/* 字号统一（2026-11-12 用户反馈「关于界面的字体要统一」，§4.7 口径）：
+   内容文字/行标题/更新条目一律正文 13px（此前简介继承 Blueprint 14px、
+   键值行 11px 同屏混排）；失败原因列表 = 真正的小附属保持 11px */
+.np-about .np-dialog-muted {
+  font-size: var(--np-font-ui);
+}
+.np-about .np-prop-row {
+  font-size: var(--np-font-ui);
+}
+.np-about .np-linkbtn {
+  font-size: var(--np-font-ui);
+}
+.np-about-update-title {
+  font-size: var(--np-font-ui);
+}
+.np-about .np-about-notes {
+  font-size: var(--np-font-ui);
+}
+.np-about-note-t {
+  font-weight: 600;
+  color: var(--np-fg);
 }
 .np-about-ver {
   color: var(--np-muted);
@@ -2968,7 +2991,20 @@ body.np-col-resizing * {
 }
 .np-about-actions {
   display: flex;
-  gap: var(--np-gutter);
+  /* 竖排整行（2026-11-12 用户反馈：半栏横排三钮文本各折 3 行）——
+     每钮独占一行，文本单行不折行，宽由整行供给 */
+  flex-direction: column;
+  gap: var(--np-gap);
+}
+.np-about-actions .bp6-button {
+  width: 100%;
+  justify-content: flex-start;
+}
+.np-about-actions .bp6-button .bp6-button-text {
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .np-about-props {
   padding-top: var(--np-gutter);

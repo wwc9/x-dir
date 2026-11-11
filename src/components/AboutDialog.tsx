@@ -223,9 +223,24 @@ export function AboutDialog() {
                 </div>
                 {!!manifest.notes?.length && (
                   <ul className="np-about-notes">
-                    {manifest.notes.map((n, i) => (
-                      <li key={i}>{n}</li>
-                    ))}
+                    {/* 条目与 Release 发行说明逐字同源（2026-11-12 用户定案
+                        「工具端更新内容与发行说明一致」）：每条 = 「短标题 —— 描述」，
+                        短标题加粗对应 Release 说明的加粗口径 */}
+                    {manifest.notes.map((n, i) => {
+                      const dash = n.indexOf("——");
+                      return (
+                        <li key={i}>
+                          {dash > 0 ? (
+                            <>
+                              <span className="np-about-note-t">{n.slice(0, dash)}</span>
+                              {n.slice(dash)}
+                            </>
+                          ) : (
+                            n
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
                 <div className="np-dialog-muted">
