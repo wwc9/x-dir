@@ -4702,8 +4702,11 @@ body.np-col-resizing * {
   color: var(--np-muted);
   opacity: 0.65;
 }
-/* 关联禁用的参数行（§4.9 参数行关联禁用）：整行降透明 */
-.np-bren-field.is-off {
+/* 关联禁用的参数行（§4.9 参数行关联禁用）：整行降透明——np-bren-field 行
+   整盒降灰；np-wm-form 行结构无 field 包裹（k 与 ctl 是两个网格项），
+   同名 is-off 分别降灰（2026-11-11 工具界面审查统一关联禁用信号） */
+.np-bren-field.is-off,
+.np-wm-form > .is-off {
   opacity: 0.45;
 }
 .np-bren-form {
@@ -4755,8 +4758,13 @@ body.np-col-resizing * {
   width: auto;
 }
 /* Blueprint 表单控件自带 margin-bottom 8px（.bp6-control），参数表单行距由
-   网格 gap 统一供给，控入内边距清零（2026-11-10 用户反馈首行下间隔偏大） */
-.np-bren-form .bp6-control {
+   网格 gap 统一供给，控入内边距清零（2026-11-10 用户反馈首行下间隔偏大；
+   2026-11-11 工具界面全量审查补 np-pdfmform / np-wm-form 两容器——§4.9
+   覆盖层②口径三类参数容器统一，否则 np-pdfmform 内的开关/复选框在
+   inline-flex 居中语境下被自带边距顶偏 ~4px） */
+.np-bren-form .bp6-control,
+.np-pdfmform .bp6-control,
+.np-wm-form .bp6-control {
   margin: 0;
 }
 /* 行节奏统一：每行按控件高基线拉齐（Checkbox ~20px / Seg·输入 24px 混排时
@@ -4779,12 +4787,12 @@ body.np-col-resizing * {
   margin-top: 0;
 }
 /* Blueprint 表单控件自带文案默认 14px，二级页面内统一紧凑到正文 13px
-   （§4.4 字号两档；2026-11-10 导出清单面板用户反馈） */
-.np-dialog .bp6-checkbox {
+   （§4.4 字号两档；2026-11-10 导出清单面板用户反馈落地 Checkbox，
+   2026-11-11 工具界面全量审查补 Switch——加密权限位/存入子文件夹/
+   烘焙 EXIF 等开关行此前 14px 与同面板 Seg 13px 混排） */
+.np-dialog .bp6-checkbox,
+.np-dialog .bp6-switch {
   font-size: var(--np-font-ui);
-}
-.np-dialog-muted.is-err {
-  color: var(--np-danger);
 }
 .np-bren-field > .bp6-input-group {
   width: 120px;

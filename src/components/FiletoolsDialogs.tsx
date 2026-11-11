@@ -503,6 +503,9 @@ export function SplitDialog({
     () => Math.max(1, Math.ceil(entry.size / (partMb * 1024 * 1024))),
     [entry.size, partMb],
   );
+  const outNote = t2("输出预览：{name}.part001… + {name}.crc（SHA-256 完整性清单）", {
+    name: entry.name,
+  });
   const apply = (): void => {
     setBusy(true);
     saveDialogPrefs("fileSplit", { partMb });
@@ -542,10 +545,8 @@ export function SplitDialog({
               n: parts,
             })}
           </span>
-          <span className="np-dialog-note-row">
-            {t2("输出预览：{name}.part001… + {name}.crc（SHA-256 完整性清单）", {
-              name: entry.name,
-            })}
+          <span className="np-dialog-note-row np-dialog-note-path" title={outNote}>
+            {outNote}
           </span>
         </div>
       </DialogBody>

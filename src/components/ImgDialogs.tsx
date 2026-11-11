@@ -415,16 +415,18 @@ export function WatermarkDialog({
             </FormRow>
           ) : (
             <FormRow k={t2("贴图")} wide>
-              <InputGroup
-                size="small"
-                value={imagePath}
-                readOnly
-                placeholder={t("未选择")}
-                spellCheck={false}
-              />
-              <Button size="small" onClick={() => void pickImage()}>
-                {t("选择…")}
-              </Button>
+              <span className="np-filext">
+                <InputGroup
+                  size="small"
+                  value={imagePath}
+                  readOnly
+                  placeholder={t("未选择")}
+                  spellCheck={false}
+                />
+                <Button size="small" onClick={() => void pickImage()}>
+                  {t("选择…")}
+                </Button>
+              </span>
             </FormRow>
           )}
           {mode === "text" && (

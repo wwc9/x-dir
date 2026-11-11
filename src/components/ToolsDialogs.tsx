@@ -41,15 +41,20 @@ import type { PdfEncryptPayload } from "../lib/operations";
 function FormRow({
   k,
   wide,
+  off,
   children,
 }: {
   k: string;
   /** 宽行：在 2 列参数网格中独占整行（长控件/多选项行使用） */
   wide?: boolean;
+  /** 关联禁用整行降灰（§4.9 参数行关联禁用，np-bren-field.is-off） */
+  off?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <span className={"np-bren-field" + (wide ? " np-wide" : "")}>
+    <span
+      className={"np-bren-field" + (wide ? " np-wide" : "") + (off ? " is-off" : "")}
+    >
       <span className="np-bren-k">{k}</span>
       {children}
     </span>
@@ -404,16 +409,16 @@ export function PdfMergeDialog({
                 </div>
               ))}
             </div>
+            {/* 范围说明走表单外的独立 muted 行：放进 np-pdfmform 会成为双列
+                网格项，长句以 max-content 撑爆标签轨（2026-11-11 审查修正） */}
+            <div className="np-dialog-muted">
+              {t2("每个选中的文件夹递归收集 PDF 与图片，各自输出 合并结果-<文件夹名>-<时间戳>.pdf")}
+            </div>
           </>
         ) : (
           <QueueSection title={t2("合并顺序")} items={items} onChange={setItems} />
         )}
         <div className="np-pdfmform">
-          {variant === "folders" && (
-            <div className="np-dialog-muted" style={{ margin: 0 }}>
-              {t2("每个选中的文件夹递归收集 PDF 与图片，各自输出 合并结果-<文件夹名>-<时间戳>.pdf")}
-            </div>
-          )}
           {variant === "files" && (
             <FormRow k={t2("输出名")}>
               <InputGroup
@@ -677,8 +682,10 @@ export function PdfWatermarkDialog({
             />
           </div>
 
-          <span className="np-bren-k">{isDiag ? t2("字号（对角线不适用）") : t2("字号（5–99）")}</span>
-          <div className="np-wm-ctl">
+          <span className={"np-bren-k" + (isDiag ? " is-off" : "")}>
+            {isDiag ? t2("字号（对角线不适用）") : t2("字号（5–99）")}
+          </span>
+          <div className={"np-wm-ctl" + (isDiag ? " is-off" : "")}>
             <InputGroup
               size="small"
               value={fontSizeText}
@@ -726,8 +733,10 @@ export function PdfWatermarkDialog({
             </div>
           </div>
 
-          <span className="np-bren-k">{isDiag ? t2("边距（对角线不适用）") : t2("边距（pt，0–1000）")}</span>
-          <div className="np-wm-ctl">
+          <span className={"np-bren-k" + (isDiag ? " is-off" : "")}>
+            {isDiag ? t2("边距（对角线不适用）") : t2("边距（pt，0–1000）")}
+          </span>
+          <div className={"np-wm-ctl" + (isDiag ? " is-off" : "")}>
             <InputGroup
               size="small"
               value={marginText}
@@ -1309,7 +1318,7 @@ export function ExportListingDialog({
           </FormRow>
         </div>
         {!nameOk && (
-          <div className="np-dialog-muted is-err">
+          <div className="np-dialog-error">
             {t2("名称含非法字符或为 Windows 保留名")}
           </div>
         )}
@@ -1401,7 +1410,7 @@ export function PdfSplitDialog({
               ]}
             />
           </FormRow>
-          <FormRow k={t2("每 N 页")}>
+          <FormRow k={t2("每 N 页")} off={method !== "pages"}>
             <InputGroup
               size="small"
               value={String(nPages)}
@@ -1410,7 +1419,7 @@ export function PdfSplitDialog({
               onChange={(e) => setNPages(num(Number(e.currentTarget.value), nPages, 1))}
             />
           </FormRow>
-          <FormRow k={t2("书签层级")}>
+          <FormRow k={t2("书签层级")} off={method !== "bookmarks"}>
             <InputGroup
               size="small"
               value={String(bookmarkLevel)}
@@ -1441,7 +1450,7 @@ export function PdfSplitDialog({
           </FormRow>
         </div>
         {!nameOk && (
-          <div className="np-dialog-muted is-err">
+          <div className="np-dialog-error">
             {t2("命名规则渲染出的文件名含非法字符")}
           </div>
         )}

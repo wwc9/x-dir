@@ -35,6 +35,7 @@ export function DragFileList({
   items: string[];
   onChange(update: (items: string[]) => string[]): void;
 }) {
+  const t2 = useT();
   const listRef = useRef<HTMLDivElement | null>(null);
   const dragFrom = useRef<number | null>(null);
 
@@ -84,7 +85,7 @@ export function DragFileList({
         <div key={p} data-row={i} className="np-pdfmlist-item" title={p}>
           <span
             className="np-pdfmlist-grip"
-            title="拖动调整顺序"
+            data-tip={t2("拖动调整顺序")}
             onPointerDown={(e) => beginRowDrag(e, i)}
           >
             <AppIcon icon={GripVertical} size={DENSITY.iconXs} />
