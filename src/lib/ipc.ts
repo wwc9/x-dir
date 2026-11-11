@@ -436,6 +436,10 @@ export interface Settings {
   shotEnabled: boolean;
   /** 截图热键键位（tauri-plugin-global-shortcut 字符串，如 "Ctrl+Alt+A"） */
   shotHotkey: string;
+  /** 截图框选跟随态的全屏十字辅助线开关（2026-11-11 低配机定案，默认开；
+   *  关闭 = 覆盖层不渲染跟随光标的水平/垂直发丝线，减少全屏合成开销。
+   *  常规设置键：主窗写、覆盖层挂载读，不走 shot_save_prefs 补丁通道） */
+  shotCrosshair: boolean;
   /** 截图标注：阴影宽度（CSS px，0=关；滑块记忆） */
   shotShadowW: number;
   /** 截图标注：边框宽度（CSS px，0=关；滑块记忆） */
@@ -569,6 +573,7 @@ export const DEFAULT_SETTINGS: Settings = {
   nameIndex: { enabled: false },
   shotEnabled: true,
   shotHotkey: "Ctrl+Alt+A",
+  shotCrosshair: true,
   /** 截图阴影默认宽（2026-11-06 3→10？原 0=关）：改 10——柔和投影是主流
    *  默认（Snipaste 口径），且预览/导出已统一 shadowBlur 高斯（真渐变），
    *  10px 才能呈现出渐变层次；已显式存值的用户不受影响 */

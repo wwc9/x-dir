@@ -405,6 +405,8 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         setStepW(clampw(st?.shotStepW, 1, 20, STROKES[1]));
         setMosaicW(clampw(st?.shotMosaicW, 2, 20, STROKES[1]));
         setBlurAlpha(clampw(st?.shotBlurAlpha, 0.15, 1, 1));
+        // 十字辅助线开关（2026-11-11）：缺键/非布尔一律视为开（!== false 口径）
+        setXhair(st?.shotCrosshair !== false);
       })
       .catch(() => undefined);
     return () => {
@@ -420,6 +422,12 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   // Esc / 右键立即退出截图（用户定案，不再逐层取消）
   const [following, setFollowing] = useState(true);
   const followingRef = useRef(true);
+  /** 跟随态全屏十字辅助线开关（2026-11-11 低配机定案）：设置 → 截图区 Switch
+   *  （shotCrosshair 常规设置键，主窗写/挂载读——覆盖层每会话重挂载，
+   *  无需补丁通道）；关闭 = 不渲染两条发丝线，放大镜/取色不受影响 */
+  const [xhair, setXhair] = useState(true);
+  const xhairRef = useRef(true);
+  xhairRef.current = xhair;
   const [sel, setSel] = useState<Sel | null>(() =>
     hitWindow(boot.windows, boot.cx, boot.cy),
   );
@@ -615,8 +623,9 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     const following = followingRef.current;
     const dNow = dragRef.current;
     const s = selRef.current;
-    // —— 十字线：仅跟随态（按下/确认后隐藏）——
-    const xhShow = following && !dNow && !!mag;
+    // —— 十字线：仅跟随态（按下/确认后隐藏）；开关关闭时元素整体不渲染，
+    //    refs 为 null 此块自然跳过（2026-11-11 低配机定案）——
+    const xhShow = xhairRef.current && following && !dNow && !!mag;
     const xhH = xhHRef.current;
     const xhV = xhVRef.current;
     if (xhH && xhV && mag) {
@@ -2403,8 +2412,14 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
           live canvas 拆出——transform 由 pointermove 同步直写（不经 rAF，
           合成器动画零光栅化），跟随态 live 层每帧静止；量化依据：放大镜全套
           canvas 重画占跟随态每帧 84%（CDP 实测），弱核显 4K 下是卡顿主因 */}
-      <div ref={xhHRef} className="np-shot-xh np-shot-xh-h" aria-hidden />
-      <div ref={xhVRef} className="np-shot-xh np-shot-xh-v" aria-hidden />
+      {/* 十字辅助线（2026-11-11 可关）：shotCrosshair 关闭时整体不渲染——
+          零元素零合成层，低配机每帧只剩放大镜小块的合成开销 */}
+      {xhair && (
+        <>
+          <div ref={xhHRef} className="np-shot-xh np-shot-xh-h" aria-hidden />
+          <div ref={xhVRef} className="np-shot-xh np-shot-xh-v" aria-hidden />
+        </>
+      )}
       <div ref={magBoxRef} className="np-shot-mag" aria-hidden>
         <canvas ref={magCvRef} className="np-shot-mag-cv" />
         <canvas ref={magGridRef} className="np-shot-mag-grid" />

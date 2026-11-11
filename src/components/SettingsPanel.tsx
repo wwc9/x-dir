@@ -374,6 +374,17 @@ export function SettingsPanel() {
                 {t("截图…")}
               </Button>
             </SetRow>
+            <SetRow
+              label={t("十字辅助线")}
+              desc={t(
+                "框选时跟随光标的水平/垂直全屏细线（确认选区后自动隐藏）；低配置电脑关闭可减少覆盖层的合成开销",
+              )}
+            >
+              <Switch
+                checked={s.shotCrosshair}
+                onChange={(e) => s.update({ shotCrosshair: e.currentTarget.checked })}
+              />
+            </SetRow>
             <div className="np-set-hint">
               {t(
                 "截图支持框选 / 窗口识别 / 矩形·椭圆·箭头·画笔·马克笔·文字标注 / 马赛克与模糊 / 序号标记 / 滚动长截图 / 贴图（钉在屏幕上）/ 复制与保存；关闭 X-Dir 后热键失效。",

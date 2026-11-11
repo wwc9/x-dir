@@ -78,6 +78,7 @@ function toPlain(s: SettingsStore): Settings {  return {
     staging: s.staging,
     nameIndex: s.nameIndex,
     shotEnabled: s.shotEnabled,
+    shotCrosshair: s.shotCrosshair,
     shotHotkey: s.shotHotkey,
     cliphistEnabled: s.cliphistEnabled,
     cliphistHotkey: s.cliphistHotkey,
@@ -283,7 +284,7 @@ export function setThemeWithFx(
       theme === "dark" ||
       (theme === "system" &&
         window.matchMedia("(prefers-color-scheme: dark)").matches);
-    fadeBorderColor(dark ? 0x131519 : 0xe9ecf1, THEME_FX_MS);
+    fadeBorderColor(dark ? 0x161616 : 0xe9ecf1, THEME_FX_MS);
     void vt.finished
       .catch(() => undefined)
       .then(() => {
@@ -347,6 +348,8 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     merged.uiGap = clampMetric(merged.uiGap, 4, 24, DEFAULT_SETTINGS.uiGap);
     // 图标视图已删除（2026-10-13）：旧档存过 icons 时回落详细信息
     if ((merged.defaultView as string) === "icons") merged.defaultView = "details";
+    // 截图十字辅助线（2026-11-11）：脏数据（非布尔，旧档缺键由 DEFAULT 兜底）
+    if (typeof merged.shotCrosshair !== "boolean") merged.shotCrosshair = true;
     // 右键菜单迁移：旧档缺 menuEntries 字段时生成出厂布局（用户刻意清空的
     // 空数组不被重置）。命令模板功能已下线（2026-10-14）：引用自定义命令的
     // 条目一律剔除——模板数据（customCommands）留档但不再渲染/可编辑
