@@ -65,11 +65,12 @@ $diff = Compare-Object (Get-Content $before) (Get-Content $after)
 if ($diff) {
     $diff | ForEach-Object { Write-Host "$($_.SideIndicator) $($_.InputObject)" }
     # 分类：OS 对任意 GUI exe 都会写的 MuiCache 命名缓存 / WebView2 运行时自身
-    # 簿记 / CloudStore 应用图块云备份（值名含 identifier 但写入者是系统）属系统
-    # 行为而非应用配置（应用自注册表零配置），不计失败
+    # 簿记 / CloudStore 应用图块云备份 / Software\Microsoft 全域（FeatureUsage
+    # AppSwitched 等系统计数以应用 AUMID 为值名，写入者始终是系统）属系统行为
+    # 而非应用配置（应用自注册表零配置），不计失败
     $appOwned = $diff | Where-Object {
         ($_.InputObject -match 'x-dir|xdir') -and
-        ($_.InputObject -notmatch 'MuiCache|FriendlyAppName|ApplicationCompany|MSEdgeWebView|[Ww]eb[vV]iew|CloudStore')
+        ($_.InputObject -notmatch 'MuiCache|FriendlyAppName|ApplicationCompany|MSEdgeWebView|[Ww]eb[vV]iew|CloudStore|Software\\Microsoft\\')
     }
     $osNoise = $diff | Where-Object { $_ -notin $appOwned }
     if ($appOwned) {
