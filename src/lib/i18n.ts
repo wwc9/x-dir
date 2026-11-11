@@ -36,6 +36,8 @@ const EN: Record<string, string> = {
   "布局方案": "Layouts",
   "暂存区": "Staging",
   "暂存区还是空的": "Staging is empty",
+  "暂存区还是空的（拖文件到这里暂存）": "Staging is empty — drop files here to stage",
+  "暂存区 {n} 项（点击查看 · 拖文件到这里暂存）": "{n} staged · click to view · drop files here",
   "拖入文件/文件夹即可暂存，跨会话保留":
     "Drop files or folders to stage them; they persist across sessions",
   "展开边栏": "Expand sidebar",

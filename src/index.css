@@ -1425,6 +1425,63 @@ body.np-col-resizing .np-menued-grip::after {
   opacity: 1;
   color: var(--np-danger);
 }
+/* 折叠边栏的暂存区（2026-11-12 用户需求「暂存区也要有折叠效果」）：mini 钮 =
+   Inbox 图标 + 计数占 char 槽；拖文件到钮 = 暂存（data-shelf 落点，悬停同
+   .np-shelf.on 淡染+虚线框），点击弹右侧飞出面板（行内拖出/移出/清空与
+   展开卡同一管线 armShelfRowDrag） */
+.np-side-shelfmini {
+  /* 方案 mini 列之后钉底（折叠 aside 为 flex 列），与方案群分隔 */
+  margin-top: auto;
+}
+.np-side-shelfmini .np-side-thumb {
+  display: grid;
+  place-items: center;
+  color: var(--np-muted);
+}
+.np-side-shelfmini.dnd-on {
+  background: var(--np-hover);
+  outline: 1px dashed var(--np-accent-border);
+  outline-offset: -1px;
+}
+.np-shelf-flyout {
+  position: fixed;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  width: 264px;
+  padding: var(--np-gap);
+  background: var(--np-surface);
+  border-radius: var(--np-radius-lg);
+  box-shadow: var(--np-shadow);
+}
+.np-shelf-flyout-h {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+  padding: 2px 6px 4px;
+  border-bottom: 1px solid var(--np-hairline);
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-shelf-flyout-h .np-side-add {
+  margin-left: auto;
+}
+.np-shelf-flyout-list {
+  overflow-y: auto;
+  min-height: 0;
+  /* 行数钳 12（ShelfMini 定位估算同口径），余下滚动 */
+  max-height: calc(var(--np-row-h) * 12 + var(--np-gap));
+  padding: 2px 0;
+}
+.np-shelf-flyout-list .np-shelf-row {
+  margin: 0 2px;
+}
+.np-shelf-flyout-empty {
+  padding: 14px 0 16px;
+  text-align: center;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
 .np-shelf .np-side-add:disabled {
   opacity: 0.4;
   cursor: default;

@@ -133,6 +133,41 @@ export function PresetPicker() {
   );
 }
 
+/** 暂存行拖拽臂（展开卡与折叠飞出面板共用，2026-11-12 提到模块级）：
+ *  行拖起走 startDrag 管线，落窗格即移动/复制（按暂存区模式），落 Explorer
+ *  由 OLE 结算（明确回传 move 才移出暂存，copy 保留条目） */
+function armShelfRowDrag(e: React.MouseEvent, path: string) {
+  if (e.button !== 0) return;
+  const startX = e.clientX;
+  const startY = e.clientY;
+  const onMove = (ev: MouseEvent) => {
+    if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5) return;
+    cleanup();
+    // 标记暂存区拖拽源：落点分发按标题切换钮的 移动/复制 语义执行传输；
+    // 应用内落点（窗格/暂存区）的移出由 handleDrop 统一决策（有完整落点
+    // 上下文，暂存条目拖回暂存区 = 无操作），这里只结算拖出到 Explorer
+    // 的 OLE 效果（明确回传 move 才移出暂存，copy 保留条目）
+    beginShelfDrag();
+    api
+      .startDrag([path])
+      .then((effect) => {
+        endShelfDrag();
+        if (effect === "move") useSettings.getState().removeShelf(path);
+      })
+      .catch((err) => {
+        endShelfDrag();
+        useUi.getState().toast(String(err), "error");
+      });
+  };
+  const onUp = () => cleanup();
+  const cleanup = () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+  };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+}
+
 /** 暂存区（侧边栏下半）：临时拖放文件/文件夹，用到时拖出到目标窗格。
  *  拖入 = OLE 落点分流（oleDispatch 命中 [data-shelf] 即入库，Explorer 拖入同管线）；
  *  拖出 = 行拖起走同一 startDrag 管线，落窗格即移动，effect ≠ none 视为已取走并移出暂存。 */
@@ -165,38 +200,6 @@ function Shelf() {
       point.x >= r.left && point.x <= r.right && point.y >= r.top && point.y <= r.bottom,
     );
   }, [point]);
-
-  function armRowDrag(e: React.MouseEvent, path: string) {
-    if (e.button !== 0) return;
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const onMove = (ev: MouseEvent) => {
-      if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5) return;
-      cleanup();
-      // 标记暂存区拖拽源：落点分发按标题切换钮的 移动/复制 语义执行传输；
-      // 应用内落点（窗格/暂存区）的移出由 handleDrop 统一决策（有完整落点
-      // 上下文，暂存条目拖回暂存区 = 无操作），这里只结算拖出到 Explorer
-      // 的 OLE 效果（明确回传 move 才移出暂存，copy 保留条目）
-      beginShelfDrag();
-      api
-        .startDrag([path])
-        .then((effect) => {
-          endShelfDrag();
-          if (effect === "move") useSettings.getState().removeShelf(path);
-        })
-        .catch((err) => {
-          endShelfDrag();
-          useUi.getState().toast(String(err), "error");
-        });
-    };
-    const onUp = () => cleanup();
-    const cleanup = () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  }
 
   return (
     <div ref={ref} className={`np-shelf${over ? " on" : ""}`} data-shelf>
@@ -271,7 +274,7 @@ function Shelf() {
                 key={p.toLowerCase()}
                 className="np-shelf-row"
                 data-tip={p}
-                onMouseDown={(e) => armRowDrag(e, p)}
+                onMouseDown={(e) => armShelfRowDrag(e, p)}
               >
                 {realIcons ? (
                   (() => {
@@ -307,9 +310,163 @@ function Shelf() {
   );
 }
 
-/** 左侧边栏：布局方案（工作区）列表 + 内置默认方案；可拖拽调宽、可折叠 */
-export function Sidebar() {
+/** 折叠边栏的暂存区（2026-11-12 用户需求「暂存区也要有折叠效果」）：mini 钮
+ *  （Inbox + 计数占 char 槽）承接展开卡两个职责——① data-shelf 落点：拖文件
+ *  到钮上即暂存（OLE 分流同展开卡，dnd 悬停同款淡染+虚线高亮）；② 点击弹
+ *  右侧飞出面板列条目，行内拖出/移出/清空与展开卡同一管线（armShelfRowDrag） */
+function ShelfMini() {
   const t = useT();
+  const items = useSettings((s) => s.staging);
+  const realIcons = useSettings((s) => s.realIcons);
+  const iconMap = useIcons((s) => s.icons);
+  const extMap = useIcons((s) => s.exts);
+  const point = useDnd((s) => s.point);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [over, setOver] = useState(false);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+
+  // 拖拽悬停高亮：dnd store 推 CSS 坐标，与钮矩形判定（同展开卡口径）
+  useEffect(() => {
+    if (!point || !btnRef.current) {
+      setOver(false);
+      return;
+    }
+    const r = btnRef.current.getBoundingClientRect();
+    setOver(
+      point.x >= r.left && point.x <= r.right && point.y >= r.top && point.y <= r.bottom,
+    );
+  }, [point]);
+
+  const toggle = () => {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    // 飞出面板定位：钮右侧 8px，右/下溢出回推（高度按行数估算，行钳 12）
+    const h = Math.min(items.length, 12) * 28 + 42;
+    setPos({
+      x: Math.min(r.right + 8, Math.max(8, window.innerWidth - 272)),
+      y: Math.min(Math.max(8, r.top - 4), Math.max(8, window.innerHeight - h - 8)),
+    });
+    setOpen(true);
+  };
+
+  // Esc / 点击外部关闭（捕获；钮与面板内部点击不关）
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const el = e.target as Node;
+      if (popRef.current?.contains(el) || btnRef.current?.contains(el)) return;
+      setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("mousedown", onDown, true);
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      window.removeEventListener("mousedown", onDown, true);
+      window.removeEventListener("keydown", onKey, true);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        className={`np-side-mini np-side-shelfmini${open ? " on" : ""}${over ? " dnd-on" : ""}`}
+        data-shelf
+        data-tip={
+          items.length
+            ? t("暂存区 {n} 项（点击查看 · 拖文件到这里暂存）", { n: items.length })
+            : t("暂存区还是空的（拖文件到这里暂存）")
+        }
+        onClick={toggle}
+      >
+        <span className="np-side-thumb">
+          <AppIcon icon={Inbox} size={DENSITY.iconSm} />
+        </span>
+        <span className="np-side-char">
+          {items.length > 99 ? "99+" : items.length}
+        </span>
+      </button>
+      {open && (
+        <div
+          ref={popRef}
+          className="np-shelf-flyout"
+          data-shelf
+          style={{ left: pos.x, top: pos.y }}
+        >
+          <div className="np-shelf-flyout-h">
+            <span>
+              {t("暂存区")} · {items.length}
+            </span>
+            <button
+              className="np-side-add"
+              data-tip={t("清空暂存区")}
+              disabled={!items.length}
+              onClick={() => useSettings.getState().clearShelf()}
+            >
+              <AppIcon icon={Trash2} size={DENSITY.iconSm} />
+            </button>
+          </div>
+          {items.length === 0 ? (
+            <div className="np-shelf-flyout-empty">{t("暂存区还是空的")}</div>
+          ) : (
+            <div className="np-shelf-flyout-list">
+              {items.map((p) => {
+                const name = fileNameOf(p);
+                const isDir = shelfEntryIsDir(p);
+                const spec = fileIcon(name, isDir);
+                return (
+                  <div
+                    key={p.toLowerCase()}
+                    className="np-shelf-row"
+                    data-tip={p}
+                    onMouseDown={(e) => armShelfRowDrag(e, p)}
+                  >
+                    {realIcons ? (
+                      (() => {
+                        const u = iconMap[p] ?? extMap[extOf(name)] ?? undefined;
+                        return u ? (
+                          <FadeInIcon src={u} />
+                        ) : (
+                          <span className="np-icon-slot" />
+                        );
+                      })()
+                    ) : (
+                      <AppIcon
+                        icon={spec.icon}
+                        size={DENSITY.iconMd}
+                        colorVar={spec.colorVar}
+                      />
+                    )}
+                    <span className="np-shelf-name">{name}</span>
+                    <button
+                      className="np-shelf-del"
+                      data-tip={t("移出暂存区")}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={() => useSettings.getState().removeShelf(p)}
+                    >
+                      <AppIcon icon={X} size={DENSITY.iconXs} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+/** 左侧边栏：布局方案（工作区）列表 + 内置默认方案；可拖拽调宽、可折叠 */
+export function Sidebar() {  const t = useT();
   const [items, setItems] = useState<Scheme[]>([]);
   // 显示顺序（2026-11-06 拖动排序）：settings.workspaceOrder 重排，新方案
   // 字典序追加尾；松手落 settings。拖拽用指针事件手写（HTML5 dnd 在主窗被
@@ -648,6 +805,7 @@ export function Sidebar() {
             <span className="np-side-char">{it.name.slice(0, 2)}</span>
           </button>
         ))}
+        <ShelfMini />
       </aside>
     );
   }
