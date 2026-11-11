@@ -38,7 +38,6 @@ export type JobMode =
   | "pdfencrypt"
   | "pdfdecrypt"
   | "pdftopng"
-  | "imgtopdf"
   | "officetopdf"
   | "cleanmeta"
   | "officetotext"

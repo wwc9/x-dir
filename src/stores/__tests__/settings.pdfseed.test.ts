@@ -96,44 +96,44 @@ describe("PDF 补种迁移（menuSeedV 版本化，2026-11-11 定案）", () => 
     await useSettings.getState().load();
     const ids = useSettings.getState().menuEntries.map((e) => e.id);
     // 原布局两条原序原位（pdfSplit 已存在 → 不补）；固定项归一化补固定七项
-    // 是既有语义排其后，缺失的 12 键补在末尾
+    // 是既有语义排其后，缺失的 11 键补在末尾
     expect(ids.slice(0, 2)).toEqual(legacy.map((e) => e.id));
-    expect(ids.slice(-12)).toEqual(
+    expect(ids.slice(-11)).toEqual(
       PDF_MENU_KEYS.filter((k) => k !== "pdfSplit").map((k) => `builtin:${k}`),
     );
     expect(ids.filter((id) => id === "builtin:pdfSplit").length).toBe(1);
     expect(useSettings.getState().menuSeedV).toBe(PDF_MENU_SEED_VERSION);
   });
 
-  it("存量档 v1（上午九件已送达、布尔标记时代）：升 v2 只补新增四键", async () => {
-    // 上午迁移后的布局：九键齐 + menuSeedV 尚未落（布尔 pdfMenuSeeded=true）
-    const entries: MenuEntry[] = PDF_MENU_KEYS.filter((k) =>
-      [
-        "pdfMerge",
-        "pdfMergeFolders",
-        "imgToPdf",
-        "pdfSplit",
-        "pdfExtract",
-        "pdfRemove",
-        "pdfRotate",
-        "pdfCompress",
-        "pdfWatermark",
-      ].includes(k),
-    ).map((k) => en(`builtin:${k}`, cond));
+  it("存量档 v1（九件已送达、布尔标记时代）：升 v2 补新增四键，已下线的 imgToPdf 同步剔除", async () => {
+    // 历史布局：v1 九键字面量（含当日已下线的 imgToPdf——它是当时的注册表键）
+    const V1_KEYS = [
+      "pdfMerge",
+      "pdfMergeFolders",
+      "imgToPdf",
+      "pdfSplit",
+      "pdfExtract",
+      "pdfRemove",
+      "pdfRotate",
+      "pdfCompress",
+      "pdfWatermark",
+    ];
+    const entries: MenuEntry[] = V1_KEYS.map((k) => en(`builtin:${k}`, cond));
     getSettings.mockImplementation(() =>
       Promise.resolve({ menuEntries: entries, pdfMenuSeeded: true }),
     );
     await useSettings.getState().load();
     const ids = useSettings.getState().menuEntries.map((e) => e.id);
-    // 新四键补进；旧九键一个不少且仍在（数量 = 9 + 4 + 固定项归一化新增）
+    // 新四键补进；imgToPdf 已下线（注册表无此键）→ 存量条目被剔除
     for (const k of ["pdfInsertBlank", "pdfToPng", "pdfEncrypt", "pdfDecrypt"]) {
       expect(ids).toContain(`builtin:${k}`);
     }
+    expect(ids).not.toContain("builtin:imgToPdf");
     expect(useSettings.getState().menuSeedV).toBe(2);
   });
 
   it("存量档已到当前版本：编辑器删减后的布局重启不回填 PDF 条目", async () => {
-    // 刻意清空的空数组仍按既有「清空语义」补固定七项，但 PDF 十三键不回填——
+    // 刻意清空的空数组仍按既有「清空语义」补固定七项，但 PDF 组条目不回填——
     // 版本已到 = 补种窗口已过，其余布局完全交给用户
     getSettings.mockImplementation(() =>
       Promise.resolve({ menuEntries: [], menuSeedV: PDF_MENU_SEED_VERSION }),

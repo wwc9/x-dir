@@ -105,11 +105,10 @@ export const BUILTIN_FNS: BuiltinFn[] = [
   { key: "createLink", label: "创建链接 ▸", desc: "硬链接（同卷）/符号链接", group: "工具", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
   { key: "fileSplit", label: "文件分割", desc: "按大小切块并生成 .crc 清单", group: "工具", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", maxCount: 1 }) },
   { key: "fileCombine", label: "文件合并", desc: "合并 .part 部件还原原文件", group: "工具", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2 }) },
-  // ── PDF（「图片合并转 PDF」2026-11-09 自办公移入，家族聚齐；
-  //    2026-11-11 扩充四件：插入空白页/转图片/加密/解密，全家十三件）──
-  { key: "pdfMerge", label: "合并为 PDF", desc: "按选中顺序合成一份 PDF", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2, exts: "pdf,jpg,jpeg,png" }) },
+  // ── PDF（2026-11-11 二批扩至十二键：插入空白页/转图片/加密/解密；
+  //    「图片合并转 PDF」同日下线——能力由「合并为 PDF」单选覆盖）──
+  { key: "pdfMerge", label: "合并为 PDF", desc: "按选中顺序合成一份 PDF（PDF/图片混选均可，单张即可）", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "pdf,jpg,jpeg,png" }) },
   { key: "pdfMergeFolders", label: "按文件夹合并 PDF", desc: "每个文件夹各合成一份", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "dir", minCount: 1 }) },
-  { key: "imgToPdf", label: "图片合并转 PDF", desc: "图片按选中序每图一页", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "png,jpg,jpeg" }) },
   { key: "pdfSplit", label: "PDF 拆分", desc: "按页数或书签拆分为多个 PDF（命名规则/子文件夹可选）", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", maxCount: 1, exts: "pdf" }) },
   { key: "pdfExtract", label: "PDF 提取页", desc: "抽取指定页另存新文件", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", maxCount: 1, exts: "pdf" }) },
   { key: "pdfRemove", label: "PDF 删除页", desc: "删除指定页另存新文件", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", maxCount: 1, exts: "pdf" }) },

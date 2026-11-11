@@ -129,10 +129,6 @@ pub enum JobKind {
     PdfDecrypt {
         password: String,
     },
-    /// 图片（PNG/JPEG）合并转 PDF，每图一页 → output
-    ImagesToPdf {
-        output: String,
-    },
     /// Office 文档经 COM 转 PDF（PowerShell 派发，旁写 <stem>.pdf）
     OfficeToPdf,
     /// OOXML 隐私属性清理（docProps 重写），旁写 <stem>_清洁.<ext>
@@ -610,24 +606,6 @@ impl JobManager {
                         }
                         crate::pdf::run_compress(
                             &sources,
-                            &cancel,
-                            &mut prog,
-                            &mut em,
-                            &mut failed,
-                        );
-                    }
-                    JobKind::ImagesToPdf { output } => {
-                        if let Some(par) = parent_of(output) {
-                            dirty_dirs.push(par);
-                        }
-                        for s in &sources {
-                            if let Some(par) = parent_of(s) {
-                                dirty_dirs.push(par);
-                            }
-                        }
-                        crate::pdf::run_images_to_pdf(
-                            &sources,
-                            output,
                             &cancel,
                             &mut prog,
                             &mut em,

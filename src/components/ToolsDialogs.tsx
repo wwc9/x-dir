@@ -854,14 +854,6 @@ export function PdfWatermarkDialog({
 /** 各合并口味的文案与输出扩展名（标题在 DialogHost 集中映射）；
  *  fallbackStem = 智能默认名的回退干（单/多对象目录名不可用时） */
 const MERGE_FLAVORS = {
-  images: {
-    queueTitle: "合并顺序",
-    ok: "合并",
-    defName: "合并图片.pdf",
-    fallbackStem: "合并图片",
-    ext: "pdf",
-    note: "每张图片一页，按清单顺序合成 PDF（PNG/JPEG 均可）；输出旁写，不覆盖原文件。",
-  },
   csv: {
     queueTitle: "合并顺序",
     ok: "合并",

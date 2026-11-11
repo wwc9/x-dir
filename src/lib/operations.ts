@@ -188,10 +188,7 @@ export async function mergePdfs(
     paths: string[];
   } | null>({ type: "pdfMerge", variant, entries });
   if (!res) return;
-  if (variant === "files" && res.paths.length < 2 && !res.autoBlank) {
-    useUi.getState().toast("至少选择 2 个文件，或启用空白页凑偶数", "error");
-    return;
-  }
+  // 单项也合法（2026-11-11 用户定案取消 ≥2）：单图/单 PDF 合并 = 旁写重存
   const paths = res.paths;
   const byFolder = variant === "folders";
   const output = byFolder
@@ -484,23 +481,6 @@ export async function pdfToPngs(entries: FileEntry[], dir: string): Promise<void
     useJobs
       .getState()
       .finishLocal(jobId, false, { failed: [{ path: "", message: String(err) }] });
-  }
-}
-
-/** 图片合并转 PDF（每图一页）：filesMerge 对话框（清单拖动定序 + 输出预览） */
-export async function imagesToPdf(entries: FileEntry[], dir: string): Promise<void> {
-  const res = await useUi.getState().openDialog<{ paths: string[]; name: string } | null>({
-    type: "filesMerge",
-    flavor: "images",
-    entries,
-  });
-  if (!res) return;
-  const output = joinPath(dir, res.name);
-  try {
-    const { jobId } = await api.imagesToPdf(res.paths, output);
-    useJobs.getState().register(jobId, "imgtopdf", dir, [dir]);
-  } catch (e) {
-    useUi.getState().toast(`合并失败：${String(e)}`, "error");
   }
 }
 

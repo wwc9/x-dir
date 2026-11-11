@@ -3,7 +3,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 
-import { api, DEFAULT_SETTINGS, THIS_PC, type Settings } from "../lib/ipc";
+import { api, DEFAULT_SETTINGS, THIS_PC, type MenuEntry, type Settings } from "../lib/ipc";
 import { clampGsPreviewW, sanitizeColWidths, sanitizeGsColWidths } from "../lib/columns";
 import { sanitizeDialogPrefs } from "../lib/dialogPrefs";
 import { fileNameOf } from "../lib/path";
@@ -351,6 +351,12 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     // 条目一律剔除——模板数据（customCommands）留档但不再渲染/可编辑
     if (saved?.menuEntries === undefined) merged.menuEntries = defaultMenuEntries();
     merged.menuEntries = stripCustomEntries(merged.menuEntries ?? []);
+    // 「图片合并转 PDF」下线清理（2026-11-11 用户定案：能力由「合并为 PDF」
+    // 单选覆盖）：注册表已无此键，存量菜单/工具栏条目剔除（渲染端本会跳过
+    // 未知键，此处清掉防编辑器残留死行——同命令模板下线的 stripCustomEntries 口径）
+    const stripOffline = (es: MenuEntry[]) => es.filter((en) => en.id !== "builtin:imgToPdf");
+    merged.menuEntries = stripOffline(merged.menuEntries ?? []);
+    merged.toolbarEntries = stripOffline(merged.toolbarEntries ?? []);
     // 基础固定功能归一化（2026-10-15）：任何旧档/导入档都保证七项基础功能常驻
     merged.menuEntries = ensureFixedEntries(merged.menuEntries ?? []);
     // 导出文件清单升级迁移（2026-11-10）：启用时机 sel → both——空白处右键

@@ -64,8 +64,9 @@ export type DialogSpec =
   | { type: "pdfMerge"; variant: "files" | "folders"; entries: FileEntry[] }
   /** PDF 加水印（右键"PDF 加水印"，2026-10-22 参数化）：带选中 PDF 入场 */
   | { type: "pdfWatermark"; entries: FileEntry[] }
-  /** 通用文件合并（2026-11-03 §4.9 对齐，取代裸输入框）：图片转 PDF / CSV / 文本 / zip 打包 */
-  | { type: "filesMerge"; flavor: "images" | "csv" | "text" | "zip"; entries: FileEntry[] }
+  /** 通用文件合并（2026-11-03 §4.9 对齐，取代裸输入框）：CSV / 文本 / zip 打包
+   *  （图片转 PDF flavor 2026-11-11 随「图片合并转 PDF」下线移除） */
+  | { type: "filesMerge"; flavor: "csv" | "text" | "zip"; entries: FileEntry[] }
   /** PDF 提取页/删除页（2026-11-03 §4.9 对齐）：页数回显 + 范围解析预演 */
   | { type: "pdfPages"; mode: "extract" | "remove"; entry: FileEntry }
   /** 解除占用（2026-11-01）：删除撞上占用失败的路径入场，可关句柄后按原语义重删 */

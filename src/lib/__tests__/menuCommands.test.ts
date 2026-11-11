@@ -102,10 +102,11 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
     expect(builtinByKey("properties")?.cond.maxCount).toBe(1);
     expect(builtinByKey("openTab")?.cond).toMatchObject({ target: "dir", maxCount: 1 });
     expect(builtinByKey("batchRename")?.cond.minCount).toBe(2);
-    // 2026-10-22 拆分：文件合并（≥2 个 pdf/图片）+ 按文件夹合并（≥2 个文件夹）
+    // 2026-10-22 拆分双入口；2026-11-11 合并为 PDF 取消 ≥2（单图/单 PDF 即可，
+    // 图片合并转 PDF 同日下线）+ 按文件夹合并（≥2 个文件夹）
     expect(builtinByKey("pdfMerge")?.cond).toMatchObject({
       target: "file",
-      minCount: 2,
+      minCount: 1,
       exts: "pdf,jpg,jpeg,png",
     });
     expect(builtinByKey("pdfMergeFolders")?.cond).toMatchObject({
@@ -232,8 +233,8 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
         expect(f.supportsSel || f.supportsBlank).toBe(true);
       }
     }
-    // 「图片合并转 PDF」归位 PDF 组（家族聚齐）
-    expect(builtinByKey("imgToPdf")?.group).toBe("PDF");
+    // 「图片合并转 PDF」2026-11-11 下线：注册表无此键（存量档由 settings.load 剔除）
+    expect(builtinByKey("imgToPdf")).toBeUndefined();
   });
 
   it("工具栏条目默认作用域（2026-10-14 定案：全部功能可入工具栏）", () => {
@@ -245,7 +246,7 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
     expect(builtinToolbarEntry("pdfMerge").area).toBe("sel");
     expect(builtinToolbarEntry("pdfMerge").cond).toMatchObject({
       target: "file",
-      minCount: 2,
+      minCount: 1,
       exts: "pdf,jpg,jpeg,png",
     });
     expect(builtinToolbarEntry("pdfMergeFolders").area).toBe("sel");
@@ -294,11 +295,10 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
 });
 
 describe("PDF 功能族入驻默认菜单（PDF_MENU_KEYS / seedPdfEntries，2026-11-11 定案）", () => {
-  it("PDF_MENU_KEYS = 注册表 PDF 组十三键（含图片合并转 PDF 与 11-11 扩充四件）", () => {
+  it("PDF_MENU_KEYS = 注册表 PDF 组十二键（11-11 扩充四件；图片合并转 PDF 同日下线）", () => {
     expect(PDF_MENU_KEYS).toEqual([
       "pdfMerge",
       "pdfMergeFolders",
-      "imgToPdf",
       "pdfSplit",
       "pdfExtract",
       "pdfRemove",

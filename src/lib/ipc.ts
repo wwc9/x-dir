@@ -999,9 +999,6 @@ export const api = {
   /** 前端渲染产物落盘（PDF 转图片：canvas → PNG base64 → 文件；仅收 .png） */
   writePngFile: (path: string, b64: string) =>
     cmd<void>("write_png_b64", { path, b64 }),
-  /** 图片（PNG/JPEG）合并转 PDF，每图一页 */
-  imagesToPdf: (paths: string[], output: string) =>
-    cmd<{ jobId: number }>("images_to_pdf", { paths, output }),
   /** Office/WPS COM 转 PDF（旁写 <stem>.pdf；需已装 Office 或 WPS） */
   officeToPdf: (paths: string[]) =>
     cmd<{ jobId: number }>("office_to_pdf", { paths }),

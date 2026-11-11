@@ -66,9 +66,7 @@ pub fn pdf_merge(
             ),
         });
     }
-    if paths.len() < 2 {
-        return Err(AppError::new("E_INVALID_NAME", "合并至少需要 2 个 PDF"));
-    }
+    // 单项合并合法（2026-11-11 用户定案取消 ≥2）：单 PDF 旁写重存、单图一页
     reject_not_pdf(&paths)?;
     if !output.to_ascii_lowercase().ends_with(".pdf") || output.trim().is_empty() {
         return Err(AppError::new("E_INVALID_NAME", "输出文件名无效"));
@@ -454,49 +452,4 @@ pub fn write_png_b64(path: String, b64: String) -> Result<(), AppError> {
         .map_err(|e| AppError::new("E_INVALID_NAME", format!("PNG 数据解码失败：{e}")))?;
     std::fs::write(to_extended(&path), bytes)
         .map_err(|e| AppError::new("E_IO", format!("写入失败：{e}")))
-}
-
-fn is_image(path: &str) -> bool {
-    matches!(
-        path.rsplit('.')
-            .next()
-            .map(|e| e.to_ascii_lowercase())
-            .as_deref(),
-        Some("png" | "jpg" | "jpeg")
-    )
-}
-
-#[tauri::command]
-pub fn images_to_pdf(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    paths: Vec<String>,
-    output: String,
-) -> Result<JobId, AppError> {
-    if paths.is_empty() {
-        return Err(AppError::new("E_INVALID_NAME", "至少需要 1 张图片"));
-    }
-    let bad = paths.iter().find(|p| !path_exists(p) || !is_image(p));
-    if let Some(p) = bad {
-        return Err(AppError::new(
-            "E_NOT_FOUND",
-            format!(
-                "文件不存在或不是 PNG/JPG：{}",
-                crate::fs::path::file_name_of(p)
-            ),
-        ));
-    }
-    if !output.to_ascii_lowercase().ends_with(".pdf") || output.trim().is_empty() {
-        return Err(AppError::new("E_INVALID_NAME", "输出文件名无效"));
-    }
-    Ok(JobId {
-        job_id: state.jobs.enqueue(
-            JobKind::ImagesToPdf { output },
-            paths,
-            None,
-            Policy::Skip,
-            false,
-            app,
-        ),
-    })
 }

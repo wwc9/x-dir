@@ -1654,59 +1654,6 @@ fn image_page(doc: &mut Document, path: &str) -> Result<ObjectId, String> {
     }))
 }
 
-/// 图片合并转 PDF：每图一页（按选中序），输出 output
-pub(crate) fn run_images_to_pdf(
-    paths: &[String],
-    output: &str,
-    cancel: &AtomicBool,
-    prog: &mut JobProgress,
-    em: &mut EmitterState,
-    failed: &mut Vec<FailItem>,
-) {
-    prog.total_files = paths.len() as u64;
-    let mut out = Document::with_version("1.5");
-    let mut kids: Vec<Object> = Vec::new();
-    for p in paths {
-        if is_cancelled(cancel) {
-            return;
-        }
-        prog.current_path = p.clone();
-        match image_page(&mut out, p) {
-            Ok(id) => kids.push(Object::Reference(id)),
-            Err(e) => failed.push(FailItem {
-                path: p.clone(),
-                message: e,
-                reason: None,
-            }),
-        }
-        prog.done_files += 1;
-        em.progress(prog);
-    }
-    if kids.is_empty() {
-        failed.push(FailItem {
-            path: output.to_string(),
-            message: "没有可用的图片".into(),
-            reason: None,
-        });
-        return;
-    }
-    if let Err(e) = build_page_tree(&mut out, kids) {
-        failed.push(FailItem {
-            path: output.to_string(),
-            message: e,
-            reason: None,
-        });
-        return;
-    }
-    if let Err(e) = out.save(to_extended(&available_name(output))) {
-        failed.push(FailItem {
-            path: output.to_string(),
-            message: e.to_string(),
-            reason: None,
-        });
-    }
-}
-
 /// 新建 /Catalog + /Pages 树挂给定 Kids；Parent 回填需在 trailer 生效后（get_pages 沿新树枚举）
 fn build_page_tree(doc: &mut Document, kids: Vec<Object>) -> Result<(), String> {
     let count = kids.len() as i64;

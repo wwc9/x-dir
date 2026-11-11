@@ -55,7 +55,6 @@ const MODE_ICONS: Record<JobMode, typeof Copy> = {
   pdfencrypt: Lock,
   pdfdecrypt: LockOpen,
   pdftopng: Images,
-  imgtopdf: Images,
   officetopdf: FileText,
   cleanmeta: Eraser,
   officetotext: FileType,

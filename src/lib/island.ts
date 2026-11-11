@@ -20,7 +20,6 @@ export const JOB_LABELS: Record<JobMode, string> = {
   pdfencrypt: "PDF 加密",
   pdfdecrypt: "PDF 解密",
   pdftopng: "PDF 转图片",
-  imgtopdf: "图片转 PDF",
   officetopdf: "文档转 PDF",
   cleanmeta: "隐私清理",
   officetotext: "导出文本",

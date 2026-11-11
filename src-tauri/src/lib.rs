@@ -234,7 +234,6 @@ pub fn run() {
             commands::pdf_cmds::pdf_decrypt,
             commands::pdf_cmds::ensure_available_dir,
             commands::pdf_cmds::write_png_b64,
-            commands::pdf_cmds::images_to_pdf,
             commands::office_cmds::office_to_pdf,
             commands::office_cmds::clean_office_meta,
             commands::office_cmds::office_to_text,

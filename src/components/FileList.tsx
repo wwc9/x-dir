@@ -43,7 +43,6 @@ import {
   runPdfSplit,
   exportOfficeText,
   extractPdfPages,
-  imagesToPdf,
   imgCompress,
   imgConvert,
   imgMontage,
@@ -1179,8 +1178,6 @@ export function FileList({
       case "pdfDecrypt":
         // 权限密码输入，旁写 _解密.pdf
         return { label: t("PDF 解密…"), action: () => void decryptPdfs(sel, path) };
-      case "imgToPdf":
-        return { label: t("图片合并为 PDF…"), action: () => void imagesToPdf(sel, path) };
       case "imgCompress":
         return { label: t("图片压缩…"), action: () => void imgCompress(sel, path) };
       case "imgWatermark":
