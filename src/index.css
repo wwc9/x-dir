@@ -7046,3 +7046,157 @@ body.np-col-resizing * {
     display: none;
   }
 }
+
+/* ═══ 功能库快速命令面板（2026-11-11 方案 C「贴身轻浮窗」定稿，右键菜单
+   「功能库…」唤起）：吸附右键菜单锚位、无遮罩点击外部即关——保持右键操作
+   流连续。面板圆角 = 瞬态浮层档 --np-radius-lg（§4.1）；行高 = --np-row-h
+   紧凑单行，图标中性 fg 与右键菜单同语言；搜索行 = 填充式 surface-2 胶囊
+   （focus ring 由容器 focus-within 承载，同剪贴板搜索行口径）═══ */
+.np-palette {
+  position: fixed;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--np-radius-lg);
+  background: var(--np-surface);
+  box-shadow: var(--np-shadow);
+}
+/* 吸附箭头：指向触发点（上缘左端，与右键菜单落点视觉衔接） */
+.np-palette::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: -5px;
+  width: 10px;
+  height: 10px;
+  transform: rotate(45deg);
+  border-radius: 2px;
+  background: var(--np-surface);
+}
+.np-palette-search {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+  flex: none;
+  height: var(--np-ctl-h);
+  margin: var(--np-gap) var(--np-gap) 0;
+  padding: 0 10px;
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius-pill);
+  color: var(--np-muted);
+}
+.np-palette-search:focus-within {
+  box-shadow: var(--np-ring);
+}
+/* 压掉全局 input 聚焦规则（ring/底色切换由容器承载，同剪贴板搜索行） */
+.np-palette-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+}
+.np-palette-search input::placeholder {
+  color: var(--np-muted);
+}
+.np-palette-rows {
+  overflow-y: auto;
+  min-height: 0;
+  /* 行数钳 10 行（定位钳制同口径 lib/palette.ts ROWS_MAX），余下滚动 */
+  max-height: calc(var(--np-row-h) * 10 + var(--np-gap) * 2);
+  padding: var(--np-gap) 0;
+}
+.np-palette-row {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+  height: var(--np-row-h);
+  margin: 0 var(--np-gap);
+  padding: 0 8px;
+  border-radius: var(--np-radius);
+  color: var(--np-fg);
+  cursor: pointer;
+  /* 不压缩不折行：名称超宽省略，组名恒右侧完整可读 */
+  white-space: nowrap;
+}
+.np-palette-row.is-on {
+  background: var(--np-sel);
+}
+.np-palette-row.is-on .np-palette-name {
+  color: var(--np-accent);
+  font-weight: 600;
+}
+/* 现场条件不满足 = 整行降灰（§4.9 is-off 口径 0.45），提示悬停可见 */
+.np-palette-row.is-off {
+  opacity: 0.45;
+  cursor: default;
+}
+.np-palette-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.np-palette-name mark {
+  background: none;
+  color: var(--np-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.np-palette-group {
+  flex: none;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-palette-empty {
+  padding: 18px 0 22px;
+  text-align: center;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-palette-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+  flex: none;
+  height: calc(var(--np-ctl-h) + var(--np-gap));
+  padding: 0 10px;
+  border-top: 1px solid var(--np-hairline);
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+/* 现场回执 chip：首选中名（多选带 +N）或「未选中」 */
+.np-palette-chip {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  padding: 1px 8px;
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius-pill);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.np-palette-keys {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  margin-left: auto;
+}
+.np-palette-keys i {
+  font-style: normal;
+  opacity: 0.5;
+}
+.np-palette-keys .np-kbd {
+  min-width: 0;
+  height: 16px;
+  padding: 0 5px;
+  align-items: center;
+}

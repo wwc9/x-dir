@@ -161,6 +161,10 @@ interface UiStore {
   dialog: DialogSpec | null;
   dialogResolve: ((v: unknown) => void) | null;
   menu: { items: MenuItem[]; x: number; y: number } | null;
+  /** 功能库快速命令面板（方案 C 贴身轻浮窗，2026-11-11）：右键菜单「功能库…」
+   *  唤起，吸附右键菜单锚位；tabId+sel = 右键现场（触发窗格标签 + 选中条目），
+   *  执行时经 listRegistry.builtinMenuItem 随功能传入 */
+  palette: { x: number; y: number; tabId: string; sel: FileEntry[] } | null;
   /** 全盘搜索面板（Everything 式，Ctrl+Shift+F / 顶栏按钮唤起） */
   globalSearch: boolean;
   /** 设置浮窗（Dialog，2026-10-14 回归浮窗样式）：null = 关闭；非空 = 当前分类 id */
@@ -180,6 +184,9 @@ interface UiStore {
   resolveDialog(v: unknown): void;
   openMenu(items: MenuItem[], x: number, y: number): void;
   closeMenu(): void;
+  /** 唤起功能库面板（同时收起右键菜单——面板吸附其锚位） */
+  openPalette(pos: { x: number; y: number; tabId: string; sel: FileEntry[] }): void;
+  closePalette(): void;
   openGlobalSearch(): void;
   closeGlobalSearch(): void;
   /** 退出全部整页（全盘搜索/定制互斥）：顶栏主界面类按钮先回主界面再执行动作 */
@@ -202,6 +209,7 @@ export const useUi = create<UiStore>()((set, get) => ({
   dialog: null,
   dialogResolve: null,
   menu: null,
+  palette: null,
   globalSearch: false,
   settingsTab: null,
   menuPage: false,
@@ -238,6 +246,15 @@ export const useUi = create<UiStore>()((set, get) => ({
 
   closeMenu() {
     set({ menu: null });
+  },
+
+  openPalette(pos) {
+    // 面板吸附右键菜单锚位：开面板即收菜单（方案 C——菜单原位让给面板）
+    set({ palette: pos, menu: null });
+  },
+
+  closePalette() {
+    set({ palette: null });
   },
 
   openGlobalSearch() {

@@ -119,20 +119,21 @@ export function onGlobalKeyDown(e: KeyboardEvent): void {
     return;
   }
   // Ctrl+Shift+F：全盘搜索（放在模态守卫之前——定制页内按下 = 切换到全盘搜索页，
-  // 整页互斥由 openGlobalSearch 内部保证；对话框/右键菜单打开时仍拦截）
+  // 整页互斥由 openGlobalSearch 内部保证；对话框/右键菜单/功能库面板打开时仍拦截）
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "f") {
     const pg = useUi.getState();
-    if (!pg.dialog && !pg.menu) {
+    if (!pg.dialog && !pg.menu && !pg.palette) {
       useUi.getState().openGlobalSearch();
       e.preventDefault();
       return;
     }
   }
-  // 模态面（对话框 / 全盘搜索 / 右键菜单 / 菜单编辑页）打开：全局快捷键一律停用——
-  // 否则 Enter 确认删除会同时 onEnter"打开"被删文件，方向键会移动背后列表。
-  // 面板内控件自带按键处理（Blueprint canEscapeKeyClose / 面板 onKeyDown）
+  // 模态面（对话框 / 全盘搜索 / 右键菜单 / 菜单编辑页 / 功能库面板）打开：
+  // 全局快捷键一律停用——否则 Enter 确认删除会同时 onEnter"打开"被删文件，
+  // 方向键会移动背后列表。面板内控件自带按键处理（Blueprint canEscapeKeyClose /
+  // 面板 onKeyDown）；功能库面板由 CommandPalette 的 window 捕获监听全权处理
   const ui = useUi.getState();
-  if (ui.dialog || ui.globalSearch || ui.menu || ui.menuPage) return;
+  if (ui.dialog || ui.globalSearch || ui.menu || ui.menuPage || ui.palette) return;
   // Ctrl +/-/0：界面缩放（输入框内同样生效，与浏览器缩放习惯一致）
   if ((e.ctrlKey || e.metaKey) && ["=", "+", "-", "0"].includes(e.key)) {
     const s = useSettings.getState();

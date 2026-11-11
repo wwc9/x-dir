@@ -1518,8 +1518,17 @@ export function FileList({
     while (items.length && items[0].sep) items.shift();
     while (items.length && items[items.length - 1].sep) items.pop();
     // 固定尾项（2026-10-15 定案）：「编辑菜单…」不属 menuEntries 存储、不可配置，
-    // 任何配置/条件下恒在且排最后，直达右键菜单编辑页
+    // 任何配置/条件下恒在且排最后，直达右键菜单编辑页。
+    // 「功能库…」（2026-11-11）同段固定：唤起快速命令面板（方案 C），吸附本
+    // 菜单锚位，右键现场（tabId+sel）随面板执行传给功能
     if (items.length && !items[items.length - 1].sep) items.push({ sep: true });
+    items.push({
+      label: t("功能库…"),
+      action: () => {
+        const m = useUi.getState().menu;
+        useUi.getState().openPalette({ x: m?.x ?? 0, y: m?.y ?? 0, tabId, sel });
+      },
+    });
     items.push({
       label: t("编辑菜单…"),
       action: () => useUi.getState().openMenuPage(),

@@ -33,6 +33,7 @@ import { applyTheme, useSettings } from "./stores/settings";
 import { initTooltip } from "./lib/tooltip";
 import { AboutDialog } from "./components/AboutDialog";
 import { ContextMenu } from "./components/ContextMenu";
+import { CommandPalette } from "./components/CommandPalette";
 import { DialogHost } from "./components/DialogHost";
 import { GlobalSearchPage } from "./components/GlobalSearch";
 import { LayoutView } from "./components/LayoutView";
@@ -269,6 +270,8 @@ export default function App() {
       <AboutDialog />
       <QuickPreviewHost />
       <ContextMenu />
+      {/* 功能库快速命令面板（2026-11-11 方案 C）：右键菜单「功能库…」唤起，常驻挂载 */}
+      <CommandPalette />
       {benchMode && <BenchFps />}
     </div>
   );
