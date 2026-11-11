@@ -3,8 +3,12 @@
 // 完整文件管理器 bundle，样式共用 index.css。
 import ReactDOM from "react-dom/client";
 
+import { suppressDefaultContextMenu } from "../lib/contextMenu";
 import "../index.css";
 import { ClipHistWindow } from "./ClipHistWindow";
+
+// WebView2 默认右键菜单屏蔽（2026-11-11，文本框保留原生编辑菜单）
+suppressDefaultContextMenu();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <ClipHistWindow />,

@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import "@blueprintjs/core/lib/css/blueprint.css";
 import App from "./App";
+import { suppressDefaultContextMenu } from "./lib/contextMenu";
 import "./index.css";
 // 样式加载顺序（2026-11-06 定案）：dev 按 import 序注入（本文件序 = index.css
 // 后于 blueprint.css，覆写生效）；rolldown 打包时会把 blueprint.css 提升到入口
@@ -11,6 +12,10 @@ import "./index.css";
 
 // 主窗口入口。截图族窗口（覆盖窗/贴图/滚动浮条/结果窗）走独立轻量入口
 // shot.html（src/shot/boot.tsx），不加载本文件与主界面 bundle。
+
+// WebView2 默认右键菜单屏蔽（定制页等未接管区域弹调试菜单，2026-11-11）
+suppressDefaultContextMenu();
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <App />

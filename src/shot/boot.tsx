@@ -10,12 +10,17 @@ import { listen } from "@tauri-apps/api/event";
 
 import "../index.css";
 import { api } from "../lib/ipc";
+import { suppressDefaultContextMenu } from "../lib/contextMenu";
 import { ShotOverlay, type ShotBoot } from "./ShotOverlay";
 import { PinWindow, type PinBoot } from "./PinWindow";
 import { ScrollBar, type ScrollBarBoot } from "./ScrollBar";
 import { ScrollPreview, type ScrollPreviewBoot } from "./ScrollPreview";
 import { ScrollFrame, type ScrollFrameBoot } from "./ScrollFrame";
 import { ShotResult, type ResultBoot } from "./ShotResult";
+
+// WebView2 默认右键菜单屏蔽（2026-11-11）：截图覆盖窗右键退出 / 贴图自绘
+// 菜单都走 pointer 事件，不受影响
+suppressDefaultContextMenu();
 
 declare global {
   interface Window {
