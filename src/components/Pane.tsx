@@ -33,22 +33,38 @@ import {
   ChevronRight,
   Computer,
   Filter,
+  Folder,
+  FolderOpen,
+  HardDrive,
   List,
   MoreHorizontal,
   Plus,
   Rows3,
   Search,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { AppIcon, ic } from "./AppIcon";
 import { NpSelect } from "./NpSelect";
 import { DENSITY } from "../lib/tokens";
-import { FileList } from "./FileList";
+import { FadeInIcon, FileList } from "./FileList";
+import { useIcons } from "../stores/icons";
 import { FN_ICONS } from "./MenuEditor";
 
 const DND_MIME = "application/x-xdir";
 
 const titleOf = (path: string) => (path === THIS_PC ? "此电脑" : fileNameOf(path));
+
+/** 标签图标（2026-11-11 用户需求）：与导航树同款语义——此电脑=Computer、
+ *  盘符根=HardDrive（--np-icon-drive）、目录=Folder/FolderOpen（激活态，
+ *  --np-icon-folder）；realIcons 开启时优先真实图标（组件内按路径请求） */
+function tabIconOf(path: string, active: boolean): { icon: LucideIcon; colorVar: string } {
+  if (path === THIS_PC) return { icon: Computer, colorVar: "--np-icon-drive" };
+  if (/^[A-Za-z]:\\?$/.test(path)) return { icon: HardDrive, colorVar: "--np-icon-drive" };
+  return active
+    ? { icon: FolderOpen, colorVar: "--np-icon-folder" }
+    : { icon: Folder, colorVar: "--np-icon-folder" };
+}
 
 /** 地址栏面包屑分段（纯函数）：Windows 路径按 \ 切分，盘符段显示 "E:"（Explorer
  *  口径不带斜杠）。超宽折叠不在此处做（按容器实测宽度在前端折叠态里收进 "…"） */
@@ -278,12 +294,23 @@ export function Pane({ pane }: { pane: PaneNode }) {
   const [, bumpRegistered] = useState(0);
   useEffect(() => bumpRegistered((x) => x + 1), []);
 
-  // ⚠ Hooks of Rules：以下两个 Hook 必须先于 `if (!tab) return null` 执行
+  // ⚠ Hooks of Rules：以下 Hook 必须先于 `if (!tab) return null` 执行
   // （2026-11-01 审查修复：曾排在 early return 之后——tab 短暂为空再恢复时
   // Hook 数不一致，React 直接抛错白屏；项目未引入 ESLint，无护栏兜底）
   const searchType = usePanes((st) => (tab ? st.tabs[tab.id]?.searchType ?? "all" : "all"));
   const searchDeep = usePanes((st) => tab && st.tabs[tab.id]?.searchDeep === true);
   const t = useT();
+  // 标签真实图标（2026-11-11 用户需求）：realIcons 开启时按标签路径请求真实
+  // 图标（标签数量少，随标签集变化去重请求即可；此电脑为虚拟根无真实图标，
+  // 恒走 Lucide 兜底——与导航树 pc 节点同口径）
+  const realIcons = useSettings((s) => s.realIcons);
+  const iconMap = useIcons((s) => s.icons);
+  const tabPathsKey = pane.tabs.map((x) => x.path).join("\n");
+  useEffect(() => {
+    if (!realIcons) return;
+    const paths = tabPathsKey.split("\n").filter((p) => p && p !== THIS_PC);
+    if (paths.length) useIcons.getState().requestIcons(paths);
+  }, [tabPathsKey, realIcons]);
 
   if (!tab) return null;
   const tabId = tab.id;
@@ -1008,10 +1035,16 @@ export function Pane({ pane }: { pane: PaneNode }) {
           }
         }}
       >
-        {pane.tabs.map((t, i) => (
+        {pane.tabs.map((t, i) => {
+          const isActive = i === pane.activeTab;
+          // 真实图标优先（realIcons 开启且非此电脑）；未到位渲染预留空位防
+          // 跳动（文件行 RowFileIcon 同口径），关闭/此电脑走 Lucide 语义兜底
+          const realUrl = realIcons && t.path !== THIS_PC ? iconMap[t.path] : undefined;
+          const spec = tabIconOf(t.path, isActive);
+          return (
           <div
             key={t.id}
-            className={`np-tab ${i === pane.activeTab ? "np-tab-on" : ""}`}
+            className={`np-tab ${isActive ? "np-tab-on" : ""}`}
             onClick={() => useLayout.getState().activateTab(pane.id, i)}
             onAuxClick={(e) => {
               // 鼠标中键关闭标签（浏览器/资源管理器习惯）；阻止冒泡避免触发激活
@@ -1059,6 +1092,13 @@ export function Pane({ pane }: { pane: PaneNode }) {
               e.dataTransfer.effectAllowed = "move";
             }}
           >
+            {realUrl ? (
+              <FadeInIcon src={realUrl} />
+            ) : realIcons && t.path !== THIS_PC ? (
+              <span className="np-icon-slot" />
+            ) : (
+              <AppIcon icon={spec.icon} size={DENSITY.iconSm} colorVar={spec.colorVar} />
+            )}
             <span className="np-ellipsis">{titleOf(t.path)}</span>
             <span
               className="np-tab-close"
@@ -1070,7 +1110,8 @@ export function Pane({ pane }: { pane: PaneNode }) {
               <AppIcon icon={X} size={DENSITY.iconXs} />
             </span>
           </div>
-        ))}
+          );
+        })}
         <Button
           minimal
           size="small"

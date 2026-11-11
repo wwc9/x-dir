@@ -2151,6 +2151,13 @@ body.np-col-resizing .np-menued-grip::after {
   opacity: 1;
   color: var(--np-danger);
 }
+/* 标签图标（2026-11-11 用户需求）：全局真实图标 18px 在 24px 标签条内过大，
+   收窄到 sm 档（14px）与 Lucide 兜底同尺寸——真实图标到位前后零跳动 */
+.np-tab .np-icon-slot,
+.np-tab .np-realicon {
+  width: var(--np-icon-sm);
+  height: var(--np-icon-sm);
+}
 
 /* 列表（内嵌圆角高亮行） */
 /* 表头横滚 clip：列宽自然宽超出窗格时表头随 .np-rows 横向滚动（onScroll 平移
@@ -6938,14 +6945,16 @@ body.np-col-resizing * {
   color: var(--np-fg);
 }
 /* 自绘顶栏（2026-10-31 用户需求；2026-11-06 方案 C 改版）：logo 章 +
-   标题/计数副行 + 搜索胶囊（顶栏主入口）+ 窗口五钮。窗口钮复用全局
-   np-winbtn 配方；置顶开态 = accent（§4.5 激活档） */
+   标题（计数副行 2026-11-11 退役，与底栏计数重复，条数只在底栏展示）+
+   搜索胶囊（顶栏主入口）+ 窗口五钮。窗口钮复用全局 np-winbtn 配方；
+   置顶开态 = accent（§4.5 激活档） */
 .np-cliptb {
   display: flex;
   align-items: center;
   gap: var(--np-gutter);
   flex: 0 0 auto;
-  /* 加高容两行标题区 + 搜索胶囊：row-h(28) + 上下 gap×2(8) = 44px 基准 */
+  /* 44px 基准 = row-h(28) + 上下 gap×2(8)（原两行标题区高度，副行退役后
+     保留同高：logo 章与搜索胶囊的呼吸空间，视觉不塌） */
   min-height: calc(var(--np-row-h) + var(--np-gap) * 4);
   padding: var(--np-gap) 6px;
   border-bottom: 1px solid var(--np-hairline);
@@ -6974,12 +6983,6 @@ body.np-col-resizing * {
   font-size: var(--np-font-ui);
   font-weight: 600;
   color: var(--np-fg);
-  white-space: nowrap;
-}
-.np-cliptb-sub {
-  font-size: var(--np-font-sm);
-  color: var(--np-muted);
-  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 /* 搜索胶囊（方案 C 上移顶栏）：surface-2 填充 + pill 圆角 + 聚焦 ring */
@@ -7035,14 +7038,9 @@ body.np-col-resizing * {
 .np-cliptb .np-winbtn + .np-winbtn {
   margin-left: calc(var(--np-gutter) * -1);
 }
-/* 窄窗（≤419px，最小宽 360）逐级让位给搜索框（2026-11-06 巡检修复）：
-   先隐计数副行、再隐标题（logo 章已表达身份）——否则搜索 input 被压到
-   只剩「搜索」二字 */
-@media (max-width: 419px) {
-  .np-cliptb-sub {
-    display: none;
-  }
-}
+/* 窄窗（≤379px，最小宽 360）隐标题让位给搜索框（2026-11-06 巡检修复，
+   计数副行已于 2026-11-11 整体退役）：logo 章已表达身份——否则搜索 input
+   被压到只剩「搜索」二字 */
 @media (max-width: 379px) {
   .np-cliptb-id {
     display: none;

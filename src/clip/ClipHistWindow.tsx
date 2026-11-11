@@ -522,9 +522,11 @@ export function ClipHistWindow() {
 
   return (
     <div className="np-clip">
-      {/* 自绘顶栏（2026-11-06 方案 C + 搜索上移）：logo 章 + 标题/计数副行 +
-          搜索框（胶囊填充式，顶栏主入口）+ 窗口五钮；拖动区 = data-tauri-drag-region
-          （双击 = 最大化/还原），窗口钮复用 np-winbtn 统一配方 */}
+      {/* 自绘顶栏（2026-11-06 方案 C + 搜索上移）：logo 章 + 标题 +
+          搜索框（胶囊填充式，顶栏主入口）+ 窗口五钮；条数只在底栏展示
+          （2026-11-11 用户反馈：顶栏计数副行与底栏重复，退役）；拖动区 =
+          data-tauri-drag-region（双击 = 最大化/还原），窗口钮复用 np-winbtn
+          统一配方 */}
       <header
         className="np-cliptb"
         data-tauri-drag-region
@@ -539,7 +541,6 @@ export function ClipHistWindow() {
         </span>
         <span className="np-cliptb-id" data-tauri-drag-region>
           <span className="np-cliptb-title">剪贴板</span>
-          <span className="np-cliptb-sub">共 {total} 条</span>
         </span>
         <div className="np-clip-searchbar">
           <AppIcon icon={Search} size={DENSITY.iconSm} />
