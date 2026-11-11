@@ -1241,17 +1241,19 @@ body.np-col-resizing .np-menued-grip::after {
 }
 .np-side-del,
 .np-side-ren {
+  /* 悬浮才进布局（2026-11-12 用户反馈：常驻 opacity:0 仍占两钮宽度，方案名
+     被提前截断——display:none 归还空间，hover 才 display:flex 显现） */
+  display: none;
   flex: 0 0 auto;
-  display: flex;
   padding: 1px;
   border: 0;
   background: transparent;
   color: var(--np-muted);
-  opacity: 0;
   cursor: pointer;
 }
 .np-side-item:hover .np-side-del,
 .np-side-item:hover .np-side-ren {
+  display: flex;
   opacity: 0.7;
 }
 .np-side-del:hover {
