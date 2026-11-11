@@ -319,15 +319,19 @@ fn encode_png(img: &RgbaImage) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-/// PNG8：color_quant NeuQuant 调色板量化（≤256 色 + 逐色 alpha），经 png crate
+/// PNG8：color_quant NeuQuant 调色板量化（逐色 alpha），经 png crate
 /// 写 indexed PNG（PLTE+tRNS）。image crate 的 PNG 编码器不支持调色板输出。
 /// 2026-11-11 用户反馈「压缩后一片空白」根因 = NeuQuant::new 两参写反
 /// （samplefac=256 越界 + colors=1 → 整图坍缩单色调色板）；正确签名
 /// (samplefac, colors)，samplefac 1–30 越小质量越好越慢，10 = 业界常用
-/// 均衡档（image crate 官方示例同值）
-fn encode_png8(img: &RgbaImage) -> Result<Vec<u8>, String> {
+/// 均衡档（image crate 官方示例同值）。
+/// 质量语义（2026-11-11 用户反馈「质量无法选择」）：quality 1–100 线性映射
+/// 调色板色彩数 16–256（75 ≈ 192 色）——高质量 = 色多更清晰更大、低质量 =
+/// 色少更小，PNG8 不再是「质量无关」的黑箱
+fn encode_png8(img: &RgbaImage, quality: u8) -> Result<Vec<u8>, String> {
+    let colors = (((quality as u32 * 256 + 50) / 100) as usize).clamp(16, 256);
     let pixels = img.clone().into_raw();
-    let nq = color_quant::NeuQuant::new(10, 256, &pixels);
+    let nq = color_quant::NeuQuant::new(10, colors, &pixels);
     let cmap = nq.color_map_rgba();
     let (w, h) = (img.width(), img.height());
     let mut indexed: Vec<u8> = Vec::with_capacity((w * h) as usize);
@@ -465,7 +469,7 @@ pub(crate) fn run_compress(
         let result = (|| -> Result<(), String> {
             let bytes = match target {
                 CompressTarget::PngLossless => optimize_png_lossless(p)?,
-                CompressTarget::Png8 => encode_png8(&decode_rgba(p, true)?)?,
+                CompressTarget::Png8 => encode_png8(&decode_rgba(p, true)?, opts.quality)?,
                 _ => encode_jpeg(&decode_rgba(p, true)?, opts.quality)?,
             };
             write_out(&out, &bytes)
@@ -1104,7 +1108,7 @@ mod tests {
     #[test]
     fn png8_output_is_real_palette_not_single_color() {
         let img = gradient_image();
-        let bytes = encode_png8(&img).unwrap();
+        let bytes = encode_png8(&img, 85).unwrap();
         // 解码 indexed PNG：调色板必须非平凡（>1 色），索引必须多样
         let mut dec = png::Decoder::new(std::io::Cursor::new(&bytes));
         dec.set_transformations(png::Transformations::IDENTITY);
@@ -1162,6 +1166,42 @@ mod tests {
                 && (br[2] as i32 - 250).abs() < 48,
             "右下（252,252,250）应近似还原：{:?}",
             br
+        );
+    }
+
+    #[test]
+    fn png8_quality_maps_to_palette_size() {
+        // 质量语义（2026-11-11）：quality → 调色板色彩数——低质量调色板显著
+        // 小于高质量，产物体积随之递减；两档解码均须为合法 indexed PNG
+        let img = gradient_image();
+        let hi = encode_png8(&img, 85).unwrap();
+        let lo = encode_png8(&img, 25).unwrap();
+        let palette_len = |bytes: &[u8]| -> usize {
+            let mut dec = png::Decoder::new(std::io::Cursor::new(bytes));
+            dec.set_transformations(png::Transformations::IDENTITY);
+            dec.read_info()
+                .unwrap()
+                .info()
+                .palette
+                .as_ref()
+                .map(|p| p.len() / 3)
+                .unwrap_or(0)
+        };
+        let hi_colors = palette_len(&hi);
+        let lo_colors = palette_len(&lo);
+        assert!(
+            lo_colors < hi_colors,
+            "低质量调色板应小于高质量：lo={} hi={}",
+            lo_colors,
+            hi_colors
+        );
+        assert!(hi_colors >= 128, "高质量应接近 256 色：{}", hi_colors);
+        assert!(lo_colors <= 96, "低质量应接近 64 色：{}", lo_colors);
+        assert!(
+            lo.len() < hi.len(),
+            "低质量产物应更小：lo={} hi={}",
+            lo.len(),
+            hi.len()
         );
     }
 }

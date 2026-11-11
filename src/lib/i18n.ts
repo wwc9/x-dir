@@ -366,10 +366,20 @@ const EN: Record<string, string> = {
   "紧凑": "Compact",
   "自定义": "Custom",
   "质量": "Quality",
+  "质量（= 色彩数）": "Quality (= color count)",
   "质量值（1–100）": "Quality (1–100)",
+  "质量值（映射色彩数 16–256）": "Quality (maps to 16–256 colors)",
+  "≈ {n} 色": "≈ {n} colors",
+  "JPEG 质量 {q}": "JPEG quality {q}",
+  "滑杆映射调色板色彩数（16–256）": "Slider maps palette colors (16–256)",
+  "滑杆自定义 JPEG 质量": "Custom JPEG quality via slider",
+  "PNG8 质量映射调色板色彩数（75 ≈ 192 色）：高质量更清晰、低质量更小。":
+    "PNG8 quality maps to palette colors (75 ≈ 192 colors): higher = sharper & larger, lower = smaller.",
   "智能": "Smart",
   "JPEG 转 JPEG、PNG 转 PNG8、其余转 JPEG":
     "JPEG→JPEG, PNG→PNG8, others→JPEG",
+  "JPEG 转 JPEG、PNG 转 PNG8（质量 = 色彩数）、其余转 JPEG":
+    "JPEG→JPEG, PNG→PNG8 (quality = color count), others→JPEG",
   "统一转 JPEG（按质量重编码）": "Convert all to JPEG (re-encode at quality)",
   "调色板量化 ≤256 色（截图/图标最佳）": "Palette quantize ≤256 colors (best for screenshots/icons)",
   "无损优化": "Lossless",

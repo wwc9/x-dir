@@ -139,7 +139,10 @@ function useQualitySeg(saved: number) {
   return { seg, setSeg, custom, setCustom, quality };
 }
 
-/** 质量档行：三档 Seg + 自定义档展开滑杆（qualityOff = 整行禁用降灰） */
+/** 质量档行：三档 Seg + 自定义档展开滑杆（qualityOff = 整行禁用降灰）。
+ *  png8 = 质量映射 PNG8 调色板色彩数（2026-11-11 用户反馈「质量无法选择」：
+ *  此前 PNG8/智能+全 PNG 一律置灰，质量行形同虚设——现质量在除「无损优化」
+ *  外全档可选，title 实时回显色彩数换算） */
 function QualityRows({
   t2,
   seg,
@@ -147,6 +150,7 @@ function QualityRows({
   custom,
   setCustom,
   qualityOff,
+  png8,
 }: {
   t2: (s: string, params?: Record<string, string | number>) => string;
   seg: number;
@@ -154,22 +158,36 @@ function QualityRows({
   custom: number;
   setCustom(v: number): void;
   qualityOff: boolean;
+  png8: boolean;
 }) {
+  const colorsOf = (q: number) => Math.round((q * 256 + 50) / 100);
   return (
     <>
-      <FormRow k={t2("质量")}>
+      <FormRow k={png8 ? t2("质量（= 色彩数）") : t2("质量")}>
         <Seg
           value={seg}
           onChange={setSeg}
           disabled={qualityOff}
           options={[
-            ...QUALITY_SEGS.map((q) => ({ value: q.value, label: t2(q.label) })),
-            { value: -1, label: t2("自定义") },
+            ...QUALITY_SEGS.map((q) => ({
+              value: q.value,
+              label: t2(q.label),
+              title: png8
+                ? t2("≈ {n} 色", { n: colorsOf(q.value) })
+                : t2("JPEG 质量 {q}", { q: q.value }),
+            })),
+            {
+              value: -1,
+              label: t2("自定义"),
+              title: png8
+                ? t2("滑杆映射调色板色彩数（16–256）")
+                : t2("滑杆自定义 JPEG 质量"),
+            },
           ]}
         />
       </FormRow>
       {seg === -1 && !qualityOff && (
-        <FormRow k={t2("质量值（1–100）")}>
+        <FormRow k={png8 ? t2("质量值（映射色彩数 16–256）") : t2("质量值（1–100）")}>
           <Slider
             min={1}
             max={100}
@@ -211,10 +229,12 @@ export function CompressDialog({
     init.target >= 0 && init.target <= 3 ? init.target : 0,
   );
   const q = useQualitySeg(init.quality);
-  // 质量只作用于 JPEG 编码路径（Rust 端 PNG8/无损优化不读该值）→ 行禁用降灰；
-  // 智能策略下纯 PNG 清单走 PNG8（同样不读质量）→ 一并禁用（2026-11-09 P2）
   const allPng = items.length > 0 && items.every((p) => /\.png$/i.test(p));
-  const qualityOff = target === 2 || target === 3 || (target === 0 && allPng);
+  const png8 = target === 2 || (target === 0 && allPng);
+  // 质量语义（2026-11-11）：JPEG = 编码质量、PNG8（含智能+全 PNG）= 调色板
+  // 色彩数（Rust 端线性映射 16–256）——仅「无损优化」真正无质量参数才禁用
+  // （旧版对 PNG 路径一律置灰 = 用户反馈「质量无法选择」根因）
+  const qualityOff = target === 3;
   // 输出扩展名与 Rust compress 同口径：Auto = PNG→png、其余→jpg
   const ext =
     target === 1 ? "jpg" : target >= 2 ? "png" : /\.png$/i.test(items[0] ?? "") ? "png" : "jpg";
@@ -228,7 +248,11 @@ export function CompressDialog({
               value={target}
               onChange={setTarget}
               options={[
-                { value: 0, label: t2("智能"), title: t2("JPEG 转 JPEG、PNG 转 PNG8、其余转 JPEG") },
+                {
+                  value: 0,
+                  label: t2("智能"),
+                  title: t2("JPEG 转 JPEG、PNG 转 PNG8（质量 = 色彩数）、其余转 JPEG"),
+                },
                 { value: 1, label: "JPEG", title: t2("统一转 JPEG（按质量重编码）") },
                 { value: 2, label: "PNG8", title: t2("调色板量化 ≤256 色（截图/图标最佳）") },
                 { value: 3, label: t2("无损优化"), title: t2("PNG 无损重压缩，画质零损失") },
@@ -242,6 +266,7 @@ export function CompressDialog({
             custom={q.custom}
             setCustom={q.setCustom}
             qualityOff={qualityOff}
+            png8={png8}
           />
         </div>
         <Hint>
@@ -249,6 +274,8 @@ export function CompressDialog({
             "为 {n} 张图片压缩，旁写 *_压缩.jpg / *_压缩.png，不覆盖原文件；EXIF 方向已烘焙进像素。",
             { n: items.length },
           )}
+          {png8 &&
+            t2("PNG8 质量映射调色板色彩数（75 ≈ 192 色）：高质量更清晰、低质量更小。")}
           {t2("输出预览：{out}", { out: outPreview(items, "_压缩", ext) })}
         </Hint>
       </DialogBody>
@@ -504,6 +531,7 @@ export function ConvertDialog({
             custom={q.custom}
             setCustom={q.setCustom}
             qualityOff={qualityOff}
+            png8={false}
           />
         </div>
         <div className="np-bren-form">
