@@ -115,7 +115,9 @@ if ($nsis) {
         $url = "https://gitee.com/wwc9/x-dir/releases/download/v$Version/$($nsis.Name)"
         $latest = [ordered]@{
             version  = $Version
-            notes    = @("见 Release 说明")
+            # notes 必须是字符串（updater 插件 serde 校验：数组会报
+            # "invalid type: sequence, expected a string"）
+            notes    = "见 Release 说明"
             pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
             platforms = [ordered]@{
                 "windows-x86_64" = [ordered]@{ signature = $sig; url = $url }

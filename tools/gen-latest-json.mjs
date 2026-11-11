@@ -17,7 +17,8 @@ if (!m) {
 }
 const manifest = {
   version: m[1],
-  notes: notes ? [notes] : ["见 Release 说明"],
+  // notes 必须为字符串（updater 插件 serde 校验拒绝数组）
+  notes: notes || "见 Release 说明",
   pub_date: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
   platforms: {
     "windows-x86_64": {
