@@ -13,6 +13,7 @@
 |---|---|---|
 | [docs/agents/ui-standards.md](docs/agents/ui-standards.md) | §4 详版：设计 token（--np-* 唯一取值来源）、组件选用优先级、密度规范、图标规范（Lucide/AppIcon 四档）、新增 UI 流程（先读规范 = 第 0 步）、二级页面统一规范（标题必有/Blueprint 紧凑化）、参数面板双列对齐细则（is-cols 网格/横向中轴/自带样式覆盖清单） | **绘制或更新任何 UI 界面前硬性必读（2026-11-10 定案）**：新增功能、改样式、调布局、新增/修改对话框一律先通读并按验收口径自查；引入任何颜色/字号/间距/图标同样必读 |
 | [docs/agents/features.md](docs/agents/features.md) | §4.3 已采用清单：全部功能域的组件选型、模块归属、实现定案与注意事项（预览/搜索/任务引擎/右键菜单/PDF/图片/办公批处理等） | 改造既有功能、新增功能、动后端命令前查现状 |
+| [docs/release.md](docs/release.md) | §9 详版：双端 Release 发布全流程（版本/tag 先行、构建产物、发行说明双语格式模板、Gitee 浏览器自动化步骤、GitHub API 脚本、实战坑速查表） | **用户说「发布新版本」时执行发布前必读** |
 
 ## 1. 工具链强制
 
@@ -92,3 +93,17 @@
 - 新增（2026-10-30 剪贴板历史，§3.7）：clipboard-rs/MIT（剪贴板变化监听信号源，Windows 内部走 AddClipboardFormatListener 真事件）、rusqlite/MIT（bundled SQLite，剪贴板历史持久化——项目首个数据库；选型排除 Ditto/CopyQ=GPL-3.0 与 PasteBar=CC BY-NC，EcoPaste/Apache-2.0 仅作架构参考）
 - 发布前生成 `THIRD-PARTY-NOTICES.txt`（`node tools/gen-third-party-notices.mjs`，2026-11-04 落地：cargo metadata 按 Windows 目标过滤 + 依赖自带 LICENSE 按签名提取全文；`tools/build-release.ps1` 打包时自动重生成并随发布物分发），当前已知：Tauri MIT-Apache、React/MIT、Blueprint Apache-2.0、TanStack MIT、react-resizable-panels MIT、png/MIT（V2 图标 PNG 编码）、notify/MIT、trash/(MIT OR Apache-2.0)、pinyin/MIT、lopdf/MIT（PDF 合并/拆分/水印/页级编辑）、flate2/(MIT OR Apache-2.0)（流压缩）、ab_glyph/Apache-2.0（水印文字光栅化，运行时读系统字体不打包）、jpeg-decoder/(MIT OR Apache-2.0)（图片合并转 PDF 的 JPEG 解码）、zip/MIT（OOXML 隐私清理重打包 + 压缩为 zip）、quick-xml/MIT/Apache-2.0（OOXML/ODF 抽取）、calamine/MIT（xlsx/xls 预览读取 + Excel 合并读取）、rust_xlsxwriter/MIT（Excel 合并写出，唯一宽松协议的 xlsx 写库）、encoding_rs/(MIT OR Apache-2.0)（编码探测/转换）、tiff/MIT-Apache（预览）、sevenz-rust/Apache-2.0（7z 清单）、image/(MIT OR Apache-2.0)（图片批处理解码/编码/缩放/合成）、oxipng/MIT（PNG 无损优化）、color_quant/(MIT OR Apache-2.0)（PNG8 调色板量化）、kamadak-exif/(MIT OR Apache-2.0)（EXIF 方向读取）（全盘搜索拼音首字母匹配）、memmap2/MIT（全盘索引 mmap 只读查询）、sha2/(MIT OR Apache-2.0)（重复文件查找内容指纹）、tauri-plugin-dialog/Apache-2.0（配置导出/导入与清单导出的原生保存对话框）、webview2-com/(MIT OR Apache-2.0)（关闭 WebView2 浏览器加速键 F5/Ctrl+R/Ctrl+F/Ctrl+P，快捷键由前端 lib/keyboard.ts 全权路由）、highlight.js/BSD-3（预览代码语法高亮，懒加载 core+单语言）、mailparse/0BSD（eml 邮件预览 MIME 解析）、cfb/MIT（msg 邮件预览 OLE 容器读流）、clipboard-rs/MIT（剪贴板历史监听，§3.7）、rusqlite/MIT（剪贴板历史 SQLite 存储，§3.7）、md-5+sha1+filetime（2026-11-09 功能库「工具」组：校验值/校验文件/改时间戳——RustCrypto MIT/Apache-2.0 与 filetime MIT/Apache-2.0，三者均已在依赖树内直引，零新外部代码）
 - 配置集中化（2026-10-12）：用户偏好统一存 settings.json（含侧边栏/列宽/导航树等 UI 偏好，原 localStorage 已迁移）；工作区=workspaces/*.json；导出=设置 → "配置"区（`export_config` 打包两者为单 JSON，version 字段供导入对齐）；导入（2026-10-14）= `import_config` 校验 app/version 后整体覆盖 settings.json 与 workspaces/*.json（前端热重载设置 + 事件刷新方案列表；2026-11-11 起成功后广播 `config-imported` 事件，常驻剪贴板浮窗重读设置热同步主题/直接粘贴——浮窗是独立 WebView 不随主窗重载）；布局方案行内重命名 = `rename_workspace`（同名冲突拒绝不静默覆盖，文档 name 字段同步改写，前端顺序表原地换名，2026-11-11）。不随导出：剪贴板历史=config/clipboard.db（SQLite 单独存储）、全盘索引=config/index/（可重建缓存）。UI 偏好禁止再直写 localStorage
+
+
+## 9. 发布自动化（2026-11-11 定案，v0.1.7 双端实发验证）
+
+- **触发规则：用户说「发布新版本」即无需再确认，全自动执行 Gitee + GitHub 双端 Release**，
+  全流程步骤/命令/验收口径见 [docs/release.md](docs/release.md)（执行前必读，坑速查见其 §7，同类问题不得重蹈）
+- 固定流水线：bump 五处版本 + update.json notes → 全绿 → 提交推送打 tag（**tag 必须先到远端**）→
+  `tools/build-release.ps1` 出四件产物 → 写 `dist-release/v<版本>/release-notes.md` →
+  **Gitee 走浏览器自动化**（内置浏览器登录态常驻，附件页面内 512KB 分块注入 Dropzone + 手动 `processQueue()`）→
+  **GitHub 走 `tools/publish-release.ps1`**（GITHUB_TOKEN 已 setx 持久化，脚本自动读 release-notes.md）→
+  `latest.json` 复制仓库根提交推送（双端 raw 端点即 updater 端点，即刻生效）
+- **发行说明格式硬性要求**：🟢新增 / 🔵改进 / 🔴修复 三段分类编号（全局连续）；内容简洁明了
+  （每条 = 加粗短标题 + 一句话）；**每条中文行下一行缩进附一行对应英文**；
+  双端同源 = 该 release-notes.md（Gitee 描述框直填，GitHub 脚本自动读取）
