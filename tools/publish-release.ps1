@@ -26,9 +26,10 @@ foreach ($f in @($setup, $zip, $sums, $latest)) {
     if (-not (Test-Path $f)) { throw "缺产物：$f（先跑 build-release.ps1）" }
 }
 
-# 发行说明：update.json notes → markdown 列表（临时文件 UTF-8 无 BOM，curl
-# --data-binary 直读，规避 PS5.1 管道按 GBK 编码中文的问题）
-$uj = Get-Content (Join-Path $Root "update.json") -Raw | ConvertFrom-Json
+# 发行说明：update.json notes → markdown 列表（-Encoding UTF8 必须——PS5.1
+# 默认按 ANSI 读文件，中文全成乱码且 JSON 解析失败；临时文件 UTF-8 无 BOM，
+# curl --data-binary 直读，规避 PS5.1 管道 GBK 编码中文的问题）
+$uj = Get-Content (Join-Path $Root "update.json") -Raw -Encoding UTF8 | ConvertFrom-Json
 $notesFile = Join-Path $env:TEMP "xdir_release_notes.json"
 $relNotes = ($uj.notes | ForEach-Object { "- $_" }) -join "`n"
 $bodyObj = @{ tag_name = "v$Version"; name = "X-Dir v$Version"; body = $relNotes; target_commitish = "main" }
