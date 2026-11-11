@@ -52,6 +52,13 @@ export function AboutDialog() {
   const open = useUi((s) => s.aboutOpen);
   const check = useUi((s) => s.updateCheck);
   const [busy, setBusy] = useState(false);
+  // 一键覆盖更新（2026-11-11）：Tauri updater 插件——检查 latest.json → 下载
+  // 签名安装包 → 静默安装同路径 → 自动重启（无卸载界面，配置/固定图标保留）。
+  // latest.json 尚未随发布上传时本通道报错，回落手动下载按钮
+  const [inPlace, setInPlace] = useState<null | {
+    phase: "check" | "download" | "install";
+    pct: number;
+  }>(null);
   // 打开瞬间若尚未检查过（启动检查未跑完/失败残留 null），自动补一次
   const autoRan = useRef(false);
   const sys = useSystemInfo(open);
@@ -62,6 +69,41 @@ export function AboutDialog() {
     void checkForUpdate()
       .then((c) => useUi.getState().setUpdateCheck(c))
       .finally(() => setBusy(false));
+  };
+
+  const inPlaceUpdate = async (): Promise<void> => {
+    setInPlace({ phase: "check", pct: 0 });
+    try {
+    const { check: checkUpdate } = await import("@tauri-apps/plugin-updater");
+      const update = await checkUpdate();
+      if (!update) {
+        useUi.getState().toast("应用内更新通道不可用，请手动下载", "error");
+        setInPlace(null);
+        return;
+      }
+      let total = 0;
+      let got = 0;
+      setInPlace({ phase: "download", pct: 0 });
+      await update.downloadAndInstall((ev) => {        if (ev.event === "Started") {
+          total = ev.data.contentLength ?? 0;
+        } else if (ev.event === "Progress") {
+          got += ev.data.chunkLength;
+          if (total > 0) {
+            setInPlace({
+              phase: "download",
+              pct: Math.min(100, Math.round((got / total) * 100)),
+            });
+          }
+        } else if (ev.event === "Finished") {
+          setInPlace({ phase: "install", pct: 100 });
+        }
+      });
+      const { relaunch } = await import("@tauri-apps/plugin-process");
+      await relaunch();
+    } catch (e) {
+      useUi.getState().toast(`自动更新失败：${String(e)}`, "error");
+      setInPlace(null);
+    }
   };
 
   useEffect(() => {
@@ -193,6 +235,20 @@ export function AboutDialog() {
                   <Button
                     size="small"
                     intent="primary"
+                    icon={ic(Download)}
+                    loading={!!inPlace}
+                    onClick={() => void inPlaceUpdate()}
+                  >
+                    {inPlace
+                      ? inPlace.phase === "download"
+                        ? `下载中 ${inPlace.pct}%`
+                        : inPlace.phase === "install"
+                          ? "安装中，完成后自动重启…"
+                          : "正在检查…"
+                      : t("一键更新（自动安装）")}
+                  </Button>
+                  <Button
+                    size="small"
                     icon={ic(Download)}
                     onClick={() => void openUrl(RELEASE_URLS.gitee)}
                   >

@@ -34,3 +34,6 @@ test-data
 
 # ZCode local workspace
 .zcode/
+
+# 更新器签名私钥（minisign；泄露 = 可伪造更新，绝不入库）
+tools/keys

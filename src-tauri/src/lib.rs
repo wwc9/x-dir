@@ -62,6 +62,13 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // 应用内覆盖更新（2026-11-11）：检查 latest.json → 下载签名安装包 →
+        // 静默安装同路径 → 自动重启（无卸载界面，配置/固定任务栏图标保留）。
+        // 公钥/清单端点在 tauri.conf.json plugins.updater；签名私钥 tools/keys/
+        // （gitignored，绝不入库）
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        // 自动重启（更新安装完成后 relaunch）
+        .plugin(tauri_plugin_process::init())
         // 截图（§3.6）：全局热键 + 位图剪贴板（注册时机由前端设置驱动，
         // 见 commands/shot.rs 的 shot_register_hotkey）
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())

@@ -34,6 +34,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "resources": [
       "binaries/7z.exe",
       "binaries/7z.dll",
@@ -59,5 +60,14 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDYyRDY4RUY5NUI4RTA4MjQKUldRa0NJNWIrWTdXWXBwVU9pbHRvSkRhbU9ZWEhQbm5wNEcweXNTWEZVL2EvbnpGSHU2R2kxZmoK",
+      "endpoints": [
+        "https://raw.giteeusercontent.com/wwc9/x-dir/raw/main/latest.json",
+        "https://raw.githubusercontent.com/wwc9/x-dir/main/latest.json"
+      ]
+    }
   }
 }

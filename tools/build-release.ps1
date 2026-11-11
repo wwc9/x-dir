@@ -38,6 +38,17 @@ Write-Host "== 2/5 重新生成 THIRD-PARTY-NOTICES.txt =="
 node tools/gen-third-party-notices.mjs
 Assert-LastExit "第三方声明生成（REVIEW 未清零）"
 
+# 应用内更新签名私钥（tauri.conf.json createUpdaterArtifacts=true 时构建必需）：
+# 私钥 tools/keys/xdir_updater.key（gitignored，绝不入库）；无密码签名
+$keyPath = Join-Path $Root "tools\keys\xdir_updater.key"
+if (Test-Path $keyPath) {
+    $env:TAURI_SIGNING_PRIVATE_KEY = $keyPath
+    $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
+    Write-Host "更新签名私钥已就位（tools/keys/xdir_updater.key）"
+} elseif (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+    Write-Warning "缺少 tools/keys/xdir_updater.key——tauri build 将因 createUpdaterArtifacts 签名缺失而失败（换机器发布请先恢复私钥）"
+}
+
 Write-Host "== 2.5/5 内嵌 7-Zip 便携版（哈希锁定下载/校验）=="
 powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "get-7zip.ps1")
 
@@ -94,6 +105,32 @@ if ($nsis) {
     Copy-Item $nsis.FullName $OutDir
     $hashTargets += (Join-Path $OutDir $nsis.Name)
     Write-Host "安装包: $($nsis.Name)（$([math]::Round($nsis.Length / 1MB, 1)) MB）"
+    # 应用内更新清单（2026-11-11 updater 插件）：.sig 随 createUpdaterArtifacts
+    # 产出；latest.json 交由发布者复制到仓库根并提交（updater 端点 = 仓库 raw
+    # 地址），url 指向 Release 附件（须与实际上传渠道一致）
+    $sigPath = "$($nsis.FullName).sig"
+    if (Test-Path $sigPath) {
+        Copy-Item $sigPath $OutDir
+        $sig = (Get-Content $sigPath -Raw).Trim()
+        $url = "https://gitee.com/wwc9/x-dir/releases/download/v$Version/$($nsis.Name)"
+        $latest = [ordered]@{
+            version  = $Version
+            notes    = @("见 Release 说明")
+            pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            platforms = [ordered]@{
+                "windows-x86_64" = [ordered]@{ signature = $sig; url = $url }
+            }
+        }
+        # 无 BOM UTF-8（BOM 会令 updater 的 JSON 解析失败）
+        [IO.File]::WriteAllText(
+            (Join-Path $OutDir "latest.json"),
+            ($latest | ConvertTo-Json -Depth 5),
+            (New-Object Text.UTF8Encoding($false))
+        )
+        Write-Host "应用内更新清单: latest.json（minisign 签名；发布时复制到仓库根提交，安装包上传渠道须与 url 一致）"
+    } else {
+        Write-Warning "未找到 $sigPath——应用内更新清单未生成（createUpdaterArtifacts 未生效？）"
+    }
     Write-Sums $hashTargets
 } else {
     Write-Sums $hashTargets
@@ -111,6 +148,6 @@ Write-Host "== 完成 → $OutDir ==" -ForegroundColor Cyan
 Write-Host "后续动作："
 Write-Host "  1. 便携验收: powershell -ExecutionPolicy Bypass -File tools/verify-portable.ps1"
 Write-Host "     （先把 zip 解到空目录，脚本做注册表零写入/配置就地断言）"
-Write-Host "  2. 填 update.json 的 notes，git 提交推送后打 tag v$Version"
-Write-Host "  3. Gitee 与 GitHub 双端建 Release，挂 zip/安装包 + SHA256SUMS.txt"
+Write-Host "  2. 把 latest.json 复制到仓库根，填 update.json 的 notes，git 提交推送后打 tag v$Version"
+Write-Host "  3. Gitee 与 GitHub 双端建 Release，挂 zip/安装包/SHA256SUMS.txt（安装包直链必须与 latest.json 的 url 一致）"
 Write-Host "  4. Release 说明里注明：exe 未签名，SmartScreen 会弹「未知发布者」，选「仍要运行」"

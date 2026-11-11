@@ -103,6 +103,10 @@ xcap = "0.9"
 base64 = "0.22"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-clipboard-manager = "2"
+# 应用内覆盖更新（2026-11-11）：updater 检查/下载/校验签名安装包，process 自动
+# 重启（均 Tauri 官方 MIT/Apache-2.0）
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 
 # 剪贴板历史（2026-10-30，§3.7）：clipboard-rs MIT 只作变化信号源（Windows
 # 内部走 AddClipboardFormatListener 真事件，macOS 轮询 changeCount），内容
