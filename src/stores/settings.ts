@@ -157,15 +157,16 @@ const toColorref = (rgb: number): number =>
   ((rgb & 0xff) << 16) | (rgb & 0xff00) | ((rgb >> 16) & 0xff);
 
 /** 原生窗缘底色（顶缘 1px 非客户区 + DWM 窗框，WebView 之外）与画布同色，
- *  取当前 DOM 主题类计算（COLORREF = 0x00BBGGRR；#e9ecf1 / #131519 与
- *  index.css --np-bg 同值；Rust 侧默认浅色，深色由本函数同步） */
+ *  取当前 DOM 主题类计算（COLORREF = 0x00BBGGRR；#e9ecf1 / #161616 与
+ *  index.css --np-bg 同值（2026-11-11 深色画布参考 zcode 方案改 #161616）；
+ *  Rust 侧默认浅色，深色由本函数同步） */
 function syncBorderColor() {
   if (borderFadeTimer !== null) {
     clearInterval(borderFadeTimer);
     borderFadeTimer = null;
   }
   const canvas = document.documentElement.classList.contains("dark")
-    ? 0x131519
+    ? 0x161616
     : 0xe9ecf1;
   borderCur = canvas;
   api.setBorderColor(toColorref(canvas)).catch(() => undefined);
@@ -226,7 +227,7 @@ export function applyTheme(theme: Settings["theme"]) {
   // 侧栏拖宽时右缘黑条）；钉成画布色后即使露底也与界面同色不可见。
   // ?. 防御：guard 测试桩的 getCurrentWindow 不含本方法
   getCurrentWindow()
-    .setBackgroundColor?.(dark ? "#131519" : "#e9ecf1")
+    .setBackgroundColor?.(dark ? "#161616" : "#e9ecf1")
     .catch(() => undefined);
   if (!themeFxInFlight) syncBorderColor();
 }

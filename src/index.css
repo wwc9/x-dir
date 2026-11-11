@@ -124,22 +124,26 @@
 
 .dark,
 html.bp6-dark {
-  /* —— 色板（深色，中性炭灰）—— */
-  --np-bg: #131519;
-  --np-surface: #1b1e23;
-  --np-surface-2: #24282f;
-  --np-border: #3a414b;
-  --np-fg: #e8eaed;
-  --np-muted: #8b929c;
+  /* —— 色板（深色，2026-11-11 中性灰阶参考 zcode 深色方案取样定值：画布
+     #161616 / 浮起面板 #2B2B2B / 填充输入 #3a3a3a / 正文 #D4D4D4 /
+     muted #8f8f8f——zcode 无边框语言，层级纯靠明度差，border 仅为
+     popover ring 等线场景保留中性一档。强调色仍为蓝 #5C9DFF，项目
+     单一强调色决策不变，仅中性灰阶与成功绿对齐 zcode）—— */
+  --np-bg: #161616;
+  --np-surface: #2b2b2b;
+  --np-surface-2: #3a3a3a;
+  --np-border: #454545;
+  --np-fg: #d4d4d4;
+  --np-muted: #8f8f8f;
   --np-accent: #5c9dff;
-  --np-accent-fg: #0d1117;
-  --np-hover: rgba(255, 255, 255, 0.055);
+  --np-accent-fg: #101010;
+  --np-hover: rgba(255, 255, 255, 0.07);
   --np-stripe: rgba(255, 255, 255, 0.04);
   --np-sel: rgba(92, 157, 255, 0.16);
   --np-danger: #f27073;
-  --np-danger-fg: #14161a;
-  --np-success: #5cb964;
-  --np-cat-add: #5cb964;
+  --np-danger-fg: #161616;
+  --np-success: #46bf72;
+  --np-cat-add: #46bf72;
   --np-cat-replace: #5c9dff;
   --np-cat-remove: #f27073;
   --np-cat-convert: #a08df5;
@@ -155,7 +159,7 @@ html.bp6-dark {
   --np-icon-image: #79a9ff;
   --np-icon-audio: #c47ec7;
   --np-icon-video: #ef8085;
-  --np-icon-text: #8b929c;
+  --np-icon-text: #8f8f8f;
   --np-icon-pdf: #f27073;
   --np-icon-table: #3bb074;
   --np-icon-archive: #ef9b2d;
@@ -163,7 +167,7 @@ html.bp6-dark {
   --np-icon-doc: #7fa8e3;
   --np-icon-slide: #e8926b;
   --np-icon-font: #d982ab;
-  --np-icon-generic: #8b929c;
+  --np-icon-generic: #8f8f8f;
 
   /* 代码语法高亮语义色（深色，GitHub Dark 系） */
   --np-code-kw: #ff7b72;

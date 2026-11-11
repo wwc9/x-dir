@@ -14,7 +14,7 @@
   - 例外 1：布局语义类 Tailwind 工具类（`flex` / `min-w-0` / `truncate` 等）不受限
   - 例外 2：JS 逻辑需要的密度数字集中在 `src/lib/tokens.ts`（`DENSITY`），与 `--np-*` 有对应的必须同名同值（如 `rowH: 28` ↔ `--np-row-h: 28px`），改一处必须改另一处；纯 JS 启发式（如右键菜单定位钳制）也集中在 DENSITY 并注释说明
   - 例外 3：index.css 组件类内的间距微调（gap/padding 的 1–10px 级布局值）允许裸值，但同一语义必须取值一致
-- 色板为中性灰 + 单一强调色（浅 `#3574f0` / 深 `#5C9DFF`），强调色只用于激活态与主操作；调整主题只改 `index.css` 的 `:root` / `.dark` 两段
+- 色板为中性灰 + 单一强调色（浅 `#3574f0` / 深 `#5C9DFF`），强调色只用于激活态与主操作；调整主题只改 `index.css` 的 `:root` / `.dark` 两段。**深色主题灰阶（2026-11-11 定案）参考 zcode 深色方案截图取样定值**：画布 `#161616` / 浮起面板 `#2B2B2B` / 填充输入 `#3a3a3a` / 正文 `#D4D4D4` / muted `#8f8f8f` / 成功绿 `#46BF72`——zcode 为无边框语言、层级纯靠明度差，`--np-border` 仅为 popover ring 等线场景保留中性一档（`#454545`）；强调色仍为蓝（单一强调色决策不变）。原生窗口底色（`stores/settings.ts` 的 setBackgroundColor/syncBorderColor `#161616`）与 `--np-bg` 同值，改画布色必须两处同改
 - Blueprint 控件的对齐覆盖集中在 `index.css` 的"Blueprint 对齐覆盖"段（只动圆角/底色/描边）
 
 ### 4.2 组件选用优先级

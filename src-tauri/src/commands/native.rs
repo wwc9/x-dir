@@ -7,7 +7,8 @@ use tauri::{AppHandle, Manager};
 use super::files::AppError;
 
 /// 无边框窗口顶部 1px 非客户区的填充色（COLORREF 0x00BBGGRR）。
-/// 默认浅色画布 #e9ecf1；深色主题由前端经 set_border_color 同步（#131519）
+/// 默认浅色画布 #e9ecf1；深色主题由前端经 set_border_color 同步（#161616，
+/// 2026-11-11 深色画布参考 zcode 方案，随 index.css --np-bg 同改）
 #[cfg(windows)]
 pub static BORDER_COLOR: AtomicU32 = AtomicU32::new(0x00F1_ECE9);
 
