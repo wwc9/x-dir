@@ -2931,6 +2931,24 @@ body.np-col-resizing * {
 .np-about .np-about-notes {
   font-size: var(--np-font-ui);
 }
+.np-about-note-sec + .np-about-note-sec {
+  margin-top: var(--np-gutter);
+}
+/* 节标题 = Release 三段同名（✨新增/⚡改进/🐛修复），13px 加粗正文色 */
+.np-about-note-head {
+  font-weight: 600;
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+}
+.np-about-note-sec ul {
+  margin: 2px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+}
 .np-about-note-t {
   font-weight: 600;
   color: var(--np-fg);

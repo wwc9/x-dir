@@ -61,6 +61,38 @@ export function isUpdateAvailable(check: UpdateCheck | null): boolean {
   );
 }
 
+// ── 更新条目分类（2026-11-12 用户定案「面板与 Release 描述一致」）────────
+// notes 每条以分类标签前缀开头（"✨ 新增 "/"⚡ 改进 "/"🐛 修复 "，与发行说明
+// 三段同名）——notes 保持 string[] 不变：已装出去的旧版解析器是严格
+// Vec<String>，换结构会让旧版检查更新直接失败；旧面板平铺显示前缀可读，
+// 新面板按前缀分组渲染出与 Release 同构的三段。
+
+export interface NoteSection {
+  title: string;
+  items: string[];
+}
+
+const NOTE_TAGS = ["✨ 新增", "⚡ 改进", "🐛 修复"] as const;
+
+/** 按前缀标签分组（保持出现顺序）；无已知前缀的条目归入「其他」节，
+ *  全部无前缀时整体落「其他」单节（旧清单兼容，面板呈现不散架） */
+export function groupNotes(notes: string[]): NoteSection[] {
+  const out: NoteSection[] = [];
+  for (const raw of notes) {
+    const t = raw.trimStart();
+    const tag = NOTE_TAGS.find((k) => t.startsWith(k));
+    const item = tag ? t.slice(tag.length).trimStart() : t;
+    const title = tag ?? "其他";
+    let sec = out.find((s) => s.title === title);
+    if (!sec) {
+      sec = { title, items: [] };
+      out.push(sec);
+    }
+    sec.items.push(item);
+  }
+  return out;
+}
+
 /** 完整检查：Rust 侧拉清单 + 当前版本号（getVersion 失败按空串，isUpdateAvailable 判 false） */
 export async function checkForUpdate(): Promise<UpdateCheck> {
   const [result, current] = await Promise.all([

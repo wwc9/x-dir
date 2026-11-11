@@ -7,7 +7,7 @@ import { Button, Dialog, DialogBody, DialogFooter } from "@blueprintjs/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Download, Info, Link2, RefreshCw } from "lucide-react";
 
-import { RELEASE_URLS, REPO_URLS, checkForUpdate, isUpdateAvailable } from "../lib/update";
+import { RELEASE_URLS, REPO_URLS, checkForUpdate, groupNotes, isUpdateAvailable } from "../lib/update";
 import { api, type SystemInfo } from "../lib/ipc";
 import { useUi } from "../stores/ui";
 import { ic } from "./AppIcon";
@@ -221,28 +221,39 @@ export function AboutDialog() {
                   发现新版本 v{manifest.version}
                   {manifest.pubDate ? `（${manifest.pubDate} 发布）` : ""}
                 </div>
-                {!!manifest.notes?.length && (
-                  <ul className="np-about-notes">
-                    {/* 条目与 Release 发行说明逐字同源（2026-11-12 用户定案
-                        「工具端更新内容与发行说明一致」）：每条 = 「短标题 —— 描述」，
-                        短标题加粗对应 Release 说明的加粗口径 */}
-                    {manifest.notes.map((n, i) => {
-                      const dash = n.indexOf("——");
-                      return (
-                        <li key={i}>
-                          {dash > 0 ? (
-                            <>
-                              <span className="np-about-note-t">{n.slice(0, dash)}</span>
-                              {n.slice(dash)}
-                            </>
-                          ) : (
-                            n
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
+                {(() => {
+                  // 分类分节（2026-11-12 用户定案「面板与 Release 描述一致」）：
+                  // notes 前缀标签分组 → ✨新增/⚡改进/🐛修复 三段，与发行说明同构；
+                  // 条目「——」前短标题加粗对应 Release 加粗口径
+                  const secs = groupNotes(manifest.notes);
+                  if (!secs.length) return null;
+                  return (
+                    <div className="np-about-notes">
+                      {secs.map((sec) => (
+                        <div key={sec.title} className="np-about-note-sec">
+                          <div className="np-about-note-head">{sec.title}</div>
+                          <ul>
+                            {sec.items.map((n, i) => {
+                              const dash = n.indexOf("——");
+                              return (
+                                <li key={i}>
+                                  {dash > 0 ? (
+                                    <>
+                                      <span className="np-about-note-t">{n.slice(0, dash)}</span>
+                                      {n.slice(dash)}
+                                    </>
+                                  ) : (
+                                    n
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
                 <div className="np-dialog-muted">
                   {t("Gitee 在国内网络环境下访问与下载更快，建议优先选择。")}
                 </div>
