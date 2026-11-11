@@ -340,14 +340,16 @@ function ShelfMini() {
   }, [point]);
 
   const toggle = () => {
-    if (open) {
+    // 空暂存不弹面板（钮上的 data-tip 已表达空态，面板只剩一句空话）；
+    // 非空才定位展开：钮右侧 8px，右/下溢出回推（行高按两行名 40px 估，
+    // 面板根再夹 maxHeight 兜底——估算误差不致溢出窗口）
+    if (open || !items.length) {
       setOpen(false);
       return;
     }
     const r = btnRef.current?.getBoundingClientRect();
     if (!r) return;
-    // 飞出面板定位：钮右侧 8px，右/下溢出回推（高度按行数估算，行钳 12）
-    const h = Math.min(items.length, 12) * 28 + 42;
+    const h = Math.min(items.length, 12) * 40 + 42;
     setPos({
       x: Math.min(r.right + 8, Math.max(8, window.innerWidth - 272)),
       y: Math.min(Math.max(8, r.top - 4), Math.max(8, window.innerHeight - h - 8)),
@@ -394,12 +396,16 @@ function ShelfMini() {
           {items.length > 99 ? "99+" : items.length}
         </span>
       </button>
-      {open && (
+      {open && items.length > 0 && (
         <div
           ref={popRef}
           className="np-shelf-flyout"
           data-shelf
-          style={{ left: pos.x, top: pos.y }}
+          style={{
+            left: pos.x,
+            top: pos.y,
+            maxHeight: window.innerHeight - pos.y - 8,
+          }}
         >
           <div className="np-shelf-flyout-h">
             <span>
@@ -414,10 +420,7 @@ function ShelfMini() {
               <AppIcon icon={Trash2} size={DENSITY.iconSm} />
             </button>
           </div>
-          {items.length === 0 ? (
-            <div className="np-shelf-flyout-empty">{t("暂存区还是空的")}</div>
-          ) : (
-            <div className="np-shelf-flyout-list">
+          <div className="np-shelf-flyout-list">
               {items.map((p) => {
                 const name = fileNameOf(p);
                 const isDir = shelfEntryIsDir(p);
@@ -458,7 +461,6 @@ function ShelfMini() {
                 );
               })}
             </div>
-          )}
         </div>
       )}
     </>

@@ -1476,12 +1476,6 @@ body.np-col-resizing .np-menued-grip::after {
 .np-shelf-flyout-list .np-shelf-row {
   margin: 0 2px;
 }
-.np-shelf-flyout-empty {
-  padding: 14px 0 16px;
-  text-align: center;
-  font-size: var(--np-font-sm);
-  color: var(--np-muted);
-}
 .np-shelf .np-side-add:disabled {
   opacity: 0.4;
   cursor: default;
