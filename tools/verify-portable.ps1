@@ -14,9 +14,22 @@ New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 function Snap([string]$tag) {
     $f = Join-Path $OutDir "reg-$tag.reg"
     reg export "HKCU\Software" "$f" /y | Out-Null
+    # 解析为「键路径::值行」条目（2026-11-12 修正）：值行脱离键路径无法判定归属——
+    # CloudStore（windows.data.apps.appleveltileinfo 应用图块云备份）的值名恰好
+    # 含应用 identifier，裸值行会被误判为应用自有写入；键头也记一行防结构变化丢失
+    $entries = New-Object System.Collections.Generic.List[string]
+    $cur = ""
+    foreach ($line in [IO.File]::ReadAllLines($f)) {
+        if ($line.StartsWith("[")) {
+            $cur = $line.Trim("[", "]")
+            $entries.Add($cur)
+        } elseif ($line -match "=`"" -or $line -match "=dword:" -or $line -match "=hex") {
+            $entries.Add("$cur`::$line")
+        }
+    }
     # 排序使 diff 稳定
     $sorted = Join-Path $OutDir "reg-$tag.sorted"
-    Get-Content $f | Sort-Object | Set-Content -Encoding Unicode $sorted
+    $entries | Sort-Object | Set-Content -Encoding Unicode $sorted
     return $sorted
 }
 
@@ -51,11 +64,12 @@ Write-Host "== 注册表 diff =="
 $diff = Compare-Object (Get-Content $before) (Get-Content $after)
 if ($diff) {
     $diff | ForEach-Object { Write-Host "$($_.SideIndicator) $($_.InputObject)" }
-    # 分类：OS 对任意 GUI exe 都会写的 MuiCache 命名缓存 / WebView2 运行时自身簿记
-    # 属系统行为而非应用配置（应用自注册表零配置），不计失败
+    # 分类：OS 对任意 GUI exe 都会写的 MuiCache 命名缓存 / WebView2 运行时自身
+    # 簿记 / CloudStore 应用图块云备份（值名含 identifier 但写入者是系统）属系统
+    # 行为而非应用配置（应用自注册表零配置），不计失败
     $appOwned = $diff | Where-Object {
         ($_.InputObject -match 'x-dir|xdir') -and
-        ($_.InputObject -notmatch 'MuiCache|FriendlyAppName|ApplicationCompany|MSEdgeWebView|[Ww]eb[vV]iew')
+        ($_.InputObject -notmatch 'MuiCache|FriendlyAppName|ApplicationCompany|MSEdgeWebView|[Ww]eb[vV]iew|CloudStore')
     }
     $osNoise = $diff | Where-Object { $_ -notin $appOwned }
     if ($appOwned) {
