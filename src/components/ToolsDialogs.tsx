@@ -1404,13 +1404,15 @@ export function PdfSplitDialog({
             />
           </FormRow>
           <FormRow k={t2("命名规则")} wide>
-            <InputGroup
-              size="small"
-              value={namingRule}
-              spellCheck={false}
-              onChange={(e) => setNamingRule(e.currentTarget.value)}
-            />
-            <span className="np-dialog-muted">.pdf</span>
+            <span className="np-filext">
+              <InputGroup
+                size="small"
+                value={namingRule}
+                spellCheck={false}
+                onChange={(e) => setNamingRule(e.currentTarget.value)}
+              />
+              <span className="np-dialog-muted">.pdf</span>
+            </span>
           </FormRow>
           <FormRow k={t2("存入子文件夹")} wide>
             <Checkbox
@@ -1663,7 +1665,7 @@ export function PdfToPngDialog({
               onChange={(e) => setDpi(num(e.currentTarget.value, dpi, 72, 600))}
             />
           </FormRow>
-          <FormRow k={t2("开箱密码")}>
+          <FormRow k={t2("开箱密码")} wide>
             <InputGroup
               size="small"
               type="password"
@@ -1673,7 +1675,7 @@ export function PdfToPngDialog({
               onChange={(e) => setUserPassword(e.target.value)}
             />
           </FormRow>
-          <FormRow k={t2("权限密码")}>
+          <FormRow k={t2("权限密码")} wide>
             <InputGroup
               size="small"
               type="password"
@@ -1763,7 +1765,7 @@ export function PdfEncryptDialog({
           </span>
         </div>
         <div className="np-bren-form is-cols">
-          <FormRow k={t2("开箱密码")}>
+          <FormRow k={t2("开箱密码")} wide>
             <InputGroup
               size="small"
               type="password"
@@ -1774,7 +1776,7 @@ export function PdfEncryptDialog({
               onChange={(e) => setOpenPassword(e.target.value)}
             />
           </FormRow>
-          <FormRow k={t2("权限密码")}>
+          <FormRow k={t2("权限密码")} wide>
             <InputGroup
               size="small"
               type="password"

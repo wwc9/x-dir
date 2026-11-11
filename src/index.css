@@ -4763,6 +4763,16 @@ body.np-col-resizing * {
 .np-bren-field > .bp6-input-group {
   width: 120px;
 }
+/* is-cols 输入宽度两档（2026-11-11 用户反馈 placeholder 截断定案）：
+   非 wide 行维持全局 120px 短输入基线（数字/页码类，同 np-two-col——
+   避免数字框突兀拉满半列）；wide 行的长提示输入恢复满宽（grid 项
+   width:auto 回落 justify-self:stretch 拉伸），口令/表达式类长 placeholder
+   在 460px 默认弹窗下有 ~300px（≈20 汉字）可用。np-pdfmform.np-two-col
+   已有同款两档（5598–5611 行）；np-wm-form 单列满宽同口径 */
+.np-bren-form.is-cols .np-bren-field.np-wide > .bp6-input-group {
+  width: auto;
+  min-width: 0;
+}
 .np-bren-k {
   flex: 0 0 auto;
 }
