@@ -29,9 +29,20 @@ foreach ($f in @($setup, $zip, $sums, $latest)) {
 # 发行说明：update.json notes → markdown 列表（-Encoding UTF8 必须——PS5.1
 # 默认按 ANSI 读文件，中文全成乱码且 JSON 解析失败；临时文件 UTF-8 无 BOM，
 # curl --data-binary 直读，规避 PS5.1 管道 GBK 编码中文的问题）
-$uj = Get-Content (Join-Path $Root "update.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+# 2026-11-11 起优先读 dist-release\v<版本>\release-notes.md（分类格式定稿，
+# 与 Gitee 浏览器自动化发布同款），缺省回退 update.json notes 平铺列表
 $notesFile = Join-Path $env:TEMP "xdir_release_notes.json"
-$relNotes = ($uj.notes | ForEach-Object { "- $_" }) -join "`n"
+$notesMd = Join-Path $ArtifactDir "release-notes.md"
+if (Test-Path $notesMd) {
+    # 必须 [IO.File]::ReadAllText——Get-Content -Raw 的返回值带 PSPath 等注解属性，
+    # ConvertTo-Json 会把它们一并序列化，body 变对象导致 GitHub 422（PS5.1 实测踩坑）
+    $relNotes = [IO.File]::ReadAllText($notesMd)
+    Write-Host "发行说明：release-notes.md（分类格式，$($relNotes.Length) 字）"
+} else {
+    $uj = Get-Content (Join-Path $Root "update.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+    $relNotes = ($uj.notes | ForEach-Object { "- $_" }) -join "`n"
+    Write-Host "发行说明：update.json notes 平铺列表（未找到 release-notes.md）"
+}
 $bodyObj = @{ tag_name = "v$Version"; name = "X-Dir v$Version"; body = $relNotes; target_commitish = "main" }
 [IO.File]::WriteAllText(
     $notesFile,
