@@ -61,9 +61,9 @@ interface DriveLite {
 
 /** 自绘顶栏（2026-11-11 方案 A 三段居中定案）：grid 1fr auto 1fr 三段——
  *  左 = 品牌 + 弹层组（浏览记录/收藏/布局预设）+ 模式组（导航树/全盘搜索/
- *  截图/剪贴板）；中 = 灵动岛严格水平居中；右 = 应用级（定制/设置/关于）+
- *  系统态（缩放/主题/语言）+ 窗口控制。段容器与段尾 np-tb-fill 弹性补白
- *  均带拖拽区：顶栏空白处可拖动窗口、双击最大化/还原 */
+ *  截图/剪贴板）+ 定制；中 = 灵动岛严格水平居中；右 = 设置/关于 + 系统态
+ *  （缩放/主题/语言）+ 窗口控制。段容器与段尾 np-tb-fill 弹性补白均带
+ *  拖拽区：顶栏空白处可拖动窗口、双击最大化/还原 */
 export function TitleBar() {
   const [drives, setDrives] = useState<DriveLite[]>([]);
   const [known, setKnown] = useState<Record<string, string>>({});
@@ -457,6 +457,23 @@ export function TitleBar() {
         }}
       />
 
+      {/* 定制（2026-11-11 用户定案移回左段末）：右键菜单与工具栏编辑入口，
+          与内容编排强相关，紧随模式组（分隔线分簇） */}
+      <span className="np-tb-sep" aria-hidden />
+      <Button
+        minimal
+        size="small"
+        icon={ic(WandSparkles)}
+        active={menuPage}
+        aria-label={t("定制")}
+        data-tip={t("定制右键菜单与工具栏")}
+        onClick={() =>
+          menuPage
+            ? useUi.getState().closeMenuPage()
+            : useUi.getState().openMenuPage()
+        }
+      />
+
       {/* 左段尾弹性拖拽补白：接管左段右侧大片空白（拖动窗口 / 双击最大化） */}
       <span
         className="np-tb-fill"
@@ -476,27 +493,13 @@ export function TitleBar() {
         <IslandPill path={activePath} />
       </div>
 
-      {/* ── 右段：应用级（定制/设置/关于）+ 系统态（缩放/主题/语言）+ 窗口控制 ── */}
+      {/* ── 右段：设置/关于 + 系统态（缩放/主题/语言）+ 窗口控制 ── */}
       <div className="np-tb-side np-tb-r" data-tauri-drag-region>
       <span
         className="np-tb-fill"
         data-tauri-drag-region
         onDoubleClick={toggleMaxDbl}
         data-tip={t("拖动窗口 · 双击最大化/还原")}
-      />
-
-      <Button
-        minimal
-        size="small"
-        icon={ic(WandSparkles)}
-        active={menuPage}
-        aria-label={t("定制")}
-        data-tip={t("定制右键菜单与工具栏")}
-        onClick={() =>
-          menuPage
-            ? useUi.getState().closeMenuPage()
-            : useUi.getState().openMenuPage()
-        }
       />
 
       <Button
@@ -532,7 +535,7 @@ export function TitleBar() {
         <AboutBadgeDot />
       </Button>
 
-      {/* 语义分组分隔：应用级组 | 系统态组（原中央拖拽区已拆为三段各自的
+      {/* 语义分组分隔：设置/关于 | 系统态组（原中央拖拽区已拆为三段各自的
           np-tb-fill 弹性补白，2026-11-11 三段居中定案） */}
       <span className="np-tb-sep" aria-hidden />
 
