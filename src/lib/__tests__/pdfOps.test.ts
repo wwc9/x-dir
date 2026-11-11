@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  BLANK_MODES,
+  blankModeNeedsN,
+  blankModeNeedsSpec,
   pagesToSpec,
   parsePageSpec,
   pdfMenuState,
+  pdfPngDirName,
+  pdfPngFileName,
   pdfSplitParts,
   renderPdfSplitName,
 } from "../pdfOps";
@@ -121,5 +126,31 @@ describe("renderPdfSplitName / pdfSplitParts", () => {
     expect(pdfSplitParts(7, 3)).toBe(3);
     expect(pdfSplitParts(4, 1)).toBe(4);
     expect(pdfSplitParts(3, 10)).toBe(1);
+  });
+});
+
+// ── 插入空白页模式表 + 转图片命名（2026-11-11）──
+describe("BLANK_MODES / blankModeNeeds*", () => {
+  it("12 种模式与 Rust blank_positions 一一对应", () => {
+    expect(BLANK_MODES.map((m) => m.value)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(BLANK_MODES.every((m) => m.label.length > 0)).toBe(true);
+  });
+  it("模式 8/9 需指定页码；10–12 需间隔 N；其余两不需要", () => {
+    for (const m of [8, 9]) expect(blankModeNeedsSpec(m)).toBe(true);
+    for (const m of [1, 2, 3, 4, 5, 6, 7, 10, 11, 12]) expect(blankModeNeedsSpec(m)).toBe(false);
+    for (const m of [10, 11, 12]) expect(blankModeNeedsN(m)).toBe(true);
+    for (const m of [1, 2, 3, 4, 5, 6, 7, 8, 9]) expect(blankModeNeedsN(m)).toBe(false);
+  });
+});
+
+describe("pdfPngFileName / pdfPngDirName", () => {
+  it("页号按总页数宽度补零（排序友好）", () => {
+    expect(pdfPngFileName("报告", 1, 12)).toBe("报告_p01.png");
+    expect(pdfPngFileName("报告", 12, 12)).toBe("报告_p12.png");
+    expect(pdfPngFileName("报告", 3, 150)).toBe("报告_p003.png");
+    expect(pdfPngFileName("报告", 7, 9)).toBe("报告_p7.png");
+  });
+  it("子文件夹名 = <stem>_图片", () => {
+    expect(pdfPngDirName("报告")).toBe("报告_图片");
   });
 });

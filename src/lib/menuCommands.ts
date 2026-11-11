@@ -105,7 +105,8 @@ export const BUILTIN_FNS: BuiltinFn[] = [
   { key: "createLink", label: "创建链接 ▸", desc: "硬链接（同卷）/符号链接", group: "工具", area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
   { key: "fileSplit", label: "文件分割", desc: "按大小切块并生成 .crc 清单", group: "工具", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", maxCount: 1 }) },
   { key: "fileCombine", label: "文件合并", desc: "合并 .part 部件还原原文件", group: "工具", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2 }) },
-  // ── PDF（「图片合并转 PDF」2026-11-09 自办公移入，家族聚齐）──
+  // ── PDF（「图片合并转 PDF」2026-11-09 自办公移入，家族聚齐；
+  //    2026-11-11 扩充四件：插入空白页/转图片/加密/解密，全家十三件）──
   { key: "pdfMerge", label: "合并为 PDF", desc: "按选中顺序合成一份 PDF", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2, exts: "pdf,jpg,jpeg,png" }) },
   { key: "pdfMergeFolders", label: "按文件夹合并 PDF", desc: "每个文件夹各合成一份", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "dir", minCount: 1 }) },
   { key: "imgToPdf", label: "图片合并转 PDF", desc: "图片按选中序每图一页", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "png,jpg,jpeg" }) },
@@ -115,6 +116,10 @@ export const BUILTIN_FNS: BuiltinFn[] = [
   { key: "pdfRotate", label: "PDF 旋转", desc: "全部页旋转（可逆向还原）", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", maxCount: 1, exts: "pdf" }) },
   { key: "pdfCompress", label: "PDF 轻压缩", desc: "对象去重轻量压缩", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "pdf" }) },
   { key: "pdfWatermark", label: "PDF 加水印", desc: "文字水印平铺/角标", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "pdf" }) },
+  { key: "pdfInsertBlank", label: "PDF 插入空白页", desc: "12 种模式插补 A4 空白页（凑偶数/凑倍数/指定页码）", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "pdf" }) },
+  { key: "pdfToPng", label: "PDF 转图片", desc: "逐页转 PNG（页范围/分辨率/加密口令）", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "pdf" }) },
+  { key: "pdfEncrypt", label: "PDF 加密", desc: "AES-128 加密 + 打印/复制/编辑权限控制", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "pdf" }) },
+  { key: "pdfDecrypt", label: "PDF 解密", desc: "输入权限密码解除加密与限制", group: "PDF", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "pdf" }) },
   // ── 图片处理（2026-10-15，Rust src/img/mod.rs；扩展名口径 lib/imgOps.ts）──
   { key: "imgCompress", label: "图片压缩", desc: "Auto/JPEG/PNG8/无损优化", group: "图片处理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: IMG_EXTS }) },
   { key: "imgWatermark", label: "图片加水印", desc: "文字/贴图平铺或角标水印", group: "图片处理", area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: IMG_EXTS }) },
@@ -143,6 +148,11 @@ export function builtinByKey(key: string): BuiltinFn | undefined {
 export const PDF_MENU_KEYS: string[] = BUILTIN_FNS.filter((f) => f.group === "PDF").map(
   (f) => f.key,
 );
+
+/** PDF 功能族补种版本（settings.menuSeedV 低于此值即补种）：v1 = 九件入驻
+ *  （2026-11-11 上午），v2 = 插入空白页/转图片/加密/解密四件扩充（2026-11-11）。
+ *  此后 PDF 组新增成员 = 版本 +1，存量档一次性送达，删减语义不受影响 */
+export const PDF_MENU_SEED_VERSION = 2;
 
 /** 功能库分组（2026-10-15 A+B 改版）：展示顺序 = 注册表首现顺序（同组连续，
  *  vitest 固定断言）；目录跳转与胶囊墙按此渲染 */

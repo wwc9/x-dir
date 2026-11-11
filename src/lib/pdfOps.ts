@@ -124,3 +124,55 @@ export function pdfSplitParts(total: number, nPages: number): number {
   const n = Math.max(1, Math.floor(nPages));
   return total <= 0 ? 0 : Math.ceil(total / n);
 }
+
+// ── 插入空白页（2026-11-11）：12 种模式对话框选项与联动 ──
+
+/** 插入模式选项（与 Rust blank_positions 1–12 一一对应） */
+export const BLANK_MODES: { value: number; label: string }[] = [
+  { value: 1, label: "末尾补页凑偶数" },
+  { value: 2, label: "开头补页凑偶数" },
+  { value: 3, label: "第一页前插一页" },
+  { value: 4, label: "第一页后插一页" },
+  { value: 5, label: "最后一页后插一页" },
+  { value: 6, label: "每页前各插一页" },
+  { value: 7, label: "每页后各插一页" },
+  { value: 8, label: "指定页码前各插一页" },
+  { value: 9, label: "指定页码后各插一页" },
+  { value: 10, label: "开头补页凑 N 的倍数" },
+  { value: 11, label: "末尾补页凑 N 的倍数" },
+  { value: 12, label: "每隔 N 页插一页" },
+];
+
+/** 模式 8/9 需要指定页码表达式 */
+export const blankModeNeedsSpec = (m: number): boolean => m === 8 || m === 9;
+
+/** 模式 10/11/12 需要间隔 N */
+export const blankModeNeedsN = (m: number): boolean => m >= 10 && m <= 12;
+
+// ── PDF 转图片（2026-11-11）：命名与目录口径 ──
+
+export interface PdfToPngOptions {
+  /** 起始页（1-based；0 = 第 1 页） */
+  startPage: number;
+  /** 结束页（1-based；0 = 末页） */
+  endPage: number;
+  /** 渲染分辨率 DPI（72–600，默认 150） */
+  dpi: number;
+  /** 加密 PDF 的用户口令（开箱密码，可空） */
+  userPassword: string;
+  /** 加密 PDF 的所有者口令（权限密码，可空；两密码任填其一即可） */
+  ownerPassword: string;
+  /** true = 每个源 PDF 的图片存进独立子文件夹（默认） */
+  saveToFolder: boolean;
+}
+
+/** PNG 输出名：<stem>_p<页号>.png，页号按总页数宽度补零（资源管理器排序友好） */
+export function pdfPngFileName(stem: string, page: number, total: number): string {
+  const width = Math.max(1, String(Math.max(total, 1)).length);
+  return `${stem}_p${String(page).padStart(width, "0")}.png`;
+}
+
+/** 转图片独立子文件夹名：<stem>_图片 */
+export function pdfPngDirName(stem: string): string {
+  return `${stem}_图片`;
+}

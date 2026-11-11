@@ -311,6 +311,151 @@ pub fn pdf_compress(
     })
 }
 
+// ── 插入空白页 / 加密 / 解密（2026-11-11 功能库 PDF 组扩充）──
+
+/// PDF 插入空白页：mode ∈ 1–12（语义见 pdf::blank_positions）；模式 8/9 需
+/// 指定页码表达式（如 1-3,5,8，对真实页数的合法性在任务内逐份校验）；
+/// 模式 10/11/12 的 N 限 2–20（默认 2）
+#[tauri::command]
+pub fn pdf_insert_blank(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    paths: Vec<String>,
+    mode: u8,
+    spec: String,
+    n: u32,
+) -> Result<JobId, AppError> {
+    reject_not_pdf(&paths)?;
+    if !(1..=12).contains(&mode) {
+        return Err(AppError::new("E_INVALID_NAME", "不支持的插入模式"));
+    }
+    if matches!(mode, 8 | 9) && spec.trim().is_empty() {
+        return Err(AppError::new(
+            "E_INVALID_NAME",
+            "该模式需指定页码（如 1-3,5,8）",
+        ));
+    }
+    if matches!(mode, 10..=12) && !(2..=20).contains(&n) {
+        return Err(AppError::new("E_INVALID_NAME", "N 须在 2–20"));
+    }
+    Ok(JobId {
+        job_id: state.jobs.enqueue(
+            JobKind::PdfInsertBlank {
+                opts: crate::pdf::BlankOpts { mode, spec, n },
+            },
+            paths,
+            None,
+            Policy::Skip,
+            false,
+            app,
+        ),
+    })
+}
+
+/// PDF AES-128 加密：open_password（开箱）与 edit_password（权限口令）
+/// 至少一个非空（只填开箱 = 权限口令沿用之）；三个 perm_* 开关 true = 禁止
+/// 打印/复制/编辑（false/缺省 = 允许）
+#[tauri::command]
+#[allow(clippy::too_many_arguments)] // 两口令 + 三权限开关 + 路径/上下文，同 pdf_watermark 口径
+pub fn pdf_encrypt(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    paths: Vec<String>,
+    open_password: String,
+    edit_password: String,
+    perm_print: bool,
+    perm_copy: bool,
+    perm_edit: bool,
+) -> Result<JobId, AppError> {
+    reject_not_pdf(&paths)?;
+    if open_password.trim().is_empty() && edit_password.trim().is_empty() {
+        return Err(AppError::new(
+            "E_INVALID_NAME",
+            "开箱密码与权限密码至少填写一个",
+        ));
+    }
+    Ok(JobId {
+        job_id: state.jobs.enqueue(
+            JobKind::PdfEncrypt {
+                opts: crate::pdf::EncryptOpts {
+                    open_password,
+                    edit_password,
+                    deny_print: perm_print,
+                    deny_copy: perm_copy,
+                    deny_edit: perm_edit,
+                },
+            },
+            paths,
+            None,
+            Policy::Skip,
+            false,
+            app,
+        ),
+    })
+}
+
+/// PDF 解密：owner_password = 所有者（权限）密码——开箱密码同样可解（PDF
+/// 认证两把钥匙等效），任务内逐份校验并旁写 <stem>_解密.pdf
+#[tauri::command]
+pub fn pdf_decrypt(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    paths: Vec<String>,
+    owner_password: String,
+) -> Result<JobId, AppError> {
+    reject_not_pdf(&paths)?;
+    if owner_password.trim().is_empty() {
+        return Err(AppError::new("E_INVALID_NAME", "请输入密码"));
+    }
+    Ok(JobId {
+        job_id: state.jobs.enqueue(
+            JobKind::PdfDecrypt {
+                password: owner_password,
+            },
+            paths,
+            None,
+            Policy::Skip,
+            false,
+            app,
+        ),
+    })
+}
+
+// ── PDF 转图片（PNG）落盘管线（2026-11-11）：渲染在前端 pdf.js（宽松协议
+// 唯一可行解——pdfium/mupdf/poppler 全是 AGPL/GPL 红线），Rust 只做安全落盘 ──
+
+/// 目录若已存在自动 "(2)" 递增并创建，返回最终目录（转图片每源 PDF 独立
+/// 子文件夹入口；直存模式前端传现有目录，原样返回）
+#[tauri::command]
+pub fn ensure_available_dir(path: String) -> Result<String, AppError> {
+    if path.trim().is_empty() {
+        return Err(AppError::new("E_INVALID_NAME", "目录路径无效"));
+    }
+    use crate::jobs::pick::available_name;
+    let dir = available_name(&path);
+    std::fs::create_dir_all(to_extended(&dir))
+        .map_err(|e| AppError::new("E_IO", format!("无法创建目录：{e}")))?;
+    Ok(dir)
+}
+
+/// 单张 PNG（前端 canvas 渲染产物，base64 不带 dataURL 前缀）写入磁盘。
+/// 仅收 .png 后缀路径（防误写任意文件）；父目录须已存在（ensure_available_dir 负责）
+#[tauri::command]
+pub fn write_png_b64(path: String, b64: String) -> Result<(), AppError> {
+    if !path.to_ascii_lowercase().ends_with(".png") {
+        return Err(AppError::new("E_INVALID_NAME", "仅允许写入 .png 文件"));
+    }
+    if path.trim().is_empty() {
+        return Err(AppError::new("E_INVALID_NAME", "文件路径无效"));
+    }
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(b64.as_bytes())
+        .map_err(|e| AppError::new("E_INVALID_NAME", format!("PNG 数据解码失败：{e}")))?;
+    std::fs::write(to_extended(&path), bytes)
+        .map_err(|e| AppError::new("E_IO", format!("写入失败：{e}")))
+}
+
 fn is_image(path: &str) -> bool {
     matches!(
         path.rsplit('.')

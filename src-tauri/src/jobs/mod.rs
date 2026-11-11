@@ -115,6 +115,20 @@ pub enum JobKind {
     },
     /// PDF 轻压缩（对象去重 + 重压缩），旁写 <stem>_压缩.pdf
     PdfCompress,
+    /// PDF 插入空白页（2026-11-11：12 种模式 + 指定页码 + 间隔 N），
+    /// 旁写 <stem>_插页.pdf
+    PdfInsertBlank {
+        opts: crate::pdf::BlankOpts,
+    },
+    /// PDF AES-128 加密（2026-11-11：开箱口令 + 权限口令 + 三权限位），
+    /// 旁写 <stem>_加密.pdf
+    PdfEncrypt {
+        opts: crate::pdf::EncryptOpts,
+    },
+    /// PDF 解密（带口令加载解密），旁写 <stem>_解密.pdf
+    PdfDecrypt {
+        password: String,
+    },
     /// 图片（PNG/JPEG）合并转 PDF，每图一页 → output
     ImagesToPdf {
         output: String,
@@ -614,6 +628,51 @@ impl JobManager {
                         crate::pdf::run_images_to_pdf(
                             &sources,
                             output,
+                            &cancel,
+                            &mut prog,
+                            &mut em,
+                            &mut failed,
+                        );
+                    }
+                    JobKind::PdfInsertBlank { opts } => {
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        crate::pdf::run_insert_blank(
+                            &sources,
+                            opts,
+                            &cancel,
+                            &mut prog,
+                            &mut em,
+                            &mut failed,
+                        );
+                    }
+                    JobKind::PdfEncrypt { opts } => {
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        crate::pdf::run_encrypt(
+                            &sources,
+                            opts,
+                            &cancel,
+                            &mut prog,
+                            &mut em,
+                            &mut failed,
+                        );
+                    }
+                    JobKind::PdfDecrypt { password } => {
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par);
+                            }
+                        }
+                        crate::pdf::run_decrypt(
+                            &sources,
+                            password,
                             &cancel,
                             &mut prog,
                             &mut em,

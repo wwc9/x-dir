@@ -6,7 +6,12 @@ import { api, type Policy, type RenameOutcome } from "./ipc";
 import type { ExportListingOptions } from "./listing";
 import { fileNameOf, isValidName, joinPath, parentPath } from "./path";
 import { montageOutputName } from "./imgOps";
-import type { PdfSplitOptions } from "./pdfOps";;
+import {
+  pdfPngDirName,
+  pdfPngFileName,
+  type PdfToPngOptions,
+  type PdfSplitOptions,
+} from "./pdfOps";
 import { useJobs } from "../stores/jobs";
 import { usePanes } from "../stores/panes";
 import { useSettings } from "../stores/settings";
@@ -315,6 +320,170 @@ export async function compressPdfs(entries: FileEntry[], dir: string): Promise<v
     useJobs.getState().register(jobId, "pdfcompress", dir, [dir]);
   } catch (e) {
     useUi.getState().toast(`压缩失败：${String(e)}`, "error");
+  }
+}
+
+// ── 插入空白页 / 加密 / 解密 / 转图片（2026-11-11 功能库 PDF 组扩充）──
+
+/** PDF 插入空白页：参数面板（12 模式）→ 任务引擎，旁写 "<名称>_插页.pdf" */
+export async function insertBlankPages(entries: FileEntry[], dir: string): Promise<void> {
+  if (!entries.length) return;
+  const opts = await useUi
+    .getState()
+    .openDialog<{ mode: number; spec: string; n: number } | null>({
+      type: "pdfInsertBlank",
+      entries,
+    });
+  if (!opts) return;
+  try {
+    const { jobId } = await api.pdfInsertBlank(
+      entries.map((e) => e.path),
+      opts.mode,
+      opts.spec.trim(),
+      opts.n,
+    );
+    useJobs.getState().register(jobId, "pdfinsertblank", dir, [dir]);
+  } catch (e) {
+    useUi.getState().toast(`插入空白页失败：${String(e)}`, "error");
+  }
+}
+
+export interface PdfEncryptPayload {
+  openPassword: string;
+  editPassword: string;
+  permPrint: boolean;
+  permCopy: boolean;
+  permEdit: boolean;
+}
+
+/** PDF AES-128 加密：参数面板 → 任务引擎，旁写 "<名称>_加密.pdf" */
+export async function encryptPdfs(entries: FileEntry[], dir: string): Promise<void> {
+  if (!entries.length) return;
+  const opts = await useUi.getState().openDialog<PdfEncryptPayload | null>({
+    type: "pdfEncrypt",
+    entries,
+  });
+  if (!opts) return;
+  try {
+    const { jobId } = await api.pdfEncrypt(
+      entries.map((e) => e.path),
+      opts.openPassword,
+      opts.editPassword,
+      opts.permPrint,
+      opts.permCopy,
+      opts.permEdit,
+    );
+    useJobs.getState().register(jobId, "pdfencrypt", dir, [dir]);
+  } catch (e) {
+    useUi.getState().toast(`加密失败：${String(e)}`, "error");
+  }
+}
+
+/** PDF 解密：密码面板 → 任务引擎，旁写 "<名称>_解密.pdf"（原文件不动） */
+export async function decryptPdfs(entries: FileEntry[], dir: string): Promise<void> {
+  if (!entries.length) return;
+  const opts = await useUi.getState().openDialog<{ password: string } | null>({
+    type: "pdfDecrypt",
+    entries,
+  });
+  if (!opts) return;
+  try {
+    const { jobId } = await api.pdfDecrypt(
+      entries.map((e) => e.path),
+      opts.password,
+    );
+    useJobs.getState().register(jobId, "pdfdecrypt", dir, [dir]);
+  } catch (e) {
+    useUi.getState().toast(`解密失败：${String(e)}`, "error");
+  }
+}
+
+/** PDF 转图片（PNG）：前端 pdf.js 逐页渲染（宽松协议唯一可行的渲染器——
+ *  pdfium/mupdf/poppler 全是 AGPL/GPL 红线），Rust 端 write_png_b64 只做
+ *  安全落盘。进度走本地任务通道（负数 jobId，island/任务面板共用 UI） */
+export async function pdfToPngs(entries: FileEntry[], dir: string): Promise<void> {
+  if (!entries.length) return;
+  const opts = await useUi.getState().openDialog<PdfToPngOptions | null>({
+    type: "pdfToPng",
+    entries,
+  });
+  if (!opts) return;
+  const [{ loadPdfjs, pdfjsDocParams }, { convertFileSrc }] = await Promise.all([
+    import("./pdfjs"),
+    import("@tauri-apps/api/core"),
+  ]);
+  const pdfjs = await loadPdfjs();
+  const jobs = useJobs.getState();
+  const jobId = jobs.registerLocal("pdftopng", dir, [dir]);
+  jobs.updateLocal(jobId, { totalFiles: entries.length });
+  const failed: { path: string; message: string }[] = [];
+  // 渲染口令：开箱/权限任填其一（pdf.js 两把钥匙都收）
+  const password = opts.userPassword || opts.ownerPassword || undefined;
+  try {
+    let done = 0;
+    for (const e of entries) {
+      if (useJobs.getState().isLocalCancelled(jobId)) {
+        useJobs.getState().finishLocal(jobId, false, { cancelled: true });
+        return;
+      }
+      const name = fileNameOf(e.path);
+      useJobs.getState().updateLocal(jobId, { currentPath: name });
+      try {
+        const task = pdfjs.getDocument(pdfjsDocParams({ url: convertFileSrc(e.path) }, password));
+        const doc = await task.promise;
+        const total = doc.numPages;
+        const start = Math.max(1, Math.min(opts.startPage || 1, total));
+        const end = Math.min(opts.endPage || total, total);
+        const stem = name.replace(/\.pdf$/i, "");
+        const outDir = opts.saveToFolder
+          ? await api.ensureAvailableDir(joinPath(dir, pdfPngDirName(stem)))
+          : dir;
+        for (let n = start; n <= end; n++) {
+          if (useJobs.getState().isLocalCancelled(jobId)) {
+            task.destroy();
+            useJobs.getState().finishLocal(jobId, false, { cancelled: true });
+            return;
+          }
+          useJobs.getState().updateLocal(jobId, {
+            currentPath: `${name} 第 ${n - start + 1}/${end - start + 1} 页`,
+          });
+          const page = await doc.getPage(n);
+          const viewport = page.getViewport({ scale: opts.dpi / 72 });
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.floor(viewport.width);
+          canvas.height = Math.floor(viewport.height);
+          await page.render({ canvas, viewport }).promise;
+          const dataUrl = canvas.toDataURL("image/png");
+          await api.writePngFile(
+            joinPath(outDir, pdfPngFileName(stem, n, total)),
+            dataUrl.slice(dataUrl.indexOf(",") + 1),
+          );
+          canvas.width = 0;
+          canvas.height = 0;
+        }
+        task.destroy();
+      } catch (err) {
+        const msg = String(err);
+        failed.push({
+          path: e.path,
+          message:
+            err instanceof Error && err.name === "PasswordException"
+              ? "需要密码或密码错误（PDF 已加密）"
+              : msg,
+        });
+      }
+      done += 1;
+      useJobs.getState().updateLocal(jobId, { doneFiles: done });
+    }
+    if (failed.length) {
+      useJobs.getState().finishLocal(jobId, false, { failed });
+    } else {
+      useJobs.getState().finishLocal(jobId, true, { note: `${done} 个文件` });
+    }
+  } catch (err) {
+    useJobs
+      .getState()
+      .finishLocal(jobId, false, { failed: [{ path: "", message: String(err) }] });
   }
 }
 

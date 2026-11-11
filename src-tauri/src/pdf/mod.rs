@@ -999,6 +999,384 @@ pub(crate) fn run_compress(
     }
 }
 
+// ──────────────── 插入空白页 / 加密 / 解密（2026-11-11 功能库 PDF 组扩充） ────────────────
+
+/// 插入空白页参数（JobKind::PdfInsertBlank 携带）：12 种模式 + 模式 8/9 的
+/// 指定页码表达式 + 模式 10/11/12 的间隔 N
+#[derive(Clone, Debug, PartialEq)]
+pub struct BlankOpts {
+    /// 1–12（语义见 blank_positions）
+    pub mode: u8,
+    /// 模式 8/9：指定页码表达式（"1-3,5,8"，复用 parse_page_ranges 同口径）
+    pub spec: String,
+    /// 模式 10/11/12：凑 N 的倍数 / 每隔 N 页（2–20，命令层校验）
+    pub n: u32,
+}
+
+/// 模式 → 最终页序列模板（None = 该位置插一张 A4 空白页，Some = 原第 n 页
+/// 顺次消费）。页码全部指原文档 1-based 页号。
+/// 1 末尾补页凑偶数 / 2 开头补页凑偶数 / 3 第一页前插一页 / 4 第一页后插一页 /
+/// 5 最后一页后插一页 / 6 每页前各插一页 / 7 每页后各插一页 / 8 指定页码前各
+/// 插一页 / 9 指定页码后各插一页 / 10 开头补页凑 N 倍数 / 11 末尾补页凑 N 倍数 /
+/// 12 每隔 N 页插一页（第 N、2N… 页后，含末页恰为倍数时）
+pub fn blank_positions(total: u32, opts: &BlankOpts) -> Result<Vec<Option<u32>>, String> {
+    let orig = |v: u32| Some(v);
+    const BLANK: Option<u32> = None;
+    let pad = |count: u32, at_start: bool| -> Vec<Option<u32>> {
+        let mut out = vec![BLANK; count as usize];
+        if at_start {
+            out.extend((1..=total).map(orig));
+        } else {
+            out.splice(0..0, (1..=total).map(orig).collect::<Vec<_>>());
+        }
+        out
+    };
+    let pages: Vec<Option<u32>> = (1..=total).map(orig).collect();
+    let one = |before: u32| -> Result<Vec<Option<u32>>, String> {
+        let mut out = Vec::with_capacity(total as usize + 1);
+        for p in 1..=total {
+            if before == p {
+                out.push(BLANK);
+            }
+            out.push(orig(p));
+        }
+        Ok(out)
+    };
+    let one_at = |spec: &str, before: bool| -> Result<Vec<Option<u32>>, String> {
+        let marks = parse_page_ranges(spec, total)?;
+        let mut out = Vec::new();
+        for p in 1..=total {
+            if marks.binary_search(&p).is_ok() {
+                if before {
+                    out.push(BLANK);
+                }
+                out.push(orig(p));
+                if !before {
+                    out.push(BLANK);
+                }
+            } else {
+                out.push(orig(p));
+            }
+        }
+        Ok(out)
+    };
+    let around = |after_each: bool| -> Vec<Option<u32>> {
+        let mut out = Vec::with_capacity(total as usize * 2);
+        for p in 1..=total {
+            if !after_each {
+                out.push(BLANK);
+            }
+            out.push(orig(p));
+            if after_each {
+                out.push(BLANK);
+            }
+        }
+        out
+    };
+    let need_spec = matches!(opts.mode, 8..=9);
+    let need_n = matches!(opts.mode, 10..=12);
+    if need_spec && opts.spec.trim().is_empty() {
+        return Err("该模式需指定页码（如 1-3,5,8）".into());
+    }
+    if need_n && !(2..=20).contains(&opts.n) {
+        return Err(format!("N 须在 2–20：{}", opts.n));
+    }
+    match opts.mode {
+        1 => Ok(if total % 2 == 1 { pad(1, false) } else { pages }),
+        2 => Ok(if total % 2 == 1 { pad(1, true) } else { pages }),
+        3 => one(1),
+        4 => Ok({
+            let mut out = vec![orig(1), BLANK];
+            out.extend((2..=total).map(orig));
+            out
+        }),
+        5 => Ok({
+            let mut out = pages;
+            out.push(BLANK);
+            out
+        }),
+        6 => Ok(around(false)),
+        7 => Ok(around(true)),
+        8 => one_at(&opts.spec, true),
+        9 => one_at(&opts.spec, false),
+        10 => Ok({
+            let short = (opts.n - total % opts.n) % opts.n;
+            if short == 0 { pages } else { pad(short, true) }
+        }),
+        11 => Ok({
+            let short = (opts.n - total % opts.n) % opts.n;
+            if short == 0 { pages } else { pad(short, false) }
+        }),
+        12 => Ok({
+            let mut out = Vec::new();
+            for p in 1..=total {
+                out.push(orig(p));
+                if p % opts.n == 0 {
+                    out.push(BLANK);
+                }
+            }
+            out
+        }),
+        other => Err(format!("不支持的插入模式：{other}")),
+    }
+}
+
+/// A4 空白页（595×842pt，Resources 空）对象——加入 doc 但不挂页树，
+/// 由调用方随 Kids 交给 build_page_tree 回填 Parent
+fn blank_page_object(doc: &mut Document) -> ObjectId {
+    doc.add_object(dictionary! {
+        "Type" => "Page",
+        "MediaBox" => Object::Array(vec![
+            Object::Integer(0),
+            Object::Integer(0),
+            Object::Integer(595),
+            Object::Integer(842),
+        ]),
+        "Resources" => dictionary! {},
+    })
+}
+
+/// 插入空白页：原页顺序 + 模式决定的位置插 A4 空白页，重建页树后旁写
+/// "<stem>_插页.pdf"（原文件不动；书签/表单域等文档级对象不搬——与提取/
+/// 删页/拆分同口径，页面内容完整保留）
+pub(crate) fn run_insert_blank(
+    paths: &[String],
+    opts: &BlankOpts,
+    cancel: &AtomicBool,
+    prog: &mut JobProgress,
+    em: &mut EmitterState,
+    failed: &mut Vec<FailItem>,
+) {
+    prog.total_files = paths.len() as u64;
+    for p in paths {
+        if is_cancelled(cancel) {
+            return;
+        }
+        prog.current_path = p.clone();
+        let out = available_name(&format!("{}\\{}_插页.pdf", parent_dir(p), stem_of(p)));
+        let result = (|| -> Result<(), String> {
+            let doc = Document::load(to_extended(p)).map_err(|e| e.to_string())?;
+            let total = doc.get_pages().len() as u32;
+            let positions = blank_positions(total, opts)?;
+            let ids = doc.get_pages();
+            let mut out_doc = Document::with_version("1.5");
+            let mut kids: Vec<Object> = Vec::new();
+            for slot in positions {
+                match slot {
+                    Some(n) => {
+                        let pid = ids.get(&n).copied().ok_or("页号越界")?;
+                        let new_id =
+                            transfer_page(&doc, pid, &mut out_doc).ok_or("页面对象不可读")?;
+                        kids.push(Object::Reference(new_id));
+                    }
+                    None => kids.push(Object::Reference(blank_page_object(&mut out_doc))),
+                }
+            }
+            build_page_tree(&mut out_doc, kids)?;
+            out_doc
+                .save(to_extended(&out))
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+        })();
+        if let Err(e) = result {
+            failed.push(FailItem {
+                path: p.clone(),
+                message: e,
+                reason: None,
+            });
+        }
+        prog.done_files += 1;
+        em.progress(prog);
+    }
+}
+
+/// 加密参数（JobKind::PdfEncrypt 携带）：AES-128（V4/R4 StdCF）。
+/// open_password = 用户口令（打开查看）；edit_password = 所有者口令（权限
+/// 控制），二者不可同时为空，只填其一亦可（edit 空 = 沿用 open，保证权限
+/// 位不被空口令一关就破）；三个 deny_* = true 即禁止对应权限
+#[derive(Clone, Debug, PartialEq)]
+pub struct EncryptOpts {
+    pub open_password: String,
+    pub edit_password: String,
+    pub deny_print: bool,
+    pub deny_copy: bool,
+    pub deny_edit: bool,
+}
+
+/// 权限位映射：禁止打印 = 清 PRINTABLE + 高质量打印位；禁止复制 = 清
+/// COPYABLE（无障碍抽取位按 PDF 2.0 建议恒保持）；禁止编辑 = 清 MODIFIABLE
+fn permissions_from(opts: &EncryptOpts) -> lopdf::encryption::Permissions {
+    let mut perms = lopdf::encryption::Permissions::all();
+    if opts.deny_print {
+        perms.remove(
+            lopdf::encryption::Permissions::PRINTABLE
+                | lopdf::encryption::Permissions::PRINTABLE_IN_HIGH_QUALITY,
+        );
+    }
+    if opts.deny_copy {
+        perms.remove(lopdf::encryption::Permissions::COPYABLE);
+    }
+    if opts.deny_edit {
+        perms.remove(lopdf::encryption::Permissions::MODIFIABLE);
+    }
+    perms
+}
+
+/// 确保 trailer /ID 存在（R3/R4 密钥派生依赖文件 ID；lopdf 不自动生成）。
+/// 缺失时用时间纳秒 + PID + 路径哈希混熵生成 16 字节（std 无 rand 库；
+/// ID 不承担安全语义，唯一性够用即可）
+fn ensure_document_id(doc: &mut Document, path: &str) {
+    if doc.trailer.get(b"ID").is_ok() {
+        return;
+    }
+    let t = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0);
+    let mut h: u64 = t ^ ((std::process::id() as u64).wrapping_mul(0x9E3779B97F4A7C15));
+    for b in path.bytes() {
+        h = h.rotate_left(8) ^ (b as u64).wrapping_mul(0xC2B2AE3D27D4EB4F);
+    }
+    let bytes: Vec<u8> = (0..16)
+        .map(|i| {
+            h = h.rotate_left(7).wrapping_add(0x2545F4914F6CDD1D ^ i);
+            (h >> ((i * 5) % 56)) as u8
+        })
+        .collect();
+    let id = Object::Array(vec![
+        Object::String(bytes.clone(), lopdf::StringFormat::Hexadecimal),
+        Object::String(bytes, lopdf::StringFormat::Hexadecimal),
+    ]);
+    doc.trailer.set(b"ID", id);
+}
+
+/// AES-128 加密核心（独立于任务上下文便于单测）：旁写 "<stem>_加密.pdf"。
+/// 已加密文件拒绝重复加密（密码未知无从叠加）
+/// 就地加密（可单测）：构造 AES-128（V4/R4 StdCF）加密态并替换全部
+/// 字符串/流，trailer 挂 /Encrypt。已加密文档拒绝重复加密
+fn encrypt_doc_inplace(doc: &mut Document, opts: &EncryptOpts) -> Result<(), String> {
+    let owner = if opts.edit_password.is_empty() {
+        opts.open_password.clone()
+    } else {
+        opts.edit_password.clone()
+    };
+    let mut filters = std::collections::BTreeMap::new();
+    filters.insert(
+        b"StdCF".to_vec(),
+        std::sync::Arc::new(lopdf::encryption::crypt_filters::Aes128CryptFilter)
+            as std::sync::Arc<dyn lopdf::encryption::crypt_filters::CryptFilter>,
+    );
+    let state =
+        lopdf::encryption::EncryptionState::try_from(lopdf::encryption::EncryptionVersion::V4 {
+            document: doc,
+            encrypt_metadata: true,
+            crypt_filters: filters,
+            stream_filter: b"StdCF".to_vec(),
+            string_filter: b"StdCF".to_vec(),
+            owner_password: &owner,
+            user_password: &opts.open_password,
+            permissions: permissions_from(opts),
+        })
+        .map_err(|e| format!("加密参数构造失败：{e}"))?;
+    doc.encrypt(&state).map_err(|e| format!("加密失败：{e}"))
+}
+
+fn encrypt_pdf_file(path: &str, opts: &EncryptOpts) -> Result<String, String> {
+    let mut doc = Document::load(to_extended(path)).map_err(|e| e.to_string())?;
+    if doc.is_encrypted() {
+        return Err("PDF 已加密，请先解密再重新加密".into());
+    }
+    ensure_document_id(&mut doc, path);
+    encrypt_doc_inplace(&mut doc, opts)?;
+    let out = available_name(&format!("{}\\{}_加密.pdf", parent_dir(path), stem_of(path)));
+    let tmp = format!("{}\\{}.encrypting.tmp", parent_dir(path), stem_of(path));
+    doc.save(to_extended(&tmp)).map_err(|e| e.to_string())?;
+    std::fs::rename(to_extended(&tmp), to_extended(&out)).map_err(|e| e.to_string())?;
+    Ok(out)
+}
+
+/// 批量加密：逐份旁写 "<stem>_加密.pdf"
+pub(crate) fn run_encrypt(
+    paths: &[String],
+    opts: &EncryptOpts,
+    cancel: &AtomicBool,
+    prog: &mut JobProgress,
+    em: &mut EmitterState,
+    failed: &mut Vec<FailItem>,
+) {
+    prog.total_files = paths.len() as u64;
+    for p in paths {
+        if is_cancelled(cancel) {
+            return;
+        }
+        prog.current_path = p.clone();
+        if let Err(e) = encrypt_pdf_file(p, opts) {
+            failed.push(FailItem {
+                path: p.clone(),
+                message: e,
+                reason: None,
+            });
+        }
+        prog.done_files += 1;
+        em.progress(prog);
+    }
+}
+
+/// 解密核心（独立便于单测）：带密码加载（读取器当场认证 + 解密全部对象；
+/// xref 流惰性解析下「先 load 再运行时 decrypt()」只会迭代空对象表，密文
+/// 原样通过）→ 旁写 "<stem>_解密.pdf"（原文件不动）；未加密文件拒绝
+fn decrypt_pdf_file(path: &str, password: &str) -> Result<String, String> {
+    // 预检（无密码试读）：未加密直接拒绝；was_encrypted 覆盖「空用户口令
+    // 被读取器静默解密」的形态（此时 is_encrypted 已翻假）
+    {
+        let probe = Document::load(to_extended(path)).map_err(|e| e.to_string())?;
+        if !probe.is_encrypted() && !probe.was_encrypted() {
+            return Err("PDF 未加密，无需解密".into());
+        }
+    }
+    let mut doc = Document::load_with_options(
+        to_extended(path),
+        lopdf::LoadOptions::with_password(password),
+    )
+    .map_err(|_| "密码错误或无法解密（需所有者/权限密码）".to_string())?;
+    // 认证失败的形态 = 返回未解密空壳（不报错）：仍处加密态即密码不对
+    if doc.is_encrypted() {
+        return Err("密码错误或无法解密（需所有者/权限密码）".into());
+    }
+    let out = available_name(&format!("{}\\{}_解密.pdf", parent_dir(path), stem_of(path)));
+    let tmp = format!("{}\\{}.decrypting.tmp", parent_dir(path), stem_of(path));
+    doc.save(to_extended(&tmp)).map_err(|e| e.to_string())?;
+    std::fs::rename(to_extended(&tmp), to_extended(&out)).map_err(|e| e.to_string())?;
+    Ok(out)
+}
+
+/// 批量解密：逐份旁写 "<stem>_解密.pdf"
+pub(crate) fn run_decrypt(
+    paths: &[String],
+    password: &str,
+    cancel: &AtomicBool,
+    prog: &mut JobProgress,
+    em: &mut EmitterState,
+    failed: &mut Vec<FailItem>,
+) {
+    prog.total_files = paths.len() as u64;
+    for p in paths {
+        if is_cancelled(cancel) {
+            return;
+        }
+        prog.current_path = p.clone();
+        if let Err(e) = decrypt_pdf_file(p, password) {
+            failed.push(FailItem {
+                path: p.clone(),
+                message: e,
+                reason: None,
+            });
+        }
+        prog.done_files += 1;
+        em.progress(prog);
+    }
+}
+
 // ────────────────────────── 图片合并转 PDF ──────────────────────────
 
 /// 图片文件解码为 RGB8（PNG/JPEG；CMYK JPEG 转 RGB、灰度复制为三通道）
@@ -1753,5 +2131,297 @@ mod tests {
             bookmark_page_ranges(&doc, 0, 2).unwrap_err().to_string(),
             "PDF 没有书签，无法按书签拆分"
         );
+    }
+
+    // ── 插入空白页（2026-11-11）：12 模式矩阵 + 重建产物可读 ──
+    const B: Option<u32> = None;
+
+    fn orig(range: std::ops::RangeInclusive<u32>) -> Vec<Option<u32>> {
+        range.map(Some).collect()
+    }
+
+    #[test]
+    fn blank_positions_mode_matrix() {
+        let o = |m, spec: &str, n, total| {
+            blank_positions(
+                total,
+                &BlankOpts {
+                    mode: m,
+                    spec: spec.into(),
+                    n,
+                },
+            )
+            .unwrap()
+        };
+        // 偶数页不补；奇数页头/尾补一页
+        assert_eq!(o(1, "", 2, 4), orig(1..=4));
+        assert_eq!(o(1, "", 2, 5), [orig(1..=5), vec![B]].concat());
+        assert_eq!(o(2, "", 2, 5), [vec![B], orig(1..=5)].concat());
+        assert_eq!(o(2, "", 2, 6), orig(1..=6));
+        // 第一页前/后、末页后各一页
+        assert_eq!(o(3, "", 2, 2), [vec![B], vec![Some(1), Some(2)]].concat());
+        assert_eq!(o(4, "", 2, 2), [Some(1), B, Some(2)]);
+        assert_eq!(o(5, "", 2, 2), [Some(1), Some(2), B]);
+        // 每页前/后各插一页
+        assert_eq!(o(6, "", 2, 2), [B, Some(1), B, Some(2)]);
+        assert_eq!(o(7, "", 2, 2), [Some(1), B, Some(2), B]);
+        // 指定页码前/后（"1-2,4" 于 5 页）
+        assert_eq!(
+            o(8, "1-2,4", 2, 5),
+            [B, Some(1), B, Some(2), Some(3), B, Some(4), Some(5)]
+        );
+        assert_eq!(o(9, "2", 2, 4), [Some(1), Some(2), B, Some(3), Some(4)]);
+        // 开头/末尾补页凑 N 的倍数：已整除不补；差 short 补 short
+        assert_eq!(o(10, "", 3, 6), orig(1..=6));
+        assert_eq!(o(10, "", 3, 5), [vec![B], orig(1..=5)].concat());
+        assert_eq!(o(10, "", 4, 5), [vec![B, B, B], orig(1..=5)].concat());
+        assert_eq!(o(11, "", 4, 5), [orig(1..=5), vec![B, B, B]].concat());
+        // 每隔 N 页插一页（含末页恰为倍数）
+        assert_eq!(
+            o(12, "", 2, 5),
+            [Some(1), Some(2), B, Some(3), Some(4), B, Some(5)]
+        );
+        assert_eq!(o(12, "", 4, 4), [Some(1), Some(2), Some(3), Some(4), B]);
+        // 参数校验：未知模式 / 模式 8/9 缺页码 / N 越界
+        assert!(
+            blank_positions(
+                5,
+                &BlankOpts {
+                    mode: 13,
+                    spec: "".into(),
+                    n: 2
+                }
+            )
+            .is_err()
+        );
+        assert!(
+            blank_positions(
+                5,
+                &BlankOpts {
+                    mode: 8,
+                    spec: "  ".into(),
+                    n: 2
+                }
+            )
+            .is_err()
+        );
+        assert!(
+            blank_positions(
+                5,
+                &BlankOpts {
+                    mode: 8,
+                    spec: "99".into(),
+                    n: 2
+                }
+            )
+            .is_err()
+        );
+        assert!(
+            blank_positions(
+                5,
+                &BlankOpts {
+                    mode: 12,
+                    spec: "".into(),
+                    n: 1
+                }
+            )
+            .is_err()
+        );
+        assert!(
+            blank_positions(
+                5,
+                &BlankOpts {
+                    mode: 12,
+                    spec: "".into(),
+                    n: 21
+                }
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn insert_blank_rebuilds_readable_document() {
+        let tmp = std::env::temp_dir().join(format!("xdir-pdfib-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let src = tmp.join("doc.pdf");
+        write_doc(&mut make_doc(3), src.to_str().unwrap());
+        // mode 1：奇数页末尾补一页 → 4 页可读
+        let doc = Document::load(&src).unwrap();
+        let positions = blank_positions(
+            3,
+            &BlankOpts {
+                mode: 1,
+                spec: "".into(),
+                n: 2,
+            },
+        )
+        .unwrap();
+        let ids = doc.get_pages();
+        let mut rebuilt = Document::with_version("1.5");
+        let mut kids: Vec<Object> = Vec::new();
+        for slot in &positions {
+            match slot {
+                Some(n) => {
+                    let pid = ids.get(n).copied().unwrap();
+                    let new_id = transfer_page(&doc, pid, &mut rebuilt).unwrap();
+                    kids.push(Object::Reference(new_id));
+                }
+                None => kids.push(Object::Reference(blank_page_object(&mut rebuilt))),
+            }
+        }
+        build_page_tree(&mut rebuilt, kids).unwrap();
+        let out_path = tmp.join("ins.pdf");
+        rebuilt.save(&out_path).unwrap();
+        let loaded = Document::load(&out_path).unwrap();
+        assert_eq!(loaded.get_pages().len(), 4);
+        // 空白页是 A4 且 Resources 为空
+        let last = loaded.get_pages().values().last().copied().unwrap();
+        if let Object::Dictionary(d) = loaded.get_object(last).unwrap() {
+            assert!(
+                matches!(d.get(b"MediaBox"), Ok(Object::Array(a)) if a.len() == 4),
+                "末页应为 A4 空白页"
+            );
+        }
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    // ── 加密 / 解密（2026-11-11）：AES-128（V4/R4）往返 + 权限位 ──
+    #[test]
+    fn encrypt_decrypt_roundtrip_with_permissions() {
+        let tmp = std::env::temp_dir().join(format!("xdir-pdfenc-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let src = tmp.join("doc.pdf");
+        write_doc(&mut make_doc(2), src.to_str().unwrap());
+        let sp = src.to_string_lossy().into_owned();
+
+        // 加密：禁打印/复制、允许编辑；只给打开密码（owner 沿用）
+        let opts = EncryptOpts {
+            open_password: "open123".into(),
+            edit_password: "".into(),
+            deny_print: true,
+            deny_copy: true,
+            deny_edit: false,
+        };
+        let enc_out = encrypt_pdf_file(&sp, &opts).unwrap();
+        assert!(enc_out.ends_with("doc_加密.pdf"), "out = {enc_out}");
+        // 原文件不动
+        assert_eq!(Document::load(&src).unwrap().get_pages().len(), 2);
+
+        // 已加密文件拒绝二次加密
+        assert!(
+            encrypt_pdf_file(&enc_out, &opts)
+                .unwrap_err()
+                .contains("已加密")
+        );
+
+        // 解密 = 带密码加载：错误密码报 InvalidPassword、正确密码得到干净明文档
+        assert!(
+            Document::load_with_options(
+                to_extended(&enc_out),
+                lopdf::LoadOptions::with_password("wrong"),
+            )
+            .is_err(),
+            "错误密码不得解密"
+        );
+        let dec = Document::load_with_options(
+            to_extended(&enc_out),
+            lopdf::LoadOptions::with_password("open123"),
+        )
+        .unwrap();
+        assert_eq!(dec.get_pages().len(), 2, "解密后页数不变");
+        assert!(
+            dec.trailer.get(b"Encrypt").is_err(),
+            "解密后 trailer 不应再有 /Encrypt"
+        );
+        assert!(!dec.is_encrypted());
+
+        // 权限位：就地加密后 /Encrypt 字典 P 值清 PRINTABLE|COPYABLE、保持 MODIFIABLE
+        let mut doc = Document::load(&src).unwrap();
+        ensure_document_id(&mut doc, &sp);
+        encrypt_doc_inplace(&mut doc, &opts).unwrap();
+        let enc_ref = doc.trailer.get(b"Encrypt").unwrap().as_reference().unwrap();
+        let dict = doc.get_dictionary(enc_ref).unwrap();
+        let p = match dict.get(b"P").unwrap() {
+            Object::Integer(v) => *v as u64,
+            other => panic!("P 不是整数：{other:?}"),
+        };
+        assert_eq!(p & (1 << 2), 0, "PRINTABLE 应被清除");
+        assert_eq!(p & (1 << 4), 0, "COPYABLE 应被清除");
+        assert_ne!(p & (1 << 3), 0, "MODIFIABLE 应保持");
+
+        // 解密：旁写 <stem>_解密.pdf（解密 doc_加密.pdf 即 doc_加密_解密.pdf），
+        // 产物无加密可读
+        let dec_out = decrypt_pdf_file(&enc_out, "open123").unwrap();
+        assert!(dec_out.ends_with("_解密.pdf"), "out = {dec_out}");
+        let dec_doc = Document::load(&dec_out).unwrap();
+        assert!(!dec_doc.is_encrypted(), "解密产物不应再加密");
+        assert_eq!(dec_doc.get_pages().len(), 2);
+        // 错误密码不解密
+        assert!(
+            decrypt_pdf_file(&enc_out, "bad")
+                .unwrap_err()
+                .contains("密码错误")
+        );
+        // 未加密文件拒绝解密
+        assert!(decrypt_pdf_file(&sp, "x").unwrap_err().contains("未加密"));
+
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn encrypt_owner_password_only_and_dual_password() {
+        let tmp = std::env::temp_dir().join(format!("xdir-pdfenc2-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let a = tmp.join("a.pdf");
+        let b = tmp.join("b.pdf");
+        write_doc(&mut make_doc(1), a.to_str().unwrap());
+        write_doc(&mut make_doc(1), b.to_str().unwrap());
+        let ap = a.to_string_lossy().into_owned();
+        let bp = b.to_string_lossy().into_owned();
+
+        // 只给所有者密码（用户口令留空 = 免开箱、仅权限限制）
+        let owner_only = EncryptOpts {
+            open_password: "".into(),
+            edit_password: "owner".into(),
+            deny_print: false,
+            deny_copy: false,
+            deny_edit: true,
+        };
+        let out = encrypt_pdf_file(&ap, &owner_only).unwrap();
+        // 空用户口令：任意外口令也开得了箱（读取器空口令回退），空口令直接解
+        let doc =
+            Document::load_with_options(to_extended(&out), lopdf::LoadOptions::with_password(""))
+                .unwrap();
+        assert_eq!(doc.get_pages().len(), 1);
+
+        // 双密码：open 开箱、owner 解权限——两把钥匙都能完成解密
+        let dual = EncryptOpts {
+            open_password: "u1".into(),
+            edit_password: "o1".into(),
+            deny_print: false,
+            deny_copy: false,
+            deny_edit: false,
+        };
+        let out2 = encrypt_pdf_file(&bp, &dual).unwrap();
+        for pwd in ["u1", "o1"] {
+            let d = Document::load_with_options(
+                to_extended(&out2),
+                lopdf::LoadOptions::with_password(pwd),
+            )
+            .unwrap();
+            assert_eq!(d.get_pages().len(), 1, "口令 {pwd} 应可解密");
+        }
+        // 错误口令报 InvalidPassword（用户口令非空时读取器不回退空口令）
+        assert!(
+            Document::load_with_options(
+                to_extended(&out2),
+                lopdf::LoadOptions::with_password("zzz"),
+            )
+            .is_err(),
+            "错误口令不得解密"
+        );
+
+        std::fs::remove_dir_all(&tmp).unwrap();
     }
 }

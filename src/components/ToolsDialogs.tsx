@@ -9,13 +9,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { t, useT } from "../lib/i18n";
 import { api, type FileEntry, type ListingFormat } from "../lib/ipc";
-import { Button, Checkbox, DialogBody, DialogFooter, InputGroup, Slider } from "@blueprintjs/core";
+import { Button, Checkbox, DialogBody, DialogFooter, InputGroup, Slider, Switch } from "@blueprintjs/core";
 import { ArrowRight } from "lucide-react";
 
 import { FOLDER_BATCH_CAP, planFolders } from "../lib/folderBatch";
 import { exportListingDefaultName, type ExportListingOptions } from "../lib/listing";
 import { loadDialogPrefs, saveDialogPrefs } from "../lib/dialogPrefs";
 import { AppIcon } from "./AppIcon";
+import { NpSelect } from "./NpSelect";
 import { Seg } from "./ImgDialogs";
 import { PosGrid } from "./WmPosGrid";
 import { DENSITY } from "../lib/tokens";
@@ -23,12 +24,19 @@ import { QueueSection, nameOf, pathsByNames } from "./FileQueue";
 import { fileNameOf, isValidName, joinPath, parentPath, smartArchiveStem } from "../lib/path";
 import {
   PDF_SPLIT_DEFAULT_RULE,
+  BLANK_MODES,
+  blankModeNeedsN,
+  blankModeNeedsSpec,
   pagesToSpec,
   parsePageSpec,
+  pdfPngDirName,
+  pdfPngFileName,
   renderPdfSplitName,
   type PdfSplitMethod,
   type PdfSplitOptions,
+  type PdfToPngOptions,
 } from "../lib/pdfOps";
+import type { PdfEncryptPayload } from "../lib/operations";
 
 function FormRow({
   k,
@@ -1447,6 +1455,425 @@ export function PdfSplitDialog({
             outDir: saveToFolder ? joinPath(dir, stem) : dir,
           });
         }}
+        onCancel={() => onDone(null)}
+      />
+    </>
+  );
+}
+
+// ───────────── PDF 插入空白页（2026-11-11：12 模式 + 指定页码 + 间隔 N）─────────────
+// 模式 8/9 露指定页码（parsePageSpec 同口径预演校验），10/11/12 露间隔 N；
+// 输出名旁写 "<stem>_插页.pdf"。模式/N 随 dialogPrefs 记忆（页码是文档相关
+// 输入，不记忆）。
+
+export function PdfInsertBlankDialog({
+  entries,
+  onDone,
+}: {
+  entries: FileEntry[];
+  /** 成功 = { 模式, 指定页码, 间隔 N }；null = 取消 */
+  onDone(v: { mode: number; spec: string; n: number } | null): void;
+}) {
+  const t2 = useT();
+  const prefs = loadDialogPrefs("pdfInsertBlank", { mode: 1, n: 2 });
+  const [mode, setMode] = useState<number>(
+    BLANK_MODES.some((m) => m.value === prefs.mode) ? Number(prefs.mode) : 1,
+  );
+  const [spec, setSpec] = useState("");
+  const num = (v: unknown, fb: number) =>
+    Number.isFinite(Number(v)) && Number(v) >= 2 && Number(v) <= 20
+      ? Math.floor(Number(v))
+      : fb;
+  const [n, setN] = useState(num(prefs.n, 2));
+  const needSpec = blankModeNeedsSpec(mode);
+  const needN = blankModeNeedsN(mode);
+  const stem = nameOf(entries[0]?.path ?? "").replace(/\.pdf$/i, "");
+  const specParsed = needSpec && spec.trim() ? parsePageSpec(spec, 9999) : null;
+  const specErr = needSpec
+    ? !spec.trim()
+      ? t2("请输入指定页码（如 1-3,5,8）")
+      : specParsed?.error
+        ? t2("页码表达式暂按 1–9999 预演：{e}（最终以文档真实页数校验）", { e: specParsed.error })
+        : null
+    : null;
+  const valid = !specErr;
+  // 模式人话提示（12 模式按类组一句）
+  const blankHint = (() => {
+    if (mode === 1 || mode === 2)
+      return t2("总页数为奇数时在{pos}补 1 页；已为偶数则原样复制输出", {
+        pos: mode === 1 ? t2("末尾") : t2("开头"),
+      });
+    if (blankModeNeedsSpec(mode))
+      return t2("在指定页码{pos}各插 1 页 A4 空白页", { pos: mode === 8 ? t2("前") : t2("后") });
+    if (mode === 12) return t2("每隔 {n} 页插 1 页 A4 空白页", { n });
+    if (needN)
+      return t2("总页数非 {n} 倍数时在{pos}补至倍数", {
+        n,
+        pos: mode === 10 ? t2("开头") : t2("末尾"),
+      });
+    const pos =
+      mode === 3
+        ? t2("第一页前")
+        : mode === 4
+          ? t2("第一页后")
+          : mode === 5
+            ? t2("最后一页后")
+            : mode === 6
+              ? t2("每页前")
+              : t2("每页后");
+    return t2("在{pos}插 1 页 A4 空白页", { pos });
+  })();
+  return (
+    <>
+      <DialogBody>
+        <div className="np-pdfmsec">
+          <span className="np-bren-k">{t2("处理文件")}</span>
+          <span className="np-dialog-muted">
+            {t2("选中 {n} 个 PDF，逐份旁写「<名称>_插页.pdf」，原文件不动", {
+              n: entries.length,
+            })}
+          </span>
+        </div>
+        <div className="np-bren-form is-cols">
+          <FormRow k={t2("插入模式")} wide>
+            <NpSelect
+              value={String(mode)}
+              options={BLANK_MODES.map((m) => ({
+                value: String(m.value),
+                label: `${m.value} · ${m.label}`,
+              }))}
+              onChange={(v) => setMode(Number(v))}
+            />
+          </FormRow>
+          {needSpec && (
+            <FormRow k={t2("指定页码")} wide>
+              <InputGroup
+                size="small"
+                value={spec}
+                autoFocus
+                spellCheck={false}
+                placeholder={t2("如 1-3,5,8（按原文档页号）")}
+                onChange={(e) => setSpec(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && valid) onDone({ mode, spec: spec.trim(), n });
+                }}
+              />
+            </FormRow>
+          )}
+          {needN && (
+            <FormRow k={t2("间隔 N")}>
+              <InputGroup
+                size="small"
+                value={String(n)}
+                onChange={(e) => setN(num(e.currentTarget.value, n))}
+              />
+            </FormRow>
+          )}
+        </div>
+        {specErr && <div className="np-dialog-error">{specErr}</div>}
+        <div className="np-dialog-muted">
+          {blankHint}
+          {" · "}
+          {t2("输出预览：{out}", { out: `${stem}_插页.pdf` })}
+        </div>
+      </DialogBody>
+      <Footer
+        okText={t2("插入")}
+        disabled={!valid}
+        onOk={() => {
+          saveDialogPrefs("pdfInsertBlank", { mode, n });
+          onDone({ mode, spec: spec.trim(), n });
+        }}
+        onCancel={() => onDone(null)}
+      />
+    </>
+  );
+}
+
+// ───────────── PDF 转图片（2026-11-11：页范围 / DPI / 口令 / 子文件夹）─────────────
+// 渲染在前端 pdf.js（回执后 operations.pdfToPngs 走本地任务通道推进度）；
+// 口令不入 dialogPrefs 存档。
+
+export function PdfToPngDialog({
+  entries,
+  onDone,
+}: {
+  entries: FileEntry[];
+  /** 成功 = PdfToPngOptions；null = 取消 */
+  onDone(v: PdfToPngOptions | null): void;
+}) {
+  const t2 = useT();
+  const prefs = loadDialogPrefs("pdfToPng", { dpi: 150, saveToFolder: true });
+  const num = (v: unknown, fb: number, min: number, max: number) =>
+    Number.isFinite(Number(v)) && Number(v) >= min && Number(v) <= max
+      ? Math.floor(Number(v))
+      : fb;
+  const [startPage, setStartPage] = useState("");
+  const [endPage, setEndPage] = useState("");
+  const [dpi, setDpi] = useState(num(prefs.dpi, 150, 72, 600));
+  const [userPassword, setUserPassword] = useState("");
+  const [ownerPassword, setOwnerPassword] = useState("");
+  const [saveToFolder, setSaveToFolder] = useState(prefs.saveToFolder !== false);
+  const dir = parentPath(entries[0]?.path ?? "");
+  const stem = nameOf(entries[0]?.path ?? "").replace(/\.pdf$/i, "");
+  const startNum = Number(startPage) || 0;
+  const endNum = Number(endPage) || 0;
+  const rangeErr =
+    startNum > endNum && endNum > 0
+      ? t2("起始页不能大于结束页")
+      : startNum < 0 || endNum < 0
+        ? t2("页码不能为负")
+        : null;
+  const valid = !rangeErr;
+  return (
+    <>
+      <DialogBody>
+        <div className="np-pdfmsec">
+          <span className="np-bren-k">{t2("处理文件")}</span>
+          <span className="np-dialog-muted">
+            {t2("选中 {n} 个 PDF，逐页转 PNG（渲染由内置 pdf.js 完成）", {
+              n: entries.length,
+            })}
+          </span>
+        </div>
+        <div className="np-bren-form is-cols">
+          <FormRow k={t2("起始页")}>
+            <InputGroup
+              size="small"
+              value={startPage}
+              placeholder={t2("1")}
+              spellCheck={false}
+              onChange={(e) => setStartPage(e.target.value)}
+            />
+          </FormRow>
+          <FormRow k={t2("结束页")}>
+            <InputGroup
+              size="small"
+              value={endPage}
+              placeholder={t2("到末页")}
+              spellCheck={false}
+              onChange={(e) => setEndPage(e.target.value)}
+            />
+          </FormRow>
+          <FormRow k={t2("分辨率 DPI")}>
+            <InputGroup
+              size="small"
+              value={String(dpi)}
+              spellCheck={false}
+              onChange={(e) => setDpi(num(e.currentTarget.value, dpi, 72, 600))}
+            />
+          </FormRow>
+          <FormRow k={t2("开箱密码")}>
+            <InputGroup
+              size="small"
+              type="password"
+              value={userPassword}
+              placeholder={t2("加密 PDF 时填写")}
+              spellCheck={false}
+              onChange={(e) => setUserPassword(e.target.value)}
+            />
+          </FormRow>
+          <FormRow k={t2("权限密码")}>
+            <InputGroup
+              size="small"
+              type="password"
+              value={ownerPassword}
+              placeholder={t2("仅权限加密时填写")}
+              spellCheck={false}
+              onChange={(e) => setOwnerPassword(e.target.value)}
+            />
+          </FormRow>
+          <FormRow k={t2("独立子文件夹")} wide>
+            <Checkbox
+              checked={saveToFolder}
+              onChange={(e) => setSaveToFolder(e.currentTarget.checked)}
+              label={t2("每个源 PDF 的图片存进「<名称>_图片」子文件夹")}
+            />
+          </FormRow>
+        </div>
+        {rangeErr && <div className="np-dialog-error">{rangeErr}</div>}
+        <div className="np-dialog-muted">
+          {t2("DPI 越高越清晰（默认 150；72 屏显 / 300 印刷）· 页号文件名补零排序 ·")}
+          {t2("输出预览：{out}", {
+            out: saveToFolder
+              ? `${pdfPngDirName(stem)}\\${pdfPngFileName(stem, 1, 1)} …`
+              : `${pdfPngFileName(stem, 1, 1)} …`,
+          })}
+          {dir ? t2("（存于 {dir}）", { dir }) : ""}
+        </div>
+      </DialogBody>
+      <Footer
+        okText={t2("转图片")}
+        disabled={!valid}
+        onOk={() => {
+          saveDialogPrefs("pdfToPng", { dpi, saveToFolder });
+          onDone({
+            startPage: startNum,
+            endPage: endNum,
+            dpi,
+            userPassword,
+            ownerPassword,
+            saveToFolder,
+          });
+        }}
+        onCancel={() => onDone(null)}
+      />
+    </>
+  );
+}
+
+// ───────────── PDF 加密 / 解密（2026-11-11：口令 + 三权限位 / 权限密码）─────────────
+// 加密 = AES-128（lopdf V4/R4 StdCF），perm* = true 即「禁止」对应权限
+// （默认三禁止，与参数口径一致）；密码均不入 dialogPrefs 存档。
+
+export function PdfEncryptDialog({
+  entries,
+  onDone,
+}: {
+  entries: FileEntry[];
+  /** 成功 = 口令与权限开关组；null = 取消 */
+  onDone(v: PdfEncryptPayload | null): void;
+}) {
+  const t2 = useT();
+  const prefs = loadDialogPrefs("pdfEncrypt", {
+    permPrint: true,
+    permCopy: true,
+    permEdit: true,
+  });
+  const [openPassword, setOpenPassword] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const bool = (v: unknown) => v === true;
+  const [permPrint, setPermPrint] = useState(bool(prefs.permPrint));
+  const [permCopy, setPermCopy] = useState(bool(prefs.permCopy));
+  const [permEdit, setPermEdit] = useState(bool(prefs.permEdit));
+  const stem = nameOf(entries[0]?.path ?? "").replace(/\.pdf$/i, "");
+  const err =
+    !openPassword.trim() && !editPassword.trim()
+      ? t2("开箱密码与权限密码至少填写一个")
+      : null;
+  return (
+    <>
+      <DialogBody>
+        <div className="np-pdfmsec">
+          <span className="np-bren-k">{t2("处理文件")}</span>
+          <span className="np-dialog-muted">
+            {t2("选中 {n} 个 PDF，AES-128 加密后旁写「<名称>_加密.pdf」，原文件不动", {
+              n: entries.length,
+            })}
+          </span>
+        </div>
+        <div className="np-bren-form is-cols">
+          <FormRow k={t2("开箱密码")}>
+            <InputGroup
+              size="small"
+              type="password"
+              value={openPassword}
+              autoFocus
+              placeholder={t2("打开/查看所需口令")}
+              spellCheck={false}
+              onChange={(e) => setOpenPassword(e.target.value)}
+            />
+          </FormRow>
+          <FormRow k={t2("权限密码")}>
+            <InputGroup
+              size="small"
+              type="password"
+              value={editPassword}
+              placeholder={t2("所有者口令，空 = 沿用开箱密码")}
+              spellCheck={false}
+              onChange={(e) => setEditPassword(e.target.value)}
+            />
+          </FormRow>
+          <FormRow k={t2("禁止打印")}>
+            <Switch
+              checked={permPrint}
+              label={t2("开启后不允许打印")}
+              onChange={(e) => setPermPrint(e.currentTarget.checked)}
+            />
+          </FormRow>
+          <FormRow k={t2("禁止复制")}>
+            <Switch
+              checked={permCopy}
+              label={t2("开启后不允许复制文本")}
+              onChange={(e) => setPermCopy(e.currentTarget.checked)}
+            />
+          </FormRow>
+          <FormRow k={t2("禁止编辑")}>
+            <Switch
+              checked={permEdit}
+              label={t2("开启后不允许修改内容")}
+              onChange={(e) => setPermEdit(e.currentTarget.checked)}
+            />
+          </FormRow>
+        </div>
+        {err && <div className="np-dialog-error">{err}</div>}
+        <div className="np-dialog-muted">
+          {t2("三个开关默认全开 = 禁止打印/复制/编辑（权限密码持有者不受限）·")}
+          {t2("输出预览：{out}", { out: `${stem}_加密.pdf` })}
+        </div>
+      </DialogBody>
+      <Footer
+        okText={t2("加密")}
+        disabled={!!err}
+        onOk={() => {
+          saveDialogPrefs("pdfEncrypt", { permPrint, permCopy, permEdit });
+          onDone({ openPassword, editPassword, permPrint, permCopy, permEdit });
+        }}
+        onCancel={() => onDone(null)}
+      />
+    </>
+  );
+}
+
+export function PdfDecryptDialog({
+  entries,
+  onDone,
+}: {
+  entries: FileEntry[];
+  /** 成功 = { 密码 }；null = 取消 */
+  onDone(v: { password: string } | null): void;
+}) {
+  const t2 = useT();
+  const [password, setPassword] = useState("");
+  const stem = nameOf(entries[0]?.path ?? "").replace(/\.pdf$/i, "");
+  const err = !password ? t2("请输入密码") : null;
+  return (
+    <>
+      <DialogBody>
+        <div className="np-pdfmsec">
+          <span className="np-bren-k">{t2("处理文件")}</span>
+          <span className="np-dialog-muted">
+            {t2("选中 {n} 个 PDF，解除加密与限制后旁写「<名称>_解密.pdf」，原文件不动", {
+              n: entries.length,
+            })}
+          </span>
+        </div>
+        <div className="np-bren-form is-cols">
+          <FormRow k={t2("密码")} wide>
+            <InputGroup
+              size="small"
+              type="password"
+              value={password}
+              autoFocus
+              placeholder={t2("所有者/权限密码（开箱密码同样可解）")}
+              spellCheck={false}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !err) onDone({ password });
+              }}
+            />
+          </FormRow>
+        </div>
+        {err && <div className="np-dialog-error">{err}</div>}
+        <div className="np-dialog-muted">
+          {t2("未加密的文件自动跳过并计入失败回执 ·")}
+          {t2("输出预览：{out}", { out: `${stem}_解密.pdf` })}
+        </div>
+      </DialogBody>
+      <Footer
+        okText={t2("解密")}
+        disabled={!!err}
+        onOk={() => onDone({ password })}
         onCancel={() => onDone(null)}
       />
     </>

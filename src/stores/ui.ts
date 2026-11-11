@@ -83,7 +83,15 @@ export type DialogSpec =
   | { type: "exportListing"; entries: FileEntry[]; dir: string }
   /** PDF 拆分参数面板（2026-11-10 参数化）：按页数 N / 按书签层级 + 命名
    *  规则 + 子文件夹选项，回执 PdfSplitOptions 给 runPdfSplit */
-  | { type: "pdfSplit"; entry: FileEntry; dir: string };;
+  | { type: "pdfSplit"; entry: FileEntry; dir: string }
+  /** PDF 插入空白页（2026-11-11）：12 种模式参数面板，回执给 insertBlankPages */
+  | { type: "pdfInsertBlank"; entries: FileEntry[] }
+  /** PDF 转图片（2026-11-11）：页范围/分辨率/口令/子文件夹，回执给 pdfToPngs */
+  | { type: "pdfToPng"; entries: FileEntry[] }
+  /** PDF AES-128 加密（2026-11-11）：口令 + 三权限位，回执给 encryptPdfs */
+  | { type: "pdfEncrypt"; entries: FileEntry[] }
+  /** PDF 解密（2026-11-11）：权限密码输入，回执给 decryptPdfs */
+  | { type: "pdfDecrypt"; entries: FileEntry[] };
 
 /** 提示弹窗语义级别：info=主操作、warn=警示、danger=不可逆/错误 */
 export type DialogKind = "info" | "warn" | "danger";

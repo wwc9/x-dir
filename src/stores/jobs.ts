@@ -34,6 +34,10 @@ export type JobMode =
   | "pdfremove"
   | "pdfrotate"
   | "pdfcompress"
+  | "pdfinsertblank"
+  | "pdfencrypt"
+  | "pdfdecrypt"
+  | "pdftopng"
   | "imgtopdf"
   | "officetopdf"
   | "cleanmeta"
@@ -100,6 +104,20 @@ interface JobsStore {
       failed?: { path: string; message: string; reason?: string }[];
     }) => void,
     deletePermanent?: boolean,
+  ): void;
+  /** 前端驱动任务（2026-11-11 PDF 转图片等渲染在渲染层的批量活）：负数
+   *  jobId 与 Rust u32 永不冲突，进度由发起方经 updateLocal 推进，island/
+   *  任务面板共用同一 JobInfo 形态；返回负数 id */
+  registerLocal(mode: JobMode, destDir: string | null, sourceParents: string[]): number;
+  /** 前端驱动任务进度推进（doneFiles/currentPath 等，仅本地 id 生效） */
+  updateLocal(jobId: number, patch: Partial<JobInfo>): void;
+  /** 前端驱动任务是否被请求取消（JobList 取消钮 → cancel 对负数 id 走此处） */
+  isLocalCancelled(jobId: number): boolean;
+  /** 前端驱动任务收尾：出列 + 脏目录刷新 + island 回执（ok=false 时 toast 首错） */
+  finishLocal(
+    jobId: number,
+    ok: boolean,
+    opts?: { note?: string; failed?: { path: string; message: string }[]; cancelled?: boolean },
   ): void;
   cancel(jobId: number): void;
   /** 暂停/恢复（仅 copy/move 任务响应；乐观切 phase，实际由后端 job-progress 确认） */
@@ -280,7 +298,75 @@ export const useJobs = create<JobsStore>()((set, get) => ({
   },
 
   cancel(jobId) {
+    if (jobId < 0) {
+      localCancelled.add(jobId);
+      return;
+    }
     api.cancelJob(jobId).catch(() => undefined);
+  },
+
+  registerLocal(mode, destDir, sourceParents) {
+    const jobId = --localSeq;
+    set((s) => ({
+      jobs: {
+        ...s.jobs,
+        [jobId]: {
+          jobId,
+          mode,
+          phase: "running",
+          totalFiles: 0,
+          doneFiles: 0,
+          totalBytes: 0,
+          doneBytes: 0,
+          currentPath: "",
+          destDir,
+          sourceParents,
+          deletePermanent: false,
+        } satisfies JobInfo,
+      },
+      order: [...s.order, jobId],
+    }));
+    return jobId;
+  },
+
+  updateLocal(jobId, patch) {
+    if (jobId >= 0 || !get().jobs[jobId]) return;
+    set((s) => ({
+      jobs: { ...s.jobs, [jobId]: { ...s.jobs[jobId], ...patch } },
+    }));
+  },
+
+  isLocalCancelled(jobId) {
+    return localCancelled.has(jobId);
+  },
+
+  finishLocal(jobId, ok, opts) {
+    const info = get().jobs[jobId];
+    if (jobId >= 0 || !info) return;
+    localCancelled.delete(jobId);
+    set((s) => ({
+      jobs: Object.fromEntries(
+        Object.entries(s.jobs).filter(([id]) => Number(id) !== jobId),
+      ),
+      order: s.order.filter((id) => id !== jobId),
+    }));
+    bumpAffectedOf(info);
+    const label = JOB_LABELS[info.mode] ?? "任务";
+    if (opts?.cancelled) {
+      useIsland.getState().pushReceipt("info", `${label}已取消`);
+    } else if (ok) {
+      useIsland.getState().pushReceipt("ok", `${label}完成${opts?.note ? ` · ${opts.note}` : ""}`);
+    } else {
+      useIsland.getState().pushReceipt("fail", `${label}失败`);
+      const first = opts?.failed?.[0];
+      if (first) {
+        import("./ui").then(({ useUi }) => {
+          const name = first.path.split(/[\\/]/).pop() ?? first.path;
+          const more = (opts?.failed?.length ?? 0) > 1 ? ` 等 ${opts?.failed?.length} 项` : "";
+          useUi.getState().toast(`${label}失败：${name}${more}（${first.message}）`, "error");
+        });
+      }
+    }
   },
 
   pause(jobId) {
@@ -318,6 +404,11 @@ function offerUnlock(failed: JobDonePayload["failed"], permanent: boolean) {
 
 /** done 事件先于 register 到达时的暂存（极快完成的小任务） */
 const lateDone = new Map<number, JobDonePayload>();
+
+/** 前端驱动任务（负数 id）的取消请求集 + id 发号器：渲染循环经
+ *  isLocalCancelled 轮询退出；与 Rust u32 jobId 无冲突 */
+const localCancelled = new Set<number>();
+let localSeq = 0;
 
 /** 任务终态钩子（撤销栈消费）：jobId → onDone，触发即删，保证只回调一次；
  *  items = 传输成功项路径对（非传输任务为 undefined）；failed = 失败清单 */

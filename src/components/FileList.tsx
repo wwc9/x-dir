@@ -34,7 +34,11 @@ import {
   createEntry,
   createFolders,
   createLinks,
+  decryptPdfs,
   deletePaths,
+  encryptPdfs,
+  insertBlankPages,
+  pdfToPngs,
   runExportListing,
   runPdfSplit,
   exportOfficeText,
@@ -1163,6 +1167,18 @@ export function FileList({
         };
       case "pdfCompress":
         return { label: t("PDF 轻压缩"), action: () => void compressPdfs(sel, path) };
+      case "pdfInsertBlank":
+        // 参数面板（2026-11-11）：12 种插入模式 + 指定页码 + 间隔 N
+        return { label: t("PDF 插入空白页…"), action: () => void insertBlankPages(sel, path) };
+      case "pdfToPng":
+        // 前端 pdf.js 渲染（本地任务通道推进度），独立子文件夹/直存两态
+        return { label: t("PDF 转图片…"), action: () => void pdfToPngs(sel, path) };
+      case "pdfEncrypt":
+        // AES-128 + 三权限位（默认全禁止）
+        return { label: t("PDF 加密…"), action: () => void encryptPdfs(sel, path) };
+      case "pdfDecrypt":
+        // 权限密码输入，旁写 _解密.pdf
+        return { label: t("PDF 解密…"), action: () => void decryptPdfs(sel, path) };
       case "imgToPdf":
         return { label: t("图片合并为 PDF…"), action: () => void imagesToPdf(sel, path) };
       case "imgCompress":

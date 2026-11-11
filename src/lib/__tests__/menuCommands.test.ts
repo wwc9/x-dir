@@ -294,7 +294,7 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
 });
 
 describe("PDF 功能族入驻默认菜单（PDF_MENU_KEYS / seedPdfEntries，2026-11-11 定案）", () => {
-  it("PDF_MENU_KEYS = 注册表 PDF 组九键（含图片合并转 PDF，家族聚齐）", () => {
+  it("PDF_MENU_KEYS = 注册表 PDF 组十三键（含图片合并转 PDF 与 11-11 扩充四件）", () => {
     expect(PDF_MENU_KEYS).toEqual([
       "pdfMerge",
       "pdfMergeFolders",
@@ -305,6 +305,10 @@ describe("PDF 功能族入驻默认菜单（PDF_MENU_KEYS / seedPdfEntries，202
       "pdfRotate",
       "pdfCompress",
       "pdfWatermark",
+      "pdfInsertBlank",
+      "pdfToPng",
+      "pdfEncrypt",
+      "pdfDecrypt",
     ]);
   });
 
@@ -312,7 +316,7 @@ describe("PDF 功能族入驻默认菜单（PDF_MENU_KEYS / seedPdfEntries，202
     const entries = defaultMenuEntries();
     const ids = entries.map((e) => e.id);
     const first = ids.indexOf("builtin:pdfMerge");
-    const last = ids.indexOf("builtin:pdfWatermark");
+    const last = ids.indexOf("builtin:pdfDecrypt");
     expect(first).toBeGreaterThan(0);
     expect(ids.slice(first, last + 1)).toEqual(PDF_MENU_KEYS.map((k) => `builtin:${k}`));
     // 前邻复制名称块（sep 分隔），后接删除尾块

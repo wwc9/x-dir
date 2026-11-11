@@ -58,6 +58,10 @@ import {
   PdfMergeDialog,
   PdfPagesDialog,
   PdfWatermarkDialog,
+  PdfInsertBlankDialog,
+  PdfToPngDialog,
+  PdfEncryptDialog,
+  PdfDecryptDialog,
   XlsxMergeDialog,
 } from "./ToolsDialogs";
 import {
@@ -124,7 +128,15 @@ export function DialogHost() {
       ? "导出文件清单"
       : dialog?.type === "pdfSplit"
         ? "PDF 拆分"
-        : dialog?.type === "filesMerge"
+        : dialog?.type === "pdfInsertBlank"
+          ? "PDF 插入空白页"
+          : dialog?.type === "pdfToPng"
+            ? "PDF 转图片"
+            : dialog?.type === "pdfEncrypt"
+              ? "PDF 加密"
+              : dialog?.type === "pdfDecrypt"
+                ? "PDF 解密"
+                : dialog?.type === "filesMerge"
       ? dialog.flavor === "images"
         ? "图片合并为 PDF"
         : dialog.flavor === "csv"
@@ -352,6 +364,18 @@ export function DialogHost() {
       )}
       {dialog?.type === "pdfSplit" && (
         <PdfSplitDialog entry={dialog.entry} dir={dialog.dir} onDone={(v) => resolve(v)} />
+      )}
+      {dialog?.type === "pdfInsertBlank" && (
+        <PdfInsertBlankDialog entries={dialog.entries} onDone={(v) => resolve(v)} />
+      )}
+      {dialog?.type === "pdfToPng" && (
+        <PdfToPngDialog entries={dialog.entries} onDone={(v) => resolve(v)} />
+      )}
+      {dialog?.type === "pdfEncrypt" && (
+        <PdfEncryptDialog entries={dialog.entries} onDone={(v) => resolve(v)} />
+      )}
+      {dialog?.type === "pdfDecrypt" && (
+        <PdfDecryptDialog entries={dialog.entries} onDone={(v) => resolve(v)} />
       )}
       {dialog?.type === "exportListing" && (
         <ExportListingDialog

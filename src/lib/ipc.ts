@@ -375,9 +375,10 @@ export interface Settings {
   customCommands: CustomCommand[];
   /** 右键菜单布局（有序条目：内置功能/自定义命令/分割线，含出现条件） */
   menuEntries: MenuEntry[];
-  /** PDF 功能族入驻菜单的一次性补种标记（2026-11-11）：true 后编辑器删减的
-   *  PDF 条目不再回填（seedPdfEntries 只在标记为假时执行） */
-  pdfMenuSeeded: boolean;
+  /** PDF 功能族入驻菜单的补种版本号（2026-11-11 定案）：低于 PDF_MENU_SEED_VERSION
+   *  即补种缺失的 PDF 组条目（新功能入库时版本 +1 一次性送达存量档）；此后
+   *  编辑器删减的条目不再回填 */
+  menuSeedV: number;
   /** 批量重命名方案（规则链预设：方案面板保存/套用/删除，随 settings.json 持久化） */
   renameSchemes: RenameScheme[];
   /** 右键菜单编辑器左栏（启用菜单）宽（px，两栏间可拖，钳制 240–480） */
@@ -536,7 +537,7 @@ export const DEFAULT_SETTINGS: Settings = {
   customCommands: [],
   // 出厂布局由 settings.load 的迁移填充（defaultMenuEntries，含旧命令条目化）
   menuEntries: [],
-  pdfMenuSeeded: false,
+  menuSeedV: 0,
   renameSchemes: [],
   // 定制页「启用菜单」栏默认宽（2026-11-09 用户反馈 300→520，上限 720）
   menuedLeftWidth: 520,
@@ -962,6 +963,42 @@ export const api = {
   /** PDF 轻压缩（旁写 *_压缩.pdf） */
   pdfCompress: (paths: string[]) =>
     cmd<{ jobId: number }>("pdf_compress", { paths }),
+  /** PDF 插入空白页（2026-11-11）：mode ∈ 1–12——1 末尾凑偶数 / 2 开头凑偶数 /
+   *  3 首页前 / 4 首页后 / 5 末页后 / 6 每页前 / 7 每页后 / 8 指定页码前 /
+   *  9 指定页码后 / 10 开头凑 N 倍数 / 11 末尾凑 N 倍数 / 12 每隔 N 页；
+   *  spec = 模式 8/9 的页码表达式（如 1-3,5,8）；n = 模式 10/11/12 的 N（2–20）。
+   *  旁写 *_插页.pdf */
+  pdfInsertBlank: (paths: string[], mode: number, spec: string, n: number) =>
+    cmd<{ jobId: number }>("pdf_insert_blank", { paths, mode, spec, n }),
+  /** PDF AES-128 加密（2026-11-11）：openPassword 开箱口令 / editPassword
+   *  权限口令（至少一个非空，只填开箱时权限口令沿用）；perm* = true 即禁止
+   *  打印/复制/编辑。旁写 *_加密.pdf */
+  pdfEncrypt: (
+    paths: string[],
+    openPassword: string,
+    editPassword: string,
+    permPrint: boolean,
+    permCopy: boolean,
+    permEdit: boolean,
+  ) =>
+    cmd<{ jobId: number }>("pdf_encrypt", {
+      paths,
+      openPassword,
+      editPassword,
+      permPrint,
+      permCopy,
+      permEdit,
+    }),
+  /** PDF 解密（2026-11-11）：ownerPassword = 所有者/权限密码（开箱密码同样
+   *  可解），旁写 *_解密.pdf，原文件不动 */
+  pdfDecrypt: (paths: string[], ownerPassword: string) =>
+    cmd<{ jobId: number }>("pdf_decrypt", { paths, ownerPassword }),
+  /** 目录可用名 + 创建（转图片独立子文件夹入口）：已存在自动 "(2)" 递增 */
+  ensureAvailableDir: (path: string) =>
+    cmd<string>("ensure_available_dir", { path }),
+  /** 前端渲染产物落盘（PDF 转图片：canvas → PNG base64 → 文件；仅收 .png） */
+  writePngFile: (path: string, b64: string) =>
+    cmd<void>("write_png_b64", { path, b64 }),
   /** 图片（PNG/JPEG）合并转 PDF，每图一页 */
   imagesToPdf: (paths: string[], output: string) =>
     cmd<{ jobId: number }>("images_to_pdf", { paths, output }),
