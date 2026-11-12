@@ -6997,8 +6997,8 @@ body.np-col-resizing * {
   padding: var(--np-gutter) var(--np-gutter) 10px;
   text-align: center;
 }
-/* 底栏悬浮胶囊（方案 C，2026-11-06）：surface-2 胶囊条承载 计数+清空+
-   完整快捷键清单（2026-10-31 定案保留）；flash 回执占位同高不跳 */
+/* 页脚容器（2026-11-12 收敛为纯快捷键说明：计数移顶栏、清空移设置）；
+   flash 回执占位同高不跳 */
 .np-clip-foot {
   display: flex;
   flex-direction: column;
@@ -7008,8 +7008,8 @@ body.np-col-resizing * {
   font-size: var(--np-font-sm);
   color: var(--np-muted);
 }
-/* 页脚 = 整行键帽式快捷键说明（2026-11-12 用户需求：计数移顶栏、快捷键
-   以 np-kbd 键帽包裹，键帽 + 动作词成组、gap 分隔、最多两行折行） */
+/* 页脚 = 整行描边键帽快捷键说明（2026-11-12 用户选定方案二「描边键帽」：
+   无容器素底，键帽 + 动作词成组、gap 分隔、最多两行折行） */
 .np-clip-flash {
   display: flex;
   align-items: center;
@@ -7023,9 +7023,16 @@ body.np-col-resizing * {
   column-gap: 14px;
   row-gap: var(--np-gap);
   min-height: calc(var(--np-ctl-h) + var(--np-gap));
-  padding: 4px 14px;
-  background: var(--np-surface-2);
-  border-radius: var(--np-radius-pill);
+  /* 左缩进 8px = np-clip-row 外壳左右 padding，与列表卡片左缘对齐 */
+  padding: 4px 8px 0;
+}
+/* 键帽描边变体（方案二定案）：透明底 + --np-border 描边 + fg 字（编辑器
+   提示风）；仅页脚 scoped 覆盖——设置页/全盘搜索等场景的 surface-2
+   填充式 np-kbd 基方不变 */
+.np-clip-keys .np-kbd {
+  padding: 1px 5px;
+  background: transparent;
+  border: 1px solid var(--np-border);
 }
 .np-clip-key {
   display: inline-flex;
