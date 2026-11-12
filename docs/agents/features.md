@@ -364,7 +364,7 @@
 - 图片条目存 PNG 原图 + 缩略（image crate thumbnail，THUMB_EDGE 320 只缩不放；**不透明图编 JPEG q80**——比 PNG 小一个量级，随分页 dataURL 下发不撑 IPC；任一像素带透明才编 PNG，按**实际像素**扫描判透明而非颜色通道——剪贴板位图恒为 RGBA 源，按通道判定永远走 PNG），dataURL mime 按实际编码标注；`parse_dib` 接受 32bpp BI_BITFIELDS 标准掩码（WinForms SetImage/GDI 合成 DIB 常态布局）。
 - 文件条目入库细分 kind：全部为目录 → dirs（fs::metadata is_dir 判定，失败归 files；write_back files|dirs 同臂回写 CF_HDROP）；链接/路径细分（is_url/is_existing_path 纯函数配 cargo test，回写仍按纯文本）。
 - FTS5 全文 = clip_fts trigram 分词优先（任意子串含中文，触发器同步；**计数漂移才 rebuild**——不每次启动全量重索引）；≥3 字符走索引，短查询/拼音/来源 LIKE 不回归；拼音首字母搜索（py 列复用 `fs::search::pinyin_initials` 惰性 ALTER+回填）；来源应用记录 source 列。
-- 富文本保真 = html 列 + CF_HTML build/parse，回写双格式 CF_UNICODETEXT+HTML Format（`cliphistRichText` 默认开）；收藏分组 fav 列（豁免清理/排最前/「收藏」过滤档）；备份导入导出（Backup JSON，image base64 往返）；OCR 取字（Windows.Media.Ocr 零新依赖，识别文本写回剪贴板自然入库）；多选合并粘贴（merge_texts 按列表序连接，`ids IN` 精确取行）。
+- 富文本保真 = html 列 + CF_HTML build/parse，回写双格式 CF_UNICODETEXT+HTML Format（`cliphistRichText` 默认开）；收藏分组 fav 列（豁免清理/排最前/「收藏」过滤档）；备份导入导出（Backup JSON，image base64 往返）；OCR 取字（Windows.Media.Ocr 零新依赖，识别文本写回剪贴板自然入库；2026-11-12 跑通修正——Buffer cast IDataWriter 必然 E_NOINTERFACE = OCR 此前从未真正出过结果，改 IBufferByteAccess 直写像素 + SetLength（直写不更新 Length，不设报 0xC00D7170）；blocking 裸线程补 CoInitializeEx(MTA)；引擎创建加已装语言包枚举兜底（statics 需 Globalization feature）；超 OcrEngine.MaxImageDimension 先等比缩到限内；真机单测 ocr_recognizes_rendered_text = PowerShell System.Drawing 渲染中文数字 → 真识别断言，无语言包机器经 create_ocr_engine 门闸自动跳过）；多选合并粘贴（merge_texts 按列表序连接，`ids IN` 精确取行）。
 
 ### 11.2 浮窗交互
 

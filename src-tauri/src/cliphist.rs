@@ -1586,62 +1586,99 @@ pub fn image_png_bytes(h: &ClipHistState, id: i64) -> Result<Vec<u8>, String> {
     .ok_or("该条目没有原图数据".to_string())
 }
 
-/// PNG 字节 → OCR 识别文本（无状态重活；识别结果写回剪贴板）
-pub fn ocr_png(png: &[u8]) -> Result<String, String> {
+/// 取本机可用的 OCR 引擎：先按用户语言档创建，失败则枚举全部已装 OCR
+/// 语言包逐个尝试（用户语言档与已装语言包常不同步）。全部为空 = None
+/// （机器确实没装任何 OCR 语言包）。pub(crate) 供测试做真机可用性门闸
+#[cfg(windows)]
+pub(crate) fn create_ocr_engine() -> Option<windows::Media::Ocr::OcrEngine> {
+    use windows::Media::Ocr::OcrEngine;
+    if let Ok(e) = OcrEngine::TryCreateFromUserProfileLanguages() {
+        return Some(e);
+    }
+    let langs = OcrEngine::AvailableRecognizerLanguages().ok()?;
+    langs
+        .into_iter()
+        .find_map(|l| OcrEngine::TryCreateFromLanguage(&l).ok())
+}
+
+/// PNG → OCR 识别文本（纯识别不写剪贴板，pub(crate) 供真机单测；
+/// 跑通修正记录见 ocr_png）
+#[cfg(windows)]
+pub(crate) fn ocr_png_text(png: &[u8]) -> Result<String, String> {
+    use windows::Graphics::Imaging::{BitmapPixelFormat, SoftwareBitmap};
+    use windows::Storage::Streams::Buffer;
+    use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
+    use windows::Win32::System::WinRT::IBufferByteAccess;
+    use windows::core::Interface;
     let img = image::load_from_memory_with_format(png, image::ImageFormat::Png)
         .map_err(|e| format!("图片解码失败：{e}"))?;
-    let rgba = img.into_rgba8();
-    let (w, hh) = rgba.dimensions();
+    // WinRT 调用需要线程 COM 已初始化：blocking 线程池线程默认未初始化
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+    }
+    let engine = create_ocr_engine()
+        .ok_or("系统无可用的 OCR 引擎（设置 → 时间和语言 → 语言 添加中文/英文语言包）")?;
+    let mut rgba = img.into_rgba8();
+    let (mut w, mut hh) = rgba.dimensions();
+    // 系统引擎有图像尺寸上限（静态属性，引擎无关）：超限先等比缩到限内，
+    // 否则 RecognizeAsync 失败
+    if let Ok(max_dim) = windows::Media::Ocr::OcrEngine::MaxImageDimension() {
+        let longest = w.max(hh);
+        if longest > max_dim {
+            let s = max_dim as f64 / longest as f64;
+            let nw = ((w as f64 * s) as u32).max(1);
+            let nh = ((hh as f64 * s) as u32).max(1);
+            rgba = image::imageops::thumbnail(&rgba, nw, nh);
+            let (nw2, nh2) = rgba.dimensions();
+            w = nw2;
+            hh = nh2;
+        }
+    }
+    let len = rgba.len();
+    let buf = Buffer::Create(len as u32).map_err(|e| format!("缓冲创建失败：{e}"))?;
+    {
+        // Buffer 只实现 IBuffer：旧实现 cast IDataWriter 必然 E_NOINTERFACE
+        // （OCR 此前从未真正出过结果的根因），改经 IBufferByteAccess 直写像素
+        let access: IBufferByteAccess = buf
+            .cast()
+            .map_err(|e| format!("Buffer 字节访问获取失败：{e}"))?;
+        let ptr = unsafe { access.Buffer() }.map_err(|e| format!("Buffer 指针获取失败：{e}"))?;
+        unsafe { std::slice::from_raw_parts_mut(ptr, len).copy_from_slice(&rgba) };
+        // 直写内存不更新 IBuffer.Length（Create 后恒 0）——CreateCopyFromBuffer
+        // 按 Length 校验，不设则报 0xC00D7170「响应内存不足」
+        buf.SetLength(len as u32)
+            .map_err(|e| format!("缓冲长度设置失败：{e}"))?;
+    }
+    let sb =
+        SoftwareBitmap::CreateCopyFromBuffer(&buf, BitmapPixelFormat::Rgba8, w as i32, hh as i32)
+            .map_err(|e| format!("位图构建失败：{e}"))?;
+    let recognize = engine
+        .RecognizeAsync(&sb)
+        .map_err(|e| format!("OCR 启动失败：{e}"))?;
+    let result = tauri::async_runtime::block_on(std::future::IntoFuture::into_future(recognize))
+        .map_err(|e| format!("OCR 识别失败：{e}"))?;
+    let text = result
+        .Text()
+        .map_err(|e| format!("取识别文本失败：{e}"))?
+        .to_string();
+    let text = text.trim().to_string();
+    if text.is_empty() {
+        return Err("未识别出文字".into());
+    }
+    Ok(text)
+}
+
+/// PNG 字节 → OCR 识别文本（无状态重活；识别结果写回剪贴板）
+pub fn ocr_png(png: &[u8]) -> Result<String, String> {
     #[cfg(windows)]
     {
-        use windows::Graphics::Imaging::{BitmapPixelFormat, SoftwareBitmap};
-        use windows::Media::Ocr::OcrEngine;
-        use windows::Storage::Streams::Buffer;
-        let buf = Buffer::Create(rgba.len() as u32).map_err(|e| format!("缓冲创建失败：{e}"))?;
-        {
-            use windows::Storage::Streams::IDataWriter;
-            use windows::core::Interface;
-            let writer: IDataWriter = buf
-                .cast()
-                .map_err(|e| format!("DataWriter 获取失败：{e}"))?;
-            let _ = writer.WriteBytes(&rgba);
-            let flush = writer
-                .FlushAsync()
-                .map_err(|e| format!("FlushAsync 失败：{e}"))?;
-            let _ = tauri::async_runtime::block_on(std::future::IntoFuture::into_future(flush));
-            writer
-                .DetachBuffer()
-                .map_err(|e| format!("DetachBuffer 失败：{e}"))?;
-        }
-        let sb = SoftwareBitmap::CreateCopyFromBuffer(
-            &buf,
-            BitmapPixelFormat::Rgba8,
-            w as i32,
-            hh as i32,
-        )
-        .map_err(|e| format!("位图构建失败：{e}"))?;
-        let engine = OcrEngine::TryCreateFromUserProfileLanguages()
-            .map_err(|_| "系统无可用的 OCR 引擎（设置 → 语言 添加中文/英文语言包）".to_string())?;
-        let recognize = engine
-            .RecognizeAsync(&sb)
-            .map_err(|e| format!("OCR 启动失败：{e}"))?;
-        let result =
-            tauri::async_runtime::block_on(std::future::IntoFuture::into_future(recognize))
-                .map_err(|e| format!("OCR 识别失败：{e}"))?;
-        let text = result
-            .Text()
-            .map_err(|e| format!("取识别文本失败：{e}"))?
-            .to_string();
-        let text = text.trim().to_string();
-        if text.is_empty() {
-            return Err("未识别出文字".into());
-        }
+        let text = ocr_png_text(png)?;
         crate::clip::set_text(&text)?;
         Ok(text)
     }
     #[cfg(not(windows))]
     {
-        let _ = (w, hh);
+        let _ = png;
         Err("OCR 仅 Windows 支持".into())
     }
 }
@@ -1927,6 +1964,49 @@ mod tests {
                 cut: true
             }
             .hash_hex()
+        );
+    }
+
+    /// 真机 OCR 跑通测试（2026-11-12）：PowerShell System.Drawing 渲染
+    /// 中文+数字文本 → ocr_png_text 真识别断言。无 OCR 语言包的机器自动
+    /// 跳过（create_ocr_engine 门闸），有引擎的机器 = 端到端真验证
+    #[test]
+    #[cfg(windows)]
+    fn ocr_recognizes_rendered_text() {
+        if super::create_ocr_engine().is_none() {
+            println!("ocr test skipped: 本机无可用的 OCR 引擎（未装语言包）");
+            return;
+        }
+        let dir = std::env::temp_dir().join("xdir_ocr_test");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("ocr_text.png");
+        let ps = format!(
+            "Add-Type -AssemblyName System.Drawing;\
+             $b = New-Object System.Drawing.Bitmap 480,140;\
+             $g = [System.Drawing.Graphics]::FromImage($b);\
+             $g.Clear([System.Drawing.Color]::White);\
+             $f = New-Object System.Drawing.Font('Microsoft YaHei', 34);\
+             $g.DrawString('OCR测试123', $f, [System.Drawing.Brushes]::Black, 12, 38);\
+             $g.Dispose();\
+             $b.Save('{}', [System.Drawing.Imaging.ImageFormat]::Png)",
+            path.to_str().unwrap()
+        );
+        let out = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps])
+            .output()
+            .expect("powershell 启动失败");
+        assert!(
+            out.status.success(),
+            "渲染测试图失败：{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let png = std::fs::read(&path).expect("读取测试图失败");
+        let text = super::ocr_png_text(&png).expect("OCR 识别应成功");
+        let _ = std::fs::remove_dir_all(&dir);
+        println!("ocr recognized: {text:?}");
+        assert!(
+            text.contains("123") || text.contains("OCR"),
+            "应识别出渲染文本，实际：{text:?}"
         );
     }
 
