@@ -1188,14 +1188,16 @@ body.np-col-resizing .np-menued-grip::after {
   background: var(--np-accent-border);
 }
 
-/* 导航树（全局共用目录树；位于侧边栏右侧，可拖宽，AGENTS §4.3） */
+/* 导航树（全局共用目录树；位于侧边栏右侧，可拖宽，AGENTS §4.3）。
+   padding 与边栏两卡（.np-side-card / .np-shelf）逐边同值：标题行 .np-side-h
+   同构 + 容器同边距，两面板标题才逐像素对齐（2026-11-12 用户反馈） */
 .np-navtree {
   position: relative;
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
   min-height: 0;
-  padding: 8px;
+  padding: 2px 6px 6px;
   gap: 2px;
   background: var(--np-surface);
   border: 1px solid var(--np-border);
