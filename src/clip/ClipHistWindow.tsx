@@ -822,7 +822,7 @@ export function ClipHistWindow() {
             <span className="np-clip-count">{total} 条</span>
             <span className="np-clip-keys">
               {picked.size > 0
-                ? `已勾选 ${picked.size} 条 · Enter 合并粘贴 · Ctrl+Enter 仅复制 · Space 续选 · Esc 取消`
+                ? `已勾选 ${picked.size} 条 · Enter 合并粘贴 · Ctrl+Enter 仅复制 · Space/Ctrl+点击 续选 · Esc 取消`
                 : searchFocused
                   ? "输入即搜索 · ↑↓ 选择 · Enter 粘贴 · Alt+1-9 取条 · Tab 切分类 · Esc 收起搜索"
                   : winPinned
