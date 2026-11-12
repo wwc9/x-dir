@@ -97,9 +97,32 @@ export function SettingsPanel() {
   const settingsTab = useUi((st) => st.settingsTab);
   const [tab, setTab] = useState<TabId>(settingsTab ?? "appearance");
   const [quickRule, setQuickRule] = useState("");
+  /** 清理历史条目的天数输入（设置 → 剪贴板，2026-11-12 用户需求；0 = 全部） */
+  const [clipClearDays, setClipClearDays] = useState(3);
   useEffect(() => {
     if (settingsTab) setTab(settingsTab);
   }, [settingsTab]);
+
+  /** 清空最近 N 天剪贴板条目：确认弹窗 → 命令（置顶/收藏豁免）→ 回执条数 */
+  const clearRecentClips = async () => {
+    const days = Math.max(0, Math.min(3650, Math.floor(clipClearDays || 0)));
+    const ok = await confirmDialog({
+      title: "清理历史条目",
+      message:
+        days === 0
+          ? "确定清空全部非置顶、非收藏条目吗？删除后不可恢复。"
+          : `确定删除最近 ${days} 天的非置顶、非收藏条目吗？删除后不可恢复。`,
+      kind: "warn",
+      okText: "清空",
+    });
+    if (!ok) return;
+    try {
+      const n = await api.cliphistClearRecent(days);
+      useUi.getState().toast(n > 0 ? `已清理 ${n} 条历史条目` : "没有可清理的条目");
+    } catch (e) {
+      useUi.getState().toast(`清理失败：${String(e)}`, "error");
+    }
+  };
 
   const setRule = (i: number, patch: Partial<ColorRule>) => {
     const rules = s.colorRules.map((r, j) => (j === i ? { ...r, ...patch } : r));
@@ -432,6 +455,35 @@ export function SettingsPanel() {
                 }))}
                 onChange={(v) => applyClipLimits(v, s.cliphistKeepDays)}
               />
+            </SetRow>
+            <SetRow
+              label={t("清理历史条目")}
+              desc="删除最近 N 天的非置顶、非收藏条目（不可恢复）；填 0 = 清空全部"
+            >
+              <span className="np-filext">
+                <input
+                  className="np-set-quickadd-input"
+                  style={{ width: "64px" }}
+                  value={clipClearDays}
+                  inputMode="numeric"
+                  onChange={(e) => {
+                    const n = Number(e.target.value.replace(/\D/g, ""));
+                    setClipClearDays(Number.isFinite(n) ? n : 0);
+                  }}
+                />
+                <span style={{ fontSize: "var(--np-font-sm)", color: "var(--np-muted)" }}>
+                  天
+                </span>
+              </span>
+              <Button
+                minimal
+                size="small"
+                intent="danger"
+                disabled={!s.cliphistEnabled}
+                onClick={() => void clearRecentClips()}
+              >
+                清空
+              </Button>
             </SetRow>
             <SetRow
               label={t("排除应用")}

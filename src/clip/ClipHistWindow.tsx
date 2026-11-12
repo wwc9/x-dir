@@ -378,20 +378,6 @@ export function ClipHistWindow() {
     void api.cliphistDelete(item.id).catch(() => undefined);
   }, []);
 
-  /** 清空全部未置顶条目：两段式确认（首击布防 3 秒，再击执行——轻量窗无
-   *  confirmDialog 基建，且清空影响面大需要防误触） */
-  const [clearArmed, setClearArmed] = useState(false);
-  const onClear = useCallback(() => {
-    if (!clearArmed) {
-      setClearArmed(true);
-      window.setTimeout(() => setClearArmed(false), 3000);
-      return;
-    }
-    setClearArmed(false);
-    keepId.current = null;
-    void api.cliphistClear().catch(() => undefined);
-  }, [clearArmed]);
-
   // 行高动态（预览自适应最多 3 行）：estimateSize 给单行基线，实际由
   // measureElement 量测；getItemKey 以条目 id 缓存尺寸，刷新不串行高
   const virtualizer = useVirtualizer({
@@ -534,6 +520,15 @@ export function ClipHistWindow() {
             delItem(cur);
           }
           break;
+        case "Tab": {
+          // Tab/Shift+Tab 循环切换分类过滤（2026-11-12 用户需求）；kind 变更
+          // 经 [query, kind] 防抖效应自动重拉，选择回落首行
+          e.preventDefault();
+          const vs = KIND_TABS.map((t) => t.v);
+          const at = vs.indexOf(stateRef.current.kind);
+          setKind(vs[(at + (e.shiftKey ? -1 : 1) + vs.length) % vs.length]);
+          break;
+        }
       }
     };
     window.addEventListener("keydown", onKey, true);
@@ -816,30 +811,23 @@ export function ClipHistWindow() {
           <span className="np-clip-viewer-tip">点击任意处或按 Esc 关闭</span>
         </div>
       )}
-      {/* 页脚悬浮胶囊（方案 C）：计数 + 清空 + 完整快捷键清单（2026-10-31
-          定案保留），flash 回执占位同高 */}
+      {/* 页脚悬浮胶囊（方案 C）：计数 + 完整快捷键清单（2026-10-31 定案
+          保留；清空钮退役 2026-11-12——功能移至 设置 → 剪贴板「清理历史
+          条目」，支持最近 N 天）。flash 回执占位同高 */}
       <div className="np-clip-foot">
         {flash ? (
           <span className="np-clip-flash">{flash}</span>
         ) : (
           <div className="np-clip-footbar">
             <span className="np-clip-count">{total} 条</span>
-            <button
-              className="np-clip-clear"
-              data-tip="清空全部未置顶条目（两击确认）"
-              onClick={onClear}
-            >
-              <AppIcon icon={Trash2} size={DENSITY.iconXs} />
-              {clearArmed ? "确认清空？" : "清空"}
-            </button>
             <span className="np-clip-keys">
               {picked.size > 0
                 ? `已勾选 ${picked.size} 条 · Enter 合并粘贴 · Space 续选 · Esc 取消`
                 : searchFocused
-                  ? "输入即搜索 · ↑↓ 选择 · Enter 粘贴 · Alt+1-9 取条 · Esc 收起搜索"
+                  ? "输入即搜索 · ↑↓ 选择 · Enter 粘贴 · Alt+1-9 取条 · Tab 切分类 · Esc 收起搜索"
                   : winPinned
-                    ? "↑↓/WS 选择 · Enter 复制（常驻中） · 1-9 取条 · Space 勾选 · Ctrl+P 置顶 · Del 删除 · Esc 关闭"
-                    : "↑↓/WS 选择 · Enter 粘贴 · 1-9 取条 · Space 勾选 · Ctrl+P 置顶 · Del 删除 · Esc 关闭"}
+                    ? "↑↓/WS 选择 · Enter 复制（常驻中） · 1-9 取条 · Space 勾选 · Tab 切分类 · Ctrl+P 置顶 · Del 删除 · Esc 关闭"
+                    : "↑↓/WS 选择 · Enter 粘贴 · 1-9 取条 · Space 勾选 · Tab 切分类 · Ctrl+P 置顶 · Del 删除 · Esc 关闭"}
             </span>
           </div>
         )}

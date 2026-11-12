@@ -262,9 +262,15 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       },
       { id: "cliphist-delete", keys: ["Del"], label: "删除选中条目", scope: "system" },
       {
+        id: "cliphist-tab",
+        keys: ["Tab / Shift+Tab"],
+        label: "循环切换分类过滤（全部/收藏/文本/链接/路径/图片/文件/文件夹；Shift 反向）",
+        scope: "system",
+      },
+      {
         id: "cliphist-esc",
         keys: ["Esc"],
-        label: "关闭浮窗（浮窗失焦亦自动关闭）",
+        label: "收起搜索框 / 关闭浮窗（浮窗失焦亦自动关闭）",
         scope: "system",
       },
     ],

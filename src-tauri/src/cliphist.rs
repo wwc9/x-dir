@@ -45,7 +45,7 @@ const SELF_WRITE_WINDOW: Duration = Duration::from_secs(3);
 const WIN_W: i32 = 460;
 const WIN_H: i32 = 540;
 
-fn now_ms() -> i64 {
+pub(crate) fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
@@ -648,6 +648,21 @@ fn cleanup(conn: &Connection, capacity: usize, keep_days: i64, now: i64) -> rusq
         )?;
     }
     Ok(())
+}
+
+/// 清空最近 N 天条目（pinned/fav 豁免，与容量/保留天数清理同口径）；days=0
+/// 清空全部非置顶/收藏。返回删除条数。入口 = 设置 → 剪贴板「清理历史条目」
+/// （浮窗页脚清空钮已退役 2026-11-12）
+pub(crate) fn clear_recent(conn: &Connection, days: u32, now: i64) -> rusqlite::Result<usize> {
+    if days == 0 {
+        conn.execute("DELETE FROM clip_items WHERE pinned = 0 AND fav = 0", [])
+    } else {
+        let cutoff = now - (days as i64).min(3650) * 86_400_000;
+        conn.execute(
+            "DELETE FROM clip_items WHERE pinned = 0 AND fav = 0 AND created_at >= ?1",
+            rusqlite::params![cutoff],
+        )
+    }
 }
 
 /// 列表条目（thumb 直接给 dataURL，前端零转换）
@@ -2153,6 +2168,45 @@ MIIE...
             .query_row("SELECT thumb FROM clip_items", [], |r| r.get(0))
             .unwrap();
         assert_eq!(&thumb[..4], &[0x89, b'P', b'N', b'G'], "透明缩略应保 PNG");
+    }
+
+    #[test]
+    fn clear_recent_respects_days_and_exemptions() {
+        let c = mem_db();
+        let day = 86_400_000i64;
+        let now = 30 * day;
+        assert!(ingest(&c, &text("old"), now - 4 * day, None, None).unwrap());
+        assert!(ingest(&c, &text("mid"), now - 2 * day, None, None).unwrap());
+        assert!(ingest(&c, &text("new"), now, None, None).unwrap());
+        assert!(ingest(&c, &text("pinned"), now - 2 * day, None, None).unwrap());
+        assert!(ingest(&c, &text("fav"), now - 2 * day, None, None).unwrap());
+        c.execute(
+            "UPDATE clip_items SET pinned = 1 WHERE preview = 'pinned'",
+            [],
+        )
+        .unwrap();
+        c.execute("UPDATE clip_items SET fav = 1 WHERE preview = 'fav'", [])
+            .unwrap();
+        // 清最近 3 天：删 mid/new，old（过期不触及）/pinned/fav（豁免）保留
+        assert_eq!(clear_recent(&c, 3, now).unwrap(), 2);
+        let left: Vec<String> = c
+            .prepare("SELECT preview FROM clip_items ORDER BY preview")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(left, vec!["fav", "old", "pinned"]);
+        // days = 0：清空全部非置顶/收藏
+        assert_eq!(clear_recent(&c, 0, now).unwrap(), 1);
+        let left: Vec<String> = c
+            .prepare("SELECT preview FROM clip_items ORDER BY preview")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(left, vec!["fav", "pinned"]);
     }
 
     #[test]

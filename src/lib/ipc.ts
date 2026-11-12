@@ -1218,8 +1218,9 @@ export const api = {
   cliphistSetFav: (id: number, fav: boolean) => cmd<void>("cliphist_set_fav", { id, fav }),
   /** 剪贴板历史：删除单条 */
   cliphistDelete: (id: number) => cmd<void>("cliphist_delete", { id }),
-  /** 剪贴板历史：清空全部未置顶条目 */
-  cliphistClear: () => cmd<void>("cliphist_clear"),
+  /** 剪贴板历史：清空最近 N 天条目（置顶/收藏豁免；0 = 全部非置顶/收藏），
+   *  返回删除条数。入口 = 设置 → 剪贴板「清理历史条目」（页脚清空钮已退役） */
+  cliphistClearRecent: (days: number) => cmd<number>("cliphist_clear_recent", { days }),
   /** 剪贴板历史：收浮窗（Esc / 选中条目后；失焦自动收由 Rust 窗口事件处理） */
   cliphistHide: () => cmd<void>("cliphist_hide"),
   /** 剪贴板历史：开/关浮窗（顶栏剪贴板钮，2026-11-06）——与系统热键同入口 */

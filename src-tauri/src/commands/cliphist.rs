@@ -180,20 +180,25 @@ pub fn cliphist_delete(app: AppHandle, state: State<'_, AppState>, id: i64) -> R
     Ok(())
 }
 
-/// 清空全部未置顶条目
+/// 清空最近 N 天条目（置顶/收藏豁免；days=0 清空全部非置顶/收藏），返回
+/// 删除条数。入口在设置 → 剪贴板「清理历史条目」（浮窗页脚清空钮已退役）
 #[tauri::command]
-pub fn cliphist_clear(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    {
+pub fn cliphist_clear_recent(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    days: u32,
+) -> Result<usize, String> {
+    let n = {
         let conn = state
             .cliphist
             .conn
             .lock()
             .unwrap_or_else(|p| p.into_inner());
-        conn.execute("DELETE FROM clip_items WHERE pinned = 0 AND fav = 0", [])
-            .map_err(|e| format!("清空失败：{e}"))?;
-    }
+        crate::cliphist::clear_recent(&conn, days, crate::cliphist::now_ms())
+            .map_err(|e| format!("清空失败：{e}"))?
+    };
     let _ = app.emit("cliphist-updated", ());
-    Ok(())
+    Ok(n)
 }
 
 /// 收浮窗（前端 Esc / 选中条目后调用；失焦自动收由窗口事件处理）

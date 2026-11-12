@@ -7038,27 +7038,6 @@ body.np-col-resizing * {
   overflow: hidden;
   line-height: 1.35;
 }
-.np-clip-clear {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--np-gap);
-  /* 不压缩不折行（2026-11-06 巡检修复：keys 长清单挤压下「清空」竖排折行） */
-  flex: none;
-  white-space: nowrap;
-  border: none;
-  background: transparent;
-  color: var(--np-muted);
-  font-size: var(--np-font-sm);
-  /* 20px = 行内动作钮同款（gap×5），页脚 24px 高度内上下留 2px */
-  height: calc(var(--np-gap) * 5);
-  padding: 0 var(--np-gap);
-  border-radius: var(--np-radius);
-  cursor: pointer;
-}
-.np-clip-clear:hover {
-  background: var(--np-hover);
-  color: var(--np-fg);
-}
 /* 自绘顶栏（2026-10-31 用户需求；2026-11-06 方案 C 改版）：logo 章 +
    标题（计数副行 2026-11-11 退役，与底栏计数重复，条数只在底栏展示）+
    搜索胶囊（顶栏主入口）+ 窗口五钮。窗口钮复用全局 np-winbtn 配方；
