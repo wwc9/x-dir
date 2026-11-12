@@ -28,7 +28,7 @@
 | 部分 | 方案 | 理由 |
 |---|---|---|
 | 虚拟文件列表 | TanStack Virtual + `np-row` 自绘行 | Blueprint 无虚拟列表；列表是性能铁律核心，必须自控 |
-| 导航树 | `NavTree.tsx` + `stores/navtree.ts`（TanStack Virtual 扁平化） | 全局共用目录树，侧边栏右侧可拖宽；点击=活动窗格导航，`list_dirs` 懒加载子目录；偏好存 localStorage |
+| 导航树 | `NavTree.tsx` + `stores/navtree.ts`（TanStack Virtual 扁平化） | 全局共用目录树，侧边栏右侧可拖宽；点击=活动窗格导航，`list_dirs` 懒加载子目录；偏好存 settings.json；「此电脑」根节点恒展开不可折叠（2026-11-12 定案：省去折叠箭头列，盘符提为顶层行与根行同缩进，其下目录 depth 1） |
 | 详情列宽拖拽 | 共享把手 `components/ColGrip.tsx`（FileList / GlobalSearch 表头共用）+ `stores/layout.ts`（窗格）/ `stores/columns.ts`（全盘搜索） | 列宽经容器节点 `--np-colw-*` CSS 变量下发，表头与行共用 `np-col-*` 类保证对齐；纯函数 `lib/columns.ts` 配单测；**每窗格独立（2026-10-15）**：窗格列宽寄存布局树 `PaneNode.colWidths`（`setPaneColWidths` 纯函数），随工作区/「上次会话」持久化，`settings.colWidths` 降级为全局默认回落（旧档/未拖过的窗格），全盘搜索仍寄存 `gsearchColWidths`（互不干扰）；**列宽 Explorer 口径**：各列定宽互不影响，可见列总宽超出窗格即 `.np-rows` 横向滚动——内容层/表头按自然宽（`detailsContentWidth` 纯函数）撑 min-width，表头经 onScroll transform 与行同步横滚；自然宽的逐级隐藏列阈值（480/380/300）镜像 index.css 容器查询 479/379/299，两处必须同改 |
 | 窗格分割 | react-resizable-panels v4 | 对应分割树模型；`Group/Panel/Separator` |
 | 图标 | `lucide-react`（经 `components/AppIcon.tsx` 封装） | 1500+ 线条图标，MIT；2px 描边与"极简现代"语言同源（2026-10-10 定案，替换 Blueprint Icons） |

@@ -32,7 +32,9 @@ interface FlatNode {
 const ROW_H = DENSITY.rowH;
 
 /** 全局目录导航树（所有窗格共用；挂在左侧边栏右侧，可拖宽）。
- *  点击节点 = 在活动窗格打开；箭头 = 展开/收起；展开时经 list_dirs 懒加载子目录。
+ *  点击节点 = 在活动窗格打开；箭头 = 展开/收起（盘符/目录），展开时经 list_dirs
+ *  懒加载子目录。「此电脑」根节点恒展开不可折叠（2026-11-12 用户定案：省去
+ *  折叠箭头列，盘符提为顶层行与根行同缩进）。
  *  图标走文件类型语义色族（--np-icon-folder / --np-icon-drive，AGENTS §4.5 特例） */
 export function NavTree() {
   const visible = useSettings((s) => s.navTreeVisible);
@@ -71,22 +73,20 @@ export function NavTree() {
         if (open) pushKids(cp, depth + 1);
       }
     };
-    const pcOpen = expanded.has(THIS_PC);
-    out.push({ key: THIS_PC, path: THIS_PC, name: "此电脑", depth: 0, open: pcOpen, kind: "pc" });
-    if (pcOpen) {
-      for (const d of drives) {
-        const p = `${d.letter}\\`;
-        const open = expanded.has(p);
-        out.push({
-          key: p,
-          path: p,
-          name: d.label ? `${d.label} (${d.letter})` : d.letter,
-          depth: 1,
-          open,
-          kind: "drive",
-        });
-        if (open) pushKids(p, 2);
-      }
+    // 此电脑 = 固定根，恒展开（展开状态不再读取，旧档残留的折叠记录自然失效）
+    out.push({ key: THIS_PC, path: THIS_PC, name: "此电脑", depth: 0, open: true, kind: "pc" });
+    for (const d of drives) {
+      const p = `${d.letter}\\`;
+      const open = expanded.has(p);
+      out.push({
+        key: p,
+        path: p,
+        name: d.label ? `${d.label} (${d.letter})` : d.letter,
+        depth: 0,
+        open,
+        kind: "drive",
+      });
+      if (open) pushKids(p, 1);
     }
     return out;
   }, [expanded, children, drives]);
@@ -222,16 +222,18 @@ export function NavTree() {
                   }
                 }}
               >
-                <span
-                  className={`np-tree-chev${n.open ? " open" : ""}`}
-                  data-tip={t(n.open ? "收起" : "展开")}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    useNavTree.getState().toggleDir(n.path);
-                  }}
-                >
-                  <AppIcon icon={ChevronRight} size={DENSITY.iconSm} />
-                </span>
+                {n.kind !== "pc" && (
+                  <span
+                    className={`np-tree-chev${n.open ? " open" : ""}`}
+                    data-tip={t(n.open ? "收起" : "展开")}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      useNavTree.getState().toggleDir(n.path);
+                    }}
+                  >
+                    <AppIcon icon={ChevronRight} size={DENSITY.iconSm} />
+                  </span>
+                )}
                 <span className="np-tree-ic">
                   {realUrl ? (
                     <FadeInIcon src={realUrl} />
