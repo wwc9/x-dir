@@ -17,6 +17,7 @@ import {
   isFixedEntryId,
   parseExts,
   PDF_MENU_KEYS,
+  seedPaletteEntry,
   seedPdfEntries,
   spyGroup,
   stripCustomEntries,
@@ -146,7 +147,7 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
     // 路径变体两面共享（空白处 = 当前目录路径的变体）；名称主干仅选中
     expect(builtinByKey("copyPathVariants")?.supportsBlank).toBe(true);
     expect(builtinByKey("copyNameStem")?.supportsBlank).toBe(false);
-    // 「工具」组六键聚齐且同组连续
+    // 「工具」组七键聚齐且同组连续（palette 为 2026-11-12 入库的功能库入口）
     const toolKeys = BUILTIN_FNS.filter((x) => x.group === "工具").map((x) => x.key);
     expect(toolKeys).toEqual([
       "hashCalc",
@@ -155,7 +156,14 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
       "createLink",
       "fileSplit",
       "fileCombine",
+      "palette",
     ]);
+    // 功能库入口两面可用（选中/空白右键均可唤起）
+    expect(builtinByKey("palette")).toMatchObject({
+      supportsSel: true,
+      supportsBlank: true,
+      area: "both",
+    });
   });
 
   it("功能库一句话描述（desc）全覆盖：胶囊悬停提示不可缺", () => {
@@ -177,7 +185,7 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
 
   it("含关键功能与两个区域", () => {
     const ids = defaultMenuEntries().map((e) => e.id);
-    for (const key of ["open", "delete", "properties", "paste", "new", "copyPath", "rename"]) {
+    for (const key of ["open", "delete", "properties", "paste", "new", "rename", "palette"]) {
       expect(ids).toContain(`builtin:${key}`);
     }
     const areas = new Set(defaultMenuEntries().map((e) => e.area));
@@ -312,26 +320,23 @@ describe("PDF 功能族入驻默认菜单（PDF_MENU_KEYS / seedPdfEntries，202
     ]);
   });
 
-  it("出厂布局整组入驻：复制名称之后、删除尾块之前，逐条带注册表默认条件", () => {
+  it("出厂布局尾段 = 功能库入口（2026-11-12 定案）；PDF 组退出出厂布局", () => {
     const entries = defaultMenuEntries();
     const ids = entries.map((e) => e.id);
-    const first = ids.indexOf("builtin:pdfMerge");
-    const last = ids.indexOf("builtin:pdfDecrypt");
-    expect(first).toBeGreaterThan(0);
-    expect(ids.slice(first, last + 1)).toEqual(PDF_MENU_KEYS.map((k) => `builtin:${k}`));
-    // 前邻复制名称块（sep 分隔），后接删除尾块
-    expect(entries[first - 1]?.kind).toBe("sep");
-    expect(ids[first - 2]).toBe("builtin:copyName");
-    expect(entries[last + 1]?.kind).toBe("sep");
-    const afterSep = ids.slice(last + 1).find((id) => id.startsWith("builtin:"));
-    expect(afterSep).toBe("builtin:delete");
-    // 区域 = 注册表默认（sel），条件逐键相等（含 exts/数量上下限）
-    PDF_MENU_KEYS.forEach((key, i) => {
-      const en = entries[first + i];
-      const fn = builtinByKey(key)!;
-      expect(en.area).toBe("sel");
-      expect(en.cond).toEqual(fn.cond);
+    // 2026-11-12 收编用户现用方案：PDF 组与 copyPath/copyName 块不再默认入驻，
+    // 仍可从功能库拖入（存量档由 seedPdfEntries 一次性补种）
+    for (const key of [...PDF_MENU_KEYS, "copyPath", "copyName"]) {
+      expect(ids).not.toContain(`builtin:${key}`);
+    }
+    // 尾段 = sep + 功能库入口（both，注册表默认条件），此前是 properties
+    expect(entries[entries.length - 1]).toMatchObject({
+      id: "builtin:palette",
+      kind: "builtin",
+      area: "both",
     });
+    expect(entries[entries.length - 2]?.kind).toBe("sep");
+    expect(ids[entries.length - 3]).toBe("builtin:properties");
+    expect(entries[entries.length - 1].cond).toEqual(builtinByKey("palette")!.cond);
   });
 
   it("seedPdfEntries：存量布局缺失的 PDF 键按注册表默认追加在末尾", () => {
@@ -450,28 +455,59 @@ describe("基础固定功能（FIXED_KEYS / ensureFixedEntries）", () => {
   });
 });
 
-describe("默认工具栏布局（defaultToolbarEntries，2026-10-15 定案）", () => {
-  it("默认排列 = 定稿 10 键：视图类型/交换窗格不入默认", () => {
+describe("默认工具栏布局（defaultToolbarEntries，2026-11-12 现用方案收编）", () => {
+  it("默认排列 = 定版 8 键（2026-10-15 初版的 addFavorite/openTerminal 随收编移除）", () => {
     expect(defaultToolbarEntries().map((e) => e.id)).toEqual([
       "builtin:up",
       "builtin:newFolder",
       "builtin:refresh",
       "builtin:addr",
       "builtin:copyPath",
-      "builtin:addFavorite",
       "builtin:search",
-      "builtin:openTerminal",
       "builtin:splitH",
       "builtin:splitV",
     ]);
   });
 
-  it("作用域键与默认表解耦：不在默认表的 view/swap 拖入仍恒可用", () => {
+  it("作用域键与默认表解耦：不在默认表的 view/swap/palette 拖入仍恒可用", () => {
     expect(builtinToolbarEntry("view").area).toBe("blank");
     expect(builtinToolbarEntry("swap").area).toBe("blank");
+    expect(builtinToolbarEntry("palette").area).toBe("blank");
     // 依赖选中的功能保持 sel + 注册表默认条件
     expect(builtinToolbarEntry("pdfMerge").area).toBe("sel");
     expect(builtinToolbarEntry("delete").area).toBe("sel");
+  });
+});
+
+describe("功能库入口补种（seedPaletteEntry，2026-11-12 定案）", () => {
+  it("缺失时末尾追加 sep + palette（both，注册表默认条件）", () => {
+    // 模拟旧档：默认布局去掉尾段（sep + palette），尾条目 = properties
+    const full = defaultMenuEntries();
+    const legacy = full.slice(0, full.length - 2);
+    const seeded = seedPaletteEntry(legacy);
+    expect(seeded.slice(0, legacy.length)).toEqual(legacy);
+    expect(seeded[seeded.length - 1]).toMatchObject({
+      id: "builtin:palette",
+      kind: "builtin",
+      area: "both",
+    });
+    expect(seeded[seeded.length - 1].cond).toEqual(builtinByKey("palette")!.cond);
+    expect(seeded[seeded.length - 2]?.kind).toBe("sep");
+  });
+
+  it("末尾已是分割线不重复加，只补条目", () => {
+    const legacy = defaultMenuEntries().filter((e) => e.id !== "builtin:palette");
+    expect(legacy[legacy.length - 1]?.kind).toBe("sep");
+    const seeded = seedPaletteEntry(legacy);
+    expect(seeded.length).toBe(legacy.length + 1);
+    expect(seeded[seeded.length - 1]?.id).toBe("builtin:palette");
+  });
+
+  it("已有条目原样返回（等值，幂等）", () => {
+    const withPalette = [...defaultMenuEntries(), builtinToolbarEntry("palette")];
+    expect(seedPaletteEntry(withPalette)).toEqual(withPalette);
+    const d = defaultMenuEntries();
+    expect(seedPaletteEntry(d)).toEqual(d);
   });
 });
 

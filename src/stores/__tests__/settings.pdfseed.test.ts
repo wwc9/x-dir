@@ -21,7 +21,11 @@ vi.mock("../../lib/ipc", async (importOriginal) => {
   };
 });
 
-import { PDF_MENU_KEYS, PDF_MENU_SEED_VERSION } from "../../lib/menuCommands";
+import {
+  MENU_SEED_VERSION,
+  PDF_MENU_KEYS,
+  PDF_MENU_SEED_VERSION,
+} from "../../lib/menuCommands";
 import type { MenuEntry } from "../../lib/ipc";
 import { useSettings } from "../../stores/settings";
 
@@ -72,21 +76,22 @@ const cond = {
   exts: "",
 };
 
-describe("PDF 补种迁移（menuSeedV 版本化，2026-11-11 定案）", () => {
+describe("菜单补种迁移（menuSeedV 版本化：v2=PDF 功能族 / v3=功能库入口）", () => {
   beforeEach(() => {
     getSettings.mockReset();
     getSettings.mockImplementation(() => Promise.resolve(null));
     useSettings.setState({ ...useSettings.getInitialState(), loaded: false });
   });
 
-  it("无存档：出厂布局整组自带全部 PDF 键，版本号升到当前", async () => {
+  it("无存档：出厂默认（2026-11-12 现用方案收编）不再自带 PDF 组，含功能库入口尾段，版本升到当前", async () => {
     await useSettings.getState().load();
     const ids = useSettings.getState().menuEntries.map((e) => e.id);
-    for (const key of PDF_MENU_KEYS) expect(ids).toContain(`builtin:${key}`);
-    expect(useSettings.getState().menuSeedV).toBe(PDF_MENU_SEED_VERSION);
+    for (const key of PDF_MENU_KEYS) expect(ids).not.toContain(`builtin:${key}`);
+    expect(ids[ids.length - 1]).toBe("builtin:palette");
+    expect(useSettings.getState().menuSeedV).toBe(MENU_SEED_VERSION);
   });
 
-  it("存量档 v0：缺失的 PDF 键按注册表默认补种在末尾，已有键原位不动", async () => {
+  it("存量档 v0：缺失的 PDF 键补种在末尾、功能库入口随后补种，已有键原位不动", async () => {
     // 模拟旧档：手动拖入过 pdfSplit（条件与注册表不同也保留）
     const legacy: MenuEntry[] = [
       en("builtin:open", { ...cond, maxCount: 1 }),
@@ -95,17 +100,19 @@ describe("PDF 补种迁移（menuSeedV 版本化，2026-11-11 定案）", () => 
     getSettings.mockImplementation(() => Promise.resolve({ menuEntries: legacy }));
     await useSettings.getState().load();
     const ids = useSettings.getState().menuEntries.map((e) => e.id);
-    // 原布局两条原序原位（pdfSplit 已存在 → 不补）；固定项归一化补固定七项
-    // 是既有语义排其后，缺失的 11 键补在末尾
+    // 原布局两条原序原位（pdfSplit 已存在 → 不补）；缺失的 11 键补在中段，
+    // 功能库入口（sep + palette）补在最末
     expect(ids.slice(0, 2)).toEqual(legacy.map((e) => e.id));
-    expect(ids.slice(-11)).toEqual(
+    expect(ids.slice(-13, -2)).toEqual(
       PDF_MENU_KEYS.filter((k) => k !== "pdfSplit").map((k) => `builtin:${k}`),
     );
+    expect(ids[ids.length - 1]).toBe("builtin:palette");
+    expect(useSettings.getState().menuEntries[ids.length - 2]?.kind).toBe("sep");
     expect(ids.filter((id) => id === "builtin:pdfSplit").length).toBe(1);
-    expect(useSettings.getState().menuSeedV).toBe(PDF_MENU_SEED_VERSION);
+    expect(useSettings.getState().menuSeedV).toBe(MENU_SEED_VERSION);
   });
 
-  it("存量档 v1（九件已送达、布尔标记时代）：升 v2 补新增四键，已下线的 imgToPdf 同步剔除", async () => {
+  it("存量档 v1（九件已送达、布尔标记时代）：升 v2 补新增四键 + 功能库入口，imgToPdf 同步剔除", async () => {
     // 历史布局：v1 九键字面量（含当日已下线的 imgToPdf——它是当时的注册表键）
     const V1_KEYS = [
       "pdfMerge",
@@ -124,17 +131,19 @@ describe("PDF 补种迁移（menuSeedV 版本化，2026-11-11 定案）", () => 
     );
     await useSettings.getState().load();
     const ids = useSettings.getState().menuEntries.map((e) => e.id);
-    // 新四键补进；imgToPdf 已下线（注册表无此键）→ 存量条目被剔除
+    // 新四键补进；imgToPdf 已下线（注册表无此键）→ 存量条目被剔除；
+    // 功能库入口补在最末
     for (const k of ["pdfInsertBlank", "pdfToPng", "pdfEncrypt", "pdfDecrypt"]) {
       expect(ids).toContain(`builtin:${k}`);
     }
     expect(ids).not.toContain("builtin:imgToPdf");
-    expect(useSettings.getState().menuSeedV).toBe(2);
+    expect(ids[ids.length - 1]).toBe("builtin:palette");
+    expect(useSettings.getState().menuSeedV).toBe(MENU_SEED_VERSION);
   });
 
-  it("存量档已到当前版本：编辑器删减后的布局重启不回填 PDF 条目", async () => {
-    // 刻意清空的空数组仍按既有「清空语义」补固定七项，但 PDF 组条目不回填——
-    // 版本已到 = 补种窗口已过，其余布局完全交给用户
+  it("存量档 v2：PDF 组不回填（补种窗口已过），仅补功能库入口", async () => {
+    // 刻意清空的空数组仍按既有「清空语义」补固定七项；PDF 组条目不回填，
+    // 功能库入口（sep + palette）一次性送达
     getSettings.mockImplementation(() =>
       Promise.resolve({ menuEntries: [], menuSeedV: PDF_MENU_SEED_VERSION }),
     );
@@ -149,6 +158,27 @@ describe("PDF 补种迁移（menuSeedV 版本化，2026-11-11 定案）", () => 
       "builtin:rename",
       "builtin:delete",
       "builtin:properties",
+      expect.any(String), // sep
+      "builtin:palette",
     ]);
+    expect(useSettings.getState().menuSeedV).toBe(MENU_SEED_VERSION);
+  });
+
+  it("存量档已到当前版本（v3）：编辑器删减后的布局重启完全不回填", async () => {
+    getSettings.mockImplementation(() =>
+      Promise.resolve({ menuEntries: [], menuSeedV: MENU_SEED_VERSION }),
+    );
+    await useSettings.getState().load();
+    const ids = useSettings.getState().menuEntries.map((e) => e.id);
+    expect(ids).toEqual([
+      "builtin:open",
+      "builtin:cut",
+      "builtin:copy",
+      "builtin:paste",
+      "builtin:rename",
+      "builtin:delete",
+      "builtin:properties",
+    ]);
+    expect(useSettings.getState().menuSeedV).toBe(MENU_SEED_VERSION);
   });
 });

@@ -230,6 +230,7 @@ const EN: Record<string, string> = {
   "硬链接（同卷）/符号链接": "Hard link / symbolic link",
   "按大小切块并生成 .crc 清单": "Split by size with .crc manifest",
   "合并 .part 部件还原原文件": "Combine .part files back",
+  "搜索并直接执行全部功能": "Search and run every function instantly",
   "按选中顺序合成一份 PDF": "Merge into one PDF in order",
   "每个文件夹各合成一份": "Merge PDFs per folder",
   "图片按选中序每图一页": "Images to PDF, one per page",

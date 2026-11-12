@@ -14,7 +14,9 @@ import {
   defaultToolbarEntries,
   ensureFixedEntries,
   ensureToolbarAddr,
+  MENU_SEED_VERSION,
   PDF_MENU_SEED_VERSION,
+  seedPaletteEntry,
   seedPdfEntries,
   stripCustomEntries,
 } from "../lib/menuCommands";
@@ -371,10 +373,12 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
         ? { ...en, area: "both" as const }
         : en,
     );
-    // PDF 功能族入驻迁移（2026-11-11，版本化补种）：menuSeedV 低于
-    // PDF_MENU_SEED_VERSION 即补种缺失的 PDF 组条目（注册表默认区域/条件，
-    // 追加在末尾）——新功能入库升版本一次性送达存量档；补种过后编辑器里
-    // 删减的 PDF 条目重启不回填（尊重自定义，出厂布局本身已整组自带）。
+    // 菜单功能入驻迁移（版本化补种，menuSeedV 门闸一次性送达）：
+    // v2 = PDF 功能族（2026-11-11）——仅对已有自定义布局的存量档补种；
+    // 2026-11-12 出厂默认收编用户现用方案后出厂布局不再自带 PDF 组，
+    // 新装档（saved.menuEntries 缺失 → 走 defaultMenuEntries）不再补种。
+    // v3 = 功能库入口（builtin:palette）尾段补种（2026-11-12）。
+    // 补种过后编辑器里删减的条目重启不回填（尊重自定义，区别于固定项）。
     // 旧档仅存上午的布尔标记 pdfMenuSeeded=true 时视为 v1（九件已送达）
     const legacySeeded = (saved as { pdfMenuSeeded?: unknown } | null)?.pdfMenuSeeded === true;
     const seedV =
@@ -383,9 +387,12 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
         : legacySeeded
           ? 1
           : 0;
-    if (seedV < PDF_MENU_SEED_VERSION) {
-      merged.menuEntries = seedPdfEntries(merged.menuEntries ?? []);
-      merged.menuSeedV = PDF_MENU_SEED_VERSION;
+    if (seedV < MENU_SEED_VERSION) {
+      if (seedV < PDF_MENU_SEED_VERSION && saved?.menuEntries !== undefined) {
+        merged.menuEntries = seedPdfEntries(merged.menuEntries ?? []);
+      }
+      merged.menuEntries = seedPaletteEntry(merged.menuEntries ?? []);
+      merged.menuSeedV = MENU_SEED_VERSION;
     }
     // 窗格工具栏迁移（2026-10-15）：旧 paneTools（key 表）→ toolbarEntries（MenuEntry）；
     // 缺失时用出厂布局（全部内置功能均可入工具栏，未知 key 由渲染端按注册表过滤）

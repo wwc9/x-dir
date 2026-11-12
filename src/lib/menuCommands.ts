@@ -15,6 +15,7 @@ import {
   ClipboardList,
   ClipboardPaste,
   Columns2,
+  Command,
   Copy,
   CopyPlus,
   Ellipsis,
@@ -186,6 +187,10 @@ export const BUILTIN_FNS: BuiltinFn[] = [
   { key: "createLink", label: "创建链接 ▸", desc: "硬链接（同卷）/符号链接", group: "工具", icon: FolderSymlink, area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
   { key: "fileSplit", label: "文件分割", desc: "按大小切块并生成 .crc 清单", group: "工具", icon: Scissors, area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", maxCount: 1 }) },
   { key: "fileCombine", label: "文件合并", desc: "合并 .part 部件还原原文件", group: "工具", icon: Merge, area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2 }) },
+  // 功能库入口入库（2026-11-12 用户定案）：快捷命令面板不再是右键菜单固定
+  // 尾项，入库为普通功能——可拖入右键菜单/窗格工具栏、可改条件可移除；
+  // 两面可用（选中/空白右键均唤起）。快速命令面板清单内不自列（palette.ts）
+  { key: "palette", label: "功能库…", desc: "搜索并直接执行全部功能", group: "工具", icon: Command, area: "both", supportsSel: true, supportsBlank: true, cond: C({}) },
   // ── PDF（2026-11-11 二批扩至十二键：插入空白页/转图片/加密/解密；
   //    「图片合并转 PDF」同日下线——能力由「合并为 PDF」单选覆盖）──
   { key: "pdfMerge", label: "合并为 PDF", desc: "按选中顺序合成一份 PDF（PDF/图片混选均可，单张即可）", group: "PDF", icon: FileStack, area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "pdf,jpg,jpeg,png" }) },
@@ -229,10 +234,15 @@ export const PDF_MENU_KEYS: string[] = BUILTIN_FNS.filter((f) => f.group === "PD
   (f) => f.key,
 );
 
-/** PDF 功能族补种版本（settings.menuSeedV 低于此值即补种）：v1 = 九件入驻
- *  （2026-11-11 上午），v2 = 插入空白页/转图片/加密/解密四件扩充（2026-11-11）。
- *  此后 PDF 组新增成员 = 版本 +1，存量档一次性送达，删减语义不受影响 */
+/** PDF 功能族补种版本：v1 = 九件入驻（2026-11-11 上午），v2 = 插入空白页/
+ *  转图片/加密/解密四件扩充（2026-11-11）。仅对「已有自定义布局的存量档」
+ *  补种（settings.load 以 saved.menuEntries 是否存在区分——2026-11-12 出厂
+ *  默认改收编用户现用方案后，出厂布局不再自带 PDF 组，新装档不补种） */
 export const PDF_MENU_SEED_VERSION = 2;
+
+/** 菜单补种总版本：v3 = 功能库入口（builtin:palette）入库默认菜单，存量档
+ *  一次性补种到末尾（2026-11-12）。此后菜单级新功能入库 = 版本 +1 */
+export const MENU_SEED_VERSION = 3;
 
 /** 功能库分组（2026-10-15 A+B 改版）：展示顺序 = 注册表首现顺序（同组连续，
  *  vitest 固定断言）；目录跳转与胶囊墙按此渲染 */
@@ -252,24 +262,24 @@ export function spyGroup(
   return cur;
 }
 
-/** 工具栏默认布局（2026-10-15 定案 = 用户定稿排列；addr = 地址框固定条目） */
+/** 工具栏默认布局（2026-11-12 用户定版 = 现用方案收编为出厂默认；addr =
+ *  地址框固定条目。2026-10-15 初版 10 键含 addFavorite/openTerminal，用户
+ *  实际使用中移除，收编后 8 键） */
 export const TOOLBAR_DEFAULT_KEYS = [
   "up",
   "newFolder",
   "refresh",
   "addr",
   "copyPath",
-  "addFavorite",
   "search",
-  "openTerminal",
   "splitH",
   "splitV",
 ] as const;
 
 /** 工具栏「当前文件夹」作用域键：窗格工具（含不在默认表的 view/swap）+
- *  天生作用于当前文件夹的功能，工具栏条目默认恒可用；其余功能默认
- *  「依赖选中项」并沿用注册表默认条件。与默认表解耦——不在默认布局的
- *  功能拖入工具栏时作用域判定不变 */
+ *  功能库入口 + 天生作用于当前文件夹的功能，工具栏条目默认恒可用；其余
+ *  功能默认「依赖选中项」并沿用注册表默认条件。与默认表解耦——不在默认
+ *  布局的功能拖入工具栏时作用域判定不变 */
 const TOOLBAR_FOLDER_KEYS = new Set<string>([
   "up",
   "view",
@@ -283,6 +293,7 @@ const TOOLBAR_FOLDER_KEYS = new Set<string>([
   "copyPath",
   "addFavorite",
   "openTerminal",
+  "palette",
 ]);
 
 /** 工具栏条目构造：作用域默认值按上表区分；菜单功能的数量/类型条件原样带入，
@@ -493,11 +504,12 @@ function presetBuilder() {
   return { e, sep };
 }
 
-/** 出厂菜单布局（2026-10-15 用户定版：常见基础功能，资源管理器惯例排序；
- *  2026-11-11 定案修订：PDF 功能族整组入驻——基础块后、删除/改名尾块前，
- *  逐条携带注册表默认条件（右键单个 PDF 只现适用的六键，图片只现图片转 PDF）；
- *  互传/标记等其他进阶功能仍留功能库自行拖入。
- *  粘贴一条两用（area=both）：选中语境排在复制旁，空白语境排在新建前 */
+/** 出厂菜单布局（2026-11-12 用户定版 = 现用方案收编：常见基础功能 +
+ *  「功能库…」尾段；资源管理器惯例排序。2026-10-15 初版与 2026-11-11 的
+ *  PDF 组/copyPath/copyName 块随本次收编退出出厂布局——仍可从功能库拖入；
+ *  互传/标记等进阶功能同样留功能库自行拖入。
+ *  粘贴一条两用（area=both）：选中语境排在复制旁，空白语境排在新建前；
+ *  功能库两用（both）尾段：选中/空白右键均可唤起 */
 export function defaultMenuEntries(): MenuEntry[] {
   const { e, sep } = presetBuilder();
   return [
@@ -507,15 +519,28 @@ export function defaultMenuEntries(): MenuEntry[] {
     e("copy", "sel"),
     e("paste", "both"),
     sep("both"),
-    e("copyPath", "sel"),
-    e("copyName", "sel"),
-    sep("both"),
-    ...PDF_MENU_KEYS.map((key) => e(key, "sel")),
-    sep("both"),
     e("delete", "sel"),
     e("rename", "sel"),
     e("new", "blank"),
     e("properties", "sel"),
+    sep("both"),
+    e("palette", "both"),
+  ];
+}
+
+/** 功能库入口补种（2026-11-12 定案）：builtin:palette 入库默认菜单后，
+ *  已保存布局一次性在末尾追加（分割线 + 条目，注册表默认区域/条件，可在
+ *  编辑器拖动/移除；末尾已是分割线时不重复加）。由 settings.load 的
+ *  MENU_SEED_VERSION 门闸保证只跑一次，已有该条目（含手动拖入过）幂等跳过 */
+export function seedPaletteEntry(entries: MenuEntry[]): MenuEntry[] {
+  if (entries.some((en) => en.id === "builtin:palette")) return entries;
+  const fn = builtinByKey("palette");
+  if (!fn) return entries;
+  const needSep = entries.length > 0 && entries[entries.length - 1].kind !== "sep";
+  return [
+    ...entries,
+    ...(needSep ? [{ id: newMenuId("sep"), kind: "sep" as const, area: "both" as const, cond: C({}) }] : []),
+    { id: "builtin:palette", kind: "builtin", area: fn.area, cond: { ...fn.cond } },
   ];
 }
 

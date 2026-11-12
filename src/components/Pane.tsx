@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ReactElement,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 import {
   Button,
@@ -376,8 +377,19 @@ export function Pane({ pane }: { pane: PaneNode }) {
       key === "openTerminal";
     return (needsPath && path === THIS_PC) || (key === "up" && path.length <= 3);
   };
-  const runTool = (key: string) => {
+  /** 功能库面板（2026-11-12 builtin:palette 入库）：工具栏入口按按钮锚位直开，
+   *  不走 FileList 执行器（其锚位语义是右键菜单落点） */
+  const openPaletteAt = (e: ReactMouseEvent) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    useUi
+      .getState()
+      .openPalette({ x: r.left, y: r.bottom + 6, tabId, sel: getSelItems() });
+  };
+  const runTool = (key: string, e?: ReactMouseEvent) => {
     switch (key) {
+      case "palette":
+        if (e) openPaletteAt(e);
+        break;
       case "up":
         usePanes.getState().up(tabId);
         break;
@@ -818,7 +830,12 @@ export function Pane({ pane }: { pane: PaneNode }) {
           icon={ic(FN_ICONS[key] ?? List)}
           disabled={off}
           data-tip={`${toolTitle(key)}${ready ? "" : t("（启用条件未满足）")}`}
-          onClick={() => {
+          onClick={(e) => {
+            // 功能库面板按按钮锚位直开（其余走 FileList 执行器按选中上下文解析）
+            if (key === "palette") {
+              openPaletteAt(e);
+              return;
+            }
             const m = getList(tabId)?.builtinMenuItem?.(key, getSelItems());
             if (m && !m.disabled) m.action?.();
           }}
@@ -993,7 +1010,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
                             : undefined
                       }
                       disabled={toolDisabled(fn.key) || !toolReady(en, fn.key)}
-                      onClick={() => runTool(fn.key)}
+                      onClick={(e) => runTool(fn.key, e)}
                     />
                   );
                 })}

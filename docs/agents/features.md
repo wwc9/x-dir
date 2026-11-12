@@ -91,7 +91,7 @@
 - **撤销/重做**：`lib/undo` 双栈（新操作使重做分支失效）；rename/newfolder 完成即压撤销栈，trash/move 由任务 onDone 门控；Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z 走全局快捷键。
 - **地址栏面包屑**：np-addr-crumbs 非聚焦覆盖层（`:focus-within` 隐藏，超 5 段中段省略）。
 - **标签**：右键菜单（duplicateTab/closeOtherTabs/closeTabsRight）；标签图标（此电脑=Computer、盘符=HardDrive、目录=Folder/FolderOpen 语义色，realIcons 开启优先真实图标并按标签路径 requestIcons；np-tab 内收窄 14px）。
-- **快速命令面板**：右键菜单固定尾段「功能库…」（不可配置）→ `openPalette` 贴身轻浮窗（无遮罩点击外部即关；搜索跨全库：名称/说明/分组 + 空格分词 AND + 名称首词 mark 高亮；↑↓ 循环 / Enter 执行 / Esc 关闭；定宽 340、无吸附箭头（2026-11-12 用户反馈：菱形咬掉搜索胶囊左上角，收窄 440→380→340 同日两轮定案）；排序 = 可用项稳定置顶、不可用沉底（2026-11-12 定案，两块各自保持高频 12 项 `PALETTE_QUICK_KEYS` → 注册表原序）；执行与右键菜单同一执行器 `builtinMenuItem`，现场条件不满足整行降灰 0.45 + data-tip 说明；`menuCommands` BuiltinFn 增 icon 字段，77 项随注册表入库）；过滤/可用性/排序/定位钳制纯函数 `lib/palette.ts` 配 vitest。
+- **快速命令面板**：唤起入口 = 功能库条目 `builtin:palette`（2026-11-12 入库为普通功能，可拖入右键菜单/窗格工具栏、可改条件可移除；默认右键菜单尾段自带；工具栏按钮按按钮锚位直开 Pane.openPaletteAt，右键菜单条目按菜单落点锚位）→ `openPalette` 贴身轻浮窗（无遮罩点击外部即关；搜索跨全库：名称/说明/分组 + 空格分词 AND + 名称首词 mark 高亮；↑↓ 循环 / Enter 执行 / Esc 关闭；定宽 340、无吸附箭头（2026-11-12 用户反馈：菱形咬掉搜索胶囊左上角，收窄 440→380→340 同日两轮定案）；排序 = 可用项稳定置顶、不可用沉底（2026-11-12 定案，两块各自保持高频 12 项 `PALETTE_QUICK_KEYS` → 注册表原序；`builtin:palette` 自身不入清单——面板唤起入口自列无意义）；执行与右键菜单同一执行器 `builtinMenuItem`，现场条件不满足整行降灰 0.45 + data-tip 说明；`menuCommands` BuiltinFn 增 icon 字段，78 项随注册表入库）；过滤/可用性/排序/定位钳制纯函数 `lib/palette.ts` 配 vitest。
 - **鼠标**：中键新标签（列表行/导航树 preventDefault 拦自动滚动）；X1/X2 历史导航（`lib/mouseNav.ts`，App 装卸）；新标签继承当前路径。
 - 快捷键全部入 `lib/shortcuts.ts` 清单并与 `keyboard.test.ts` 双向对齐；新增 np-* 类均已在 index.css 定义（cssClasses 审计通过）。
 
@@ -118,12 +118,13 @@
 
 - 菜单布局 = `settings.menuEntries`（有序 MenuEntry：builtin/sep × area 启用时机三档（两处出现/仅选中右键/仅空白处右键）× cond（对象/数量/扩展名）；条目行恒展示四个条件摘要 chip）。
 - 条件编辑器 = 锚定条目的 PopoverNext 浮层（不推移布局）+ np-seg 分段快选行 + `condSentence` 人话实时预览（配单测）；功能库**仅拖拽添加**（点击不入场）。
-- **77 个内置功能**入功能库（含 PDF 家族见 §6、办公批处理见 §7、图片五件套见 §8）；FileList 只按规范渲染，**禁止往 rowMenuItems 硬编码新菜单项**——新功能 = 注册表加一行 + 执行器加一个 case。
-- **「工具」组六键**：计算校验值（MD5/SHA-1/SHA-256/SHA-512，行级点亮 + GNU SUMS 无 BOM 保存）/ 校验核对（.md5/.sha256[sums] 逐项比对 ✓✗缺失报告）/ 修改时间与属性（时间四态 + 只读/隐藏位三态）/ 创建链接（硬链接/符号链接旁写）/ 文件分割（.partNNN + .crc SHA-256 清单）/ 文件合并（分组建序 + 验签重组）。
+- **78 个内置功能**入功能库（含 PDF 家族见 §6、办公批处理见 §7、图片五件套见 §8、功能库入口 `builtin:palette` 2026-11-12 入库「工具」组）；FileList 只按规范渲染，**禁止往 rowMenuItems 硬编码新菜单项**——新功能 = 注册表加一行 + 执行器加一个 case。
+- **「工具」组七键**：计算校验值（MD5/SHA-1/SHA-256/SHA-512，行级点亮 + GNU SUMS 无 BOM 保存）/ 校验核对（.md5/.sha256[sums] 逐项比对 ✓✗缺失报告）/ 修改时间与属性（时间四态 + 只读/隐藏位三态）/ 创建链接（硬链接/符号链接旁写）/ 文件分割（.partNNN + .crc SHA-256 清单）/ 文件合并（分组建序 + 验签重组）/ 功能库入口（快捷命令面板唤起）。
 - **复制路径 ▸ 变体**（正斜杠/带引号/\\?\ 扩展长/相对/所在文件夹，path.ts 纯函数）+ 复制名称（无扩展名）；行尾转换 ▸（字节级 CRLF/LF 互转不改编码，旁写 _crlf/_lf）。
 - **导出文件清单** = 参数面板 ExportListingDialog（穿透子文件夹 / 导出内容三档 / 格式四档 XLSX 默认 / 文件名内联校验，参数随 dialogPrefs 记忆）；列集十列（CSV/MD 同列集，txt = 完整路径）；免保存框直写当前文件夹（默认名 = 文件夹名-文件清单，重名 (2) 递增）；Rust `fs/listing.rs` 单源（行上限 20 万中止）+ `lib/listing.ts` 配 vitest。
 - **新建子菜单**：文件夹/文本/Word/Excel/PowerPoint/Markdown（0 字节文件与资源管理器 NullFile 同轨）；**新建文件夹 = Explorer 式**：不走弹窗——直接落盘「新建文件夹」（重名 (2) 递增，搜索/过滤态由 Rust 同名报错兜底）并立即行内重命名（pendingRevealRef 滚动定位），工具栏钮/右键菜单/Ctrl+Shift+N/「新建」子菜单四入口同口径。
-- **基础固定功能**：open/cut/copy/paste/rename/delete/properties 七项常驻——不可移除/清空/被预设丢失（`ensureFixedEntries` 在加载/导入/预设应用/清空后归一化补齐）；「编辑菜单…」恒定尾项直达编辑页。
+- **基础固定功能**：open/cut/copy/paste/rename/delete/properties 七项常驻——不可移除/清空/被预设丢失（`ensureFixedEntries` 在加载/导入/预设应用/清空后归一化补齐）；「编辑菜单…」恒定尾项直达编辑页（「功能库…」2026-11-12 起入库为普通功能不再固定注入）。
+- **出厂默认（2026-11-12 用户定版 = 现用方案收编为出厂默认，新装自动使用）**：菜单 10 条（打开/预览/剪切/复制/粘贴两用 + 分割线 + 删除/重命名/新建/属性 + 分割线 + 「功能库…」尾段两用）；PDF 功能族与 copyPath/copyName 块退出出厂布局（仍可从功能库拖入）。存量档迁移 = menuSeedV 版本化补种（v2=PDF 组仅对已有自定义布局的存量档送达，新装档不再自带；v3=功能库入口 sep+palette 尾段一次性送达，`seedPaletteEntry` 幂等）；此后菜单级新功能入库 = 版本 +1。
 - **同一内置功能全布局唯一**（id = `builtin:<key>`）；「重置为默认方案」与「清空」驻「启用菜单」标题行右侧，均经确认弹窗；多套预设已下线（重置 = defaultMenuEntries + ensureFixedEntries 归一化）；旧档由 settings.load 迁移。
 
 ### 3.2 定制页
@@ -140,7 +141,7 @@
 **组件与模块**：`BUILTIN_FNS` 统一注册表 + `settings.toolbarEntries`（load 迁移旧 paneTools + `ensureToolbarAddr` 归一化）+ Pane 目录驱动渲染。
 
 - **全部内置功能均可入工具栏，无能力位**（窗格工具 up/view/addr/search/splitH/splitV/swap 仅工具栏；其余菜单+工具栏两面共享）。
-- 默认布局 = 定稿 10 键（上一级/新建文件夹/刷新/地址框/复制路径/添加到收藏夹/搜索当前文件夹/在终端打开/横向分裂/纵向分裂）。
+- 默认布局 = 定版 8 键（2026-11-12 现用方案收编：上一级/新建文件夹/刷新/地址框/复制路径/搜索当前文件夹/横向分裂/纵向分裂；初版 addFavorite/openTerminal 移除，功能库入口可拖入）。
 - 条目默认作用域：文件夹作用域键 =「当前文件夹」恒可用，其余 =「依赖选中项」+ 注册表默认条件；**条件判定 = 当前窗格选中项完整判定**（`entryVisible`，未满足置灰 `.np-tool-off`）。
 - 编辑条带模拟窗格导航栏 np-nav（图标+标题文本按钮 + 地址框占位同排，左缘竖线 = 插入指示）；点击条目弹条件编辑浮层、拖入启用/排序、拖出卡片移除；**投放区 = 整张工具栏卡**（分割线拖入红染弹回）。
 - **地址框 = 固定条目**（`builtin:addr`，不可移除/清空、可排序，`ensureToolbarAddr` 保证常驻第 4 位）。

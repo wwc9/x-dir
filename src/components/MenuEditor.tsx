@@ -29,6 +29,7 @@ import {
   Droplets,
   Clock,
   Combine,
+  Command,
   Eraser,
   ExternalLink,
   Eye,
@@ -216,6 +217,7 @@ export const FN_ICONS: Record<string, LucideIcon> = {
   createLink: Link2,
   fileSplit: Split,
   fileCombine: Combine,
+  palette: Command,
   eolConvert: WrapText,
 };
 

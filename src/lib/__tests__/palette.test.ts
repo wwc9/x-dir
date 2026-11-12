@@ -39,7 +39,10 @@ describe("paletteItems", () => {
     const base = [
       ...PALETTE_QUICK_KEYS.map((k) => builtinByKey(k)!),
       ...BUILTIN_FNS.filter(
-        (f) => !quickSet.has(f.key) && (f.supportsSel || f.supportsBlank),
+        (f) =>
+          f.key !== "palette" &&
+          !quickSet.has(f.key) &&
+          (f.supportsSel || f.supportsBlank),
       ),
     ];
     const avail = base
@@ -56,6 +59,10 @@ describe("paletteItems", () => {
     for (const tool of ["up", "view", "addr", "search", "splitH", "splitV", "swap"]) {
       expect(keys).not.toContain(tool);
     }
+  });
+  it("功能库入口自身不入面板（builtin:palette 是面板的唤起入口，自列无意义）", () => {
+    const keys = paletteItems([fe("a.txt", false)]).map((i) => i.fn.key);
+    expect(keys).not.toContain("palette");
   });
   it("可用性随现场变化：空白右键仅 supportsBlank 项可用", () => {
     const blank = paletteItems([]);

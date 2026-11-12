@@ -45,9 +45,10 @@ export function paletteAvailable(fn: BuiltinFn, sel: FileEntry[]): boolean {
 }
 
 /** 面板全库清单：可用项稳定置顶 + 不可用项沉底（2026-11-12 用户定案；sort
- *  ES2019 起稳定，两块各自保持高频 12 项 → 注册表原序）；窗格工具
- *  （supportsSel/Blank 双 false，仅工具栏可用）不入面板——其执行器不在
- *  listRegistry，右键语境无执行路径 */
+ *  ES2019 起稳定，两块各自保持高频 12 项 → 注册表原序）；功能库入口自身
+ *  （builtin:palette，同日入库）与窗格工具（supportsSel/Blank 双 false，仅
+ *  工具栏可用）不入面板——前者是面板自己的唤起入口（自列无意义），后者
+ *  执行器不在 listRegistry，右键语境无执行路径 */
 export function paletteItems(sel: FileEntry[]): PaletteItem[] {
   const quickSet = new Set<string>(PALETTE_QUICK_KEYS);
   const quick = PALETTE_QUICK_KEYS.map((k) => builtinByKey(k)).filter(
@@ -55,7 +56,9 @@ export function paletteItems(sel: FileEntry[]): PaletteItem[] {
   );
   const rest = BUILTIN_FNS.filter(
     (f) =>
-      !quickSet.has(f.key) && (f.supportsSel || f.supportsBlank),
+      f.key !== "palette" &&
+      !quickSet.has(f.key) &&
+      (f.supportsSel || f.supportsBlank),
   );
   return [...quick, ...rest]
     .map((fn) => ({
