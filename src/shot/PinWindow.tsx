@@ -214,7 +214,7 @@ export function PinWindow({ boot }: { boot: PinBoot }) {
       {barOn && (
         <button
           className="np-shot-pin-close"
-          data-tip="关闭（Esc / 双击同效）"
+          data-tip="关闭 · Esc / 双击同效"
           style={{ top: pad / boot.scale + 8, right: pad / boot.scale + 8 }}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => void win.close().catch(() => undefined)}

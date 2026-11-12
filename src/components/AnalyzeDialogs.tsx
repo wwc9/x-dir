@@ -459,7 +459,7 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
                   key={r.path}
                   className="np-dsiz-row"
                   onClick={() => (r.isDir ? drill(r.path) : toggle(r.path))}
-                  data-tip={r.isDir ? "查看子目录体积" : undefined}
+                  data-tip={r.isDir ? t("查看子目录体积") : undefined}
                 >
                   <span
                     className="np-dsiz-ck"
@@ -689,7 +689,10 @@ export function CompareDialog({
               intent="danger"
               disabled={!selB.size}
               onClick={deleteBOnly}
-              data-tip={`把「仅在 ${bName}」勾选的 ${selB.size} 项移入回收站`}
+              data-tip={t("把「仅在 {name}」勾选的 {n} 项移入回收站", {
+                name: bName,
+                n: selB.size,
+              })}
             >
               {t("删除 {name} 多余", { name: bName })}
             </Button>
@@ -697,7 +700,11 @@ export function CompareDialog({
               size="small"
               disabled={!selB.size && !selD.size}
               onClick={() => syncTo("b")}
-              data-tip={`把勾选的 ${selB.size + selD.size} 项以 ${bName} 版本复制到 ${aName}`}
+              data-tip={t("把勾选的 {n} 项以 {from} 版本复制到 {to}", {
+                n: selB.size + selD.size,
+                from: bName,
+                to: aName,
+              })}
             >
               {bName} → {aName}
             </Button>
@@ -706,7 +713,11 @@ export function CompareDialog({
               intent="primary"
               disabled={!selA.size && !selD.size}
               onClick={() => syncTo("a")}
-              data-tip={`把勾选的 ${selA.size + selD.size} 项以 ${aName} 版本复制到 ${bName}`}
+              data-tip={t("把勾选的 {n} 项以 {from} 版本复制到 {to}", {
+                n: selA.size + selD.size,
+                from: aName,
+                to: bName,
+              })}
             >
               {aName} → {bName}
             </Button>

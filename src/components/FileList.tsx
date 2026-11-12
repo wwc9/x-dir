@@ -1918,7 +1918,7 @@ export function FileList({
             <div className="np-list-error-actions">
               <button
                 className="np-list-error-btn"
-                data-tip="跳转到桌面文件夹"
+                data-tip={t("跳转到桌面文件夹")}
                 onClick={goDesktop}
               >
                 <AppIcon icon={Monitor} size={DENSITY.iconSm} />
@@ -1926,7 +1926,7 @@ export function FileList({
               </button>
               <button
                 className="np-list-error-btn"
-                data-tip="跳转到驱动器列表"
+                data-tip={t("跳转到驱动器列表")}
                 onClick={goThisPc}
               >
                 <AppIcon icon={HardDrive} size={DENSITY.iconSm} />

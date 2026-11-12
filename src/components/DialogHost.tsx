@@ -1203,7 +1203,7 @@ function BatchRenameDialog({
                   data-tip={t("全选 / 全不选")}
                 />
                 <span className="np-bren-hc">{t("原文件名")}</span>
-                <span className="np-bren-hc" data-tip={t("改动片段以 accent 底色高亮")}>{t("新文件名预览")}</span>
+                <span className="np-bren-hc" data-tip={t("改动片段以强调色高亮")}>{t("新文件名预览")}</span>
                 <span className="np-bren-hc">{t("结果")}</span>
                 <span className="np-bren-hc np-bren-headpath">
                   {t("路径")}
@@ -1281,7 +1281,7 @@ function BatchRenameDialog({
               <button
                 className="np-bren-tool"
                 disabled={!picked.size}
-                data-tip="从列表移除勾选行（不动磁盘文件）"
+                data-tip={t("从列表移除勾选行（不动磁盘文件）")}
                 onClick={removePicked}
               >
                 <AppIcon icon={Trash2} size={DENSITY.iconSm} />
@@ -1376,7 +1376,7 @@ function BatchRenameDialog({
                             <div className="np-scheme-n">{sc.name}</div>
                             <div className="np-scheme-s">{sc.ops.length} {t("条规则")}</div>
                           </div>
-                          <button className="np-rchain-btn" data-tip="删除方案" onClick={(e) => { e.stopPropagation(); updateSettings({ renameSchemes: schemes.filter((x) => x.id !== sc.id) }); }}>
+                          <button className="np-rchain-btn" data-tip={t("删除方案")} onClick={(e) => { e.stopPropagation(); updateSettings({ renameSchemes: schemes.filter((x) => x.id !== sc.id) }); }}>
                             <AppIcon icon={X} size={DENSITY.iconXs} />
                           </button>
                         </div>
@@ -1469,7 +1469,7 @@ function BatchRenameDialog({
                         句式超宽时行内横滚（弹层均 portal 不被裁剪）；
                         停用卡整卡淡显 */}
                     <div className="np-rs-head">
-                      <span className="np-rs-grip" data-tip="拖动卡片可调整顺序">
+                      <span className="np-rs-grip" data-tip={t("拖动卡片可调整顺序")}>
                         <AppIcon icon={GripVertical} size={DENSITY.iconXs} />
                       </span>
                       <span className="np-rs-idx">{idx + 1}</span>
@@ -1481,7 +1481,7 @@ function BatchRenameDialog({
                         checked={op.enabled}
                         onChange={(e) => patchOp(op.id, { enabled: e.currentTarget.checked } as Partial<RenameOp>)}
                       />
-                      <button className="np-rchain-btn" data-tip="删除规则" onClick={() => removeOp(op.id)}>
+                      <button className="np-rchain-btn" data-tip={t("删除规则")} onClick={() => removeOp(op.id)}>
                         <AppIcon icon={X} size={DENSITY.iconXs} />
                       </button>
                     </div>
@@ -1509,7 +1509,12 @@ function BatchRenameDialog({
             <Button
               size="small"
               disabled={!canUndoRename}
-              data-tip={canUndoRename ? `撤回最近一次批量重命名（Ctrl+Z）` : "没有可撤回的重命名（仅支持最近一次）"}
+              data-tip={
+                canUndoRename
+                  ? t("撤回最近一次批量重命名")
+                  : t("没有可撤回的重命名（仅支持最近一次）")
+              }
+              data-kbd={canUndoRename ? "Ctrl+Z" : undefined}
               onClick={() => {
                 setUndoUsed(true);
                 void useUndo.getState().undo();

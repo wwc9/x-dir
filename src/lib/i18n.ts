@@ -48,6 +48,9 @@ const EN: Record<string, string> = {
   "把当前窗口组合另存为新方案": "Save current panes as a new scheme",
   "删除方案": "Delete scheme",
   "撤回上次重命名": "Undo last rename",
+  "撤回最近一次批量重命名": "Undo the most recent batch rename",
+  "没有可撤回的重命名（仅支持最近一次）":
+    "Nothing to undo (only the most recent rename is kept)",
   "清空暂存区": "Clear staging",
   "移出暂存区": "Remove from staging",
   "拖动调整上下高度": "Drag to resize height",
@@ -62,9 +65,14 @@ const EN: Record<string, string> = {
     "Switch to Copy: dragging an item to a pane copies it, keeping the original",
   "当前方案（改动后点上方保存覆盖）":
     "Current scheme (click save above to overwrite changes)",
-  "当前方案（改动后点上方保存图标覆盖）":
-    "Current scheme (click the save icon above to overwrite changes)",
+  "点击切换 · 拖动调整顺序": "Click to switch · drag to reorder",
   "点击切换到此布局": "Click to switch to this layout",
+  "点击展开任务面板（暂停/继续/取消）":
+    "Click to expand the task panel (pause/resume/cancel)",
+  "点击取消交换（Esc 同效）": "Click to cancel the swap (Esc works too)",
+  "点击打开全盘搜索": "Click to open global search",
+  "收起": "Collapse",
+  "展开": "Expand",
 
   // ── 窗格工具提示（toolTitle 复合串；快捷键经 data-kbd 键帽展示，
   //    2026-11-05 起文案不再内嵌括号式键位，裸键见下方基础词条）──
@@ -444,6 +452,10 @@ const EN: Record<string, string> = {
   "{n} 项": "{n} items",
   "扫描失败：": "Scan failed: ",
   "查看子目录体积": "View subdirectory sizes",
+  "把「仅在 {name}」勾选的 {n} 项移入回收站":
+    "Move {n} checked item(s) found only in {name} to the Recycle Bin",
+  "把勾选的 {n} 项以 {from} 版本复制到 {to}":
+    "Copy {n} checked item(s) from {from} over to {to} ({from} versions win)",
   "页数读取失败（文件可能损坏或加密）": "Failed to read page count (file may be corrupt or encrypted)",
   "字号需为 5–99 的整数": "Font size must be an integer 5–99",
   "边距需为 0–1000 的整数": "Margin must be an integer 0–1000",
@@ -453,6 +465,8 @@ const EN: Record<string, string> = {
   "文字与输出名支持占位符，点击输入框下方的按钮即可插入；页码按「页码格式」渲染，[页面标签] 暂以页码代替。输出按「输出文件名」模板旁写 PDF，同名自动 (2) 递增，不覆盖原文件。":
     "Text and output name support placeholders — click the buttons under the inputs to insert; page numbers render per “Page number format”, [页面标签] falls back to the page number. Output follows the output-name template side by side (duplicates get (2), originals untouched).",
   "跳转到 {g}": "Jump to {g}",
+  "跳转到桌面文件夹": "Go to the Desktop folder",
+  "跳转到驱动器列表": "Go to the drive list",
   "暂无浏览记录": "No history yet",
   "清空浏览记录": "Clear history",
   "应用默认方案（可保存覆盖；不可删除）":
@@ -498,6 +512,8 @@ const EN: Record<string, string> = {
   "加序号": "Add sequence numbers",
   "取消": "Cancel",
   "取消任务": "Cancel job",
+  "继续任务": "Resume task",
+  "暂停任务": "Pause task",
   "只展示未启用的功能": "Show only disabled functions",
   "可点下方开源地址在浏览器验证网络后重试。": "Verify your network via the links below, then retry.",
   "可用空间": "Free space",
@@ -516,6 +532,9 @@ const EN: Record<string, string> = {
   "如 pdf, txt（空 = 不限）": "e.g. pdf, txt (empty = any)",
   "定制": "Customize",
   "对象类型": "Target type",
+  "对象类型为「仅文件」时可配置": "Configurable when target type is “files only”",
+  "逗号/空格分隔扩展名白名单，不区分大小写":
+    "Comma/space-separated extension whitelist, case-insensitive",
   "导入…": "Import…",
   "导入配置文件": "Import config file",
   "导出…": "Export…",
@@ -632,7 +651,10 @@ const EN: Record<string, string> = {
   "已停用": "Disabled",
   "原文件名": "Original name",
   "新文件名预览": "New name preview",
-  "改动片段以 accent 底色高亮": "Changed segments are highlighted",
+  "改动片段以强调色高亮": "Changed segments are highlighted in the accent color",
+  "从列表移除勾选行（不动磁盘文件）":
+    "Remove checked rows from the list (no disk changes)",
+  "拖动卡片可调整顺序": "Drag cards to reorder",
   "结果": "Result",
   "将改名": "Will rename",
   "无变化": "No change",
@@ -707,6 +729,10 @@ const EN: Record<string, string> = {
   "是": "Yes",
   "保持原页数": "Keep original page count",
   "自动补 A4 空白页使总页数凑成偶数（审计底稿打印场景常用）": "Auto-insert blank A4 pages so the total page count is even (common for audit working papers)",
+  "自动换行：开（点击改为不换行 + 行号）":
+    "Word wrap: on (click to switch to no-wrap + line numbers)",
+  "自动换行：关（点击改为换行 + 行号）":
+    "Word wrap: off (click to wrap + line numbers)",
   "空白页位置": "Blank page position",
   "最后1页之后": "After the last page",
   "第1页之前": "Before page 1",

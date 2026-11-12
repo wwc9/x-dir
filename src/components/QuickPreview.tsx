@@ -257,7 +257,11 @@ export function QuickPreviewHost() {
                 size="small"
                 icon={ic(WrapText)}
                 active={!textWrap}
-                data-tip={textWrap ? "自动换行：开（点击改为不换行 + 行号）" : "自动换行：关（点击恢复）"}
+                data-tip={
+                  textWrap
+                    ? t("自动换行：开（点击改为不换行 + 行号）")
+                    : t("自动换行：关（点击改为换行 + 行号）")
+                }
                 onClick={() => setTextWrap((w) => !w)}
               />
             )}

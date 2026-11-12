@@ -212,11 +212,11 @@ export function IslandPill({ path }: { path: string }) {
 function islandTitle(view: IslandView): string {
   switch (view.kind) {
     case "job":
-      return "点击展开任务面板（暂停/继续/取消）";
+      return t("点击展开任务面板（暂停/继续/取消）");
     case "swap":
-      return "点击取消交换（Esc 同效）";
+      return t("点击取消交换（Esc 同效）");
     case "gsearch":
-      return "点击打开全盘搜索";
+      return t("点击打开全盘搜索");
     case "receipt":
       return view.receipt.text;
     case "clipboard":

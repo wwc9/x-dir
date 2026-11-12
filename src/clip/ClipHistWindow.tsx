@@ -625,7 +625,7 @@ export function ClipHistWindow() {
           className={`np-winbtn ${winPinned ? "is-on" : ""}`}
           data-tip={
             winPinned
-              ? "浮窗常驻：开（点击恢复失焦自动关闭）"
+              ? "浮窗常驻：开（点击恢复为失焦自动关闭）"
               : "浮窗常驻：关（点击常驻屏幕，失焦不自动关闭，Enter 转为仅复制）"
           }
           aria-label="浮窗常驻开关"

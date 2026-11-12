@@ -892,7 +892,7 @@ export function Sidebar() {  const t = useT();
               onClick={() => void apply(it.name)}
               data-tip={
                 current === it.name
-                  ? t("当前方案（改动后点上方保存图标覆盖）")
+                  ? t("当前方案（改动后点上方保存覆盖）")
                   : t("点击切换 · 拖动调整顺序")
               }
             >

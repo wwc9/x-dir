@@ -613,8 +613,8 @@ export function MenuEditor() {
           placeholder={t("如 pdf, txt（空 = 不限）")}
           data-tip={
             en.cond.target !== "file"
-              ? "对象类型为「仅文件」时可配置"
-              : "逗号/空格分隔扩展名白名单，不区分大小写"
+              ? t("对象类型为「仅文件」时可配置")
+              : t("逗号/空格分隔扩展名白名单，不区分大小写")
           }
           disabled={en.cond.target !== "file"}
           spellCheck={false}
@@ -686,8 +686,8 @@ export function MenuEditor() {
           placeholder={t("如 pdf, txt（空 = 不限）")}
           data-tip={
             en.cond.target !== "file"
-              ? "对象类型为「仅文件」时可配置"
-              : "逗号/空格分隔扩展名白名单，不区分大小写"
+              ? t("对象类型为「仅文件」时可配置")
+              : t("逗号/空格分隔扩展名白名单，不区分大小写")
           }
           disabled={en.cond.target !== "file"}
           spellCheck={false}

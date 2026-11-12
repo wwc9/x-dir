@@ -224,7 +224,7 @@ export function NavTree() {
               >
                 <span
                   className={`np-tree-chev${n.open ? " open" : ""}`}
-                  data-tip={n.open ? "收起" : "展开"}
+                  data-tip={t(n.open ? "收起" : "展开")}
                   onClick={(e) => {
                     e.stopPropagation();
                     useNavTree.getState().toggleDir(n.path);
