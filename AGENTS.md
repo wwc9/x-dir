@@ -74,4 +74,4 @@
 
 - **触发规则：用户说「发布新版本」即无需再确认，全自动执行 Gitee + GitHub 双端 Release**
 - 固定流水线：bump 五处版本 + update.json notes → 全绿 → 提交推送打 tag（**tag 必须先到远端**）→ `tools/build-release.ps1` 出四件产物 → 写 `dist-release/v<版本>/release-notes.md` → Gitee 浏览器自动化 + GitHub `tools/publish-release.ps1` → `latest.json` 复制仓库根提交推送（双端 raw 端点即 updater 端点）
-- 发行说明硬性格式（✨新增/⚡改进/🐛修复 三段分类编号 + 每条中英双语）见 docs/release.md §3
+- 发行说明硬性格式（三段双语标题 ✨新增 New/⚡改进 Improved/🐛修复 Fixed + 加粗双语短标题 + 英文描述行）见 docs/release.md §3

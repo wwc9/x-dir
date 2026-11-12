@@ -31,40 +31,42 @@ NSIS 首次打包需下载工具链，国内网络易超时——脚本会降级
 
 ## 3. 发行说明 `release-notes.md`（双端同源，分类编号 + 双语）
 
-写到 `dist-release/v<版本>/release-notes.md`，**格式硬性要求**：✨ 新增 / ⚡ 改进 / 🐛 修复 三段分类编号；
-内容简洁明了（每条 = 加粗短标题 + 一句话）；**每条中文行下一行附对应英文行**（英文行缩进 3 空格，与条目同段渲染）。
-定稿范本（v0.1.7，2026-11-11 用户钦定风格）：
+写到 `dist-release/v<版本>/release-notes.md`，**格式硬性要求（2026-11-12 用户确认版式）**：
+✨ 新增 New / ⚡ 改进 Improved / 🐛 修复 Fixed 三段分类编号，**段标题双语**；
+编号全局连续（新增从 1、改进接续、修复接续）；内容简洁明了——每条 =
+**加粗双语短标题（中文 + 英文同体）** + 中文一句话，下一行缩进 3 空格附英文描述行
+（与条目同段渲染；英文行不机械直译，按凝练口径重写）。
+定稿范本（v0.1.9，2026-11-12 用户确认）：
 
 ```markdown
-## ✨ 新增
+## ✨ 新增 New
 
-1. **应用内一键覆盖更新** —— 「关于」浮窗一键下载安装新版，配置全保留，完成后自动重启
-   **In-app one-click update** — install the new version from the About panel, config kept, auto restart
-2. **表格预览数字格式渲染** —— 小数、百分数、千分位与日期按文件内格式显示
-   **Spreadsheet number formatting** — cells render per the file's formats, dates as real dates
+1. **更新完成自动重启 Auto-Relaunch** —— 一键更新装完新版后自动拉起应用，已在运行则不重复打开
+   The app restarts itself once the update finishes installing, and never opens a second instance
+2. **更新完成感知提示 Update Notice** —— 静默更新完成后灵动岛提示「已更新到新版本，配置全部保留」
+   After a silent update, the island bubble confirms the new version with config fully kept
 
-## ⚡ 改进
+## ⚡ 改进 Improved
 
-5. **安装包升级改为覆盖安装** —— 双击新版安装包原地覆盖升级，装完自动启动
-   **In-place installer upgrade** — the new setup upgrades over the old install and auto-launches
-6. **新建文件夹改为资源管理器同款** —— 直接创建并进入行内重命名，重名自动加序号
-   **Explorer-style new folder** — creates at once with inline rename, duplicates auto-numbered
+3. **开源文档体系整理 Docs Overhaul** —— 贡献者文档重构为分域结构，新增文档总索引与依赖合规清单
+   Contributor docs are reorganized by domain, adding a docs index and a dependency compliance list
 
-## 🐛 修复
+## 🐛 修复 Fixed
 
-11. **右键不再弹出浏览器调试菜单** —— 未接管区域不再弹出 WebView2 默认右键菜单
-    **No WebView2 debug menu** — right-click on unhandled areas no longer shows the default menu
-12. **界面细节** —— 剪贴板浮窗顶栏间距收紧，分割预览长名不再折行
-    **UI polish** — tighter clipboard widget spacing; split preview no longer wraps long names
+4. **剪贴板图片缩略图变形发糊 Thumbnail Sharpness** —— 缩略图改为等比缩放不裁切，高清源不再放大发虚
+   Clipboard image thumbnails now keep their aspect ratio, without cropping or upscale blur
+5. **剪贴板浮窗快捷键冲突 Hotkey Conflict** —— 搜索框不再吞掉 1-9 取条、空格勾选等列表快捷键，Esc 随时返回列表模式
+   The clipboard search box no longer swallows list shortcuts like 1–9 and Space; Esc returns to list mode
 ```
 
-编号全局连续（新增从 1、改进接续、修复接续）；英文行不机械直译，按「短标题 —— 一句话」口径重写得更凝练；
 内容取材 = `update.json` notes + 本轮提交记录，按上述口径精炼改写。
+历史版本（v0.1.7/0.1.8：单语短标题，英文行带独立粗标题）不回溯改写。
 
 > **update.json notes 前缀约定（2026-11-12）**：notes 每条以分类标签开头（`✨ 新增 ` /
 > `⚡ 改进 ` / `🐛 修复 `，与三段同名），关于浮窗按前缀分组渲染出与发行说明同构的三段。
 > notes 保持 string[] 不变——旧版应用的解析器是严格 Vec<String>，换结构会让旧版检查
-> 更新解析失败；旧面板平铺显示前缀亦可读。条目正文 = 「短标题 —— 描述」，与发行说明中文行逐字同源。
+> 更新解析失败；旧面板平铺显示前缀亦可读。条目正文 = 「双语短标题 —— 描述」，与发行
+> 说明中文行逐字同源；面板按「——」前加粗，双语标题一体加粗。
 
 ## 4. Gitee 端：浏览器自动化（ZCode 内置浏览器，IAB）
 
