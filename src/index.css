@@ -6773,9 +6773,9 @@ body.np-col-resizing * {
    （2026-11-07 用户报四角不一致根因）。现间隔 = 外壳 padding-bottom：进
    measureElement 量测盒参与 offset 累计，且完全不接触卡片视觉 */
 .np-clip-row {
-  /* 左右 8px 缩进 + 底部 8px 间隔：全部在外壳 padding 上（进量测盒，
-     不接触内层卡片视觉） */
-  padding: 0 calc(var(--np-gap) * 2) calc(var(--np-gap) * 2);
+  /* 左右 8px 缩进 + 底部 4px 间隔（2026-11-12 紧凑双行卡定案 8→4）：全部在
+     外壳 padding 上（进量测盒，不接触内层卡片视觉） */
+  padding: 0 calc(var(--np-gap) * 2) var(--np-gap);
   color: var(--np-fg);
 }
 /* 可见卡片本体：无 border 无 clip 花招，圆角四角恒等且 = 设置的
@@ -6783,8 +6783,9 @@ body.np-col-resizing * {
 .np-clip-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: 8px;
+  /* 2026-11-12 紧凑双行卡定案（三方案比选方案二）：padding 8/10 → 4/8 */
+  padding: 4px 8px;
   background-color: var(--np-surface-2);
   border-radius: var(--np-radius-pane);
   cursor: default;
@@ -6819,18 +6820,13 @@ body.np-col-resizing * {
   color: var(--np-muted);
   font-variant-numeric: tabular-nums;
 }
-/* 卡片主体：右上类型 chip 行 + meta 行（时间 · 来源 · 悬停动作） */
+/* 卡片主体：预览文本（2 行钳制）+ meta 行（时间 · 来源 · 动作 · 标记 · chip） */
 .np-clip-body {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-}
-.np-clip-crow {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  gap: 2px;
 }
 .np-clip-preview {
   flex: 1;
@@ -6843,12 +6839,16 @@ body.np-col-resizing * {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
-/* 类型 chip：类型色族淡染小标（图=蓝 文件=橙 其余=灰，--np-icon-* 语义同源） */
+/* 类型 chip：类型色族淡染小标（图=蓝 文件=橙 其余=灰，--np-icon-* 语义同源）。
+   2026-11-12 紧凑双行卡定案：自内容行移入 meta 行尾（margin-left auto，
+   动作组浮现时与 actions 的 auto 分摊自由空间），padding 收为 2/5 适配
+   meta 行 18px 高度 */
 .np-clip-chip {
   flex: none;
+  margin-left: auto;
   font-size: 10px;
   line-height: 1;
-  padding: 4px 8px;
+  padding: 2px 5px;
   border-radius: var(--np-radius);
   font-weight: 600;
   background: color-mix(in srgb, var(--np-icon-generic) 14%, transparent);
@@ -6875,16 +6875,17 @@ body.np-col-resizing * {
   align-self: center;
   color: var(--np-accent);
 }
-/* meta 行：相对时间 · 来源应用 + 悬停动作组（margin-left auto）；
+/* meta 行：相对时间 · 来源应用 + 悬停动作组（margin-left auto）+ 置顶/收藏
+   标记 + 类型 chip（行尾，2026-11-12 紧凑双行卡移入）；
    整行 nowrap（2026-11-06 巡检修复：窄窗时间「11 小时前」折行竖排），
-   溢出由来源 src 的 ellipsis 吸收；min-height 常驻预留动作钮高度（20px）：
-   动作组 display 切换不再撑高卡片（2026-11-07 用户报「选中高度变化」根因
-   ——旧列表 28px 行高兜底掩盖，卡片流无兜底后显形） */
+   溢出由来源 src 的 ellipsis 吸收；min-height 常驻预留动作钮高度（18px，
+   2026-11-12 紧凑化 20→18）：动作组 display 切换不再撑高卡片（2026-11-07
+   用户报「选中高度变化」根因——旧列表 28px 行高兜底掩盖，卡片流无兜底后显形） */
 .np-clip-meta {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: calc(var(--np-gap) * 5);
+  min-height: calc(var(--np-gap) * 4.5);
   font-size: var(--np-font-sm);
   color: var(--np-muted);
   font-variant-numeric: tabular-nums;
@@ -6905,12 +6906,15 @@ body.np-col-resizing * {
   opacity: 0.85;
 }
 /* 图片条目缩略图：等比缩放不裁切不变形。显示尺寸由前端 fitThumb(onLoad)
-   精确设定：在 行高 2.4 / 卡片可用宽 上限内等比放大到最大，且 scale ≤ 1
+   精确设定：在 行高 3（2026-11-12 紧凑双行卡定案 2.4→3）/ 卡片可用宽
+   上限内等比放大到最大，且 scale ≤ 1
    不超过图片本身尺寸（2026-11-12 用户定案「尽可能大」）；此处 max-height
    仅为加载前兜底。点击放大看原图 */
 .np-clip-thumb {
   display: block;
-  max-height: calc(var(--np-row-h) * 2.4);
+  /* 上限 3 行高（2026-11-12 紧凑双行卡定案 2.4→3，与 fitThumb capH 同步），
+     仅为加载前兜底，显示尺寸由 JS 权威 */
+  max-height: calc(var(--np-row-h) * 3);
   width: auto;
   height: auto;
   object-fit: contain;
@@ -6969,9 +6973,9 @@ body.np-col-resizing * {
 .np-clip-row.is-sel .np-clip-actions {
   display: inline-flex;
 }
-/* 动作钮 20px（gap×5）：24px 悬停态会把单行行高从 28 撑到 30（悬停/选中
- * 换显时内容高度跳变，2026-10-31 用户实测反馈）——缩到 20 后单行内容
- * 最大高度 20+6 padding < 28 最小行高，悬停前后等高 */
+/* 动作钮 18px（gap×4.5，2026-11-12 紧凑双行卡 20→18）：与 meta min-height
+ * 同值 = 动作组 display 切换永不撑高卡片（2026-10-31 高度跳变教训承袭：
+ * 悬停/选中换显前后等高） */
 .np-clip-actions button {
   display: inline-flex;
   align-items: center;
@@ -6979,8 +6983,8 @@ body.np-col-resizing * {
   border: none;
   background: transparent;
   color: var(--np-muted);
-  width: calc(var(--np-gap) * 5);
-  height: calc(var(--np-gap) * 5);
+  width: calc(var(--np-gap) * 4.5);
+  height: calc(var(--np-gap) * 4.5);
   border-radius: var(--np-radius);
   cursor: pointer;
 }

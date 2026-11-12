@@ -535,17 +535,17 @@ export function ClipHistWindow() {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [pasteItem, pinItem, delItem, goTo, togglePick, mergePaste]);
 
-  /** 缩略图等比适配（onLoad，2026-11-12 用户定案「尽可能大」）：在 行高 2.4
-   *  / 卡片可用宽 上限内等比放大到最大，scale ≤ 1 保证**不超过图片本身尺寸**
-   *  （自然 CSS 像素）；预留 ~90px 预览文字位。行高变化由虚拟列表
-   *  measureElement 的 ResizeObserver 自动重测 */
+  /** 缩略图等比适配（onLoad，2026-11-12 用户定案「尽可能大」；同日紧凑双行卡
+   *  定案上限 2.4→3 行高）：在 行高 3 / 卡片可用宽 上限内等比放大到最大，
+   *  scale ≤ 1 保证**不超过图片本身尺寸**（自然 CSS 像素）；预留 ~90px 预览
+   *  文字位。行高变化由虚拟列表 measureElement 的 ResizeObserver 自动重测 */
   const fitThumb = (e: { currentTarget: HTMLImageElement }) => {
     const el = e.currentTarget;
     if (!el.naturalWidth || !el.naturalHeight) return;
     const card = el.closest(".np-clip-card");
-    // 可用宽 = 卡片内容宽 − 序号列与间距(28) − 预览文字保留位(90)，下限 120
-    const capW = Math.max(120, (card?.clientWidth ?? 400) - 118);
-    const capH = DENSITY.rowH * 2.4;
+    // 可用宽 = 卡片内容宽 − 序号列与间距(26) − 预览文字保留位(90)，下限 120
+    const capW = Math.max(120, (card?.clientWidth ?? 400) - 116);
+    const capH = DENSITY.rowH * 3;
     const scale = Math.min(1, capW / el.naturalWidth, capH / el.naturalHeight);
     el.style.width = `${(el.naturalWidth * scale).toFixed(1)}px`;
     el.style.height = `${(el.naturalHeight * scale).toFixed(1)}px`;
@@ -726,21 +726,10 @@ export function ClipHistWindow() {
                     />
                   ) : null}
                   <div className="np-clip-body">
-                    <div className="np-clip-crow">
-                      <span className="np-clip-preview">{it.preview}</span>
-                      {it.pinned && (
-                        <span className="np-clip-pinmark" data-tip="已置顶">
-                          <AppIcon icon={Pin} size={DENSITY.iconXs} />
-                        </span>
-                      )}
-                      {it.fav && (
-                        <span className="np-clip-favmark" data-tip="已收藏">
-                          <AppIcon icon={Star} size={DENSITY.iconXs} />
-                        </span>
-                      )}
-                      <span className={`np-clip-chip k-${kCls}`}>{kMeta.label}</span>
-                    </div>
-                    {/* meta 行：相对时间 + 来源应用（方案 C 新信息位）+ 悬停动作组 */}
+                    <span className="np-clip-preview">{it.preview}</span>
+                    {/* meta 行：相对时间 + 来源 + 悬停动作组 + 置顶/收藏标记 +
+                        类型 chip 行尾（2026-11-12 紧凑双行卡：chip 自内容行移入，
+                        内容行整行让给预览文本） */}
                     <div className="np-clip-meta">
                       <span>{relTime(it.createdAt)}</span>
                       {it.source && (
@@ -801,6 +790,17 @@ export function ClipHistWindow() {
                           <AppIcon icon={Trash2} size={DENSITY.iconXs} />
                         </button>
                       </span>
+                      {it.pinned && (
+                        <span className="np-clip-pinmark" data-tip="已置顶">
+                          <AppIcon icon={Pin} size={DENSITY.iconXs} />
+                        </span>
+                      )}
+                      {it.fav && (
+                        <span className="np-clip-favmark" data-tip="已收藏">
+                          <AppIcon icon={Star} size={DENSITY.iconXs} />
+                        </span>
+                      )}
+                      <span className={`np-clip-chip k-${kCls}`}>{kMeta.label}</span>
                     </div>
                   </div>
                   </div>
