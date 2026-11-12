@@ -91,7 +91,7 @@
 - **撤销/重做**：`lib/undo` 双栈（新操作使重做分支失效）；rename/newfolder 完成即压撤销栈，trash/move 由任务 onDone 门控；Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z 走全局快捷键。
 - **地址栏面包屑**：np-addr-crumbs 非聚焦覆盖层（`:focus-within` 隐藏，超 5 段中段省略）。
 - **标签**：右键菜单（duplicateTab/closeOtherTabs/closeTabsRight）；标签图标（此电脑=Computer、盘符=HardDrive、目录=Folder/FolderOpen 语义色，realIcons 开启优先真实图标并按标签路径 requestIcons；np-tab 内收窄 14px）。
-- **快速命令面板**：右键菜单固定尾段「功能库…」（不可配置）→ `openPalette` 贴身轻浮窗（无遮罩点击外部即关；搜索跨全库：名称/说明/分组 + 空格分词 AND + 名称首词 mark 高亮；↑↓ 循环 / Enter 执行 / Esc 关闭；定宽 380、无吸附箭头（2026-11-12 用户反馈：菱形咬掉搜索胶囊左上角，收窄 440→380 同批定案）；排序 = 可用项稳定置顶、不可用沉底（2026-11-12 定案，两块各自保持高频 12 项 `PALETTE_QUICK_KEYS` → 注册表原序）；执行与右键菜单同一执行器 `builtinMenuItem`，现场条件不满足整行降灰 0.45 + data-tip 说明；`menuCommands` BuiltinFn 增 icon 字段，77 项随注册表入库）；过滤/可用性/排序/定位钳制纯函数 `lib/palette.ts` 配 vitest。
+- **快速命令面板**：右键菜单固定尾段「功能库…」（不可配置）→ `openPalette` 贴身轻浮窗（无遮罩点击外部即关；搜索跨全库：名称/说明/分组 + 空格分词 AND + 名称首词 mark 高亮；↑↓ 循环 / Enter 执行 / Esc 关闭；定宽 340、无吸附箭头（2026-11-12 用户反馈：菱形咬掉搜索胶囊左上角，收窄 440→380→340 同日两轮定案）；排序 = 可用项稳定置顶、不可用沉底（2026-11-12 定案，两块各自保持高频 12 项 `PALETTE_QUICK_KEYS` → 注册表原序）；执行与右键菜单同一执行器 `builtinMenuItem`，现场条件不满足整行降灰 0.45 + data-tip 说明；`menuCommands` BuiltinFn 增 icon 字段，77 项随注册表入库）；过滤/可用性/排序/定位钳制纯函数 `lib/palette.ts` 配 vitest。
 - **鼠标**：中键新标签（列表行/导航树 preventDefault 拦自动滚动）；X1/X2 历史导航（`lib/mouseNav.ts`，App 装卸）；新标签继承当前路径。
 - 快捷键全部入 `lib/shortcuts.ts` 清单并与 `keyboard.test.ts` 双向对齐；新增 np-* 类均已在 index.css 定义（cssClasses 审计通过）。
 

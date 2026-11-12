@@ -19,9 +19,9 @@ import { DENSITY } from "../lib/tokens";
 import { t } from "../lib/i18n";
 import { AppIcon } from "./AppIcon";
 
-/** 面板定宽（2026-11-12 用户反馈收窄 440→380）；行数上限与高度估算供定位钳制（启发式，与右键
+/** 面板定宽（2026-11-12 用户反馈两轮收窄 440→380→340）；行数上限与高度估算供定位钳制（启发式，与右键
  *  菜单 DENSITY.menuClampW 同口径——组件未量测前先用常量落位） */
-const PANEL_W = 380;
+const PANEL_W = 340;
 const ROWS_MAX = 10;
 /** 搜索行 + 底栏 + 内边距的chrome 高度估算 */
 const CHROME_H = 74;
