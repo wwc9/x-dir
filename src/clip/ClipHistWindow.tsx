@@ -822,12 +822,12 @@ export function ClipHistWindow() {
             <span className="np-clip-count">{total} 条</span>
             <span className="np-clip-keys">
               {picked.size > 0
-                ? `已勾选 ${picked.size} 条 · Enter 合并粘贴 · Space 续选 · Esc 取消`
+                ? `已勾选 ${picked.size} 条 · Enter 合并粘贴 · Ctrl+Enter 仅复制 · Space 续选 · Esc 取消`
                 : searchFocused
                   ? "输入即搜索 · ↑↓ 选择 · Enter 粘贴 · Alt+1-9 取条 · Tab 切分类 · Esc 收起搜索"
                   : winPinned
-                    ? "↑↓/WS 选择 · Enter 复制（常驻中） · 1-9 取条 · Space 勾选 · Tab 切分类 · Ctrl+P 置顶 · Del 删除 · Esc 关闭"
-                    : "↑↓/WS 选择 · Enter 粘贴 · 1-9 取条 · Space 勾选 · Tab 切分类 · Ctrl+P 置顶 · Del 删除 · Esc 关闭"}
+                    ? "↑↓/WS 选择 · Enter 复制（常驻中） · 1-9 取条 · Space/Ctrl+点击 勾选 · Tab 切分类 · Ctrl+P 置顶 · Del 删除 · Esc 关闭"
+                    : "↑↓/WS 选择 · Enter 粘贴 · 1-9 取条 · Space/Ctrl+点击 勾选 · Tab 切分类 · Ctrl+P 置顶 · Del 删除 · Esc 关闭"}
             </span>
           </div>
         )}
