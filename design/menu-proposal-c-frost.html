@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>方案 C「霜」— 右键菜单风格设计稿：亚克力玻璃拟态</title>
+<!-- 设计稿（不参与构建）：右键菜单风格提案 C。静态自包含，双击浏览器打开；
+     右上角切换深浅主题预览。基线 = 现版 Blueprint Menu（纯文字 + 10px 圆角卡）-->
+<style>
+  :root {
+    --bg:#e9ecf1; --surface:#ffffff; --surface2:#f0f2f5; --border:#d6dbe2;
+    --hairline:rgba(16,24,40,.06); --fg:#171d26; --muted:#66707e;
+    --accent:#3574f0; --sel:rgba(53,116,240,.12); --danger:#d1434b;
+    --shadow:0 12px 32px rgba(20,28,40,.14);
+    /* 玻璃拟态核心 token：半透明底 + 背景 blur + 内高光描边 */
+    --glass:rgba(255,255,255,.72);
+    --glass-ring:rgba(255,255,255,.65);
+    --glass-hover:rgba(53,116,240,.14);
+  }
+  html.dark {
+    --bg:#101214; --surface:#2b2b2b; --surface2:#3a3a3a; --border:#454545;
+    --hairline:rgba(255,255,255,.08); --fg:#e2e2e2; --muted:#8f8f8f;
+    --accent:#5c9dff; --sel:rgba(92,157,255,.16); --danger:#f27073;
+    --shadow:0 16px 40px rgba(0,0,0,.6);
+    --glass:rgba(38,40,44,.62);
+    --glass-ring:rgba(255,255,255,.12);
+    --glass-hover:rgba(92,157,255,.18);
+  }
+  * { box-sizing:border-box; margin:0; }
+  body {
+    background:var(--bg); color:var(--fg); font-size:13px; overflow:hidden; height:100vh;
+    font-family:system-ui,"Segoe UI","Microsoft YaHei",sans-serif; user-select:none;
+  }
+  /* 彩色氛围背景：让玻璃 blur 有东西可透（浅色 = 柔和色斑，深色 = 极光） */
+  .aura { position:fixed; inset:0; z-index:0; overflow:hidden; }
+  .aura i { position:absolute; border-radius:50%; filter:blur(70px); opacity:.5; }
+  .aura i:nth-child(1) { width:420px; height:420px; left:8%; top:12%; background:#7fb0ff; }
+  .aura i:nth-child(2) { width:360px; height:360px; right:12%; top:6%; background:#ffc6a4; }
+  .aura i:nth-child(3) { width:400px; height:400px; left:38%; bottom:-6%; background:#9ee7c9; }
+  html.dark .aura i { opacity:.25; filter:blur(90px); }
+  html.dark .aura i:nth-child(1) { background:#2b5fd9; }
+  html.dark .aura i:nth-child(2) { background:#b05a2e; }
+  html.dark .aura i:nth-child(3) { background:#1d7a55; }
+  /* ── 设计说明卡（玻璃同语言） ── */
+  .brief {
+    position:fixed; left:16px; top:16px; z-index:60; width:270px;
+    background:var(--glass); backdrop-filter:blur(18px) saturate(1.3);
+    border:1px solid var(--glass-ring); border-radius:12px; padding:12px 14px;
+    box-shadow:var(--shadow); font-size:12px; line-height:1.6;
+  }
+  .brief h1 { font-size:13px; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
+  .brief h1 .tag {
+    font-size:11px; font-weight:400; color:var(--accent); background:var(--sel);
+    border-radius:99px; padding:1px 8px;
+  }
+  .brief p { color:var(--muted); margin-bottom:6px; }
+  .brief li { color:var(--muted); margin-left:16px; margin-bottom:2px; }
+  .brief li b { color:var(--fg); font-weight:600; }
+  .brief .ft { margin-top:7px; padding-top:7px; border-top:1px solid var(--hairline); color:var(--muted); }
+  .brief .ft b { color:var(--accent); font-weight:600; }
+  /* ── 主题切换 ── */
+  .theme {
+    position:fixed; right:16px; top:16px; z-index:60; border:1px solid var(--glass-ring); cursor:pointer;
+    display:flex; align-items:center; gap:6px; padding:5px 10px;
+    background:var(--glass); backdrop-filter:blur(18px); color:var(--fg); font-size:12px;
+    border-radius:99px; box-shadow:var(--shadow);
+  }
+  /* ── 背景幕：玻璃窗口残影 ── */
+  .fake {
+    position:absolute; left:50%; top:54px; transform:translateX(-50%); z-index:1;
+    width:min(860px,86vw); height:calc(100vh - 100px);
+    background:rgba(255,255,255,.4); border:1px solid rgba(255,255,255,.5);
+    backdrop-filter:blur(14px); border-radius:12px; box-shadow:var(--shadow);
+    padding:14px 16px; opacity:.6;
+  }
+  html.dark .fake { background:rgba(43,45,48,.45); border-color:rgba(255,255,255,.08); }
+  .fake .bar { display:flex; gap:8px; align-items:center; margin-bottom:12px; }
+  .fake .addr { flex:1; height:24px; background:rgba(120,130,150,.15); border-radius:99px; }
+  .fake .tool { width:60px; height:24px; background:rgba(120,130,150,.15); border-radius:6px; }
+  .fake .row { height:28px; border-radius:6px; display:flex; align-items:center; gap:8px; padding:0 8px; }
+  .fake .row.is-sel { background:var(--sel); }
+  .fake .ic { width:14px; height:14px; border-radius:3px; background:rgba(120,130,150,.2); flex:none; }
+  .fake .nm { height:8px; border-radius:4px; background:rgba(120,130,150,.18); }
+  .fake .mt { margin-left:auto; width:70px; height:8px; border-radius:4px; background:rgba(120,130,150,.18); }
+  /* ═════════ 方案 C 核心：亚克力玻璃拟态（Win11 Mica/Fluent 气质）═════════
+     差异点：① 半透明底 + backdrop blur，菜单「浮」在内容之上而非「挡住」
+     ② 内高光描边（glass-ring）替代外 ring，边界靠光而非线 ③ 悬停 = 玻璃高光条
+     ④ accent 光晕投影 ⑤ 行高 26 + 左侧 3px accent 指示条（悬停浮现）*/
+  .wrap {
+    position:absolute; left:50%; top:110px; transform:translateX(-50%); z-index:40;
+  }
+  .menu {
+    position:relative; width:236px; padding:5px;
+    background:var(--glass);
+    backdrop-filter:blur(22px) saturate(1.4);
+    border:1px solid var(--glass-ring);
+    border-radius:12px;
+    box-shadow:0 12px 32px rgba(20,28,40,.18), 0 0 0 .5px rgba(20,28,40,.08);
+    overflow:hidden;
+  }
+  html.dark .menu { box-shadow:0 16px 44px rgba(0,0,0,.55), 0 0 0 .5px rgba(0,0,0,.4); }
+  .mi {
+    position:relative;
+    display:flex; align-items:center;
+    height:26px; padding:0 10px 0 13px; border-radius:6px;
+    cursor:pointer; white-space:nowrap; color:var(--fg);
+  }
+  .mi::before {
+    content:""; position:absolute; left:4px; top:6px; bottom:6px; width:3px;
+    border-radius:2px; background:var(--accent); opacity:0; transition:opacity .12s;
+  }
+  .mi:hover { background:var(--glass-hover); }
+  .mi:hover::before { opacity:1; }
+  .mi.is-off { color:var(--muted); opacity:.55; cursor:default; }
+  .mi.is-off:hover { background:none; }
+  .mi.is-off:hover::before { opacity:0; }
+  .mi.is-danger { color:var(--danger); }
+  .mi.is-danger::before { background:var(--danger); }
+  .mi.is-danger:hover { background:rgba(209,67,75,.12); }
+  html.dark .mi.is-danger:hover { background:rgba(242,112,115,.14); }
+  .mi .arr { margin-left:auto; color:var(--muted); font-size:11px; }
+  .msep { height:1px; background:var(--hairline); margin:5px 8px; }
+  .sub {
+    position:absolute; left:calc(100% + 6px); top:186px; z-index:41;
+    width:186px; padding:5px;
+    background:var(--glass); backdrop-filter:blur(22px) saturate(1.4);
+    border:1px solid var(--glass-ring); border-radius:12px;
+    box-shadow:0 12px 32px rgba(20,28,40,.18);
+  }
+  .hint {
+    position:absolute; left:50%; top:64px; transform:translateX(-50%); z-index:42;
+    color:var(--muted); font-size:12px;
+    background:var(--glass); backdrop-filter:blur(18px);
+    border:1px solid var(--glass-ring);
+    padding:4px 12px; border-radius:99px;
+  }
+</style>
+</head>
+<body>
+  <div class="aura"><i></i><i></i><i></i></div>
+  <div class="brief">
+    <h1>方案 C「霜」<span class="tag">亚克力玻璃</span></h1>
+    <p>Win11 Fluent 气质：半透明 blur 底让菜单「浮」于内容上，边界靠内高光而非描边。</p>
+    <li><b>backdrop blur 22px</b> + 饱和度提升，透而不乱</li>
+    <li><b>悬停三联</b>：玻璃高光条 + accent 左指示条 + 文字不变色</li>
+    <li><b>左指示条</b>：3px accent 圆角短条悬停浮现，位置感强</li>
+    <li><b>氛围背景</b>：本稿用彩色光斑演示 blur 效果，实装后在文件列表上同样成立</li>
+    <div class="ft">取舍：<b>backdrop-filter 有合成器开销</b>（WebView2 GPU 良好）；深浅两套 glass token 需入 index.css</div>
+  </div>
+  <button class="theme" onclick="document.documentElement.classList.toggle('dark')">◐ 深浅主题</button>
+
+  <div class="fake">
+    <div class="bar"><div class="tool"></div><div class="addr"></div><div class="tool"></div></div>
+    <div class="row"><div class="ic"></div><div class="nm" style="width:220px"></div><div class="mt"></div></div>
+    <div class="row is-sel"><div class="ic"></div><div class="nm" style="width:180px"></div><div class="mt"></div></div>
+    <div class="row"><div class="ic"></div><div class="nm" style="width:260px"></div><div class="mt"></div></div>
+    <div class="row"><div class="ic"></div><div class="nm" style="width:150px"></div><div class="mt"></div></div>
+  </div>
+  <div class="hint">悬停条目查看交互态 · 右上角切换主题</div>
+
+  <div class="wrap">
+  <div class="menu">
+    <div class="mi">打开</div>
+    <div class="mi">在新标签打开</div>
+    <div class="mi">预览</div>
+    <div class="msep"></div>
+    <div class="mi">剪切</div>
+    <div class="mi">复制</div>
+    <div class="mi">粘贴</div>
+    <div class="msep"></div>
+    <div class="mi">复制路径</div>
+    <div class="mi">复制名称</div>
+    <div class="mi">重命名</div>
+    <div class="mi is-danger">删除</div>
+    <div class="mi">新建 ▸<span class="arr">▸</span></div>
+    <div class="mi">属性</div>
+    <div class="msep"></div>
+    <div class="mi">功能库…</div>
+    <div class="mi">编辑菜单…</div>
+  </div>
+  <div class="sub">
+    <div class="mi">文件夹</div>
+    <div class="mi">文本文档</div>
+    <div class="mi">Word 文档</div>
+    <div class="mi">Excel 工作表</div>
+    <div class="mi">CSV 表格</div>
+  </div>
+  </div>
+</body>
+</html>

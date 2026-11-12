@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>方案 B「锐」— 右键菜单风格设计稿：紧凑键盘向</title>
+<!-- 设计稿（不参与构建）：右键菜单风格提案 B。静态自包含，双击浏览器打开；
+     右上角切换深浅主题预览。基线 = 现版 Blueprint Menu（纯文字 + 10px 圆角卡）-->
+<style>
+  :root {
+    --bg:#e9ecf1; --surface:#ffffff; --surface2:#f0f2f5; --border:#d6dbe2;
+    --hairline:rgba(16,24,40,.08); --fg:#171d26; --muted:#66707e;
+    --accent:#3574f0; --hover:rgba(26,33,41,.06);
+    --sel:rgba(53,116,240,.12); --danger:#d1434b;
+    --shadow:0 8px 24px rgba(20,28,40,.12);
+  }
+  html.dark {
+    --bg:#161616; --surface:#2b2b2b; --surface2:#3a3a3a; --border:#454545;
+    --hairline:rgba(255,255,255,.09); --fg:#d4d4d4; --muted:#8f8f8f;
+    --accent:#5c9dff; --hover:rgba(255,255,255,.08);
+    --sel:rgba(92,157,255,.16); --danger:#f27073;
+    --shadow:0 10px 28px rgba(0,0,0,.5);
+  }
+  * { box-sizing:border-box; margin:0; }
+  body {
+    background:var(--bg); color:var(--fg); font-size:13px; overflow:hidden; height:100vh;
+    font-family:system-ui,"Segoe UI","Microsoft YaHei",sans-serif; user-select:none;
+  }
+  /* ── 设计说明卡 ── */
+  .brief {
+    position:fixed; left:16px; top:16px; z-index:60; width:270px;
+    background:var(--surface); border-radius:6px; padding:12px 14px;
+    box-shadow:var(--shadow); font-size:12px; line-height:1.6;
+  }
+  .brief h1 { font-size:13px; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
+  .brief h1 .tag {
+    font-size:11px; font-weight:400; color:var(--accent); background:var(--sel);
+    border-radius:4px; padding:1px 8px;
+  }
+  .brief p { color:var(--muted); margin-bottom:6px; }
+  .brief li { color:var(--muted); margin-left:16px; margin-bottom:2px; }
+  .brief li b { color:var(--fg); font-weight:600; }
+  .brief .ft { margin-top:7px; padding-top:7px; border-top:1px solid var(--hairline); color:var(--muted); }
+  .brief .ft b { color:var(--accent); font-weight:600; }
+  /* ── 主题切换 ── */
+  .theme {
+    position:fixed; right:16px; top:16px; z-index:60; border:0; cursor:pointer;
+    display:flex; align-items:center; gap:6px; padding:5px 10px;
+    background:var(--surface); color:var(--fg); font-size:12px;
+    border-radius:6px; box-shadow:var(--shadow);
+  }
+  /* ── 背景幕 ── */
+  .fake {
+    position:absolute; left:50%; top:54px; transform:translateX(-50%);
+    width:min(860px,86vw); height:calc(100vh - 100px);
+    background:var(--surface); border-radius:6px; box-shadow:var(--shadow);
+    padding:14px 16px; opacity:.5;
+  }
+  .fake .bar { display:flex; gap:8px; align-items:center; margin-bottom:12px; }
+  .fake .addr { flex:1; height:24px; background:var(--surface2); border-radius:4px; }
+  .fake .tool { width:60px; height:24px; background:var(--surface2); border-radius:4px; }
+  .fake .row { height:28px; border-radius:4px; display:flex; align-items:center; gap:8px; padding:0 8px; }
+  .fake .row.is-sel { background:var(--sel); }
+  .fake .ic { width:14px; height:14px; border-radius:3px; background:var(--surface2); flex:none; }
+  .fake .nm { height:8px; border-radius:4px; background:var(--surface2); }
+  .fake .mt { margin-left:auto; width:70px; height:8px; border-radius:4px; background:var(--surface2); }
+  /* ═════════ 方案 B 核心：紧凑键盘向（TC / Linear 气质）═════════
+     差异点：① 行高 24 高密度，长菜单少滚动 ② 右置 kbd 键帽，键盘党直达
+     ③ 小圆角（容器 6 / 条目 4）+ 单像素 hairline 边框 + 极浅投影，硬朗工具感
+     ④ 悬停 = 实色灰底（无淡染），切换干脆 ⑤ 组间 hairline + 2px 极窄段距 */
+  .wrap {
+    position:absolute; left:50%; top:110px; transform:translateX(-50%); z-index:40;
+  }
+  .menu {
+    position:relative; width:236px; padding:3px;
+    background:var(--surface);
+    border-radius:6px;
+    box-shadow:0 0 0 1px var(--border), var(--shadow);
+  }
+  .mi {
+    display:flex; align-items:center; gap:8px;
+    height:24px; padding:0 8px; border-radius:4px;
+    cursor:pointer; white-space:nowrap; color:var(--fg);
+  }
+  .mi:hover { background:var(--hover); }
+  .mi.is-off { color:var(--muted); opacity:.55; cursor:default; }
+  .mi.is-off:hover { background:none; }
+  .mi.is-danger { color:var(--danger); }
+  .mi.is-danger:hover { background:rgba(209,67,75,.08); }
+  .mi .kbd {
+    margin-left:auto;
+    display:inline-flex; align-items:center; height:15px; padding:0 5px;
+    background:var(--surface2); border-radius:3px; color:var(--muted);
+    font-size:10px; font-family:ui-monospace,Consolas,monospace; flex:none;
+  }
+  .mi:hover .kbd { color:var(--fg); }
+  .mi .arr { margin-left:auto; color:var(--muted); font-size:10px; }
+  .gl {
+    display:block; padding:5px 8px 2px; font-size:10px; color:var(--muted);
+    letter-spacing:.08em;
+  }
+  .msep { height:1px; background:var(--hairline); margin:3px 6px; }
+  .sub {
+    position:absolute; left:calc(100% + 5px); top:154px; z-index:41;
+    width:186px; padding:3px;
+    background:var(--surface); border-radius:6px;
+    box-shadow:0 0 0 1px var(--border), var(--shadow);
+  }
+  .hint {
+    position:absolute; left:50%; top:64px; transform:translateX(-50%);
+    color:var(--muted); font-size:12px; background:var(--surface);
+    padding:4px 12px; border-radius:6px; box-shadow:0 0 0 1px var(--border);
+  }
+</style>
+</head>
+<body>
+  <div class="brief">
+    <h1>方案 B「锐」<span class="tag">紧凑键盘向</span></h1>
+    <p>工具向高密度菜单：小圆角、实色悬停、右置快捷键键帽，TC / Linear 气质。</p>
+    <li><b>行高 24</b>：长菜单（功能库 78 项）少 1/3 滚动</li>
+    <li><b>kbd 键帽右置</b>：Ctrl+X / F2 / Del 直达肌肉记忆</li>
+    <li><b>分组小标签</b>：段落语义化，扫视定位更快</li>
+    <li><b>硬朗质感</b>：容器 6px / 条目 4px 圆角，实色悬停无淡染过渡</li>
+    <div class="ft">取舍：密度换呼吸感；<b>kbd 需 shortcuts.ts 对齐维护</b>，无快捷键的条目右缘留白</div>
+  </div>
+  <button class="theme" onclick="document.documentElement.classList.toggle('dark')">◐ 深浅主题</button>
+
+  <div class="fake">
+    <div class="bar"><div class="tool"></div><div class="addr"></div><div class="tool"></div></div>
+    <div class="row"><div class="ic"></div><div class="nm" style="width:220px"></div><div class="mt"></div></div>
+    <div class="row is-sel"><div class="ic"></div><div class="nm" style="width:180px"></div><div class="mt"></div></div>
+    <div class="row"><div class="ic"></div><div class="nm" style="width:260px"></div><div class="mt"></div></div>
+    <div class="row"><div class="ic"></div><div class="nm" style="width:150px"></div><div class="mt"></div></div>
+  </div>
+  <div class="hint">悬停条目查看交互态 · 右上角切换主题</div>
+
+  <div class="wrap">
+  <div class="menu">
+    <span class="gl">文件</span>
+    <div class="mi">打开<span class="kbd">↵</span></div>
+    <div class="mi">在新标签打开</div>
+    <div class="mi">预览<span class="kbd">Space</span></div>
+    <div class="msep"></div>
+    <span class="gl">剪贴板</span>
+    <div class="mi">剪切<span class="kbd">Ctrl+X</span></div>
+    <div class="mi">复制<span class="kbd">Ctrl+C</span></div>
+    <div class="mi">粘贴<span class="kbd">Ctrl+V</span></div>
+    <div class="msep"></div>
+    <span class="gl">管理</span>
+    <div class="mi">复制路径</div>
+    <div class="mi">复制名称</div>
+    <div class="mi">重命名<span class="kbd">F2</span></div>
+    <div class="mi is-danger">删除<span class="kbd">Del</span></div>
+    <div class="mi">新建 ▸<span class="arr">▸</span></div>
+    <div class="mi">属性<span class="kbd">Alt+↵</span></div>
+    <div class="msep"></div>
+    <div class="mi">功能库…</div>
+    <div class="mi">编辑菜单…</div>
+  </div>
+  <div class="sub">
+    <div class="mi">文件夹<span class="kbd">Ctrl+Shift+N</span></div>
+    <div class="mi">文本文档</div>
+    <div class="mi">Word 文档</div>
+    <div class="mi">Excel 工作表</div>
+    <div class="mi">CSV 表格</div>
+  </div>
+  </div>
+</body>
+</html>

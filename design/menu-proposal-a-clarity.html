@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>方案 A「晰」— 右键菜单风格设计稿：图标语义菜单</title>
+<!-- 设计稿（不参与构建）：右键菜单风格提案 A。静态自包含，双击浏览器打开；
+     右上角切换深浅主题预览。基线 = 现版 Blueprint Menu（纯文字 + 10px 圆角卡）-->
+<style>
+  :root {
+    --bg:#e9ecf1; --surface:#ffffff; --surface2:#f0f2f5; --border:#d6dbe2;
+    --hairline:rgba(16,24,40,.06); --fg:#171d26; --muted:#66707e;
+    --accent:#3574f0; --accent-fg:#ffffff; --hover:rgba(26,33,41,.055);
+    --sel:rgba(53,116,240,.12); --danger:#d1434b;
+    --shadow:0 12px 32px rgba(20,28,40,.14);
+    --radius:10px;
+  }
+  html.dark {
+    --bg:#161616; --surface:#2b2b2b; --surface2:#3a3a3a; --border:#454545;
+    --hairline:rgba(255,255,255,.08); --fg:#d4d4d4; --muted:#8f8f8f;
+    --accent:#5c9dff; --accent-fg:#101010; --hover:rgba(255,255,255,.07);
+    --sel:rgba(92,157,255,.16); --danger:#f27073;
+    --shadow:0 16px 40px rgba(0,0,0,.5);
+  }
+  * { box-sizing:border-box; margin:0; }
+  body {
+    background:var(--bg); color:var(--fg); font-size:13px; overflow:hidden; height:100vh;
+    font-family:system-ui,"Segoe UI","Microsoft YaHei",sans-serif; user-select:none;
+  }
+  /* ── 设计说明卡 ── */
+  .brief {
+    position:fixed; left:16px; top:16px; z-index:60; width:270px;
+    background:var(--surface); border-radius:var(--radius); padding:12px 14px;
+    box-shadow:var(--shadow); font-size:12px; line-height:1.6;
+  }
+  .brief h1 { font-size:13px; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
+  .brief h1 .tag {
+    font-size:11px; font-weight:400; color:var(--accent); background:var(--sel);
+    border-radius:99px; padding:1px 8px;
+  }
+  .brief p { color:var(--muted); margin-bottom:6px; }
+  .brief li { color:var(--muted); margin-left:16px; margin-bottom:2px; }
+  .brief li b { color:var(--fg); font-weight:600; }
+  .brief .ft { margin-top:7px; padding-top:7px; border-top:1px solid var(--hairline); color:var(--muted); }
+  .brief .ft b { color:var(--accent); font-weight:600; }
+  /* ── 主题切换 ── */
+  .theme {
+    position:fixed; right:16px; top:16px; z-index:60; border:0; cursor:pointer;
+    display:flex; align-items:center; gap:6px; padding:5px 10px;
+    background:var(--surface); color:var(--fg); font-size:12px;
+    border-radius:99px; box-shadow:var(--shadow);
+  }
+  /* ── 背景幕：拟真文件管理器残影 ── */
+  .fake {
+    position:absolute; left:50%; top:54px; transform:translateX(-50%);
+    width:min(860px,86vw); height:calc(100vh - 100px);
+    background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:14px 16px; opacity:.5;
+  }
+  .fake .bar { display:flex; gap:8px; align-items:center; margin-bottom:12px; }
+  .fake .addr { flex:1; height:24px; background:var(--surface2); border-radius:99px; }
+  .fake .tool { width:60px; height:24px; background:var(--surface2); border-radius:6px; }
+  .fake .row { height:28px; border-radius:6px; display:flex; align-items:center; gap:8px; padding:0 8px; }
+  .fake .row.is-sel { background:var(--sel); }
+  .fake .ic { width:14px; height:14px; border-radius:3px; background:var(--surface2); flex:none; }
+  .fake .nm { height:8px; border-radius:4px; background:var(--surface2); }
+  .fake .mt { margin-left:auto; width:70px; height:8px; border-radius:4px; background:var(--surface2); }
+  /* ═════════ 方案 A 核心：图标语义菜单 ═════════
+     差异点：① 每条目带 16px 描边图标（语义先行，扫读快）② 行高 28 呼吸感
+     ③ 悬停 = sel 淡染 + 图标转 accent ④ 危险项图标+文字双红 ⑤ 分割线段间
+     留白加大，视觉分组更清晰。容器延续现版语言：10px 圆角 + ring 描边 + 柔投影 */
+  .wrap {
+    position:absolute; left:50%; top:110px; transform:translateX(-50%); z-index:40;
+  }
+  .menu {
+    position:relative; width:232px; padding:5px;
+    background:var(--surface);
+    border-radius:var(--radius);
+    box-shadow:0 0 0 1px var(--border), var(--shadow);
+  }
+  .mi {
+    display:flex; align-items:center; gap:10px;
+    height:28px; padding:0 10px; border-radius:6px;
+    cursor:pointer; white-space:nowrap; color:var(--fg);
+  }
+  .mi .ic { width:16px; height:16px; flex:none; color:var(--muted); transition:color .1s; }
+  .mi:hover { background:var(--sel); color:var(--accent); }
+  .mi:hover .ic { color:var(--accent); }
+  .mi.is-off { color:var(--muted); opacity:.55; cursor:default; }
+  .mi.is-off .ic { color:var(--muted); }
+  .mi.is-off:hover { background:none; color:var(--muted); }
+  .mi.is-danger { color:var(--danger); }
+  .mi.is-danger .ic { color:var(--danger); }
+  .mi.is-danger:hover { background:rgba(209,67,75,.1); color:var(--danger); }
+  .mi .arr { margin-left:auto; color:var(--muted); font-size:11px; }
+  .mi:hover .arr { color:var(--accent); }
+  .msep { height:1px; background:var(--hairline); margin:5px 8px; }
+  /* 子菜单飞出（静态展示位，锚定主菜单右缘） */
+  .sub {
+    position:absolute; left:calc(100% + 6px); top:198px; z-index:41;
+    width:190px; padding:5px;
+    background:var(--surface); border-radius:var(--radius);
+    box-shadow:0 0 0 1px var(--border), var(--shadow);
+  }
+  .sub .anchor { position:absolute; left:-5px; top:14px; width:10px; height:10px;
+    transform:rotate(45deg); background:var(--surface); border-radius:2px; }
+  .hint {
+    position:absolute; left:50%; top:64px; transform:translateX(-50%);
+    color:var(--muted); font-size:12px; background:var(--surface);
+    padding:4px 12px; border-radius:99px; box-shadow:0 0 0 1px var(--border);
+  }
+</style>
+</head>
+<body>
+  <div class="brief">
+    <h1>方案 A「晰」<span class="tag">图标语义</span></h1>
+    <p>在现版语言（白卡 + ring 描边 + 10px 圆角）上加图标语义层，扫读不用逐字认。</p>
+    <li><b>16px 描边图标</b>：静默态中性灰，悬随文字转 accent</li>
+    <li><b>行高 28</b>：与列表行同构，呼吸感比现版（约 20px）松一档</li>
+    <li><b>危险双红</b>：图标与文字同染 danger，误删防线更醒目</li>
+    <li><b>分段留白</b>：分割线上下 5px，功能块一眼分层</li>
+    <div class="ft">取舍：<b>宽度 +32px</b> 换扫读效率；图标语义需与功能库映射表（FN_ICONS）对齐维护</div>
+  </div>
+  <button class="theme" onclick="document.documentElement.classList.toggle('dark')">◐ 深浅主题</button>
+
+  <div class="fake">
+    <div class="bar"><div class="tool"></div><div class="addr"></div><div class="tool"></div></div>
+    <div class="row"><div class="ic"></div><div class="nm" style="width:220px"></div><div class="mt"></div></div>
+    <div class="row is-sel"><div class="ic"></div><div class="nm" style="width:180px"></div><div class="mt"></div></div>
+    <div class="row"><div class="ic"></div><div class="nm" style="width:260px"></div><div class="mt"></div></div>
+    <div class="row"><div class="ic"></div><div class="nm" style="width:150px"></div><div class="mt"></div></div>
+  </div>
+  <div class="hint">悬停条目查看交互态 · 右上角切换主题</div>
+
+  <div class="wrap">
+  <div class="menu">
+    <div class="mi"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 4a1 1 0 0 1 1-1h3l1.5 1.5h6a1 1 0 0 1 1 1V6H3.6a1 1 0 0 0-.97.76L1.5 12z"/><path d="M1.5 12l1.3-5.2a1 1 0 0 1 .97-.8h9.9a.8.8 0 0 1 .78 1l-1.2 4.5a1 1 0 0 1-.78.5z"/></svg>打开</div>
+    <div class="mi"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 4a1 1 0 0 1 1-1h3l1.5 1.5h6a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1z"/></svg>在新标签打开</div>
+    <div class="mi"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="2"/></svg>预览</div>
+    <div class="msep"></div>
+    <div class="mi"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="4" cy="4.5" r="2"/><circle cx="4" cy="11.5" r="2"/><path d="M11 4.5L5.7 10.2M11 11.5L5.7 5.8M10 3.5l2 2M10 12.5l2-2"/></svg>剪切</div>
+    <div class="mi"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 3H3.5A1.5 1.5 0 0 0 2 4.5V12"/></svg>复制</div>
+    <div class="mi"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="10" height="10" rx="1.5"/><path d="M10.5 4V3a1 1 0 0 0-1-1h-5a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1H6"/></svg>粘贴</div>
+    <div class="mi is-off"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 9.5l3-3M4 6.5L2.7 7.8a2.4 2.4 0 0 0 3.4 3.4L7.4 9.9M9 4.5l1.3-1.3a2.4 2.4 0 0 1 3.4 3.4L12.4 8"/></svg>创建链接 ▸</div>
+    <div class="mi"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5L11.7 2.8a1.4 1.4 0 0 1 2 2L5 13.6l-2.6.6z"/></svg>重命名</div>
+    <div class="mi is-danger"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M5.5 4V2.8a.8.8 0 0 1 .8-.8h3.4a.8.8 0 0 1 .8.8V4M3.5 4l.7 9.2a1 1 0 0 0 1 .8h5.6a1 1 0 0 0 1-.8L12.5 4M6.5 7v3.5M9.5 7v3.5"/></svg>删除</div>
+    <div class="msep"></div>
+    <div class="mi"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 6.5L14 2M8.7 3.3l.8 1.2 1.2.8M12.7 7.3l-.8-1.2-1.2-.8M4.5 11.5l4-4M3 13h10"/></svg>复制路径</div>
+    <div class="mi"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h10M8 4v9M5.5 13h5"/></svg>复制名称</div>
+    <div class="mi"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"/></svg>新建 ▸<span class="arr">▸</span></div>
+    <div class="mi"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.2M8 5.2v.4"/></svg>属性</div>
+    <div class="msep"></div>
+    <div class="mi"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5h2.5V5M5 5h2.5M11 2.5H8.5M11 2.5V5M8.5 5H11M8 5v8.5M5 10.5h3M5 13.5h6a.5.5 0 0 0 .5-.5V3a.5.5 0 0 0-.5-.5"/></svg>功能库…</div>
+    <div class="mi"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5h6M10.5 4.5H14M2 8h1.5M6 8h8M2 11.5h4M8.5 11.5H14"/><circle cx="9.5" cy="4.5" r="1.3"/><circle cx="4.5" cy="8" r="1.3"/><circle cx="7" cy="11.5" r="1.3"/></svg>编辑菜单…</div>
+  </div>
+  <div class="sub">
+    <div class="anchor"></div>
+    <div class="mi"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 2.5v11M2.5 8h11"/></svg>文件夹</div>
+    <div class="mi"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3 4h10M3 8h10M3 12h6"/></svg>文本文档</div>
+    <div class="mi"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="3" y="2.5" width="10" height="11" rx="1"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3"/></svg>Word 文档</div>
+    <div class="mi"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="2.5" y="2.5" width="11" height="11" rx="1"/><path d="M2.5 6h11M2.5 9.5h11M6 2.5v11M10 2.5v11"/></svg>Excel 工作表</div>
+  </div>
+  </div>
+</body>
+</html>
