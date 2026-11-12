@@ -923,7 +923,6 @@ const EN: Record<string, string> = {
   "PDF 文档": "PDF documents",
   "Procfile 定义": "Procfiles",
   "Word 文档": "Word documents",
-  "CSV 表格": "CSV spreadsheet",
   "RTF 富文本": "Rich text (RTF)",
   "Python 脚本": "Python script",
   "代码 · 配置 · 脚本 · 数据库": "Code · Config · Scripts · DB",
