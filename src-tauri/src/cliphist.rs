@@ -1071,6 +1071,12 @@ pub fn stop_watcher(app: &AppHandle) {
 /// 浮窗是否在屏（true = 已上屏聚焦；停靠位不算）
 static CLIPHIST_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// 浮窗本次在屏期间是否真实持有过前台焦点（Focused(true) 置位、呼出复位）：
+/// 焦点看门狗（见 ensure_clip_window）只对「持过焦 → 丢了焦」收窗，呼出
+/// 抢焦点失败的旧竞态（可见但从未持焦）维持原容忍不误收
+static CLIPHIST_SEEN_FOCUS: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 /// 浮窗常驻（置顶钮，2026-10-31）：true = 失焦不自动收窗（浮窗本就
 /// always_on_top，常驻语义 = 钉在屏幕上连续取用；Esc/热键/显式动作仍收）。
 /// 会话级状态，不持久化——与贴图的临时性同口径
@@ -1209,6 +1215,9 @@ pub(crate) fn ensure_clip_window(app: &AppHandle) -> Result<(), String> {
     // 失焦自动收（Ditto 惯例；置顶常驻时豁免）；Destroyed 复位开关
     let app2 = app.clone();
     win.on_window_event(move |e| match e {
+        tauri::WindowEvent::Focused(true) => {
+            CLIPHIST_SEEN_FOCUS.store(true, Ordering::SeqCst);
+        }
         tauri::WindowEvent::Focused(false) => {
             if CLIPHIST_OPEN.load(Ordering::SeqCst) && !CLIPHIST_PINNED.load(Ordering::SeqCst) {
                 close_clip_window(&app2);
@@ -1219,6 +1228,52 @@ pub(crate) fn ensure_clip_window(app: &AppHandle) -> Result<(), String> {
         }
         _ => {}
     });
+    // 焦点看门狗（2026-11-12 用户反馈「点顶栏空白后点外部不再自动收」）：
+    // 顶栏拖拽区的原生拖拽会让 WebView2 焦点状态错乱——浮窗可见但前台已易主，
+    // Focused(false) 永不触发 = 永不自动收（既有注释记录过的失败模式）。
+    // 每 400ms 比对前台：本次在屏持过焦（SEEN_FOCUS）→ 前台已非本窗 →
+    // 光标也不在窗内 → 收窗；光标仍在窗内（用户正与浮窗交互）不收。
+    // SEEN_FOCUS 免疫呼出抢焦点失败的旧竞态：从未持焦不收，维持原容忍。
+    #[cfg(windows)]
+    {
+        let app_wd = app.clone();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(Duration::from_millis(400));
+                if !CLIPHIST_OPEN.load(Ordering::SeqCst)
+                    || !CLIPHIST_SEEN_FOCUS.load(Ordering::SeqCst)
+                    || CLIPHIST_PINNED.load(Ordering::SeqCst)
+                {
+                    continue;
+                }
+                let Some(w) = app_wd.get_webview_window("cliphist") else {
+                    continue;
+                };
+                use windows::Win32::Foundation::POINT;
+                use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetForegroundWindow};
+                let Ok(h) = w.hwnd() else {
+                    continue;
+                };
+                if unsafe { GetForegroundWindow() } == h {
+                    continue;
+                }
+                let mut pt = POINT::default();
+                if unsafe { GetCursorPos(&mut pt) }.is_ok()
+                    && let (Ok(pos), Ok(sz)) = (w.outer_position(), w.outer_size())
+                {
+                    let in_win = pt.x >= pos.x
+                        && pt.y >= pos.y
+                        && pt.x < pos.x + sz.width as i32
+                        && pt.y < pos.y + sz.height as i32;
+                    // 光标悬在浮窗内 = 用户仍在交互（点击/拖拽中），等它真正离开
+                    if in_win {
+                        continue;
+                    }
+                }
+                close_clip_window(&app_wd);
+            }
+        });
+    }
     Ok(())
 }
 
@@ -1313,6 +1368,8 @@ pub fn toggle_clip_window(app: &AppHandle) {
         }
         let _ = w.show();
         let _ = w.set_focus();
+        // 复位持焦标记：本次在屏期间须重新由 Focused(true) 置位
+        CLIPHIST_SEEN_FOCUS.store(false, Ordering::SeqCst);
         CLIPHIST_OPEN.store(true, Ordering::SeqCst);
     }
 }
