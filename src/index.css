@@ -7008,35 +7008,43 @@ body.np-col-resizing * {
   font-size: var(--np-font-sm);
   color: var(--np-muted);
 }
-.np-clip-footbar {
-  display: flex;
-  align-items: center;
-  gap: var(--np-gap);
-  min-height: calc(var(--np-ctl-h) + var(--np-gap));
-  padding: 0 14px;
-  background: var(--np-surface-2);
-  border-radius: var(--np-radius-pill);
-}
+/* 页脚 = 整行键帽式快捷键说明（2026-11-12 用户需求：计数移顶栏、快捷键
+   以 np-kbd 键帽包裹，键帽 + 动作词成组、gap 分隔、最多两行折行） */
 .np-clip-flash {
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: calc(var(--np-ctl-h) + var(--np-gap) + var(--np-gap));
 }
-.np-clip-count {
-  flex: none;
-  font-variant-numeric: tabular-nums;
-}
 .np-clip-keys {
-  margin-left: auto;
-  min-width: 0;
-  /* 展示不完整折行（2026-11-11 用户反馈：单行省略改最多两行）：分隔符
-     「 · 」自带空格即自然断行点；两行仍放不下才末行省略（-webkit-line-clamp） */
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  line-height: 1.35;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 14px;
+  row-gap: var(--np-gap);
+  min-height: calc(var(--np-ctl-h) + var(--np-gap));
+  padding: 4px 14px;
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius-pill);
+}
+.np-clip-key {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--np-gap);
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  white-space: nowrap;
+}
+/* 顶栏条目计数徽标（2026-11-12 自底栏移入）：标题右侧 muted 小胶囊 */
+.np-cliptb-count {
+  margin-left: var(--np-gap);
+  padding: 1px 8px;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-surface-2);
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 /* 自绘顶栏（2026-10-31 用户需求；2026-11-06 方案 C 改版）：logo 章 +
    标题（计数副行 2026-11-11 退役，与底栏计数重复，条数只在底栏展示）+

@@ -581,6 +581,11 @@ export function ClipHistWindow() {
         <span className="np-cliptb-id" data-tauri-drag-region>
           <span className="np-cliptb-title">剪贴板</span>
         </span>
+        {/* 条目计数徽标（2026-11-12 用户需求：自底栏移入顶栏；多选时切换
+            为已勾选计数） */}
+        <span className="np-cliptb-count" data-tauri-drag-region>
+          {picked.size > 0 ? `已勾选 ${picked.size}/${total}` : `${total} 条`}
+        </span>
         {searchOpen ? (
           <div className="np-clip-searchbar">
             <AppIcon icon={Search} size={DENSITY.iconSm} />
@@ -811,24 +816,57 @@ export function ClipHistWindow() {
           <span className="np-clip-viewer-tip">点击任意处或按 Esc 关闭</span>
         </div>
       )}
-      {/* 页脚悬浮胶囊（方案 C）：计数 + 完整快捷键清单（2026-10-31 定案
-          保留；清空钮退役 2026-11-12——功能移至 设置 → 剪贴板「清理历史
-          条目」，支持最近 N 天）。flash 回执占位同高 */}
+      {/* 页脚悬浮胶囊（方案 C）：整行键帽式快捷键说明（2026-11-12 用户需求：
+          条目计数移顶栏、快捷键以 np-kbd 键帽包裹）。flash 回执占位同高 */}
       <div className="np-clip-foot">
         {flash ? (
           <span className="np-clip-flash">{flash}</span>
         ) : (
-          <div className="np-clip-footbar">
-            <span className="np-clip-count">{total} 条</span>
-            <span className="np-clip-keys">
-              {picked.size > 0
-                ? `已勾选 ${picked.size} 条 · Enter 合并粘贴 · Ctrl+Enter 仅复制 · Space/Ctrl+点击 续选 · Esc 取消`
-                : searchFocused
-                  ? "输入即搜索 · ↑↓ 选择 · Enter 粘贴 · Alt+1-9 取条 · Tab 切分类 · Esc 收起搜索"
-                  : winPinned
-                    ? "↑↓/WS 选择 · Enter 复制（常驻中） · 1-9 取条 · Space/Ctrl+点击 勾选 · Tab 切分类 · Ctrl+P 置顶 · Del 删除 · Esc 关闭"
-                    : "↑↓/WS 选择 · Enter 粘贴 · 1-9 取条 · Space/Ctrl+点击 勾选 · Tab 切分类 · Ctrl+P 置顶 · Del 删除 · Esc 关闭"}
-            </span>
+          <div className="np-clip-keys">
+            {(picked.size > 0
+              ? [
+                  { k: "Enter", l: "合并粘贴" },
+                  { k: "Ctrl+Enter", l: "仅复制" },
+                  { k: "Space", l: "续选" },
+                  { k: "Ctrl+点击", l: "增删勾选" },
+                  { k: "Esc", l: "取消" },
+                ]
+              : searchFocused
+                ? [
+                    { k: "输入", l: "搜索" },
+                    { k: "↑↓", l: "选择" },
+                    { k: "Enter", l: "粘贴" },
+                    { k: "Alt+1-9", l: "取条" },
+                    { k: "Tab", l: "切分类" },
+                    { k: "Esc", l: "收起搜索" },
+                  ]
+                : winPinned
+                  ? [
+                      { k: "↑↓/WS", l: "选择" },
+                      { k: "Enter", l: "复制" },
+                      { k: "1-9", l: "取条" },
+                      { k: "Space/Ctrl+点击", l: "勾选" },
+                      { k: "Tab", l: "切分类" },
+                      { k: "Ctrl+P", l: "置顶" },
+                      { k: "Del", l: "删除" },
+                      { k: "Esc", l: "关闭" },
+                    ]
+                  : [
+                      { k: "↑↓/WS", l: "选择" },
+                      { k: "Enter", l: "粘贴" },
+                      { k: "1-9", l: "取条" },
+                      { k: "Space/Ctrl+点击", l: "勾选" },
+                      { k: "Tab", l: "切分类" },
+                      { k: "Ctrl+P", l: "置顶" },
+                      { k: "Del", l: "删除" },
+                      { k: "Esc", l: "关闭" },
+                    ]
+            ).map(({ k, l }) => (
+              <span key={k + l} className="np-clip-key">
+                <span className="np-kbd">{k}</span>
+                {l}
+              </span>
+            ))}
           </div>
         )}
       </div>
