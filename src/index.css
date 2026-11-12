@@ -6862,7 +6862,7 @@ body.np-col-resizing * {
   background: color-mix(in srgb, var(--np-icon-folder) 16%, transparent);
   color: var(--np-icon-folder);
 }
-/* 置顶/收藏标记：chip 左侧 accent 小图标（行内，不占独立角标位） */
+/* 置顶/收藏标记：meta 行右簇 accent 小图标（动作组与 chip 之间） */
 .np-clip-favmark {
   display: inline-flex;
   flex: none;
@@ -6874,6 +6874,15 @@ body.np-col-resizing * {
   flex: none;
   align-self: center;
   color: var(--np-accent);
+}
+/* 悬停/选中态标记退场（2026-11-12 宽缩略图挤压 meta 行修正）：动作组此时
+   已含同款收藏/置顶钮（状态即图标+提示），标记纯冗余；display 切换不占高
+   ——meta min-height 恒 18px，换显前后等高 */
+.np-clip-card:hover .np-clip-pinmark,
+.np-clip-row.is-sel .np-clip-pinmark,
+.np-clip-card:hover .np-clip-favmark,
+.np-clip-row.is-sel .np-clip-favmark {
+  display: none;
 }
 /* meta 行：相对时间 · 来源应用 + 悬停动作组（margin-left auto）+ 置顶/收藏
    标记 + 类型 chip（行尾，2026-11-12 紧凑双行卡移入）；

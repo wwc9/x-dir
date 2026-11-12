@@ -537,14 +537,17 @@ export function ClipHistWindow() {
 
   /** 缩略图等比适配（onLoad，2026-11-12 用户定案「尽可能大」；同日紧凑双行卡
    *  定案上限 2.4→3 行高）：在 行高 3 / 卡片可用宽 上限内等比放大到最大，
-   *  scale ≤ 1 保证**不超过图片本身尺寸**（自然 CSS 像素）；预留 ~90px 预览
-   *  文字位。行高变化由虚拟列表 measureElement 的 ResizeObserver 自动重测 */
+   *  scale ≤ 1 保证**不超过图片本身尺寸**（自然 CSS 像素）。可用宽为 meta 行
+   *  预算让位（2026-11-12 用户报：超宽缩略图挤压 meta 行，悬停动作组+chip
+   *  被裁切修正——预算按悬停最宽态 220px 计，标记悬停时自动隐藏见 CSS）。
+   *  行高变化由虚拟列表 measureElement 的 ResizeObserver 自动重测 */
   const fitThumb = (e: { currentTarget: HTMLImageElement }) => {
     const el = e.currentTarget;
     if (!el.naturalWidth || !el.naturalHeight) return;
     const card = el.closest(".np-clip-card");
-    // 可用宽 = 卡片内容宽 − 序号列与间距(26) − 预览文字保留位(90)，下限 120
-    const capW = Math.max(120, (card?.clientWidth ?? 400) - 116);
+    // 可用宽 = 卡片内容宽 − 序号列与间距(26) − meta 行预算(220) − 卡片水平
+    // padding(16)，下限 120
+    const capW = Math.max(120, (card?.clientWidth ?? 400) - 264);
     const capH = DENSITY.rowH * 3;
     const scale = Math.min(1, capW / el.naturalWidth, capH / el.naturalHeight);
     el.style.width = `${(el.naturalWidth * scale).toFixed(1)}px`;
