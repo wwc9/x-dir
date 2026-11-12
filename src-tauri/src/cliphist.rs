@@ -32,9 +32,13 @@ const WATCH_INTERVAL: Duration = Duration::from_millis(200);
 const TEXT_MAX_BYTES: usize = 1 << 20;
 const IMAGE_MAX_BYTES: usize = 20 << 20;
 const FILES_MAX_COUNT: usize = 500;
-/// 图片条目缩略图长边上限（列表直接随页下发 dataURL；2026-10-31 提到 128：
-/// 行内以 3 行等高（≈56px）展示，96 档在横图下会被放大发虚）
-const THUMB_EDGE: u32 = 128;
+/// 图片条目缩略图长边上限（列表直接随页下发 dataURL）。320 档：行内以
+/// 2.4 行等高（≈67px）展示，150% DPI 下横图显示宽 ≈179 物理像素，128 档
+/// 会被放大 1.4× 发糊（用户实测）；320 只缩不放保清晰，体积靠不透明图编
+/// JPEG（比 PNG 小一个量级）控制，随页 IPC 不膨胀
+const THUMB_EDGE: u32 = 320;
+/// 缩略 JPEG 质量档（截图/照片 80 视觉无损）
+const THUMB_JPEG_Q: u8 = 80;
 /// 自写回环 guard 时间窗
 const SELF_WRITE_WINDOW: Duration = Duration::from_secs(3);
 /// 浮窗逻辑尺寸（inner_size 逻辑像素；定位换算物理像素）
@@ -123,7 +127,7 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
            text         TEXT,                       -- 全文或文件路径拼接（搜索用）
            preview      TEXT    NOT NULL,           -- 列表单行预览
            image        BLOB,                       -- PNG 原图（kind=image）
-           thumb        BLOB,                       -- PNG 缩略 ≤96px（kind=image）
+           thumb        BLOB,                       -- 缩略 ≤320px（JPEG/PNG，kind=image）
            files        TEXT,                       -- 路径 JSON 数组（kind=files）
            py           TEXT,                       -- 文本拼音首字母（中文搜索，T1-3）
            source       TEXT,                       -- 来源进程名（T2-2，如 excel.exe）
@@ -466,14 +470,30 @@ fn encode_png(w: u32, h: u32, rgba: &[u8]) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-/// 缩略图（thumbnail 为快速整数采样，长边 ≤96 保纵横比）
+/// 缩略图（thumbnail 快速整数采样，长边 ≤320 只缩不放保纵横比）。
+/// 不透明图编 JPEG（q80，截图/照片体积比 PNG 小一个量级，随分页 dataURL
+/// 下发不撑 IPC）；带透明像素编 PNG 保 alpha。透明判定按**实际像素**扫描
+/// 而非颜色通道——剪贴板位图恒为 RGBA 源，按通道判定会永远走 PNG
 fn make_thumb(w: u32, h: u32, rgba: &[u8]) -> Option<Vec<u8>> {
     let img = image::RgbaImage::from_raw(w, h, rgba.to_vec())?;
+    let has_alpha = rgba.as_chunks::<4>().0.iter().any(|px| px[3] != 255);
     let thumb = image::DynamicImage::ImageRgba8(img).thumbnail(THUMB_EDGE, THUMB_EDGE);
     let mut out = Vec::new();
-    thumb
-        .write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
+    if has_alpha {
+        thumb
+            .write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
+            .ok()?;
+    } else {
+        let rgb = thumb.to_rgb8();
+        let mut enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, THUMB_JPEG_Q);
+        enc.encode(
+            rgb.as_raw(),
+            rgb.width(),
+            rgb.height(),
+            image::ExtendedColorType::Rgb8,
+        )
         .ok()?;
+    }
     Some(out)
 }
 
@@ -711,8 +731,14 @@ pub fn list_page(
                 created_at: r.get(5)?,
                 last_used_at: r.get(6)?,
                 thumb: thumb.map(|b| {
+                    // mime 按实际编码标（make_thumb 不透明 = JPEG / 带透明 = PNG）
+                    let mime = if b.starts_with(&[0x89, b'P', b'N', b'G']) {
+                        "image/png"
+                    } else {
+                        "image/jpeg"
+                    };
                     format!(
-                        "data:image/png;base64,{}",
+                        "data:{mime};base64,{}",
                         base64::engine::general_purpose::STANDARD.encode(b)
                     )
                 }),
@@ -2051,10 +2077,25 @@ MIIE...
         let img = img.expect("原图入库");
         let decoded = image::load_from_memory_with_format(&img, image::ImageFormat::Png).unwrap();
         assert_eq!(decoded.dimensions(), (w, h));
-        // 缩略图 ≤96 且能解码
+        // 不透明缩略编 JPEG（体积小一个量级），解码按内容嗅探不受格式影响
         let t = thumb.expect("缩略图入库");
-        let dt = image::load_from_memory_with_format(&t, image::ImageFormat::Png).unwrap();
+        assert_eq!(&t[..2], &[0xFF, 0xD8], "不透明缩略应为 JPEG");
+        let dt = image::load_from_memory(&t).unwrap();
         assert!(dt.width() <= THUMB_EDGE && dt.height() <= THUMB_EDGE);
+    }
+
+    #[test]
+    fn thumb_with_transparent_pixels_stays_png() {
+        let c = mem_db();
+        let (w, h) = (2u32, 3u32);
+        // 任一像素带透明 → 缩略保 PNG（dataURL mime 同步为 image/png）
+        let mut rgba = vec![255u8; (w * h * 4) as usize];
+        rgba[3] = 0;
+        assert!(ingest(&c, &ClipContent::Image { w, h, rgba }, 1, None, None).unwrap());
+        let thumb: Vec<u8> = c
+            .query_row("SELECT thumb FROM clip_items", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(&thumb[..4], &[0x89, b'P', b'N', b'G'], "透明缩略应保 PNG");
     }
 
     #[test]

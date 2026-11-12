@@ -361,7 +361,7 @@
 - 选型定案见 REQUIREMENTS §3.7 与 opensource.md §2（Ditto/CopyQ/PasteBar 全打回；clipboard-rs MIT 只作监听信号，内容读写走自有 clip.rs 保 CF_HDROP DropEffect 与 CF_DIB 性能先例；rusqlite bundled SQLite = 项目首个数据库，config/clipboard.db WAL，磁盘库失败降级内存库）。
 - 监听 = clipboard-rs `ClipboardWatcherContext`（AddClipboardFormatListener 真事件，watcher 专用线程 + WatcherShutdown.stop() + 代际号防旧线程误清登记）；回环 guard = sha256 内容 hash + 3 秒窗一次性消费；去重命中置顶（Ditto 行为）。
 - 护栏 = 文本 1MiB / 位图 20MB / 文件 500 条 + 容量（默认 500 钳 50–10000）+ 保留天数（默认 30，0=永不清），置顶豁免清理；敏感内容高置信跳过（PEM/AWS/JWT/GH·Slack·Google 令牌，手写匹配器零依赖）；排除应用 `cliphistExcludeApps`（watcher 前台进程比对命中即不入库）。
-- 图片条目存 PNG 原图 + 缩略（image crate thumbnail，THUMB_EDGE 128），缩略图随分页以 dataURL 下发；`parse_dib` 接受 32bpp BI_BITFIELDS 标准掩码（WinForms SetImage/GDI 合成 DIB 常态布局）。
+- 图片条目存 PNG 原图 + 缩略（image crate thumbnail，THUMB_EDGE 320 只缩不放；**不透明图编 JPEG q80**——比 PNG 小一个量级，随分页 dataURL 下发不撑 IPC；任一像素带透明才编 PNG，按**实际像素**扫描判透明而非颜色通道——剪贴板位图恒为 RGBA 源，按通道判定永远走 PNG），dataURL mime 按实际编码标注；`parse_dib` 接受 32bpp BI_BITFIELDS 标准掩码（WinForms SetImage/GDI 合成 DIB 常态布局）。
 - 文件条目入库细分 kind：全部为目录 → dirs（fs::metadata is_dir 判定，失败归 files；write_back files|dirs 同臂回写 CF_HDROP）；链接/路径细分（is_url/is_existing_path 纯函数配 cargo test，回写仍按纯文本）。
 - FTS5 全文 = clip_fts trigram 分词优先（任意子串含中文，触发器同步；**计数漂移才 rebuild**——不每次启动全量重索引）；≥3 字符走索引，短查询/拼音/来源 LIKE 不回归；拼音首字母搜索（py 列复用 `fs::search::pinyin_initials` 惰性 ALTER+回填）；来源应用记录 source 列。
 - 富文本保真 = html 列 + CF_HTML build/parse，回写双格式 CF_UNICODETEXT+HTML Format（`cliphistRichText` 默认开）；收藏分组 fav 列（豁免清理/排最前/「收藏」过滤档）；备份导入导出（Backup JSON，image base64 往返）；OCR 取字（Windows.Media.Ocr 零新依赖，识别文本写回剪贴板自然入库）；多选合并粘贴（merge_texts 按列表序连接，`ids IN` 精确取行）。
@@ -370,8 +370,8 @@
 
 - 常驻停靠屏幕外（-32700 防闪白，绝不用 hide()）；热键呼出 = 光标显示器居中上屏 + 抓取前台窗口为粘贴目标，失焦自动收（Ditto 惯例）；**置顶常驻态豁免失焦收窗**（np-clip-pinbtn，会话级不持久化；常驻态回写一律仅复制不关窗并页脚回执）。
 - **直接粘贴**（默认开，可关）= 回写剪贴板 → SetForegroundWindow 恢复目标焦点（先转让再收窗）→ 60ms 后 SendInput Ctrl+V；恢复失败（管理员窗口/UAC）保持打开提示「已复制」降级。
-- 键盘：↑↓/Enter=直接粘贴 / Ctrl+Enter=仅复制 / Ctrl+P=置顶 / Del=删除（输入框聚焦豁免）/ Esc=关（有搜索词先清空）；W/S 备用导航；数字取条（Alt+1-9 全域/裸 1-9 未聚焦）；Space/Ctrl+点击多选合并；**IME 组合豁免**（isComposing/keyCode 229）；**判定顺序**：数字/空格取条在「可打印字符聚焦兜底」之前（顺序颠倒会两功能失效——已修）。
-- 行 = 选中行对齐文件列表 np-row 口径（sel 淡染底 + accent 文字）；类型徽章 = 左缘 3px 类型色条（np-clip-kbar-*，透明占位统一缩进）+ 灰线性图标；序号列居中 + 斑马纹（`--np-stripe`，按数据序号挂 is-alt——虚拟列表 nth-child 随滚动翻转闪烁）；图片行 3 行等高大缩略（高 calc(row-h×2)、限宽 45%）；行悬停 = 主题蓝淡染；行内动作钮（置顶/删除）悬停与选中行常显。
+- 键盘**双模式**（2026-11-12 用户实测「快捷键与搜索框冲突」定案）：**输入模式**（焦点在搜索框）= 可打印字符/空格/数字/Del 进搜索词，↑↓/Enter/Alt+1-9/Ctrl+P 仍作用列表，Esc 清词退出；**列表模式**（焦点在 body/按钮）= 页脚全部快捷键生效（↑↓/WS/Enter/1-9/Space/Ctrl+P/Del/Esc），可打印字符兜底夺焦补词。支撑修复：① 焦点自卫只在**呼出后 1.5s 宽限期**归还搜索框（此前无条件归还——点击列表行后 activeElement 落 body 即被抢回，裸 1-9/Space/W-S/Del 永远进不了列表模式）；② 行内动作钮点击后持有焦点，Enter/Space 会二次触发按钮（收藏被无意翻转）——keydown 路由到列表语义；③ Esc = 放大图 → 清勾选 → 清词退输入模式 → 空词输入模式退列表模式 → 关窗 五段递进；④ 页脚快捷键清单随模式切换（输入模式显示「输入即搜索 · Esc 返回列表」，出口可发现）。**IME 组合豁免**（isComposing/keyCode 229）；**判定顺序**：数字/空格取条在「可打印字符聚焦兜底」之前（顺序颠倒会两功能失效——已修）。
+- 行 = 选中行对齐文件列表 np-row 口径（sel 淡染底 + accent 文字）；类型徽章 = 左缘 3px 类型色条（np-clip-kbar-*，透明占位统一缩进）+ 灰线性图标；序号列居中 + 斑马纹（`--np-stripe`，按数据序号挂 is-alt——虚拟列表 nth-child 随滚动翻转闪烁）；**图片行缩略图等比缩放**（max 约束 + auto 尺寸，高 2.4 行上限、宽 45% 上限，只缩不放——旧版固定 95×67 盒 + object-fit cover 裁切变形，用户实测修复）；行悬停 = 主题蓝淡染；行内动作钮（置顶/删除）悬停与选中行常显。
 - **自绘顶栏 np-cliptb** = 拖动区 + 双击最大化 + 置顶/最小化/最大化/关闭四钮（窗口钮 28px 密排成组，原生标题栏钮连排惯例）；最大化 = Rust MonitorFromWindow+GetMonitorInfoW rcWork 手动撑满工作区 + 记录恢复矩形（cliphist_set_maximized）；底栏 = 「N 条 + 清空（两击确认）+ 完整快捷键清单」一行（清单最多折两行，末行省略）。
 - **尺寸持久化** = 建窗 resizable(true)+min_inner_size(360×300)，页面 resize 防抖 600ms 经 cliphist_save_size 白名单补丁落盘（钳 360–1200×300–1500；最大化态跳过并锁 resizable）；上屏定位用实际窗口尺寸。
 - **焦点链**：开窗聚焦搜索框 120/350/700ms 三重试 + 400ms 低频焦点自卫（WebView2 激活序列会重置 activeElement）+ 可打印字符落键夺焦补词；收窗把焦点还给呼出前窗口；顶栏设置钮 = 唤主窗直达设置面板「剪贴板」页（**park_clip_window 不做焦点归还且置于聚焦主窗之前**——顺序颠倒会被归还抢走前台，面板压在别的窗口后面）。

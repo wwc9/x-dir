@@ -1,8 +1,13 @@
 // 剪贴板历史浮窗（§3.7，Ditto 式）：自绘顶栏（标题 + 置顶/最小化/最大化/
 // 关闭 + 拖动）+ 搜索框 + 类型段选 + 虚拟列表 + 状态行。数据过滤/分页全在
 // Rust 端（铁律 3），列表只渲染可见行（铁律 1，TanStack Virtual 动态行高——
-// 预览自适应最多 3 行）。键盘：↑↓ 选择 / Enter 直接粘贴 / Ctrl+Enter 仅复制
-// / Ctrl+P 置顶 / Del 删除 / Esc 关闭（有搜索词先清空）。窗口显隐与失焦
+// 预览自适应最多 3 行）。键盘双模式：**输入模式**（焦点在搜索框）= 可打印
+// 字符/空格/数字/Del 进搜索词，↑↓/Enter/Alt+1-9/Ctrl+P 仍作用列表，Esc
+// 清词退出；**列表模式**（焦点在 body/按钮）= 页脚全部快捷键生效（↑↓/WS
+// 选择 · Enter 粘贴 · 1-9 取条 · Space 勾选 · Ctrl+P 置顶 · Del 删除 ·
+// Esc 关闭）。焦点自卫只在呼出后的宽限期把焦点归还搜索框（中文 IME 起始
+// 组合需要焦点），宽限期外 body 焦点是合法列表模式不再抢回——否则裸
+// 1-9/Space/Del 永远进不了列表模式（2026-11-12 用户实测冲突根因）。
 // 自动收由 Rust 管理；本页经窗口 focus 事件感知「被呼出」→ 刷新并聚焦。
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
@@ -61,6 +66,9 @@ export function ClipHistWindow() {
   const [winPinned, setWinPinned] = useState(false);
   /** 浮窗最大化（顶栏钮/双击顶栏，Rust 侧手动工作区方案；重开后复位） */
   const [isMaxed, setIsMaxed] = useState(false);
+  /** 输入模式 = 焦点在搜索框（开窗默认聚焦）：页脚快捷键清单随之切换，
+   *  Esc 返回列表模式的出口在页脚可见（可发现性） */
+  const [typing, setTyping] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   // 装载协程防乱序：仅最后一次发起的请求可落盘（搜索防抖/翻页竞态）
@@ -75,6 +83,9 @@ export function ClipHistWindow() {
   // 纯属浪费——用户真正呼出时 focus 路径本来就会重拉。首次获得焦点才放行
   // 数据通道；focus 事件极端丢失时由 400ms 焦点自卫兜底武装
   const armed = useRef(false);
+  // 最近一次窗口呼出时刻（focusSearch/onFocusChanged 刷新）：焦点自卫只在
+  // 呼出后宽限期内归还搜索框，平时不抢焦点（保住列表模式快捷键）
+  const lastActivate = useRef(0);
   // 键盘/事件处理器读取的最新态（避免重绑 window 监听、闭包过期）
   const stateRef = useRef({ items, sel, query, kind, directPaste, winPinned, isMaxed, picked, viewImg });
   stateRef.current = { items, sel, query, kind, directPaste, winPinned, isMaxed, picked, viewImg };
@@ -169,11 +180,13 @@ export function ClipHistWindow() {
     });
     let unFocus: (() => void) | undefined;
     const focusSearch = () => {
+      lastActivate.current = Date.now();
       // WebView2 激活序列会在原生焦点落定后把 activeElement 重置为 body：
       // 单次延迟聚焦在「页面首次被激活」时仍会被冲掉（2026-10-31 E2E 实测），
       // 120/350/700ms 三重试兜底覆盖激活完成时刻，幂等无害
       [120, 350, 700].forEach((ms) => {
         window.setTimeout(() => {
+          if (Date.now() - lastActivate.current >= 1500) return;
           if (document.activeElement !== inputRef.current) {
             inputRef.current?.focus();
             inputRef.current?.select();
@@ -197,17 +210,24 @@ export function ClipHistWindow() {
       }, 600);
     };
     window.addEventListener("resize", onWinResize);
-    // 焦点自卫（2026-10-31 终案）：冷启动首次激活时 WebView2 激活序列可能在
-    // 事件 + 三重试之后仍重置 activeElement——低频守卫接管，本页持有焦点且
-    // 焦点悬在 body（未被按钮等接住）时归还搜索框；停靠态 hasFocus=false 自空转。
-    // 顺带兜底武装数据通道（focus 事件先于监听注册到达的极端时序）
+    // 焦点自卫（2026-10-31 终案；2026-11-12 加宽限期）：冷启动首次激活时
+    // WebView2 激活序列可能在事件 + 三重试之后仍重置 activeElement——低频
+    // 守卫接管，**仅呼出后 1.5s 宽限期内**且焦点悬在 body 时归还搜索框；
+    // 此前无条件归还：点击列表行后 activeElement 落 body 即被抢回搜索框，
+    // 裸 1-9/Space/W-S/Del 永远进不了列表模式（用户实测「快捷键与搜索框
+    // 冲突」根因）。宽限期外 body 焦点 = 合法列表模式，不触碰；停靠态
+    // hasFocus=false 自空转。顺带兜底武装数据通道（focus 事件先于监听
+    // 注册到达的极端时序）
     const focusGuard = window.setInterval(() => {
       if (document.hasFocus()) {
         if (!armed.current) {
           armed.current = true;
           void fetchPage(0, false, null);
         }
-        if (document.activeElement === document.body) {
+        if (
+          Date.now() - lastActivate.current < 1500 &&
+          document.activeElement === document.body
+        ) {
           inputRef.current?.focus();
         }
       }
@@ -414,6 +434,22 @@ export function ClipHistWindow() {
       if (e.isComposing || e.keyCode === 229) return;
       const { items: list, sel: i, query: q, picked: pk } = stateRef.current;
       const cur = list[i];
+      // 按钮焦点劫持修复（2026-11-12）：行内动作钮（收藏/置顶/删除等）点击后
+      // 持有焦点，Enter/Space 会二次触发该按钮（无意翻转收藏/置顶）——路由到
+      // 列表语义（Enter=合并/粘贴，Space=勾选当前条），与列表模式一致
+      if (
+        document.activeElement instanceof HTMLButtonElement &&
+        (e.key === "Enter" || e.key === " ")
+      ) {
+        e.preventDefault();
+        if (e.key === "Enter") {
+          if (pk.size > 0) mergePaste(e.ctrlKey);
+          else if (cur) pasteItem(cur, e.ctrlKey);
+        } else if (cur) {
+          togglePick(cur.id);
+        }
+        return;
+      }
       // W/S 备用导航（截图 WASD 惯例同源）：仅搜索框未聚焦时生效，且必须
       // 判在可打印键兜底之前——否则会被兜底截获进搜索词
       if (
@@ -485,8 +521,14 @@ export function ClipHistWindow() {
           } else if (pk.size > 0) {
             setPicked(new Set());
           } else if (q) {
+            // 清词并退出输入模式：焦点留在搜索框会让数字/空格/Del 继续被当
+            // 编辑键，列表快捷键看起来失效（blur 后回列表模式全部生效）
             setQuery("");
-            inputRef.current?.focus();
+            inputRef.current?.blur();
+          } else if (document.activeElement === inputRef.current) {
+            // 空词输入模式（开窗默认聚焦搜索框）：第一段 Esc 退回列表模式
+            // （页脚全部快捷键生效），第二段才关窗
+            inputRef.current?.blur();
           } else {
             void api.cliphistHide().catch(() => undefined);
           }
@@ -551,6 +593,8 @@ export function ClipHistWindow() {
             spellCheck={false}
             placeholder="搜索文本与文件路径…"
             onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => setTyping(true)}
+            onBlur={() => setTyping(false)}
           />
         </div>
         <button
@@ -775,9 +819,11 @@ export function ClipHistWindow() {
             <span className="np-clip-keys">
               {picked.size > 0
                 ? `已勾选 ${picked.size} 条 · Enter 合并粘贴 · Space 续选 · Esc 取消`
-                : winPinned
-                  ? "↑↓/WS 选择 · Enter 复制（常驻中） · 1-9 取条 · Space 勾选 · Ctrl+P 置顶 · Del 删除 · Esc 关闭"
-                  : "↑↓/WS 选择 · Enter 粘贴 · 1-9 取条 · Space 勾选 · Ctrl+P 置顶 · Del 删除 · Esc 关闭"}
+                : typing
+                  ? "输入即搜索 · ↑↓ 选择 · Enter 粘贴 · Alt+1-9 取条 · Esc 返回列表"
+                  : winPinned
+                    ? "↑↓/WS 选择 · Enter 复制（常驻中） · 1-9 取条 · Space 勾选 · Ctrl+P 置顶 · Del 删除 · Esc 关闭"
+                    : "↑↓/WS 选择 · Enter 粘贴 · 1-9 取条 · Space 勾选 · Ctrl+P 置顶 · Del 删除 · Esc 关闭"}
             </span>
           </div>
         )}

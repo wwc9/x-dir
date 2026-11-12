@@ -6904,12 +6904,18 @@ body.np-col-resizing * {
   white-space: nowrap;
   opacity: 0.85;
 }
-/* 图片条目缩略图（方案 C 大展示位）：96×64 圆角——原始缩略 ≤128px
-   （THUMB_EDGE 防发虚定案），此尺寸内缩放显示不发糊；点击放大看原图 */
+/* 图片条目缩略图：等比缩放不裁切不变形（2026-11-12 用户反馈 cover 定盒
+   裁切 + 128 源放大发糊根因修复）。max 约束 + auto 尺寸 = 浏览器按天然
+   纵横比缩放，只缩不放：截图类（源缩略长边 320，THUMB_EDGE）在 2.4 行
+   高度上限内清晰显示，小图标按原尺寸显示不发糊；宽 45% 上限保预览文字
+   空间。点击放大看原图 */
 .np-clip-thumb {
-  height: calc(var(--np-row-h) * 2.4);
-  width: calc(var(--np-row-h) * 3.4);
-  object-fit: cover;
+  display: block;
+  max-height: calc(var(--np-row-h) * 2.4);
+  max-width: 45%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
   border-radius: calc(var(--np-radius-pane) - 2px);
   background: var(--np-surface);
   border: 1px solid var(--np-hairline);
