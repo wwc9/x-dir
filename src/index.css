@@ -2312,9 +2312,9 @@ body.np-col-resizing * {
   overflow-x: auto;
 }
 /* 拖放目标提示（2026-11-11 方案 S2「淡染浮标」定案，取代原 2px 实线内描边）：
-   内容区只铺 accent 5% 淡染，动作徽标浮于内容区底部中央（.np-rows-wrap 提供
-   relative 定位域；徽标 pointer-events none 不吃拖放/点击）；状态条
-   「释放以放入」文字保留兜底 */
+   内容区只铺 accent 5% 淡染，动作徽标浮于内容区中央（2026-11-12 用户定案，
+   原 bottom 8px 底部居中改窗格中央；.np-rows-wrap 提供 relative 定位域；
+   徽标 pointer-events none 不吃拖放/点击）；状态条「释放以放入」文字保留兜底 */
 .np-drop-hover {
   background: color-mix(in srgb, var(--np-accent) 5%, transparent);
   border-radius: var(--np-radius);
@@ -2329,8 +2329,8 @@ body.np-col-resizing * {
 .np-drop-badge {
   position: absolute;
   left: 50%;
-  bottom: 8px;
-  transform: translateX(-50%);
+  top: 50%;
+  transform: translate(-50%, -50%);
   z-index: 5;
   display: inline-flex;
   align-items: center;
