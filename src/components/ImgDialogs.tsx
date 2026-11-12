@@ -282,8 +282,8 @@ export function CompressDialog({
               {t2("PNG8 质量映射调色板色彩数（75 ≈ 192 色）：高质量更清晰、低质量更小。")}
             </span>
           )}
-          <span className="np-dialog-note-row np-dialog-note-path" title={outPreview(items, "_压缩", ext)}>
-            {t2("输出预览：{out}", { out: outPreview(items, "_压缩", ext) })}
+          <span className="np-dialog-note-row np-dialog-note-path" title={outPreview(items, t2("_压缩"), ext)}>
+            {t2("输出预览：{out}", { out: outPreview(items, t2("_压缩"), ext) })}
           </span>
         </Hint>
       </DialogBody>
@@ -361,10 +361,10 @@ export function WatermarkDialog({
   const pickImage = async () => {
     const { open } = await import("@tauri-apps/plugin-dialog");
     const path = await open({
-      title: "选择水印贴图（建议透明底 PNG）",
+      title: t2("选择水印贴图（建议透明底 PNG）"),
       multiple: false,
       directory: false,
-      filters: [{ name: "图片", extensions: ["png", "jpg", "jpeg", "webp", "bmp"] }],
+      filters: [{ name: t2("图片"), extensions: ["png", "jpg", "jpeg", "webp", "bmp"] }],
     });
     if (typeof path === "string" && path) setImagePath(path);
   };
@@ -466,8 +466,8 @@ export function WatermarkDialog({
               n: items.length,
             })}
           </span>
-          <span className="np-dialog-note-row np-dialog-note-path" title={outPreview(items, "_水印")}>
-            {t2("输出预览：{out}", { out: outPreview(items, "_水印") })}
+          <span className="np-dialog-note-row np-dialog-note-path" title={outPreview(items, t2("_水印"))}>
+            {t2("输出预览：{out}", { out: outPreview(items, t2("_水印")) })}
           </span>
         </Hint>
       </DialogBody>
@@ -563,8 +563,8 @@ export function ConvertDialog({
               ext,
             })}
           </span>
-          <span className="np-dialog-note-row np-dialog-note-path" title={outPreview(items, "_转换", ext)}>
-            {t2("输出预览：{out}", { out: outPreview(items, "_转换", ext) })}
+          <span className="np-dialog-note-row np-dialog-note-path" title={outPreview(items, t2("_转换"), ext)}>
+            {t2("输出预览：{out}", { out: outPreview(items, t2("_转换"), ext) })}
           </span>
         </Hint>
       </DialogBody>
@@ -670,8 +670,8 @@ export function ResizeDialog({
               n: items.length,
             })}
           </span>
-          <span className="np-dialog-note-row np-dialog-note-path" title={outPreview(items, "_缩放")}>
-            {t2("输出预览：{out}", { out: outPreview(items, "_缩放") })}
+          <span className="np-dialog-note-row np-dialog-note-path" title={outPreview(items, t2("_缩放"))}>
+            {t2("输出预览：{out}", { out: outPreview(items, t2("_缩放")) })}
           </span>
         </Hint>
       </DialogBody>

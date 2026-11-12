@@ -1,6 +1,7 @@
 // 布局方案的随机默认名：两字自然意象词池。
 // 选型理由：短（侧边栏窄列放得下）、中文语境可读易记、与"我的方案 2"式编号相比
-// 更有辨识度；重名自动追加序号兜底。
+// 更有辨识度；重名自动追加序号兜底。词经 t() 出名（EN 界面得英文名，存档同名）。
+import { t } from "./i18n";
 
 const POOL = [
   "晚风", "晴川", "远山", "星野", "溪流", "白露", "青柠", "栖枝",
@@ -19,9 +20,9 @@ export function randomSchemeName(
 ): string {
   const taken = new Set(existing.map((e) => e.toLowerCase()));
   const word = POOL[Math.floor(rand() * POOL.length) % POOL.length];
-  if (!taken.has(word)) return word;
+  if (!taken.has(word)) return t(word);
   for (let i = 2; ; i++) {
-    const name = `${word} ${i}`;
+    const name = `${t(word)} ${i}`;
     if (!taken.has(name)) return name;
   }
 }

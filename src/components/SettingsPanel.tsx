@@ -3,7 +3,7 @@
 // 配置；取值统一走 settings.update()（settings.json 集中化）；控件与行布局按 §4.7。
 // 右键菜单已独立为整页（MenuEditorPage），不再归属设置分类。
 import { useEffect, useState, Fragment, type ReactNode } from "react";
-import { useT } from "../lib/i18n";
+import { t, useT } from "../lib/i18n";
 import {
   Button,
   ButtonGroup,
@@ -107,20 +107,22 @@ export function SettingsPanel() {
   const clearRecentClips = async () => {
     const days = Math.max(0, Math.min(3650, Math.floor(clipClearDays || 0)));
     const ok = await confirmDialog({
-      title: "清理历史条目",
+      title: t("清理历史条目"),
       message:
         days === 0
-          ? "确定清空全部非置顶、非收藏条目吗？删除后不可恢复。"
-          : `确定删除最近 ${days} 天的非置顶、非收藏条目吗？删除后不可恢复。`,
+          ? t("确定清空全部非置顶、非收藏条目吗？删除后不可恢复。")
+          : t("确定删除最近 {n} 天的非置顶、非收藏条目吗？删除后不可恢复。", { n: days }),
       kind: "warn",
-      okText: "清空",
+      okText: t("清空"),
     });
     if (!ok) return;
     try {
       const n = await api.cliphistClearRecent(days);
-      useUi.getState().toast(n > 0 ? `已清理 ${n} 条历史条目` : "没有可清理的条目");
+      useUi
+        .getState()
+        .toast(n > 0 ? t("已清理 {n} 条历史条目", { n }) : t("没有可清理的条目"));
     } catch (e) {
-      useUi.getState().toast(`清理失败：${String(e)}`, "error");
+      useUi.getState().toast(t("清理失败：{e}", { e: String(e) }), "error");
     }
   };
 
@@ -134,7 +136,7 @@ export function SettingsPanel() {
   const applyShotHotkey = (enabled: boolean, hotkey: string) => {
     s.update({ shotEnabled: enabled, shotHotkey: hotkey });
     api.hotkeysSync(hotkeySpecs(useSettings.getState())).catch((e) =>
-      useUi.getState().toast(`截图热键未生效：${String(e)}`, "error"),
+      useUi.getState().toast(t("截图热键未生效：{e}", { e: String(e) }), "error"),
     );
   };
 
@@ -144,7 +146,7 @@ export function SettingsPanel() {
     const st = useSettings.getState();
     void api
       .hotkeysSync(hotkeySpecs(st))
-      .catch((e) => useUi.getState().toast(`剪贴板热键未生效：${String(e)}`, "error"));
+      .catch((e) => useUi.getState().toast(t("剪贴板热键未生效：{e}", { e: String(e) }), "error"));
     void api.cliphistConfigure(enabled, st.cliphistCapacity, st.cliphistKeepDays).catch(
       () => undefined,
     );
@@ -154,7 +156,7 @@ export function SettingsPanel() {
   const applyClipHotkey = (hotkey: string) => {
     s.update({ cliphistHotkey: hotkey });
     api.hotkeysSync(hotkeySpecs(useSettings.getState())).catch((e) =>
-      useUi.getState().toast(`剪贴板热键未生效：${String(e)}`, "error"),
+      useUi.getState().toast(t("剪贴板热键未生效：{e}", { e: String(e) }), "error"),
     );
   };
 
@@ -207,33 +209,33 @@ export function SettingsPanel() {
       <div className="np-settings-page">
         {tab === "appearance" && (
           <>
-            <SetRow label={t("主题")} desc="跟随 Windows 深浅色自动切换，或固定浅色 / 深色">
+            <SetRow label={t("主题")} desc={t("跟随 Windows 深浅色自动切换，或固定浅色 / 深色")}>
               <ButtonGroup className="np-seg" size="small" variant="minimal">
-                {(["system", "light", "dark"] as const).map((t) => (
+                {(["system", "light", "dark"] as const).map((th) => (
                   <Button
-                    key={t}
-                    active={s.theme === t}
+                    key={th}
+                    active={s.theme === th}
                     onClick={(e) => {
                       const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                      setThemeWithFx(t, {
+                      setThemeWithFx(th, {
                         x: r.left + r.width / 2,
                         y: r.top + r.height / 2,
                       });
                     }}
                   >
-                    {t === "system" ? "跟随系统" : t === "light" ? "浅色" : "深色"}
+                    {th === "system" ? t("跟随系统") : th === "light" ? t("浅色") : t("深色")}
                   </Button>
                 ))}
               </ButtonGroup>
             </SetRow>
-            <SetRow label={t("界面缩放")} desc="Ctrl +/−/0 或 Ctrl+滚轮，作用于全部界面">
+            <SetRow label={t("界面缩放")} desc={t("Ctrl +/−/0 或 Ctrl+滚轮，作用于全部界面")}>
               <NpSelect
                 value={s.uiZoom}
                 options={ZOOM_STEPS.map((z) => ({ value: z, label: `${Math.round(z * 100)}%` }))}
                 onChange={(z) => s.update({ uiZoom: z })}
               />
             </SetRow>
-            <SetRow label={t("真实文件图标")} desc="提取文件关联的系统图标，替代内置线性图标">
+            <SetRow label={t("真实文件图标")} desc={t("提取文件关联的系统图标，替代内置线性图标")}>
               <Switch
                 checked={s.realIcons}
                 onChange={(e) => s.update({ realIcons: e.currentTarget.checked })}
@@ -241,7 +243,7 @@ export function SettingsPanel() {
             </SetRow>
             <SetRow
               label={t("面板圆角")}
-              desc="窗格、侧栏卡片、导航树、对话框等所有面板的统一圆角半径"
+              desc={t("窗格、侧栏卡片、导航树、对话框等所有面板的统一圆角半径")}
             >
               <div className="np-set-slider">
                 <Slider
@@ -257,7 +259,7 @@ export function SettingsPanel() {
             </SetRow>
             <SetRow
               label={t("组件间隔")}
-              desc="窗格之间及各卡片组件的间隔条宽度（分隔条可拖拽热区同宽）"
+              desc={t("窗格之间及各卡片组件的间隔条宽度（分隔条可拖拽热区同宽）")}
             >
               <div className="np-set-slider">
                 <Slider
@@ -275,7 +277,7 @@ export function SettingsPanel() {
         )}
         {tab === "browse" && (
           <>
-            <SetRow label={t("新标签默认视图")} desc="新开标签页进入的显示模式">
+            <SetRow label={t("新标签默认视图")} desc={t("新开标签页进入的显示模式")}>
               <NpSelect
                 value={s.defaultView}
                 options={(["details", "list"] as ViewMode[]).map((v) => ({
@@ -285,7 +287,7 @@ export function SettingsPanel() {
                 onChange={(v) => s.update({ defaultView: v })}
               />
             </SetRow>
-            <SetRow label={t("新标签默认排序")} desc="新开标签页的排序字段与方向">
+            <SetRow label={t("新标签默认排序")} desc={t("新开标签页的排序字段与方向")}>
               <span className="np-set-sort">
                 <NpSelect
                   value={s.defaultSort.key}
@@ -298,24 +300,24 @@ export function SettingsPanel() {
                 <NpSelect
                   value={s.defaultSort.dir}
                   options={[
-                    { value: "asc", label: "升序" },
-                    { value: "desc", label: "降序" },
+                    { value: "asc", label: t("升序") },
+                    { value: "desc", label: t("降序") },
                   ]}
                   onChange={(dir) => s.update({ defaultSort: { ...s.defaultSort, dir } })}
                 />
               </span>
             </SetRow>
-            <SetRow label={'"在终端打开"使用'} desc="右键菜单终端项调用的 Shell">
+            <SetRow label={t('“在终端打开”使用')} desc={t("右键菜单终端项调用的 Shell")}>
               <NpSelect
                 value={s.terminal}
                 options={[
                   { value: "powershell", label: "PowerShell" },
-                  { value: "cmd", label: "CMD（命令提示符）" },
+                  { value: "cmd", label: t("CMD（命令提示符）") },
                 ]}
                 onChange={(t) => s.update({ terminal: t })}
               />
             </SetRow>
-            <SetRow label={t("显示隐藏文件")} desc="列出带隐藏属性与点开头的文件">
+            <SetRow label={t("显示隐藏文件")} desc={t("列出带隐藏属性与点开头的文件")}>
               <Switch
                 checked={s.showHidden}
                 onChange={(e) => s.update({ showHidden: e.currentTarget.checked })}
@@ -323,14 +325,14 @@ export function SettingsPanel() {
             </SetRow>
             <SetRow
               label={t("记忆目录选中集")}
-              desc="离开目录时快照勾选，回到该目录自动恢复（Ctrl+A / Esc 等显式操作不受影响）"
+              desc={t("离开目录时快照勾选，回到该目录自动恢复（Ctrl+A / Esc 等显式操作不受影响）")}
             >
               <Switch
                 checked={s.rememberSelection}
                 onChange={(e) => s.update({ rememberSelection: e.currentTarget.checked })}
               />
             </SetRow>
-            <SetRow label={t("启动时恢复上次会话")} desc="重启后还原窗格、标签与路径">
+            <SetRow label={t("启动时恢复上次会话")} desc={t("重启后还原窗格、标签与路径")}>
               <Switch
                 checked={s.restoreLastSession}
                 onChange={(e) => s.update({ restoreLastSession: e.currentTarget.checked })}
@@ -342,7 +344,7 @@ export function SettingsPanel() {
           <>
             <SetRow
               label={t("删除前确认")}
-              desc="删除到回收站前弹出确认框（默认直删；弹窗内勾选「以后不再确认」即关闭本开关）"
+              desc={t("删除到回收站前弹出确认框（默认直删；弹窗内勾选「以后不再确认」即关闭本开关）")}
             >
               <Switch
                 checked={s.confirmDelete}
@@ -351,7 +353,7 @@ export function SettingsPanel() {
             </SetRow>
             <SetRow
               label={t("系统进度与冲突框")}
-              desc="复制 / 移动走 Windows 原生 IFileOperation（进度/冲突由系统承担，快操作系统不弹进度窗；关闭 = 灵动岛字节级进度 + 应用内冲突框）"
+              desc={t("复制 / 移动走 Windows 原生 IFileOperation（进度/冲突由系统承担，快操作系统不弹进度窗；关闭 = 灵动岛字节级进度 + 应用内冲突框）")}
             >
               <Switch
                 checked={s.nativeFileOps}
@@ -362,7 +364,7 @@ export function SettingsPanel() {
         )}
         {tab === "search" && (
           <>
-            <SetRow label={t("预览面板")} desc="结果右侧内嵌文件预览，分隔条可拖宽">
+            <SetRow label={t("预览面板")} desc={t("结果右侧内嵌文件预览，分隔条可拖宽")}>
               <Switch
                 checked={s.gsearchPreview}
                 onChange={(e) => s.update({ gsearchPreview: e.currentTarget.checked })}
@@ -375,15 +377,15 @@ export function SettingsPanel() {
         )}
         {tab === "shot" && (
           <>
-            <SetRow label={t("截图快捷键")} desc="系统级全局热键，X-Dir 运行时任意界面可按（含游戏等全屏应用除外）">
+            <SetRow label={t("截图快捷键")} desc={t("系统级全局热键，X-Dir 运行时任意界面可按（含游戏等全屏应用除外）")}>
               <Switch
                 checked={s.shotEnabled}
                 onChange={(e) => applyShotHotkey(e.currentTarget.checked, s.shotHotkey)}
               />
             </SetRow>
             <SetRow
-              label="热键键位（自定义）"
-              desc="点击后直接按下组合键录制；需含 Ctrl / Alt / Shift 修饰键（或单独 F1-F12），更改即时生效"
+              label={t("热键键位（自定义）")}
+              desc={t("点击后直接按下组合键录制；需含 Ctrl / Alt / Shift 修饰键（或单独 F1-F12），更改即时生效")}
             >
               <HotkeyRecorder
                 value={s.shotHotkey}
@@ -392,7 +394,7 @@ export function SettingsPanel() {
                 notify={(msg) => useUi.getState().toast(msg, "error")}
               />
             </SetRow>
-            <SetRow label={t("立即试一次")} desc="直接开始一次截图（等同按下全局热键）">
+            <SetRow label={t("立即试一次")} desc={t("直接开始一次截图（等同按下全局热键）")}>
               <Button minimal size="small" onClick={() => void api.shotBegin().catch(() => undefined)}>
                 {t("截图…")}
               </Button>
@@ -419,7 +421,7 @@ export function SettingsPanel() {
           <>
             <SetRow
               label={t("启用剪贴板历史")}
-              desc="后台记录复制/剪切的文本·图片·文件，存本地 clipboard.db（不上传；关闭 X-Dir 后监听停止，历史保留）"
+              desc={t("后台记录复制/剪切的文本·图片·文件，存本地 clipboard.db（不上传；关闭 X-Dir 后监听停止，历史保留）")}
             >
               <Switch
                 checked={s.cliphistEnabled}
@@ -427,8 +429,8 @@ export function SettingsPanel() {
               />
             </SetRow>
             <SetRow
-              label="呼出热键（自定义）"
-              desc="系统级全局热键，任意界面可按；点击后直接按下组合键录制，更改即时生效"
+              label={t("呼出热键（自定义）")}
+              desc={t("系统级全局热键，任意界面可按；点击后直接按下组合键录制，更改即时生效")}
             >
               <HotkeyRecorder
                 value={s.cliphistHotkey}
@@ -439,26 +441,26 @@ export function SettingsPanel() {
             </SetRow>
             <SetRow
               label={t("选中后直接粘贴")}
-              desc="回写剪贴板后自动切回原窗口并模拟 Ctrl+V；对管理员权限窗口等场景失败时降级为仅复制"
+              desc={t("回写剪贴板后自动切回原窗口并模拟 Ctrl+V；对管理员权限窗口等场景失败时降级为仅复制")}
             >
               <Switch
                 checked={s.cliphistDirectPaste}
                 onChange={(e) => s.update({ cliphistDirectPaste: e.currentTarget.checked })}
               />
             </SetRow>
-            <SetRow label={t("历史容量")} desc="超过上限自动删除最旧的未置顶条目">
+            <SetRow label={t("历史容量")} desc={t("超过上限自动删除最旧的未置顶条目")}>
               <NpSelect
                 value={s.cliphistCapacity}
                 options={[200, 500, 1000, 2000].map((v) => ({
                   value: v,
-                  label: `${v} 条`,
+                  label: t("{n} 条", { n: v }),
                 }))}
                 onChange={(v) => applyClipLimits(v, s.cliphistKeepDays)}
               />
             </SetRow>
             <SetRow
               label={t("清理历史条目")}
-              desc="删除最近 N 天的非置顶、非收藏条目（不可恢复）；填 0 = 清空全部"
+              desc={t("删除最近 N 天的非置顶、非收藏条目（不可恢复）；填 0 = 清空全部")}
             >
               <span className="np-filext">
                 <input
@@ -472,7 +474,7 @@ export function SettingsPanel() {
                   }}
                 />
                 <span style={{ fontSize: "var(--np-font-sm)", color: "var(--np-muted)" }}>
-                  天
+                  {t("天")}
                 </span>
               </span>
               <Button
@@ -482,12 +484,12 @@ export function SettingsPanel() {
                 disabled={!s.cliphistEnabled}
                 onClick={() => void clearRecentClips()}
               >
-                清空
+                {t("清空")}
               </Button>
             </SetRow>
             <SetRow
               label={t("排除应用")}
-              desc="这些程序复制的内容不入库（进程名，逗号分隔，写 excel 或 excel.exe 均可）"
+              desc={t("这些程序复制的内容不入库（进程名，逗号分隔，写 excel 或 excel.exe 均可）")}
             >
               <input
                 className="np-set-quickadd-input"
@@ -501,7 +503,7 @@ export function SettingsPanel() {
             </SetRow>
             <SetRow
               label={t("富文本保真")}
-              desc="记录文本条目的 HTML 格式，粘贴回 Word/浏览器/邮件保留加粗与颜色（纯文本粘贴不受影响）"
+              desc={t("记录文本条目的 HTML 格式，粘贴回 Word/浏览器/邮件保留加粗与颜色（纯文本粘贴不受影响）")}
             >
               <Switch
                 checked={s.cliphistRichText}
@@ -510,24 +512,24 @@ export function SettingsPanel() {
                 }
               />
             </SetRow>
-            <SetRow label={t("保留天数")} desc="到期自动清理（置顶条目豁免）">
+            <SetRow label={t("保留天数")} desc={t("到期自动清理（置顶条目豁免）")}>
               <NpSelect
                 value={s.cliphistKeepDays}
                 options={[
-                  { value: 7, label: "7 天" },
-                  { value: 30, label: "30 天" },
-                  { value: 90, label: "90 天" },
-                  { value: 0, label: "永不清" },
+                  { value: 7, label: t("7 天") },
+                  { value: 30, label: t("30 天") },
+                  { value: 90, label: t("90 天") },
+                  { value: 0, label: t("永不清") },
                 ]}
                 onChange={(v) => applyClipLimits(s.cliphistCapacity, v)}
               />
             </SetRow>
-            <SetRow label={t("备份导出")} desc="全部历史条目导出为 JSON（含图片/收藏/富文本）">
+            <SetRow label={t("备份导出")} desc={t("全部历史条目导出为 JSON（含图片/收藏/富文本）")}>
               <Button minimal size="small" onClick={() => void onCliphistExport()}>
                 {t("导出…")}
               </Button>
             </SetRow>
-            <SetRow label={t("备份导入")} desc="从备份 JSON 追加导入（保留收藏与时间戳）">
+            <SetRow label={t("备份导入")} desc={t("从备份 JSON 追加导入（保留收藏与时间戳）")}>
               <Button minimal size="small" onClick={() => void onCliphistImport()}>
                 {t("导入…")}
               </Button>
@@ -626,9 +628,9 @@ export function SettingsPanel() {
                 // 实际以设置当前值为准（关闭时显示未启用）
                 const keys =
                   it.id === "shot-open"
-                    ? [s.shotEnabled ? s.shotHotkey : "未启用"]
+                    ? [s.shotEnabled ? s.shotHotkey : t("未启用")]
                     : it.id === "cliphist-open"
-                      ? [s.cliphistEnabled ? s.cliphistHotkey : "未启用"]
+                      ? [s.cliphistEnabled ? s.cliphistHotkey : t("未启用")]
                       : it.keys;
                 return (
                   <SetRow key={it.id} label={t(it.label)}>
@@ -651,12 +653,12 @@ export function SettingsPanel() {
           ))}
         {tab === "config" && (
           <>
-            <SetRow label={t("导出配置文件")} desc="打包设置与全部布局方案为单个 JSON">
+            <SetRow label={t("导出配置文件")} desc={t("打包设置与全部布局方案为单个 JSON")}>
               <Button minimal size="small" onClick={() => void onExportConfig()}>
                 {t("导出…")}
               </Button>
             </SetRow>
-            <SetRow label={t("导入配置文件")} desc="从导出的 JSON 恢复（覆盖当前设置与同名布局方案）">
+            <SetRow label={t("导入配置文件")} desc={t("从导出的 JSON 恢复（覆盖当前设置与同名布局方案）")}>
               <Button minimal size="small" onClick={() => void onImportConfig()}>
                 {t("导入…")}
               </Button>
@@ -674,16 +676,16 @@ export function SettingsPanel() {
 async function onCliphistExport() {
   const { save } = await import("@tauri-apps/plugin-dialog");
   const path = await save({
-    title: "导出剪贴板备份",
+    title: t("导出剪贴板备份"),
     defaultPath: "xdir-clipboard-backup.json",
     filters: [{ name: "JSON", extensions: ["json"] }],
   });
   if (!path) return;
   try {
     const n = await api.cliphistExport(path);
-    useUi.getState().toast(`已导出 ${n} 条剪贴板历史`);
+    useUi.getState().toast(t("已导出 {n} 条剪贴板历史", { n }));
   } catch (e) {
-    useUi.getState().toast(`导出失败：${String(e)}`, "error");
+    useUi.getState().toast(t("导出失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -691,7 +693,7 @@ async function onCliphistExport() {
 async function onCliphistImport() {
   const { open } = await import("@tauri-apps/plugin-dialog");
   const path = await open({
-    title: "导入剪贴板备份",
+    title: t("导入剪贴板备份"),
     multiple: false,
     directory: false,
     filters: [{ name: "JSON", extensions: ["json"] }],
@@ -699,9 +701,9 @@ async function onCliphistImport() {
   if (typeof path !== "string" || !path) return;
   try {
     const n = await api.cliphistImport(path);
-    useUi.getState().toast(`已导入 ${n} 条（追加）`);
+    useUi.getState().toast(t("已导入 {n} 条（追加）", { n }));
   } catch (e) {
-    useUi.getState().toast(`导入失败：${String(e)}`, "error");
+    useUi.getState().toast(t("导入失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -709,7 +711,7 @@ async function onCliphistImport() {
 async function onExportConfig() {
   const { save } = await import("@tauri-apps/plugin-dialog");
   const path = await save({
-    title: "导出 X-Dir 配置",
+    title: t("导出 X-Dir 配置"),
     defaultPath: "X-Dir-config.json",
     filters: [{ name: "X-Dir 配置", extensions: ["json"] }],
   });
@@ -718,9 +720,9 @@ async function onExportConfig() {
     const r = await api.exportConfig(path);
     useUi
       .getState()
-      .toast(`配置已导出：${path}（含 ${r.workspaces} 个布局方案）`);
+      .toast(t("配置已导出：{path}（含 {n} 个布局方案）", { path, n: r.workspaces }));
   } catch (e) {
-    useUi.getState().toast(`导出失败：${String(e)}`, "error");
+    useUi.getState().toast(t("导出失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -728,17 +730,17 @@ async function onExportConfig() {
 async function onImportConfig() {
   const { open } = await import("@tauri-apps/plugin-dialog");
   const path = await open({
-    title: "导入 X-Dir 配置",
+    title: t("导入 X-Dir 配置"),
     multiple: false,
     directory: false,
     filters: [{ name: "X-Dir 配置", extensions: ["json"] }],
   });
   if (typeof path !== "string" || !path) return;
   const ok = await confirmDialog({
-    title: "导入配置",
-    message: "导入将覆盖当前全部设置与同名布局方案（不可撤销），确定继续吗？",
+    title: t("导入配置"),
+    message: t("导入将覆盖当前全部设置与同名布局方案（不可撤销），确定继续吗？"),
     kind: "warn",
-    okText: "导入",
+    okText: t("导入"),
   });
   if (!ok) return;
   try {
@@ -748,8 +750,8 @@ async function onImportConfig() {
     window.dispatchEvent(new Event("xdir-workspaces-changed"));
     useUi
       .getState()
-      .toast(`配置已导入（含 ${r.workspaces} 个布局方案）`);
+      .toast(t("配置已导入（含 {n} 个布局方案）", { n: r.workspaces }));
   } catch (e) {
-    useUi.getState().toast(`导入失败：${String(e)}`, "error");
+    useUi.getState().toast(t("导入失败：{e}", { e: String(e) }), "error");
   }
 }

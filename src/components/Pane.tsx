@@ -755,7 +755,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
                   <MenuItem
                     key={m}
                     icon={ic(VIEW_META[m].icon)}
-                    text={VIEW_META[m].label}
+                    text={t(VIEW_META[m].label)}
                     active={m === viewMode}
                     onClick={() => usePanes.getState().setView(tabId, m)}
                   />
@@ -915,7 +915,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
               <NpSelect
                 value={searchType}
                 data-tip={t("类型（选文件/文件夹或常用类型，等同于 ext: 过滤）")}
-                options={SEARCH_TYPE_OPTIONS}
+                options={SEARCH_TYPE_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))}
                 popoverClassName="np-search-type-pop"
                 onChange={(v) => usePanes.getState().setSearchType(tabId, v)}
               />
@@ -1052,15 +1052,15 @@ export function Pane({ pane }: { pane: PaneNode }) {
           }
         }}
       >
-        {pane.tabs.map((t, i) => {
+        {pane.tabs.map((tab, i) => {
           const isActive = i === pane.activeTab;
           // 真实图标优先（realIcons 开启且非此电脑）；未到位渲染预留空位防
           // 跳动（文件行 RowFileIcon 同口径），关闭/此电脑走 Lucide 语义兜底
-          const realUrl = realIcons && t.path !== THIS_PC ? iconMap[t.path] : undefined;
-          const spec = tabIconOf(t.path, isActive);
+          const realUrl = realIcons && tab.path !== THIS_PC ? iconMap[tab.path] : undefined;
+          const spec = tabIconOf(tab.path, isActive);
           return (
           <div
-            key={t.id}
+            key={tab.id}
             className={`np-tab ${isActive ? "np-tab-on" : ""}`}
             onClick={() => useLayout.getState().activateTab(pane.id, i)}
             onAuxClick={(e) => {
@@ -1077,23 +1077,23 @@ export function Pane({ pane }: { pane: PaneNode }) {
               useLayout.getState().setActive(pane.id);
               const items: UiMenuItem[] = [
                 {
-                  label: "复制标签",
+                  label: t("复制标签"),
                   action: () => useLayout.getState().duplicateTab(pane.id, i),
                 },
                 {
-                  label: "关闭标签",
+                  label: t("关闭标签"),
                   action: () => useLayout.getState().closeTab(pane.id, i),
                 },
               ];
               if (pane.tabs.length > 1) {
                 items.push({ sep: true });
                 items.push({
-                  label: "关闭其他标签",
+                  label: t("关闭其他标签"),
                   action: () => useLayout.getState().closeOtherTabs(pane.id, i),
                 });
                 if (i < pane.tabs.length - 1) {
                   items.push({
-                    label: "关闭右侧标签",
+                    label: t("关闭右侧标签"),
                     action: () => useLayout.getState().closeTabsRight(pane.id, i),
                   });
                 }
@@ -1111,12 +1111,12 @@ export function Pane({ pane }: { pane: PaneNode }) {
           >
             {realUrl ? (
               <FadeInIcon src={realUrl} />
-            ) : realIcons && t.path !== THIS_PC ? (
+            ) : realIcons && tab.path !== THIS_PC ? (
               <span className="np-icon-slot" />
             ) : (
               <AppIcon icon={spec.icon} size={DENSITY.iconSm} colorVar={spec.colorVar} />
             )}
-            <span className="np-ellipsis">{titleOf(t.path)}</span>
+            <span className="np-ellipsis">{titleOf(tab.path)}</span>
             <span
               className="np-tab-close"
               onClick={(e) => {
@@ -1159,7 +1159,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
             }}
             spellCheck={false}
           />
-          <span className="np-filter-count">{(ui?.total ?? 0).toLocaleString()} 项</span>
+          <span className="np-filter-count">{t("{n} 项", { n: (ui?.total ?? 0).toLocaleString() })}</span>
           <button
             className="np-filter-clear"
             data-tip={t("退出过滤")} data-kbd="Esc"

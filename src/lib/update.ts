@@ -5,6 +5,7 @@
 import { getVersion } from "@tauri-apps/api/app";
 
 import { api, type UpdateManifestDto } from "./ipc";
+import { t } from "./i18n";
 
 export const REPO_URLS = {
   gitee: "https://gitee.com/wwc9/x-dir",
@@ -96,7 +97,7 @@ export function groupNotes(notes: string[]): NoteSection[] {
 /** 完整检查：Rust 侧拉清单 + 当前版本号（getVersion 失败按空串，isUpdateAvailable 判 false） */
 export async function checkForUpdate(): Promise<UpdateCheck> {
   const [result, current] = await Promise.all([
-    api.fetchUpdateManifest().catch(() => ({ manifest: null, errors: ["IPC 调用失败"] })),
+    api.fetchUpdateManifest().catch(() => ({ manifest: null, errors: [t("IPC 调用失败")] })),
     getVersion().catch(() => ""),
   ]);
   return {

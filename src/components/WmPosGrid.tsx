@@ -1,6 +1,8 @@
 // 水印位置九宫格（3×3 选点；2026-11-09 自 ToolsDialogs 抽出共享——PDF 加水印
 // 与图片加水印两对话框同款位置控件，P2 统一参数口径）。选中态 = accent 实底
 // 白点（index.css .np-wm-*）；disabled = 整组降灰（如平铺布局下位置不适用）。
+import { t } from "../lib/i18n";
+
 export const WM_POS_CELLS: { value: string; tip: string }[] = [
   { value: "left-top", tip: "左上" },
   { value: "mid-top", tip: "中上" },
@@ -29,7 +31,7 @@ export function PosGrid({
         <button
           key={c.value}
           className={"np-wm-cell" + (value === c.value ? " on" : "")}
-          data-tip={c.tip}
+          data-tip={t(c.tip)}
           disabled={disabled}
           onClick={() => onChange(c.value)}
         />

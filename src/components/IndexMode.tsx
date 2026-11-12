@@ -49,20 +49,20 @@ function toggleIndexMode(enabled: boolean, onToggle: (v: boolean) => void, onOk?
     api
       .enableIndexMode()
       .then(() => {
-        useUi.getState().toast("已拉起索引守护进程，后台建索引中…");
+        useUi.getState().toast(t("已拉起索引守护进程，后台建索引中…"));
         onOk?.();
       })
       .catch((e) => {
-        useUi.getState().toast(`开启索引模式失败：${String(e)}`, "error");
+        useUi.getState().toast(t("开启索引模式失败：{e}", { e: String(e) }), "error");
         onToggle(false);
       });
   } else {
     api
       .disableIndexMode()
-      .then(() => useUi.getState().toast("已发送停止请求，守护进程保存索引后退出"))
+      .then(() => useUi.getState().toast(t("已发送停止请求，守护进程保存索引后退出")))
       .catch((e) => {
         // 与开启分支对称：失败必须提示并回滚开关，不能吞成 unhandledrejection
-        useUi.getState().toast(`关闭索引模式失败：${String(e)}`, "error");
+        useUi.getState().toast(t("关闭索引模式失败：{e}", { e: String(e) }), "error");
         onToggle(true);
       });
   }
@@ -100,10 +100,10 @@ function VolumeRows({
           <span className="np-gsearch-idx-vol-letter">{v.letter}:</span>
           <span className="np-gsearch-idx-vol-text">
             {v.state === "building"
-              ? "初建中（MFT 枚举）…"
+              ? t("初建中（MFT 枚举）…")
               : v.state === "error"
                 ? v.error
-                : `${v.entries.toLocaleString()} 项`}
+                : t("{n} 项", { n: v.entries.toLocaleString() })}
           </span>
         </span>
       ))}
@@ -144,10 +144,10 @@ export function IndexModeBar({ status }: { status: IndexStatus | null }) {
     if (prev !== "starting" && prev !== "building") return;
     if (phase === "ready") {
       const s = readySummary(vols, totalEntries);
-      if (s) useUi.getState().toast(`索引已就绪：${s}`);
+      if (s) useUi.getState().toast(t("索引已就绪：{s}", { s }));
     } else if (phase === "error") {
       const s = errorSummary(vols);
-      if (s) useUi.getState().toast(`索引建立失败：${s}`, "error");
+      if (s) useUi.getState().toast(t("索引建立失败：{s}", { s }), "error");
     }
     // vols/totalEntries 随轮询变化，但回执只在阶段翻转时发一次
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -170,14 +170,14 @@ export function IndexModeBar({ status }: { status: IndexStatus | null }) {
           <div className="np-gsearch-idx-pop">
             <div className="np-gsearch-idx-title">
               {phase === "ready"
-                ? "索引已就绪（NTFS 秒搜生效中）"
+                ? t("索引已就绪（NTFS 秒搜生效中）")
                 : phase === "building" || phase === "starting"
-                  ? "索引建立中…"
+                  ? t("索引建立中…")
                   : phase === "error"
-                    ? "索引建立失败"
+                    ? t("索引建立失败")
                     : phase === "down"
-                      ? "守护进程未运行"
-                      : "索引模式（NTFS 秒搜）"}
+                      ? t("守护进程未运行")
+                      : t("索引模式（NTFS 秒搜）")}
             </div>
             {phase === "starting" && (
               <div className="np-gsearch-idx-vols">
@@ -218,7 +218,7 @@ export function IndexModeBar({ status }: { status: IndexStatus | null }) {
           data-tip={t("索引建立进度，点击查看详情")}
         >
           <span className="np-gsearch-idx-dot" />
-          <span>{PHASE_LABEL[phase]}</span>
+          <span>{t(PHASE_LABEL[phase])}</span>
         </button>
       </PopoverNext>
       <Switch

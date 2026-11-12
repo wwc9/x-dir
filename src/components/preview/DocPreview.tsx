@@ -232,7 +232,7 @@ function OfficeSections({ office }: { office: OfficeTextResult }) {
   if (cover) {
     return (
       <div className="np-pv-epub">
-        <img className="np-pv-epub-cover" src={cover} alt="封面" />
+        <img className="np-pv-epub-cover" src={cover} alt={t("封面")} />
         <div className="np-pv-epub-sections">{sections}</div>
       </div>
     );

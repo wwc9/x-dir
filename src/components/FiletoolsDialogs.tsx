@@ -143,7 +143,10 @@ export function HashCalcDialog({
       });
       if (!target) return;
       try {
-        const sums = `# X-Dir 校验清单（${algo}）\n${doneRows.map(lineOf).join("\n")}\n`;
+        const sums = t2("# X-Dir 校验清单（{a}）\n{rows}\n", {
+          a: algo,
+          rows: doneRows.map(lineOf).join("\n"),
+        });
         await api.saveSumsFile(target, sums);
         useUi.getState().toast(t2("校验文件已保存"));
       } catch (err) {

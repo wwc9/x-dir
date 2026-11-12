@@ -53,10 +53,11 @@
 - `lib/layoutTree.ts` 改动必须带 vitest 用例；`lib/path.ts` 行为由 `path.test.ts` 锁定，改行为先改用例
 - 全局快捷键（`lib/keyboard.ts`）新增/改动必须同步 `lib/shortcuts.ts` 清单，且 `keyboard.test.ts` 覆盖对齐用例保持全绿
 - Rust `fs`/`jobs` 纯逻辑（排序/路径/冲突/分页）必须带 cargo test；图标映射（`lib/fileIcons.ts`）扩展时补映射断言
-- 三条规范审计测试（新代码违反即 CI 失败）：
+- 四条规范审计测试（新代码违反即 CI 失败）：
   - `iconRule.test.ts` = lucide 图标只许经 `AppIcon`/`ic()` 渲染（除 AppIcon.tsx 本体）
   - `apiBinding.test.ts` = `lib/ipc.ts` 的 api 方法必须有 UI 调用点（防死绑定滞留）
   - `cssClasses.test.ts` = TSX 引用的 `np-*` 类必须在 index.css 有定义或入白名单（白名单仅收 JS 查询钩子/语义标记类，新成员必须注释理由）
+  - `i18nCoverage.test.ts` = 英文覆盖四合一审计：t()/t2() 字面量键（含 CJK）必须入 EN 词典或白名单（白名单仅收 Rust 写盘硬编码后缀等回落中文即正确的串，新成员必须注释理由）、typeName 全部输出已收录、数据文件功能名/描述/分类标签已收录、EN 词典无死词条。新增用户可见文案 = 中文源串入代码 + EN 词条入 `lib/i18n.ts`，缺一测试即红
 
 ## 7. 提交与自动同步
 

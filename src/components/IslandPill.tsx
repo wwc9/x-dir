@@ -110,10 +110,10 @@ export function IslandPill({ path }: { path: string }) {
         const pctText =
           j.percent === null
             ? j.anyQueued
-              ? "排队中"
+              ? t("排队中")
               : "…"
             : `${Math.round(j.percent * 100)}%`;
-        const state = j.anyPaused ? " · 已暂停" : "";
+        const state = j.anyPaused ? t(" · 已暂停") : "";
         return (
           <>
             {/* 迷你进度条：不确定态（排队/无总量）降透明度示意 */}
@@ -144,7 +144,7 @@ export function IslandPill({ path }: { path: string }) {
         return (
           <>
             <AppIcon icon={Search} size={DENSITY.iconXs} />
-            <span>全盘搜索… {view.matched} 项</span>
+            <span>{t("全盘搜索… {n} 项", { n: view.matched })}</span>
           </>
         );
       case "receipt": {
@@ -177,16 +177,18 @@ export function IslandPill({ path }: { path: string }) {
               size={DENSITY.iconXs}
             />
             <span>
-              已{view.cut ? "剪切" : "复制"} {view.count} 项
+              {view.cut
+                ? t("已剪切 {n} 项", { n: view.count })
+                : t("已复制 {n} 项", { n: view.count })}
             </span>
           </>
         );
       case "path":
         return (
           <>
-            <span>{path === THIS_PC ? "此电脑" : fileNameOf(path)}</span>
+            <span>{path === THIS_PC ? t("此电脑") : fileNameOf(path)}</span>
             {view.selected > 0 && (
-              <span className="np-island-sel">已选 {view.selected} 项</span>
+              <span className="np-island-sel">{t("已选 {n} 项", { n: view.selected })}</span>
             )}
           </>
         );

@@ -127,7 +127,8 @@ describe("fileIcon / typeName", () => {
   });
   it("类型描述", () => {
     expect(typeName("a.pdf", false)).toBe("PDF 文档");
-    expect(typeName("x.qqq", false)).toBe("QQQ 文件");
+    // 未知扩展名返回模板键（调用点 t() 注入 { ext } 参数，EN 显示 "QQQ file"）
+    expect(typeName("x.qqq", false)).toBe("{ext} 文件");
     expect(typeName("noext", false)).toBe("文件");
     expect(typeName("c", true)).toBe("文件夹");
   });

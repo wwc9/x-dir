@@ -115,7 +115,7 @@ function copyText(text: string, okMsg: string) {
   navigator.clipboard
     .writeText(text)
     .then(() => useUi.getState().toast(okMsg))
-    .catch(() => useUi.getState().toast("复制失败", "error"));
+    .catch(() => useUi.getState().toast(t("复制失败"), "error"));
 }
 
 function driveEntries(drives: DriveInfo[]): FileEntry[] {
@@ -973,7 +973,7 @@ export function FileList({
     const layout = useLayout.getState();
     const targetId = layout.paneTargetOf(paneId);
     if (!targetId) {
-      useUi.getState().toast("没有其他窗格可作目标", "error");
+      useUi.getState().toast(t("没有其他窗格可作目标"), "error");
       return;
     }
     const target = layout.tree
@@ -981,12 +981,12 @@ export function FileList({
       : undefined;
     const dest = target?.tabs[target.activeTab]?.path;
     if (!dest || dest === THIS_PC) {
-      useUi.getState().toast("目标窗格在「此电脑」页，请先进入一个文件夹", "error");
+      useUi.getState().toast(t("目标窗格在「此电脑」页，请先进入一个文件夹"), "error");
       return;
     }
     const paths = selectedPaths();
     if (!paths.length) {
-      useUi.getState().toast("未选中任何项", "error");
+      useUi.getState().toast(t("未选中任何项"), "error");
       return;
     }
     layout.setPaneTarget(paneId, targetId);
@@ -1114,12 +1114,13 @@ export function FileList({
                 paneId: p.id,
                 label:
                   p.tabs[p.activeTab]?.path === THIS_PC
-                    ? "此电脑"
+                    ? t("此电脑")
                     : (p.tabs[p.activeTab]?.path ?? ""),
                 path: p.tabs[p.activeTab]?.path ?? THIS_PC,
               }))
           : [];
-        const label = key === "copyToPane" ? "复制到窗格 ▸" : "移动到窗格 ▸";
+        const label =
+          key === "copyToPane" ? t("复制到窗格 ▸") : t("移动到窗格 ▸");
         if (!others.length) return { label, disabled: true };
         return {
           label,
@@ -1157,7 +1158,7 @@ export function FileList({
           action: () => {
             const st = useSettings.getState();
             for (const p of paths) st.addFavorite(p);
-            useUi.getState().toast("已加入收藏");
+            useUi.getState().toast(t("已加入收藏"));
           },
         };
       }
@@ -1168,7 +1169,9 @@ export function FileList({
           action: () => {
             const added = useSettings.getState().addShelf(paths);
             useUi.getState().toast(
-              added ? `已暂存 ${added} 项` : "这些项已在暂存区（或暂存区已满）",
+              added
+                ? t("已暂存 {n} 项", { n: added })
+                : t("这些项已在暂存区（或暂存区已满）"),
             );
           },
         };
@@ -1453,12 +1456,16 @@ export function FileList({
               ["Python 脚本", "新建 Python 脚本", "新建 Python 脚本.py", "file"],
             ] as const
           ).map(([label, title, initial, kind]) => ({
-            label,
-            // 文件夹走 Explorer 式内联创建（2026-11-11 用户定案），其余格式仍弹窗
+            label: t(label),
+            // 文件夹走 Explorer 式内联创建（2026-11-11 用户定案），其余格式仍弹窗；
+            // title/initial 一并翻译（EN 界面下新建文件名同为英文，对标 Explorer）
             action: () =>
               kind === "dir"
                 ? createFolderInline(path)
-                : createEntry(path, kind, forceBump, { title, initial }),
+                : createEntry(path, kind, forceBump, {
+                    title: t(title),
+                    initial: t(initial),
+                  }),
           })),
         };
       // 预览：与 Space 同语义——当前视图全部条目（含文件夹元信息卡）入队，定位到选中项
@@ -1497,7 +1504,7 @@ export function FileList({
       case "toggleHidden": {
         const on = useSettings.getState().showHidden;
         return {
-          label: on ? "隐藏隐藏文件" : "显示隐藏文件",
+          label: on ? t("隐藏隐藏文件") : t("显示隐藏文件"),
           action: () => {
             const s = useSettings.getState();
             s.update({ showHidden: !s.showHidden });
@@ -1577,7 +1584,7 @@ export function FileList({
       mode = cur.mode;
       paths = cur.paths;
     } else {
-      useUi.getState().toast("剪贴板里没有文件", "error");
+      useUi.getState().toast(t("剪贴板里没有文件"), "error");
       return;
     }
     await transfer(paths, path, mode === "copy" ? "copy" : "move");
@@ -1604,7 +1611,7 @@ export function FileList({
     usePanes.getState().setEditing(tabId, null);
     if (!newName || newName === entry.name) return;
     if (!isValidName(newName)) {
-      useUi.getState().toast("名称含非法字符或为 Windows 保留名", "error");
+      useUi.getState().toast(t("名称含非法字符或为 Windows 保留名"), "error");
       return;
     }
     try {
@@ -1623,7 +1630,7 @@ export function FileList({
       const dir = parentPath(entry.path);
       if (dir) usePanes.getState().bumpAffected([dir]);
     } catch (e) {
-      useUi.getState().toast(`重命名失败：${String(e)}`, "error");
+      useUi.getState().toast(t("重命名失败：{e}", { e: String(e) }), "error");
     }
   }
 
@@ -1903,16 +1910,16 @@ export function FileList({
         {error ? (
           <div className="np-list-error">
             <div className="np-list-error-title">
-              {error.code === "E_NOT_FOUND" ? "文件夹不存在" : "无法打开此位置"}
+              {t(error.code === "E_NOT_FOUND" ? "文件夹不存在" : "无法打开此位置")}
             </div>
             <div className="np-list-error-path" title={path}>
               {path}
             </div>
             <div className="np-list-error-msg">
               {error.code === "E_NOT_FOUND"
-                ? "可能已被移动、重命名或删除，也可能路径输入有误。"
+                ? t("可能已被移动、重命名或删除，也可能路径输入有误。")
                 : error.code === "E_PERM"
-                  ? "没有访问此位置的权限。"
+                  ? t("没有访问此位置的权限。")
                   : error.message}
             </div>
             <div className="np-list-error-actions">
@@ -1922,7 +1929,7 @@ export function FileList({
                 onClick={goDesktop}
               >
                 <AppIcon icon={Monitor} size={DENSITY.iconSm} />
-                打开桌面
+                {t("打开桌面")}
               </button>
               <button
                 className="np-list-error-btn"
@@ -1930,21 +1937,21 @@ export function FileList({
                 onClick={goThisPc}
               >
                 <AppIcon icon={HardDrive} size={DENSITY.iconSm} />
-                打开此电脑
+                {t("打开此电脑")}
               </button>
             </div>
           </div>
         ) : count === 0 ? (
           <div className="np-list-empty">
             {isThisPc
-              ? "正在读取驱动器…"
+              ? t("正在读取驱动器…")
               : searchActive
-                ? "没有匹配的结果"
+                ? t("没有匹配的结果")
                 : filterActive
-                  ? "没有匹配过滤词的条目"
+                  ? t("没有匹配过滤词的条目")
                   : loaded
-                    ? "此文件夹为空"
-                    : "正在加载…"}
+                    ? t("此文件夹为空")
+                    : t("正在加载…")}
           </div>
         ) : (
           <div
@@ -2046,7 +2053,9 @@ export function FileList({
                               {relDirOf(entry)}
                             </span>
                             <span className="np-cell-muted np-col-type">
-                              {t(typeName(entry.name, entry.isDir))}
+                              {t(typeName(entry.name, entry.isDir), {
+                                ext: extOf(entry.name).toUpperCase(),
+                              })}
                             </span>
                             <span className="np-cell-muted np-col-size">
                               {formatSize(entry)}
@@ -2058,7 +2067,9 @@ export function FileList({
                               {formatTime(entry.mtimeMs)}
                             </span>
                             <span className="np-cell-muted np-col-type">
-                              {t(typeName(entry.name, entry.isDir))}
+                              {t(typeName(entry.name, entry.isDir), {
+                                ext: extOf(entry.name).toUpperCase(),
+                              })}
                             </span>
                             <span className="np-cell-muted np-col-size">
                               {formatSize(entry)}
@@ -2143,7 +2154,7 @@ export function FileList({
       {/* 窗格状态条（§7.1） */}
       <div className="np-pstatus">
         <span className="np-ellipsis">
-          <span className="np-pane-no" title={`窗格 ${paneNo}`}>
+          <span className="np-pane-no" title={t("窗格 {n}", { n: paneNo })}>
             <span className="np-pane-hash">#</span>
             {paneNo}
           </span>
@@ -2151,13 +2162,13 @@ export function FileList({
             ·
           </span>
           {searchActive
-            ? `搜索 “${search}” · ${count.toLocaleString()} 项${
+            ? `${t("搜索 “{q}” · {n} 项", { q: search, n: count.toLocaleString() })}${
                 searchDeep ? "" : t(" · 当前目录")
               }${
                 searchRes?.elapsedMs ? ` · ${formatElapsed(searchRes.elapsedMs)}` : ""
               }${
                 searchRes?.engine === "index"
-                  ? " · 索引"
+                  ? t(" · 索引")
                   : searchRes?.scanned
                     ? t(" · 已扫描 {n}", { n: searchRes.scanned.toLocaleString() })
                     : ""

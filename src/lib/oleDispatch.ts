@@ -15,6 +15,7 @@ import { useLayout } from "../stores/layout";
 import { useSettings } from "../stores/settings";
 import { useUi } from "../stores/ui";
 import { useDnd } from "../stores/dnd";
+import { t } from "./i18n";
 
 interface DragDropPayload {
   type: "enter" | "over" | "drop" | "leave";
@@ -95,7 +96,7 @@ async function handleDrop(paths: string[], cssX: number, cssY: number) {
     if (paths.length === 1) {
       useLayout.getState().newTab(hit.paneId, paths[0]);
     } else {
-      useUi.getState().toast("标签栏一次只能接收一个文件夹", "error");
+      useUi.getState().toast(t("标签栏一次只能接收一个文件夹"), "error");
     }
     return;
   }
@@ -108,7 +109,7 @@ async function handleDrop(paths: string[], cssX: number, cssY: number) {
   const destPath = rowDropDest(row?.dataset ?? {}) ?? tab?.path ?? THIS_PC;
   // "此电脑"是虚拟页，不能接收放置——明确告知，避免看起来像拖放失效
   if (destPath === THIS_PC || !pane) {
-    useUi.getState().toast("「此电脑」页不能放置文件，请拖到打开了文件夹的窗格", "error");
+    useUi.getState().toast(t("「此电脑」页不能放置文件，请拖到打开了文件夹的窗格"), "error");
     return;
   }
   if (allSourcesInside(paths, destPath)) return;
@@ -116,7 +117,7 @@ async function handleDrop(paths: string[], cssX: number, cssY: number) {
   const guard = dropGuard(paths, destPath);
   if (guard === "self") return; // 拖到正显示源目录的窗格：无操作（对齐 Explorer）
   if (guard === "inside") {
-    useUi.getState().toast("不能把文件夹放入它自身内部", "error");
+    useUi.getState().toast(t("不能把文件夹放入它自身内部"), "error");
     return;
   }
   // 暂存区拖出 = 标题切换钮的语义（移动/复制，settings.stagingMode）；

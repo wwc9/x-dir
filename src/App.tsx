@@ -31,6 +31,7 @@ import { useUi } from "./stores/ui";
 import { useIsland } from "./stores/island";
 import { applyTheme, useSettings } from "./stores/settings";
 import { initTooltip } from "./lib/tooltip";
+import { t } from "./lib/i18n";
 import { AboutDialog } from "./components/AboutDialog";
 import { ContextMenu } from "./components/ContextMenu";
 import { CommandPalette } from "./components/CommandPalette";
@@ -126,7 +127,7 @@ export default function App() {
         if (restored && st.restoreLastSession) {
           useIsland
             .getState()
-            .pushReceipt("info", `已恢复上次会话 · ${dfsPanes(restored).length} 个窗格`);
+            .pushReceipt("info", t("已恢复上次会话 · {n} 个窗格", { n: dfsPanes(restored).length }));
         }
         unsubJobs = await useJobs.getState().init();
         if (disposed) {
@@ -192,7 +193,7 @@ export default function App() {
       } catch (e) {
         // 启动链路任何一步失败都兜底出默认布局，避免内容区白屏；错误上 toast 便于定位
         console.error(e);
-        useUi.getState().toast(`启动恢复失败：${String(e)}`, "error");
+        useUi.getState().toast(t("启动恢复失败：{e}", { e: String(e) }), "error");
         useLayout.getState().init(applyPreset(mkPane(THIS_PC), "2x2"));
       }
     })();
@@ -246,9 +247,16 @@ export default function App() {
     void listen<{ from: string; to: string }>("app-updated", ({ payload }) => {
       useIsland
         .getState()
-        .pushReceipt("ok", `X-Dir 已更新到 v${payload.to}（原 v${payload.from}），配置全部保留`, {
-          dwellMs: 6000,
-        });
+        .pushReceipt(
+          "ok",
+          t("X-Dir 已更新到 v{to}（原 v{from}），配置全部保留", {
+            to: payload.to,
+            from: payload.from,
+          }),
+          {
+            dwellMs: 6000,
+          },
+        );
     }).then((f) => {
       off = f;
     });
@@ -322,25 +330,27 @@ function BenchFps() {
     let raf = 0;
     let lastTitleAt = 0;
     let lastTitle = -1;
-    const tick = (t: number) => {
-      const dt = t - last;
-      last = t;
+    const tick = (now: number) => {
+      const dt = now - last;
+      last = now;
       win.push(dt);
       if (win.length > 30) win.shift();
       if (win.length === 30) {
         const avg = win.reduce((a, b) => a + b, 0) / win.length;
         const v = Math.round(1000 / avg);
         setFps(v);
-        if (v !== lastTitle && t - lastTitleAt > 500) {
+        if (v !== lastTitle && now - lastTitleAt > 500) {
           lastTitle = v;
-          lastTitleAt = t;
+          lastTitleAt = now;
           // 附 V8 JS 堆（performance.memory），便于区分渲染进程内存构成
           const mem = (
             performance as Performance & {
               memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number };
             }
           ).memory;
-          const heap = mem ? `·JS堆${Math.round(mem.usedJSHeapSize / 1048576)}M` : "";
+          const heap = mem
+            ? t("·JS堆{m}M", { m: Math.round(mem.usedJSHeapSize / 1048576) })
+            : "";
           void import("@tauri-apps/api/window").then(({ getCurrentWindow }) =>
             getCurrentWindow().setTitle(`X-Dir ${v}FPS ${heap}`),
           );
@@ -352,7 +362,10 @@ function BenchFps() {
     return () => cancelAnimationFrame(raf);
   }, []);
   return (
-    <div className="np-bench-fps" title="滚动帧率（最近 30 帧平均，验收标准 ≥55）">
+    <div
+      className="np-bench-fps"
+      title={t("滚动帧率（最近 30 帧平均，验收标准 ≥55）")}
+    >
       {fps} FPS
     </div>
   );

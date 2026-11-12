@@ -59,7 +59,7 @@ export function FolderPreview({
       .then((r) => {
         if (reqSeq !== req) return;
         setChildren(r.total);
-        onInfoRef.current(`${r.total.toLocaleString()} 项`);
+        onInfoRef.current(t("{n} 项", { n: r.total.toLocaleString() }));
       })
       .catch(() => undefined);
     // 递归体积：可能较慢（大目录），best-effort 异步补齐
@@ -85,13 +85,19 @@ export function FolderPreview({
         <span className="np-pv-k">{t("类型")}</span>
         <span>{t("文件夹")}</span>
         <span className="np-pv-k">{t("直接子项")}</span>
-        <span>{children === null ? "统计中…" : `${children.toLocaleString()} 项`}</span>
+        <span>
+          {children === null
+            ? t("统计中…")
+            : t("{n} 项", { n: children.toLocaleString() })}
+        </span>
         <span className="np-pv-k">{t("总大小")}</span>
         <span>
           {size
-            ? `${formatSize({ isDir: false, size: size.bytes })}（${size.files.toLocaleString()} 个文件）`
+            ? `${formatSize({ isDir: false, size: size.bytes })}${t("（{n} 个文件）", {
+                n: size.files.toLocaleString(),
+              })}`
             : sizing
-              ? "计算中…"
+              ? t("计算中…")
               : "—"}
         </span>
         <span className="np-pv-k">{t("修改时间")}</span>

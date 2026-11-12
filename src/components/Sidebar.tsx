@@ -117,13 +117,13 @@ export function PresetPicker() {
         <button
           key={p.id}
           className="np-layouttile"
-          data-tip={p.tip}
+          data-tip={t(p.tip)}
           onClick={() => useLayout.getState().preset(p.id)}
         >
           <span className="np-side-thumb">
             <MiniTreeSvg node={PRESET_TREES[p.id]} size={DENSITY.sideThumbLg} />
           </span>
-          <span>{p.label}</span>
+          <span>{t(p.label)}</span>
         </button>
       ))}
       <div className="np-layouthint">
@@ -611,10 +611,10 @@ export function Sidebar() {  const t = useT();
     }
     try {
       await api.saveWorkspace(current, tree);
-      useUi.getState().toast(`已保存到方案“${current}”`);
+      useUi.getState().toast(t("已保存到方案“{name}”", { name: t(current) }));
       refresh();
     } catch (e) {
-      useUi.getState().toast(`保存方案失败：${String(e)}`, "error");
+      useUi.getState().toast(t("保存方案失败：{e}", { e: String(e) }), "error");
     }
   }
 
@@ -623,24 +623,24 @@ export function Sidebar() {  const t = useT();
     const existing = await api.listWorkspaces().catch<string[]>(() => []);
     const name = await useUi.getState().openDialog<string | null>({
       type: "input",
-      title: "保存布局方案",
-      label: "方案名称",
+      title: t("保存布局方案"),
+      label: t("方案名称"),
       initial: randomSchemeName(existing),
-      okText: "保存",
+      okText: t("保存"),
     });
     const tree = useLayout.getState().tree;
     if (!name || !tree) return;
     if (name === DEFAULT_SCHEME) {
-      useUi.getState().toast("“默认方案”是内置方案，请换一个名字", "error");
+      useUi.getState().toast(t("“默认方案”是内置方案，请换一个名字"), "error");
       return;
     }
     try {
       await api.saveWorkspace(name, tree);
-      useUi.getState().toast(`方案“${name}”已保存`);
+      useUi.getState().toast(t("方案“{name}”已保存", { name: t(name) }));
       setCurrent(name);
       refresh();
     } catch (e) {
-      useUi.getState().toast(`保存方案失败：${String(e)}`, "error");
+      useUi.getState().toast(t("保存方案失败：{e}", { e: String(e) }), "error");
     }
   }
 
@@ -652,16 +652,16 @@ export function Sidebar() {  const t = useT();
         setCurrent(name);
       }
     } catch (e) {
-      useUi.getState().toast(`加载失败：${String(e)}`, "error");
+      useUi.getState().toast(t("加载失败：{e}", { e: String(e) }), "error");
     }
   }
 
   async function remove(name: string) {
     const ok = await confirmDialog({
-      title: "删除方案",
-      message: `确定删除方案“${name}”吗？删除后不可恢复。`,
+      title: t("删除方案"),
+      message: t("确定删除方案“{name}”吗？删除后不可恢复。", { name: t(name) }),
       kind: "danger",
-      okText: "删除",
+      okText: t("删除"),
     });
     if (!ok) return;
     await api.deleteWorkspace(name).catch(() => undefined);
@@ -674,14 +674,14 @@ export function Sidebar() {  const t = useT();
   async function rename(name: string) {
     const next = await useUi.getState().openDialog<string | null>({
       type: "input",
-      title: "重命名方案",
-      label: "方案名称",
+      title: t("重命名方案"),
+      label: t("方案名称"),
       initial: name,
-      okText: "重命名",
+      okText: t("重命名"),
     });
     if (!next || next === name) return;
     if (next === DEFAULT_SCHEME) {
-      useUi.getState().toast("“默认方案”是内置方案，请换一个名字", "error");
+      useUi.getState().toast(t("“默认方案”是内置方案，请换一个名字"), "error");
       return;
     }
     try {
@@ -693,10 +693,10 @@ export function Sidebar() {  const t = useT();
           .update({ workspaceOrder: order.map((n) => (n === name ? next : n)) });
       }
       if (current === name) setCurrent(next);
-      useUi.getState().toast(`方案已重命名为“${next}”`);
+      useUi.getState().toast(t("方案已重命名为“{name}”", { name: t(next) }));
       refresh();
     } catch (e) {
-      useUi.getState().toast(`重命名失败：${String(e)}`, "error");
+      useUi.getState().toast(t("重命名失败：{e}", { e: String(e) }), "error");
     }
   }
 
@@ -790,7 +790,7 @@ export function Sidebar() {  const t = useT();
           <span className="np-side-thumb">
             <MiniTreeSvg node={defaultTree ?? DEFAULT_TREE} size={DENSITY.sideThumbSm} />
           </span>
-          <span className="np-side-char">{DEFAULT_SCHEME.slice(0, 2)}</span>
+          <span className="np-side-char">{t(DEFAULT_SCHEME).slice(0, 2)}</span>
         </button>
         {items.map((it) => (
           <button

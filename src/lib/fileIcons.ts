@@ -364,10 +364,12 @@ export const TYPE_NAMES: Record<string, string> = {
   ...BY_NAME_TYPES,
 };
 
+/** 类型名（中文源串，渲染端经 t() 翻译）：未知扩展名返回 "{ext} 文件" 模板键，
+ *  调用点以 { ext } 参数注入大写扩展名（i18n "{ext} 文件": "{ext} file"） */
 export function typeName(name: string, isDir: boolean): string {
   if (isDir) return "文件夹";
   const ext = extOf(name);
-  if (ext) return TYPE_NAMES[ext] ?? `${ext.toUpperCase()} 文件`;
+  if (ext) return TYPE_NAMES[ext] ?? "{ext} 文件";
   return TYPE_NAMES[name.toLowerCase()] ?? "文件";
 }
 

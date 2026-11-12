@@ -244,7 +244,7 @@ export function GlobalSearchPage() {
     }
     setLoading(true);
     let stale = false;
-    const t = window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       const prev = activeReq.current;
       if (prev !== null) api.cancelSearch(prev).catch(() => undefined);
       const reqId = nextGlobalSearchReq();
@@ -278,12 +278,12 @@ export function GlobalSearchPage() {
           if (stale || activeReq.current !== reqId) return;
           setRes(EMPTY_RES);
           setLoading(false);
-          useUi.getState().toast(`全盘搜索失败：${String(e)}`, "error");
+          useUi.getState().toast(t("全盘搜索失败：{e}", { e: String(e) }), "error");
         });
     }, indexReady ? 120 : 300);
     return () => {
       stale = true;
-      window.clearTimeout(t);
+      window.clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, open, maxResults, typeSel, indexReady]);
@@ -341,10 +341,10 @@ export function GlobalSearchPage() {
   /** 多选批量删除到回收站：确认后走任务引擎（灵动岛进度 + 回执） */
   async function deleteBatch(selEntries: FileEntry[]) {
     const ok = await confirmDialog({
-      title: "删除到回收站",
-      message: `将把选中的 ${selEntries.length} 项移入回收站？`,
+      title: t("删除到回收站"),
+      message: t("将把选中的 {n} 项移入回收站？", { n: selEntries.length }),
       kind: "warn",
-      okText: "删除",
+      okText: t("删除"),
     });
     if (!ok) return;
     api
@@ -366,12 +366,12 @@ export function GlobalSearchPage() {
             paneId: p.id,
             label:
               p.tabs[p.activeTab]?.path === THIS_PC
-                ? "此电脑"
+                ? t("此电脑")
                 : (p.tabs[p.activeTab]?.path ?? ""),
             path: p.tabs[p.activeTab]?.path ?? THIS_PC,
           }))
       : [];
-    if (!others.length) return [{ label: "（无其他窗格）", disabled: true }];
+    if (!others.length) return [{ label: t("（无其他窗格）"), disabled: true }];
     return others.map((o) => ({
       label: o.label,
       action: () => {
@@ -395,27 +395,45 @@ export function GlobalSearchPage() {
       navigator.clipboard
         .writeText(paths.join("\n"))
         .then(() =>
-          useUi.getState().toast(paths.length > 1 ? `已复制 ${paths.length} 条路径` : "路径已复制"),
+          useUi
+            .getState()
+            .toast(
+              paths.length > 1
+                ? t("已复制 {n} 条路径", { n: paths.length })
+                : t("路径已复制"),
+            ),
         )
         .catch(() => undefined);
     };
     return [
       ...(one
         ? [
-            { label: one.isDir ? "打开文件夹" : "打开", action: () => activate(one) },
-            { label: "打开所在文件夹", action: () => reveal(one) },
+            {
+              label: one.isDir ? t("打开文件夹") : t("打开"),
+              action: () => activate(one),
+            },
+            { label: t("打开所在文件夹"), action: () => reveal(one) },
           ]
-        : [{ label: `打开所在文件夹（首项）`, action: () => reveal(selEntries[0]) }]),
+        : [
+            {
+              label: t("打开所在文件夹（首项）"),
+              action: () => reveal(selEntries[0]),
+            },
+          ]),
       { sep: true },
       {
-        label: one ? "复制完整路径" : `复制完整路径（${paths.length} 项）`,
+        label: one
+          ? t("复制完整路径")
+          : t("复制完整路径（{n} 项）", { n: paths.length }),
         action: copyPaths,
       },
-      { label: "复制到窗格 ▸", sub: paneMenuItems(paths, "copy") },
-      { label: "移动到窗格 ▸", sub: paneMenuItems(paths, "move") },
+      { label: t("复制到窗格 ▸"), sub: paneMenuItems(paths, "copy") },
+      { label: t("移动到窗格 ▸"), sub: paneMenuItems(paths, "move") },
       { sep: true },
       {
-        label: one ? "删除" : `删除到回收站（${paths.length} 项）`,
+        label: one
+          ? t("删除")
+          : t("删除到回收站（{n} 项）", { n: paths.length }),
         danger: true,
         action: () => void deleteBatch(selEntries),
       },
@@ -541,15 +559,22 @@ export function GlobalSearchPage() {
     );
   }
 
-  const wan = (n: number) => (n >= 10000 ? `${Math.round(n / 10000)} 万` : `${n}`);
+  // 万级缩写随语言：EN 直接千分位全量（"25 万" ↔ "250,000"）
+  const lang = useSettings((s) => s.lang);
+  const wan = (n: number) =>
+    lang === "en"
+      ? n.toLocaleString("en-US")
+      : n >= 10000
+        ? `${Math.round(n / 10000)} 万`
+        : `${n}`;
   const statusText = loading
     ? stream.scanned > 0
-      ? `正在扫描… 已扫描 ${stream.scanned.toLocaleString()} 项`
-      : "正在扫描磁盘…"
+      ? t("正在扫描… 已扫描 {n} 项", { n: stream.scanned.toLocaleString() })
+      : t("正在扫描磁盘…")
     : res
-      ? `${res.engine === "index" ? "索引" : "遍历"} · ${entries.length} 项结果${rowFilter.trim() ? `（过滤自 ${res.entries.length}）` : ""} · ${res.engine === "index" ? `全库 ${wan(res.scanned)} 条` : `已扫描 ${res.scanned.toLocaleString()} 项`} · ${res.elapsedMs} ms${res.truncated ? " · 已截断" : ""}${res.fallbackReason ? ` · 索引不可用：${res.fallbackReason}` : ""}`
-      : "Enter 打开 · Ctrl+Enter 定位 · Shift 多选 · Ctrl+A 全选";
-  const statusSuffix = checked.size > 1 ? ` · 已选 ${checked.size} 项` : "";
+      ? `${res.engine === "index" ? t("索引") : t("遍历")} · ${t("{n} 项结果", { n: entries.length.toLocaleString() })}${rowFilter.trim() ? t("（过滤自 {n}）", { n: res.entries.length.toLocaleString() }) : ""} · ${res.engine === "index" ? t("全库 {n} 条", { n: wan(res.scanned) }) : t("已扫描 {n} 项", { n: res.scanned.toLocaleString() })} · ${res.elapsedMs} ms${res.truncated ? t(" · 已截断") : ""}${res.fallbackReason ? t(" · 索引不可用：{r}", { r: res.fallbackReason }) : ""}`
+      : t("Enter 打开 · Ctrl+Enter 定位 · Shift 多选 · Ctrl+A 全选");
+  const statusSuffix = checked.size > 1 ? t(" · 已选 {n} 项", { n: checked.size }) : "";
 
   const rows = virtualizer.getVirtualItems();
   const pvSpec = pvEntry ? fileIcon(pvEntry.name, pvEntry.isDir, false) : null;
@@ -643,8 +668,8 @@ export function GlobalSearchPage() {
                     ["点击列头", "排序（再点反向）· Shift/Ctrl 多选"],
                   ].map(([k, v]) => (
                     <div key={k} className="np-gsearch-help-row">
-                      <span className="np-kbd">{k}</span>
-                      <span className="np-gsearch-help-desc">{v}</span>
+                      <span className="np-kbd">{t(k)}</span>
+                      <span className="np-gsearch-help-desc">{t(v)}</span>
                     </div>
                   ))}
                 </div>
@@ -669,7 +694,7 @@ export function GlobalSearchPage() {
           <NpSelect<string>
             value={typeSel}
             data-tip={t("类型（选文件/文件夹或常用类型，等同于 ext: 过滤）")}
-            options={SEARCH_TYPE_OPTIONS}
+            options={SEARCH_TYPE_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))}
             onChange={setTypeSel}
           />
           <InputGroup
@@ -692,7 +717,7 @@ export function GlobalSearchPage() {
           <NpSelect<number>
             value={maxResults}
             data-tip={t("结果数量上限")}
-            options={MAX_OPTIONS.map((m) => ({ value: m, label: `上限 ${m}` }))}
+            options={MAX_OPTIONS.map((m) => ({ value: m, label: t("上限 {n}", { n: m }) }))}
             onChange={setMaxResults}
           />
           <span className="np-gsearch-filter-spacer" />
@@ -765,10 +790,10 @@ export function GlobalSearchPage() {
                   )}
                   <span>
                     {loading
-                      ? "正在扫描磁盘…"
+                      ? t("正在扫描磁盘…")
                       : query.trim()
-                        ? "没有匹配的结果"
-                        : "输入关键词开始搜索（文件名 / 通配符 / 拼音首字母）"}
+                        ? t("没有匹配的结果")
+                        : t("输入关键词开始搜索（文件名 / 通配符 / 拼音首字母）")}
                   </span>
                 </div>
               ) : (
@@ -826,7 +851,9 @@ export function GlobalSearchPage() {
                         </span>
                         <span className="np-cell-muted np-col-size">{formatSize(e)}</span>
                         <span className="np-cell-muted np-col-type np-ellipsis">
-                          {t(typeName(e.name, e.isDir))}
+                          {t(typeName(e.name, e.isDir), {
+                            ext: extOf(e.name).toUpperCase(),
+                          })}
                         </span>
                         {gsMtimeVisible(panelW) && (
                           <span className="np-cell-muted np-col-mtime">
@@ -857,7 +884,7 @@ export function GlobalSearchPage() {
                 <span className="np-gsearch-pv-name np-ellipsis">
                   {pvEntry ? pvEntry.name : t("未选中结果")}
                 </span>
-                {pvEntry && <span className="np-pv-badge">{PREVIEW_LABELS[pvKind]}</span>}
+                {pvEntry && <span className="np-pv-badge">{t(PREVIEW_LABELS[pvKind])}</span>}
                 <span className="np-gsearch-pv-spacer" />
                 <Button
                   minimal

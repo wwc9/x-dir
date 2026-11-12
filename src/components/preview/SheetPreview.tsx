@@ -136,7 +136,15 @@ export function SheetPreview({
   return (
     <div className="np-pv-sheet">
       <div className="np-pv-sheet-bar">
-        <Seg value={rowMode} onChange={setRowMode} options={ROW_MODE_OPTS} />
+        <Seg
+          value={rowMode}
+          onChange={setRowMode}
+          options={ROW_MODE_OPTS.map((o) => ({
+            ...o,
+            label: t(o.label),
+            title: t(o.title),
+          }))}
+        />
       </div>
       <div ref={scrollRef} className="np-pv-sheet-scroll">
         {rows.length === 0 ? (

@@ -17,7 +17,7 @@ import {
 import { ChevronDown, GripVertical, Info, OctagonAlert, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 
 import { formatBytes, formatSize, formatTime } from "../lib/format";
-import { typeName } from "../lib/fileIcons";
+import { extOf, typeName } from "../lib/fileIcons";
 import { api, type FileEntry, type FileLocks } from "../lib/ipc";
 import {
   compileRegex,
@@ -125,75 +125,75 @@ export function DialogHost() {
 
   const title =
     dialog?.type === "exportListing"
-      ? "导出文件清单"
+      ? t("导出文件清单")
       : dialog?.type === "pdfSplit"
-        ? "PDF 拆分"
+        ? t("PDF 拆分")
         : dialog?.type === "pdfInsertBlank"
-          ? "PDF 插入空白页"
+          ? t("PDF 插入空白页")
           : dialog?.type === "pdfToPng"
-            ? "PDF 转图片"
+            ? t("PDF 转图片")
             : dialog?.type === "pdfEncrypt"
-              ? "PDF 加密"
+              ? t("PDF 加密")
               : dialog?.type === "pdfDecrypt"
-                ? "PDF 解密"
+                ? t("PDF 解密")
                 : dialog?.type === "filesMerge"
       ? dialog.flavor === "csv"
-        ? "CSV 合并"
+        ? t("CSV 合并")
         : dialog.flavor === "zip"
-          ? "压缩为 zip"
-          : "文本合并"
+          ? t("压缩为 zip")
+          : t("文本合并")
       : dialog?.type === "pdfPages"
         ? dialog.mode === "extract"
-          ? "PDF 提取页"
-          : "PDF 删除页"
+          ? t("PDF 提取页")
+          : t("PDF 删除页")
         : dialog?.type === "confirm"
-      ? (dialog.title ?? "确认")
+      ? (dialog.title ?? t("确认"))
       : dialog?.type === "alert"
-        ? (dialog.title ?? "提示")
+        ? (dialog.title ?? t("提示"))
         : dialog?.type === "input"
           ? dialog.title
           : dialog?.type === "conflict"
-        ? "目标位置存在同名项"
+        ? t("目标位置存在同名项")
         : dialog?.type === "duplicates"
-          ? "重复文件"
+          ? t("重复文件")
           : dialog?.type === "dirsizes"
-            ? "空间分析"
+            ? t("空间分析")
             : dialog?.type === "compare"
-              ? "文件夹比较"
+              ? t("文件夹比较")
               : dialog?.type === "batchRename"
-                ? "批量重命名"
+                ? t("批量重命名")
                 : dialog?.type === "emptyScan"
-                  ? "空文件清理"
+                  ? t("空文件清理")
                   : dialog?.type === "newFolders"
-                    ? "批量新建文件夹"
+                    ? t("批量新建文件夹")
                     : dialog?.type === "pdfMerge"
-                      ? "PDF 合并"
+                      ? t("PDF 合并")
                       : dialog?.type === "pdfWatermark"
-                        ? "PDF 加水印"
+                        ? t("PDF 加水印")
                         : dialog?.type === "xlsxMerge"
-                          ? "Excel 合并"
+                          ? t("Excel 合并")
                           : dialog?.type === "imgCompress"
-                  ? "图片压缩"
+                  ? t("图片压缩")
                   : dialog?.type === "imgWatermark"
-                    ? "图片水印"
+                    ? t("图片水印")
                     : dialog?.type === "imgConvert"
-                      ? "图片格式转换"
+                      ? t("图片格式转换")
                       : dialog?.type === "imgResize"
-                        ? "图片尺寸调整"
+                        ? t("图片尺寸调整")
                         : dialog?.type === "imgMontage"
-                          ? "宫格拼图"
+                          ? t("宫格拼图")
                           : dialog?.type === "unlock"
-                            ? "解除占用"
+                            ? t("解除占用")
                             : dialog?.type === "hashCalc"
-                              ? "计算校验值"
+                              ? t("计算校验值")
                               : dialog?.type === "hashVerify"
-                                ? "校验核对"
+                                ? t("校验核对")
                                 : dialog?.type === "fileTouch"
-                                  ? "修改时间与属性"
+                                  ? t("修改时间与属性")
                                   : dialog?.type === "fileSplit"
-                                    ? "文件分割"
+                                    ? t("文件分割")
                                     : dialog?.type === "properties"
-                                      ? "属性"
+                                      ? t("属性")
                                       : "";
   // 标题图标：confirm/alert 按 kind；冲突预检固定警示；其余无图标
   const icon =
@@ -239,7 +239,7 @@ export function DialogHost() {
             actions={
               <>
                 <Button size="small" onClick={close}>
-                  {dialog.cancelText ?? "取消"}
+                  {dialog.cancelText ?? t("取消")}
                 </Button>
                 <Button
                   size="small"
@@ -249,7 +249,7 @@ export function DialogHost() {
                     resolve(true);
                   }}
                 >
-                  {dialog.okText ?? "确定"}
+                  {dialog.okText ?? t("确定")}
                 </Button>
               </>
             }
@@ -269,7 +269,7 @@ export function DialogHost() {
                 intent={kindIntent(kind)}
                 onClick={close}
               >
-                {dialog.okText ?? "知道了"}
+                {dialog.okText ?? t("知道了")}
               </Button>
             }
           />
@@ -405,7 +405,12 @@ export function DialogHost() {
             <div className="np-props">
               <Prop k={t("名称")} v={dialog.entry.name} />
               <Prop k={t("路径")} v={dialog.entry.path} />
-              <Prop k={t("类型")} v={t(typeName(dialog.entry.name, dialog.entry.isDir))} />
+              <Prop
+                k={t("类型")}
+                v={t(typeName(dialog.entry.name, dialog.entry.isDir), {
+                  ext: extOf(dialog.entry.name).toUpperCase(),
+                })}
+              />
               <Prop k={t("大小")} v={<SizeValue entry={dialog.entry} />} />
               <Prop k={t("修改时间")} v={formatTime(dialog.entry.mtimeMs)} />
               <Prop k={t("创建时间")} v={formatTime(dialog.entry.ctimeMs)} />
@@ -413,12 +418,12 @@ export function DialogHost() {
                 k={t("属性")}
                 v={
                   [
-                    dialog.entry.attrs.readonly && "只读",
-                    dialog.entry.attrs.hidden && "隐藏",
-                    dialog.entry.attrs.system && "系统",
+                    dialog.entry.attrs.readonly && t("只读"),
+                    dialog.entry.attrs.hidden && t("隐藏"),
+                    dialog.entry.attrs.system && t("系统"),
                   ]
                     .filter(Boolean)
-                    .join("、") || "常规"
+                    .join(t("、")) || t("常规")
                 }
               />
             </div>
@@ -481,7 +486,7 @@ function InputDialog({
               {t("取消")}
             </Button>
             <Button size="small" intent="primary" onClick={submit}>
-              {dialog.okText ?? "确定"}
+              {dialog.okText ?? t("确定")}
             </Button>
           </>
         }
@@ -510,7 +515,7 @@ function ConflictDialog({
           ))}
         </div>
         {items.length > 1 && (
-          <div className="np-dialog-muted">共 {items.length} 个冲突（将应用同一策略）</div>
+          <div className="np-dialog-muted">{t("共 {n} 个冲突（将应用同一策略）", { n: items.length })}</div>
         )}
         <RadioGroup
           selectedValue={action}
@@ -603,10 +608,10 @@ function UnlockDialog({
     if (stuck.length || truncated) {
       const parts: string[] = [];
       if (stuck.length) {
-        parts.push(`仍被占用，未能解除：${stuck.map(baseName).join("、")}`);
+        parts.push(t("仍被占用，未能解除：{names}", { names: stuck.map(baseName).join(t("、")) }));
       }
-      if (truncated) parts.push("部分系统句柄无响应，可能仍有未解除的占用");
-      useUi.getState().toast(parts.join("；"), "error");
+      if (truncated) parts.push(t("部分系统句柄无响应，可能仍有未解除的占用"));
+      useUi.getState().toast(parts.join(t("；")), "error");
     }
   };
 
@@ -615,18 +620,18 @@ function UnlockDialog({
       <DialogBody>
         <div className="np-dialog-muted">
           {permanent
-            ? "以下文件正被其他程序占用，无法删除："
-            : "以下文件正被其他程序占用，无法移入回收站："}
+            ? t("以下文件正被其他程序占用，无法删除：")
+            : t("以下文件正被其他程序占用，无法移入回收站：")}
         </div>
         <div className="np-conflict-list">
           {locks === null ? (
-            <div className="np-dialog-muted">正在查找占用进程…</div>
+            <div className="np-dialog-muted">{t("正在查找占用进程…")}</div>
           ) : (
             locks.map((l) => (
               <div key={l.path} className="np-ellipsis">
                 · {baseName(l.path)}
                 {l.lockers.length > 0 && (
-                  <> — {l.lockers.map((p) => p.name).join("、")}</>
+                  <> — {l.lockers.map((p) => p.name).join(t("、"))}</>
                 )}
               </div>
             ))
@@ -634,23 +639,23 @@ function UnlockDialog({
         </div>
         {locks !== null && locks.every((l) => l.lockers.length === 0) && (
           <div className="np-dialog-muted">
-            未找到占用进程（可能是瞬时占用已释放，或系统级进程）。
+            {t("未找到占用进程（可能是瞬时占用已释放，或系统级进程）。")}
           </div>
         )}
         {locks !== null && locks.some((l) => l.truncated) && (
           <div className="np-dialog-muted">
-            部分系统句柄无响应，占用进程列表可能不完整。
+            {t("部分系统句柄无响应，占用进程列表可能不完整。")}
           </div>
         )}
         <div className="np-dialog-muted">
-          解除占用会强制关闭这些程序打开的文件句柄，对应程序未保存的内容可能丢失。
+          {t("解除占用会强制关闭这些程序打开的文件句柄，对应程序未保存的内容可能丢失。")}
         </div>
       </DialogBody>
       <DialogFooter
         actions={
           <>
             <Button size="small" onClick={onDone}>
-              取消
+              {t("取消")}
             </Button>
             <Button
               size="small"
@@ -658,7 +663,7 @@ function UnlockDialog({
               disabled={busy || locks === null}
               onClick={() => void release()}
             >
-              解除占用并重试
+              {t("解除占用并重试")}
             </Button>
           </>
         }
@@ -689,7 +694,7 @@ function UnlockDialog({
   }, [scan, entry.path]);
   if (!entry.isDir) return <>{formatSize(entry)}</>;
   if (!scan || size === -1) return <>—</>;
-  return <>{size === null ? "计算中…" : formatBytes(size)}</>;
+  return <>{size === null ? t("计算中…") : formatBytes(size)}</>;
 }
 
 /** 规则分类单一来源（2026-11-08 面板一定案）：4 大类 × 10 规则，添加规则 =
@@ -821,7 +826,7 @@ function ClsSlot({ op, onPatch }: { op: Extract<RenameOp, { type: "removeCls" }>
     }
     setOpen(!open);
   };
-  const names = CLS_DEFS.filter((d) => op.cls.includes(d.key)).map((d) => d.name);
+  const names = CLS_DEFS.filter((d) => op.cls.includes(d.key)).map((d) => t(d.name));
   const reSrc = removeClsRegex(op.cls, op.keep);
   return (
     <span className="np-rs-clswrap" ref={wrapRef}>
@@ -829,7 +834,7 @@ function ClsSlot({ op, onPatch }: { op: Extract<RenameOp, { type: "removeCls" }>
         className={`np-select np-rs-clsbtn${open ? " is-open" : ""}`}
         onClick={(e) => { e.stopPropagation(); toggle(); }}
       >
-        {names.length ? names.join("、") : t("未勾选字符类型")}
+        {names.length ? names.join(t("、")) : t("未勾选字符类型")}
         <span className="np-select-chev">{ic(ChevronDown)}</span>
       </button>
       {open &&
@@ -953,7 +958,7 @@ function BatchRenameDialog({
     if (!name || !opsList.length) return;
     updateSettings({ renameSchemes: [...schemes, { id: `sch${Date.now()}${Math.floor(Math.random() * 1000)}`, name, ops: opsList }] });
     setSchemeName("");
-    useUi.getState().toast(`已保存方案「${name}」`);
+    useUi.getState().toast(t("已保存方案「{name}」", { name }));
   };
   /** 撤回上次重命名（2026-11-08 用户定案「后悔药」）：按钮常驻 footer，
    *  撤销栈顶为 rename 批条目时可用（整批一条，一次全撤）；本次对话框
@@ -972,14 +977,17 @@ function BatchRenameDialog({
   const [dragId, setDragId] = useState<string | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
 
-  /** 词槽作用域（语句卡句尾「作用于」；替换扩展名卡不带此槽） */
+  /** 词槽作用域（语句卡句尾「作用于」；替换扩展名卡不带此槽）。
+   *  选项 label/title 渲染时过 t()（模块级常量不冻结语言） */
   const scopeSlot = (op: RenameOp) => (
     <NpSelect
       value={op.scope}
-      options={[...R_SCOPE_OPTS]}
+      options={R_SCOPE_OPTS.map((o) => ({ value: o.value, label: t(o.label), title: t(o.title) }))}
       onChange={(scope) => patchOp(op.id, { scope } as Partial<RenameOp>)}
     />
   );
+  const R_PAD_OPTS_T = R_PAD_OPTS.map((o) => ({ value: o.value, label: t("{n} 位", { n: o.value }) }));
+  const R_CASE_OPTS_T = R_CASE_OPTS.map((o) => ({ value: o.value, label: t(o.label) }));
 
   /** 卡头类型词：replace/case 双条目按 scope/mode 区分（替换扩展名、扩展名小写等句式卡） */
   const typeNameOf = (op: RenameOp) => {
@@ -996,15 +1004,15 @@ function BatchRenameDialog({
       case "replace": {
         if (op.scope === "ext")
           return [
-            "把扩展名",
+            t("把扩展名"),
             <InputGroup key="f" size="small" value={op.find} placeholder={t("jpg")} spellCheck={false}
               onChange={(e) => patchOp(op.id, { find: e.target.value } as Partial<RenameOp>)} />,
-            "改为",
+            t("改为"),
             <InputGroup key="r" size="small" value={op.replace} placeholder={t("png")} spellCheck={false}
               onChange={(e) => patchOp(op.id, { replace: e.target.value } as Partial<RenameOp>)} />,
           ];
         const find = (
-          <InputGroup size="small" value={op.find} placeholder={op.regex ? t("\s+") : t("要查找的文字")} spellCheck={false}
+          <InputGroup size="small" value={op.find} placeholder={op.regex ? t("\\s+") : t("要查找的文字")} spellCheck={false}
             onChange={(e) => patchOp(op.id, { find: e.target.value } as Partial<RenameOp>)} />
         );
         const rep = (
@@ -1013,51 +1021,51 @@ function BatchRenameDialog({
         );
         const mode = (
           <Seg value={op.regex ? "regex" : "literal"}
-            options={[{ value: "literal", label: t("文字") }, { value: "regex", label: t("表达式"), title: "正则表达式，替换串支持 $1 捕获组" }]}
+            options={[{ value: "literal", label: t("文字") }, { value: "regex", label: t("表达式"), title: t("正则表达式，替换串支持 $1 捕获组") }]}
             onChange={(v) => patchOp(op.id, { regex: v === "regex" } as Partial<RenameOp>)} />
         );
         return op.regex
-          ? ["用正则", find, "匹配并替换为", rep, "，模式", mode, "，作用于", scopeSlot(op)]
+          ? [t("用正则"), find, t("匹配并替换为"), rep, t("，模式"), mode, t("，作用于"), scopeSlot(op)]
           : [
-            <span key="s1">把</span>, find, <span key="s2">替换为</span>, rep, <span key="s3">，按</span>, mode, <span key="s4">匹配，作用于</span>, scopeSlot(op),
+            <span key="s1">{t("把")}</span>, find, <span key="s2">{t("替换为")}</span>, rep, <span key="s3">{t("，按")}</span>, mode, <span key="s4">{t("匹配，作用于")}</span>, scopeSlot(op),
           ];
       }
       case "remove":
         return [
-          "删除名称里所有的",
+          t("删除名称里所有的"),
           <InputGroup key="f" size="small" value={op.find} placeholder={t("要删除的文字")} spellCheck={false}
             onChange={(e) => patchOp(op.id, { find: e.target.value } as Partial<RenameOp>)} />,
-          "，作用于", scopeSlot(op),
+          t("，作用于"), scopeSlot(op),
         ];
       case "insert":
         return [
-          "在",
+          t("在"),
           <NpSelect key="p" value={op.position} options={[{ value: "start", label: t("名称开头") }, { value: "end", label: t("名称末尾") }, { value: "at", label: t("第 N 个字符后") }]}
             onChange={(v) => patchOp(op.id, { position: v } as Partial<RenameOp>)} />,
-          "插入",
+          t("插入"),
           <InputGroup key="t" size="small" value={op.text} placeholder={t("要插入的文字")} spellCheck={false}
             onChange={(e) => patchOp(op.id, { text: e.target.value } as Partial<RenameOp>)} />,
           ...(op.position === "at" ? [
-            "，第",
+            t("，第"),
             <input key="at" className="np-bren-num" type="number" min={0} value={op.at ?? 0}
               onChange={(e) => patchOp(op.id, { at: Math.max(0, Math.floor(Number(e.target.value) || 0)) } as Partial<RenameOp>)} />,
-            "个字符后",
+            t("个字符后"),
           ] : []),
-          "，作用于", scopeSlot(op),
+          t("，作用于"), scopeSlot(op),
         ];
       case "prefix":
         return [
-          "在最前面加",
+          t("在最前面加"),
           <InputGroup key="t" size="small" value={op.text} placeholder={t("前缀文字")} spellCheck={false}
             onChange={(e) => patchOp(op.id, { text: e.target.value } as Partial<RenameOp>)} />,
-          "，作用于", scopeSlot(op),
+          t("，作用于"), scopeSlot(op),
         ];
       case "suffix":
         return [
-          op.scope === "name" ? "在扩展名前加" : "在末尾加",
+          op.scope === "name" ? t("在扩展名前加") : t("在末尾加"),
           <InputGroup key="t" size="small" value={op.text} placeholder={t("后缀文字")} spellCheck={false}
             onChange={(e) => patchOp(op.id, { text: e.target.value } as Partial<RenameOp>)} />,
-          "，作用于", scopeSlot(op),
+          t("，作用于"), scopeSlot(op),
         ];
       case "trim": {
         const head = (
@@ -1069,114 +1077,114 @@ function BatchRenameDialog({
             onChange={(e) => patchOp(op.id, { tail: Math.max(0, Math.floor(Number(e.target.value) || 0)) } as Partial<RenameOp>)} />
         );
         const segs: React.ReactNode[] = [];
-        if (op.head > 0) segs.push("去掉开头", head, "个");
-        if (op.tail > 0) segs.push(op.head > 0 ? "、末尾" : "去掉末尾", tail, "个字符");
-        if (!segs.length) segs.push("去掉开头", head, "个、末尾", tail, "个字符");
-        return [...segs, "，作用于", scopeSlot(op)];
+        if (op.head > 0) segs.push(t("去掉开头"), head, t("个"));
+        if (op.tail > 0) segs.push(op.head > 0 ? t("、末尾") : t("去掉末尾"), tail, t("个字符"));
+        if (!segs.length) segs.push(t("去掉开头"), head, t("个、末尾"), tail, t("个字符"));
+        return [...segs, t("，作用于"), scopeSlot(op)];
       }
       case "number": {
         const pad = Math.min(Math.max(op.pad, 1), 6);
         const n1 = String(op.start).padStart(pad, "0");
         const n2 = String(op.start + 1).padStart(pad, "0");
         return [
-          "在",
+          t("在"),
           <NpSelect key="p" value={op.position} options={[{ value: "start", label: t("名称开头") }, { value: "end", label: t("扩展名前") }]}
             onChange={(v) => patchOp(op.id, { position: v } as Partial<RenameOp>)} />,
-          "加编号，从",
+          t("加编号，从"),
           <input key="s" className="np-bren-num" type="number" min={0} value={op.start}
             onChange={(e) => patchOp(op.id, { start: Math.max(0, Math.floor(Number(e.target.value) || 0)) } as Partial<RenameOp>)} />,
-          "起、宽",
-          <NpSelect key="w" value={op.pad} options={R_PAD_OPTS} onChange={(pad) => patchOp(op.id, { pad } as Partial<RenameOp>)} />,
+          t("起、宽"),
+          <NpSelect key="w" value={op.pad} options={R_PAD_OPTS_T} onChange={(pad) => patchOp(op.id, { pad } as Partial<RenameOp>)} />,
           <span key="pv" className="np-rs-prev">（{op.separator || ""}{n1}、{op.separator || ""}{n2}…）</span>,
-          "，分隔符",
+          t("，分隔符"),
           <InputGroup key="sep" className="np-rs-narrow" size="small" value={op.separator} spellCheck={false}
             onChange={(e) => patchOp(op.id, { separator: e.target.value } as Partial<RenameOp>)} />,
         ];
       }
       case "case":
         return [
-          "把英文字母",
-          <NpSelect key="m" value={op.mode} options={[...R_CASE_OPTS]} onChange={(mode) => patchOp(op.id, { mode } as Partial<RenameOp>)} />,
-          "，作用于", scopeSlot(op),
+          t("把英文字母"),
+          <NpSelect key="m" value={op.mode} options={R_CASE_OPTS_T} onChange={(mode) => patchOp(op.id, { mode } as Partial<RenameOp>)} />,
+          t("，作用于"), scopeSlot(op),
         ];
       case "date":
         return [
-          "在",
+          t("在"),
           <NpSelect key="p" value={op.position} options={[{ value: "start", label: t("名称开头") }, { value: "end", label: t("名称末尾") }]}
             onChange={(v) => patchOp(op.id, { position: v } as Partial<RenameOp>)} />,
-          "加修改日期",
+          t("加修改日期"),
           <NpSelect key="f" value={op.format} options={[...R_DATE_OPTS]} onChange={(format) => patchOp(op.id, { format } as Partial<RenameOp>)} />,
-          "，分隔符",
+          t("，分隔符"),
           <InputGroup key="sep" className="np-rs-narrow" size="small" value={op.separator} spellCheck={false}
             onChange={(e) => patchOp(op.id, { separator: e.target.value } as Partial<RenameOp>)} />,
-          "，作用于", scopeSlot(op),
+          t("，作用于"), scopeSlot(op),
         ];
       case "chinese":
         return [
-          <span key="s1">把汉字</span>,
+          <span key="s1">{t("把汉字")}</span>,
           <NpSelect key="m" value={op.mode} options={[{ value: "s2t", label: t("简体 → 繁体") }, { value: "t2s", label: t("繁体 → 简体") }]}
             onChange={(mode) => patchOp(op.id, { mode } as Partial<RenameOp>)} />,
-          "，作用于", scopeSlot(op),
+          t("，作用于"), scopeSlot(op),
         ];
       case "pinyin":
         return [
-          <span key="s1">把汉字转</span>,
+          <span key="s1">{t("把汉字转")}</span>,
           <NpSelect key="m" value={op.mode} options={[{ value: "initials", label: t("拼音首字母") }, { value: "full", label: t("全拼") }]}
             onChange={(mode) => patchOp(op.id, { mode } as Partial<RenameOp>)} />,
-          "，作用于", scopeSlot(op),
+          t("，作用于"), scopeSlot(op),
         ];
       case "cnNum":
         return [
-          <span key="s1">把名称里的数字</span>,
+          <span key="s1">{t("把名称里的数字")}</span>,
           <NpSelect key="m" value={op.mode} options={[{ value: "toArabic", label: t("十二 → 12") }, { value: "toChinese", label: t("12 → 十二") }]}
             onChange={(mode) => patchOp(op.id, { mode } as Partial<RenameOp>)} />,
-          "，作用于", scopeSlot(op),
+          t("，作用于"), scopeSlot(op),
         ];
       case "padNum":
         return [
-          <span key="s1">把名称里的数字补齐到</span>,
-          <NpSelect key="w" value={op.width} options={R_PAD_OPTS.filter((o) => o.value >= 2)} onChange={(width) => patchOp(op.id, { width } as Partial<RenameOp>)} />,
-          "，作用于", scopeSlot(op),
+          <span key="s1">{t("把名称里的数字补齐到")}</span>,
+          <NpSelect key="w" value={op.width} options={R_PAD_OPTS_T.filter((o) => o.value >= 2)} onChange={(width) => patchOp(op.id, { width } as Partial<RenameOp>)} />,
+          t("，作用于"), scopeSlot(op),
         ];
       case "arith":
         return [
-          <span key="s1">把名称里的数字</span>,
+          <span key="s1">{t("把名称里的数字")}</span>,
           <Seg key="a" value={op.arith}
             options={[{ value: "add", label: t("加") }, { value: "sub", label: t("减") }, { value: "mul", label: t("乘") }, { value: "div", label: t("除") }]}
             onChange={(v) => patchOp(op.id, { arith: v } as Partial<RenameOp>)} />,
           <input key="v" className="np-bren-num" type="number" value={op.value}
             onChange={(e) => patchOp(op.id, { value: Number(e.target.value) || 0 } as Partial<RenameOp>)} />,
-          "，作用于", scopeSlot(op),
+          t("，作用于"), scopeSlot(op),
         ];
       case "dateFormat":
         return [
-          <span key="s1">把名称里的日期统一成</span>,
+          <span key="s1">{t("把名称里的日期统一成")}</span>,
           <NpSelect key="f" value={op.format}
             options={[{ value: "ymd", label: t("2026-11-07") }, { value: "ymdCompact", label: t("20261107") }, { value: "cn", label: t("2026年11月7日") }]}
             onChange={(format) => patchOp(op.id, { format } as Partial<RenameOp>)} />,
-          "，作用于", scopeSlot(op),
+          t("，作用于"), scopeSlot(op),
         ];
        case "trimEdges":
         return [
-          <span key="s1">去掉名称首尾的空白（含全角空格），作用于</span>,
+          <span key="s1">{t("去掉名称首尾的空白（含全角空格），作用于")}</span>,
           scopeSlot(op),
         ];
       case "parent":
         return [
-          "在",
+          t("在"),
           <NpSelect key="p" value={op.position} options={[{ value: "start", label: t("名称开头") }, { value: "end", label: t("名称末尾") }]}
             onChange={(v) => patchOp(op.id, { position: v } as Partial<RenameOp>)} />,
-          "加父文件夹名，分隔符",
+          t("加父文件夹名，分隔符"),
           <InputGroup key="sep" className="np-rs-narrow" size="small" value={op.separator} spellCheck={false}
             onChange={(e) => patchOp(op.id, { separator: e.target.value } as Partial<RenameOp>)} />,
-          "，作用于", scopeSlot(op),
+          t("，作用于"), scopeSlot(op),
         ];
       case "removeCls":
         return [
-          op.keep ? <span key="s1">只保留名称里的</span> : <span key="s1">删除名称里的</span>,
+          op.keep ? <span key="s1">{t("只保留名称里的")}</span> : <span key="s1">{t("删除名称里的")}</span>,
           <ClsSlot key="slot" op={op} onPatch={(p) => patchOp(op.id, p)} />,
-          <span key="s2">的字符</span>,
-          "，作用于", scopeSlot(op),
+          <span key="s2">{t("的字符")}</span>,
+          t("，作用于"), scopeSlot(op),
         ];
     }
   };
@@ -1267,7 +1275,7 @@ function BatchRenameDialog({
                 <button
                   key={tp.id}
                   className="np-bren-chip"
-                  data-tip={tp.desc}
+                  data-tip={t(tp.desc)}
                   onClick={() => setOpsList(tp.build())}
                 >
                   {t(tp.label)}
@@ -1285,7 +1293,7 @@ function BatchRenameDialog({
                 onClick={removePicked}
               >
                 <AppIcon icon={Trash2} size={DENSITY.iconSm} />
-                {t("删除选中")}（{picked.size}）
+                {t("删除选中（{n}）", { n: picked.size })}
               </button>
             </div>
           </div>
@@ -1331,7 +1339,7 @@ function BatchRenameDialog({
                             }}
                           >
                             <div className="np-rp-n2">{t(r.name)}</div>
-                            <div className="np-rp-s">{r.s}</div>
+                            <div className="np-rp-s">{t(r.s)}</div>
                           </div>
                         ))}
                       </div>
@@ -1370,7 +1378,7 @@ function BatchRenameDialog({
                             onClick={() => {
                               setOpsList(withFreshIds(sc.ops));
                               setSchemeOpen(false);
-                              useUi.getState().toast(`已套用方案「${sc.name}」`);
+                              useUi.getState().toast(t("已套用方案「{name}」", { name: sc.name }));
                             }}
                           >
                             <div className="np-scheme-n">{sc.name}</div>
@@ -1497,10 +1505,11 @@ function BatchRenameDialog({
           </div>
         )}
         <div className="np-dialog-muted">
-          已变更 {changedCount} / 共 {entries.length} 项
-          {picked.size < entries.length && `，${entries.length - picked.size} 项已取消勾选`}
-          {errorCount > 0 && `，${errorCount} 项冲突或非法（红色标出）`}
-          {plan.length > 200 && "（仅预览前 200 行）"}
+          {t("已变更 {c} / 共 {n} 项", { c: changedCount, n: entries.length })}
+          {picked.size < entries.length &&
+            t("，{n} 项已取消勾选", { n: entries.length - picked.size })}
+          {errorCount > 0 && t("，{n} 项冲突或非法（红色标出）", { n: errorCount })}
+          {plan.length > 200 && t("（仅预览前 200 行）")}
         </div>
       </DialogBody>
       <DialogFooter
@@ -1521,7 +1530,7 @@ function BatchRenameDialog({
               }}
             >
               {canUndoRename && undoTop.ops.length > 1
-                ? `撤回重命名（${undoTop.ops.length} 项）`
+                ? t("撤回重命名（{n} 项）", { n: undoTop.ops.length })
                 : t("撤回上次重命名")}
             </Button>
             <Button size="small" onClick={() => onDone(null)}>
@@ -1533,7 +1542,7 @@ function BatchRenameDialog({
               disabled={!todo.length}
               onClick={() => onDone(todo)}
             >
-              应用（{todo.length} 项）
+              {t("应用（{n} 项）", { n: todo.length })}
             </Button>
           </>
         }

@@ -241,6 +241,7 @@ const TARGET_OPTS: { value: MenuCond["target"]; label: string }[] = [
 function areaOptsFor(fn: BuiltinFn | undefined) {
   return SCOPE_OPTS.map((o) => ({
     ...o,
+    label: t(o.label),
     disabled:
       o.value === "sel"
         ? !(fn?.supportsSel ?? true)
@@ -249,9 +250,9 @@ function areaOptsFor(fn: BuiltinFn | undefined) {
           : false,
     title:
       o.value === "sel" && !fn?.supportsSel
-        ? "该功能仅空白处可用"
+        ? t("该功能仅空白处可用")
         : o.value === "blank" && !fn?.supportsBlank
-          ? "该功能仅选中条目可用"
+          ? t("该功能仅选中条目可用")
           : undefined,
   }));
 }
@@ -295,31 +296,35 @@ function condChipTexts(en: MenuEntry): string[] {
   const max = en.cond.maxCount;
   const count =
     min > 1 && max > 0
-      ? `${min}–${max} 项`
+      ? t("{a}–{b} 项", { a: min, b: max })
       : min > 1
-        ? `≥ ${min}`
+        ? t("≥ {n} 项", { n: min })
         : max > 0
           ? max === 1
-            ? "1 项"
-            : `≤ ${max}`
-          : "不限";
+            ? t("1 项")
+            : t("≤ {n} 项", { n: max })
+          : t("不限");
   const exts = en.cond.exts.trim();
-  const type = exts ? exts.split(/[,，;；\s]+/).filter(Boolean).join(",") : "不限";
+  const type = exts ? exts.split(/[,，;；\s]+/).filter(Boolean).join(",") : t("不限");
   const obj =
-    en.cond.target === "file" ? "仅文件" : en.cond.target === "dir" ? "仅文件夹" : "不限";
+    en.cond.target === "file"
+      ? t("仅文件")
+      : en.cond.target === "dir"
+        ? t("仅文件夹")
+        : t("不限");
   return [areaChipText(en), obj, count, type];
 }
 /** 行内区域标签：显示生效区域而非所设值（收窄时由回显句解释原因） */
 function areaChipText(en: MenuEntry): string {
   const eff = effArea(en);
-  return eff ? areaLabel(eff) : "不显示";
+  return eff ? areaLabel(eff) : t("不显示");
 }
 /** 回显句补充说明：所设启用时机被能力位收窄 / 完全不生效时讲明原因 */
 function condNote(en: MenuEntry): string {
   const eff = effArea(en);
-  if (eff === null) return "（当前启用时机下不会显示）";
+  if (eff === null) return t("（当前启用时机下不会显示）");
   if (eff !== en.area)
-    return eff === "sel" ? "（该功能不支持未选中）" : "（该功能不支持选中）";
+    return eff === "sel" ? t("（该功能不支持未选中）") : t("（该功能不支持选中）");
   return "";
 }
 
@@ -372,16 +377,18 @@ function entryLabel(en: MenuEntry): string {
   return t(builtinByKey(en.id.slice("builtin:".length))?.label ?? en.id);
 }
 
-/** 工具栏回显句：condSentence 去掉右键前缀（作用域按条目出现位置） */
-/** 工具栏回显句：启用时机按三档表述 + condSentence 去掉位置前缀 */
+/** 工具栏回显句：启用时机按三档表述 + condSentence 去掉位置前缀。
+ *  前缀剥离按译后串匹配（condSentence 已过 t()，正则字面量只对 zh 成立） */
 function toolbarSentence(cond: MenuCond, area: MenuEntry["area"]): string {
   const head =
     area === "sel"
-      ? "选中时可用"
+      ? t("选中时可用")
       : area === "blank"
-        ? "未选中时可用（作用于当前文件夹）"
-        : "总是可用";
-  const rest = condSentence(cond, "sel").replace(/^选中条目时显示 · /, "");
+        ? t("未选中时可用（作用于当前文件夹）")
+        : t("总是可用");
+  const prefix = t("选中条目时显示") + " · ";
+  const raw = condSentence(cond, "sel");
+  const rest = raw.startsWith(prefix) ? raw.slice(prefix.length) : raw;
   return `${head} · ${rest}`;
 }
 
@@ -444,11 +451,10 @@ export function MenuEditor() {
   /** 重置为默认菜单布局（2026-10-15 定案：多套预设下线，单一出厂默认），需确认 */
   const applyMenuDefault = () => {
     void confirmDialog({
-      title: "重置为默认方案",
-      message:
-        "把右键菜单重置为默认布局？当前布局将被覆盖（七项基础功能保留）。",
+      title: t("重置为默认方案"),
+      message: t("把右键菜单重置为默认布局？当前布局将被覆盖（七项基础功能保留）。"),
       kind: "warn",
-      okText: "重置",
+      okText: t("重置"),
     }).then((ok) => {
       // 默认布局只覆盖可自定义区；缺失的基础固定功能由归一化补齐
       if (ok) set(ensureFixedEntries(defaultMenuEntries()));
@@ -457,11 +463,10 @@ export function MenuEditor() {
   /** 重置为默认工具栏排列（2026-10-15 定案 = 定稿 10 键），需确认（地址框归一化兜底） */
   const applyToolbarDefault = () => {
     void confirmDialog({
-      title: "重置为默认方案",
-      message:
-        "把窗格工具栏重置为默认排列？当前排列将被覆盖（地址框保留常驻）。",
+      title: t("重置为默认方案"),
+      message: t("把窗格工具栏重置为默认排列？当前排列将被覆盖（地址框保留常驻）。"),
       kind: "warn",
-      okText: "重置",
+      okText: t("重置"),
     }).then((ok) => {
       if (ok) s.update({ toolbarEntries: ensureToolbarAddr(defaultToolbarEntries()) });
     });
@@ -576,7 +581,7 @@ export function MenuEditor() {
         <span className="np-menued-clabel">{t("对象类型")}</span>
         <Seg
           value={en.cond.target}
-          options={TARGET_OPTS}
+          options={TARGET_OPTS.map((o) => ({ ...o, label: t(o.label) }))}
           onChange={(target) => patchCond(en.id, { target })}
         />
       </div>
@@ -584,7 +589,7 @@ export function MenuEditor() {
         <span className="np-menued-clabel">{t("选中数量")}</span>
         <Seg
           value={countPresetOf(en.cond)}
-          options={COUNT_PRESET_OPTS}
+          options={COUNT_PRESET_OPTS.map((o) => ({ ...o, label: t(o.label) }))}
           onChange={(p) => patchCond(en.id, COUNT_PRESET_VALUES[p])}
         />
       </div>
@@ -594,12 +599,14 @@ export function MenuEditor() {
           <span className="np-menued-crange">
             <NpSelect
               value={en.cond.minCount}
-              options={COUNT_MIN_OPTS}
+              options={COUNT_MIN_OPTS.map((o) => ({ ...o, label: t("≥ {n} 项", { n: o.value }) }))}
               onChange={(minCount) => patchCond(en.id, { minCount })}
             />
             <NpSelect
               value={en.cond.maxCount}
-              options={COUNT_MAX_OPTS}
+              options={COUNT_MAX_OPTS.map((o) =>
+                o.value === 0 ? { ...o, label: t(o.label) } : { ...o, label: t("≤ {n} 项", { n: o.value }) },
+              )}
               onChange={(maxCount) => patchCond(en.id, { maxCount })}
             />
           </span>
@@ -634,14 +641,14 @@ export function MenuEditor() {
   /** 条件编辑浮层内容（方案 A 分段快选）：工具栏条目 = 启用时机 + 三条件 + 人话回显 */
   const toolCondPanel = (en: MenuEntry) => (
     <div className="np-menued-cond">
-      <div className="np-menued-cond-name">
-        启用条件 · {builtinByKey(en.id.slice("builtin:".length))?.label ?? en.id}
-      </div>
+        <div className="np-menued-cond-name">
+          {t("启用条件")} · {t(builtinByKey(en.id.slice("builtin:".length))?.label ?? en.id)}
+        </div>
       <div className="np-menued-frow">
         <span className="np-menued-clabel">{t("启用时机")}</span>
         <Seg
           value={en.area}
-          options={SCOPE_OPTS}
+          options={SCOPE_OPTS.map((o) => ({ ...o, label: t(o.label) }))}
           onChange={(area) => patchToolbarCond(en.id, { area })}
         />
       </div>
@@ -649,7 +656,7 @@ export function MenuEditor() {
         <span className="np-menued-clabel">{t("对象类型")}</span>
         <Seg
           value={en.cond.target}
-          options={TARGET_OPTS}
+          options={TARGET_OPTS.map((o) => ({ ...o, label: t(o.label) }))}
           onChange={(target) => patchToolbarCond(en.id, { target })}
         />
       </div>
@@ -657,7 +664,7 @@ export function MenuEditor() {
         <span className="np-menued-clabel">{t("选中数量")}</span>
         <Seg
           value={countPresetOf(en.cond)}
-          options={COUNT_PRESET_OPTS}
+          options={COUNT_PRESET_OPTS.map((o) => ({ ...o, label: t(o.label) }))}
           onChange={(p) => patchToolbarCond(en.id, COUNT_PRESET_VALUES[p])}
         />
       </div>
@@ -667,12 +674,14 @@ export function MenuEditor() {
           <span className="np-menued-crange">
             <NpSelect
               value={en.cond.minCount}
-              options={COUNT_MIN_OPTS}
+              options={COUNT_MIN_OPTS.map((o) => ({ ...o, label: t("≥ {n} 项", { n: o.value }) }))}
               onChange={(minCount) => patchToolbarCond(en.id, { minCount })}
             />
             <NpSelect
               value={en.cond.maxCount}
-              options={COUNT_MAX_OPTS}
+              options={COUNT_MAX_OPTS.map((o) =>
+                o.value === 0 ? { ...o, label: t(o.label) } : { ...o, label: t("≤ {n} 项", { n: o.value }) },
+              )}
               onChange={(maxCount) => patchToolbarCond(en.id, { maxCount })}
             />
           </span>
@@ -703,7 +712,7 @@ export function MenuEditor() {
         <AppIcon icon={Info} size={DENSITY.iconXs} />
         <span className="np-ellipsis">
           {toolbarSentence(en.cond, en.area)}
-          {en.area === "sel" ? "（按当前窗格选中项判定，未满足时置灰）" : ""}
+          {en.area === "sel" ? t("（按当前窗格选中项判定，未满足时置灰）") : ""}
         </span>
       </div>
     </div>
@@ -719,9 +728,9 @@ export function MenuEditor() {
   };
 
   const payloadLabel = (p: DragPayload): string => {
-    if (p.src === "sep") return "分割线";
-    if (p.src === "toolbar") return builtinByKey(p.id.slice("builtin:".length))?.label ?? p.id;
-    if (p.src === "builtin") return builtinByKey(p.key)?.label ?? p.key;
+    if (p.src === "sep") return t("分割线");
+    if (p.src === "toolbar") return t(builtinByKey(p.id.slice("builtin:".length))?.label ?? p.id);
+    if (p.src === "builtin") return t(builtinByKey(p.key)?.label ?? p.key);
     const en = entries.find((e) => e.id === p.id);
     return en ? entryLabel(en) : p.id;
   };
@@ -834,9 +843,9 @@ export function MenuEditor() {
     return !used.has(id) && !toolbarUsed.has(id);
   };
   const libFns = BUILTIN_FNS.filter(
-    (f) => match(f.label) && (!onlyUnused || isUnusedFn(f)),
+    (f) => match(t(f.label)) && (!onlyUnused || isUnusedFn(f)),
   );
-  const showSep = !q || "分割线".includes(q);
+  const showSep = !q || t("分割线").toLowerCase().includes(q);
   // ── 功能库目录（2026-10-15 A+B 定案）：点击平滑跳转 + scrollspy 高亮跟随 ──
   const groups = fnGroups();
   const visibleGroups = groups.filter((g) => libFns.some((f) => f.group === g));
@@ -868,8 +877,8 @@ export function MenuEditor() {
   return (
     <div className="np-menued">
       <div className="np-set-hint">
-        把右侧功能拖入左侧菜单或上方工具栏即可启用；拖动排序，拖出区域即移除，点击条目可设置出现条件。
-        带「固定」标记的基础功能不可移除；菜单功能在工具栏中按当前窗格选中项执行。
+        {t("把右侧功能拖入左侧菜单或上方工具栏即可启用；拖动排序，拖出区域即移除，点击条目可设置出现条件。")}
+        {t("带「固定」标记的基础功能不可移除；菜单功能在工具栏中按当前窗格选中项执行。")}
       </div>
       {/* 窗格工具栏区（共享功能库的第二个投放区）：横放在两栏上方，条带模拟
           窗格实际导航栏（np-nav）的样子——图标 + 标题文本的按钮同排；点击条目
@@ -913,13 +922,13 @@ export function MenuEditor() {
                 <div
                   data-toolbar-row={en.id}
                   className={rowCls}
-                  data-tip={`${builtinByKey(key)?.label ?? en.id} · ${toolbarSentence(en.cond, en.area)}`}
+                  data-tip={`${t(builtinByKey(key)?.label ?? en.id)} · ${toolbarSentence(en.cond, en.area)}`}
                   onPointerDown={(e) => beginDrag(e, { src: "toolbar", id: en.id })}
                 >
                   <AppIcon icon={FN_ICONS[key] ?? List} size={DENSITY.iconSm} />
                   <span className="np-ellipsis">
-                    {builtinByKey(key)?.label ?? en.id}
-                    {key === "addr" && "（固定）"}
+                    {t(builtinByKey(key)?.label ?? en.id)}
+                    {key === "addr" && t("（固定）")}
                   </span>
                 </div>
               </PopoverNext>
@@ -947,11 +956,10 @@ export function MenuEditor() {
                 minimal
                 onClick={() => {
                   void confirmDialog({
-                    title: "清空自定义菜单",
-                    message:
-                      "清空当前菜单布局？仅保留七项基础固定功能，自定义排列不可恢复。",
+                    title: t("清空自定义菜单"),
+                    message: t("清空当前菜单布局？仅保留七项基础固定功能，自定义排列不可恢复。"),
                     kind: "warn",
-                    okText: "清空",
+                    okText: t("清空"),
                   }).then((ok) => {
                     if (ok) set(ensureFixedEntries([]));
                   });

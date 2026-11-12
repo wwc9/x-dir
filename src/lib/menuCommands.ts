@@ -83,6 +83,7 @@ import {
 } from "lucide-react";
 import type { MenuCond, MenuEntry } from "./ipc";
 import { IMG_EXTS, MONTAGE_MAX, MONTAGE_MIN } from "./imgOps";
+import { t } from "./i18n";
 
 export type MenuArea = "sel" | "blank" | "both";
 
@@ -383,7 +384,7 @@ export function ensureFixedEntries(entries: MenuEntry[]): MenuEntry[] {
 /** 启用时机标签（总是 / 选中时 / 未选中时）：菜单 = 条目出现的右键语境
  *  （未选中 = 空白处右键），工具栏 = 按钮是否依赖选中项判定 */
 export function areaLabel(area: MenuEntry["area"]): string {
-  return area === "sel" ? "选中时" : area === "blank" ? "未选中时" : "总是";
+  return area === "sel" ? t("选中时") : area === "blank" ? t("未选中时") : t("总是");
 }
 
 /** 出现位置按能力位收窄：返回实际生效区域；null = 当前设置下该条目永不显示。
@@ -405,31 +406,31 @@ export function effectiveArea(
 export function condSentence(cond: MenuCond, area: MenuEntry["area"]): string {
   const pos =
     area === "both"
-      ? "总是显示"
+      ? t("总是显示")
       : area === "sel"
-        ? "选中条目时显示"
-        : "未选中时显示（空白处）";
+        ? t("选中条目时显示")
+        : t("未选中时显示（空白处）");
   const obj =
     cond.target === "all"
-      ? "对象不限"
+      ? t("对象不限")
       : cond.target === "file"
-        ? "仅文件"
-        : "仅文件夹";
+        ? t("仅文件")
+        : t("仅文件夹");
   const min = cond.minCount ?? 1;
   const max = cond.maxCount;
   const cnt =
     min > 1 && max > 0
-      ? `第 ${min}–${max} 项`
+      ? t("第 {a}–{b} 项", { a: min, b: max })
       : min > 1
-        ? `至少 ${min} 项`
+        ? t("至少 {n} 项", { n: min })
         : max > 0
-          ? `至多 ${max} 项`
-          : "数量不限";
+          ? t("至多 {n} 项", { n: max })
+          : t("数量不限");
   const exts = cond.exts
     .split(/[,，;；\s]+/)
     .filter(Boolean)
     .join(" / ");
-  const ext = exts ? ` · 类型 ${exts}（不区分大小写）` : "";
+  const ext = exts ? ` · ${t("类型")} ${exts}${t("（不区分大小写）")}` : "";
   return `${pos} · ${obj} · ${cnt}${ext}`;
 }
 

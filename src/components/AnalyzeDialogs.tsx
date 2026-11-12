@@ -100,15 +100,15 @@ export function DuplicateDialog({ dir, onDone }: { dir: string; onDone(): void }
     void (async () => {
       const { save } = await import("@tauri-apps/plugin-dialog");
       const target = await save({
-        defaultPath: joinPath(dir, "重复文件清单.csv"),
+        defaultPath: joinPath(dir, t("重复文件清单.csv")),
         filters: [{ name: "CSV", extensions: ["csv"] }],
       });
       if (!target) return;
       try {
         await api.saveTextFile(target, buildDupCsv(groups));
-        useUi.getState().toast("重复文件清单已导出");
+        useUi.getState().toast(t("重复文件清单已导出"));
       } catch (e) {
-        useUi.getState().toast(`导出失败：${String(e)}`, "error");
+        useUi.getState().toast(t("导出失败：{msg}", { msg: String(e) }), "error");
       }
     })();
   };
@@ -117,7 +117,7 @@ export function DuplicateDialog({ dir, onDone }: { dir: string; onDone(): void }
     <>
       <DialogBody>
         {error ? (
-          <div className="np-list-error">扫描失败：{error}</div>
+          <div className="np-list-error">{t("扫描失败：")}{error}</div>
         ) : !groups ? (
           <Loading text={t("正在按内容指纹扫描…")} />
         ) : !groups.length ? (
@@ -129,14 +129,14 @@ export function DuplicateDialog({ dir, onDone }: { dir: string; onDone(): void }
                 n: groups.length,
                 size: formatBytes(dupWaste(groups)),
               })}
-              ，勾选要清理的副本（默认保留每组第一份）
+              {t("，勾选要清理的副本（默认保留每组第一份）")}
             </div>
             {groups.map((g) => (
               <div key={g.hash}>
                 <div className="np-dup-head">
                   <span>{formatBytes(g.size)}</span>
                   <span className="np-cell-muted">
-                    × {g.paths.length} 份 · 可省{" "}
+                    {t("× {n} 份 · 可省", { n: g.paths.length })}{" "}
                     {formatBytes(g.size * (g.paths.length - 1))}
                   </span>
                 </div>
@@ -219,7 +219,7 @@ export function EmptyScanDialog({ dir, onDone }: { dir: string; onDone(): void }
       <div>
         <div className="np-dup-head">
           <span>{title}</span>
-          <span className="np-cell-muted">{paths.length} 项</span>
+          <span className="np-cell-muted">{t("{n} 项", { n: paths.length })}</span>
         </div>
         {paths.map((p) => (
           <Checkbox
@@ -247,7 +247,7 @@ export function EmptyScanDialog({ dir, onDone }: { dir: string; onDone(): void }
     <>
       <DialogBody>
         {error ? (
-          <div className="np-list-error">扫描失败：{error}</div>
+          <div className="np-list-error">{t("扫描失败：")}{error}</div>
         ) : !scan ? (
           <Loading text={t("正在扫描空文件与空文件夹…")} />
         ) : !total ? (
@@ -255,10 +255,13 @@ export function EmptyScanDialog({ dir, onDone }: { dir: string; onDone(): void }
         ) : (
           <div className="np-dup-list">
             <div className="np-dialog-muted">
-              共扫描 {scan.scanned} 项，勾选要清理的 {sel.size} 项（删除到回收站）
+              {t("共扫描 {total} 项，勾选要清理的 {selected} 项（删除到回收站）", {
+                total: scan.scanned,
+                selected: sel.size,
+              })}
             </div>
-            {section("空文件（0 字节）", scan.emptyFiles)}
-            {section("空文件夹", scan.emptyDirs)}
+            {section(t("空文件（0 字节）"), scan.emptyFiles)}
+            {section(t("空文件夹"), scan.emptyDirs)}
           </div>
         )}
       </DialogBody>
@@ -501,7 +504,7 @@ export function DirSizeDialog({ dir, onDone }: { dir: string; onDone(): void }) 
                     />
                   </span>
                   <span className="np-cell-muted np-dsiz-files">
-                    {r.isDir ? `${r.files} 项` : ""}
+                    {r.isDir ? t("{n} 项", { n: r.files }) : ""}
                   </span>
                   <span className="np-cell-muted np-dsiz-pct">
                     {total > 0 ? `${((r.size / total) * 100).toFixed(1)}%` : "—"}
@@ -604,10 +607,13 @@ export function CompareDialog({
       .filter((i) => selB.has(i.rel))
       .map((i) => joinPath(b, i.rel));
     void confirmDialog({
-      title: "删除多余项",
-      message: `把「仅在 ${fileNameOf(b) || b}」勾选的 ${paths.length} 项移入回收站？`,
+      title: t("删除多余项"),
+      message: t("把「仅在 {name}」勾选的 {n} 项移入回收站？", {
+        name: fileNameOf(b) || b,
+        n: paths.length,
+      }),
       kind: "danger",
-      okText: "删除",
+      okText: t("删除"),
     }).then((ok) => {
       if (!ok) return;
       onDone();
@@ -625,7 +631,7 @@ export function CompareDialog({
       <div>
         <div className="np-dup-head">
           <span>{title}</span>
-          <span className="np-cell-muted">{items.length} 项</span>
+          <span className="np-cell-muted">{t("{n} 项", { n: items.length })}</span>
         </div>
         {items.map((i) => (
           <Checkbox
@@ -654,19 +660,19 @@ export function CompareDialog({
     <>
       <DialogBody>
         {error ? (
-          <div className="np-list-error">比较失败：{error}</div>
+          <div className="np-list-error">{t("比较失败：")}{error}</div>
         ) : !res ? (
           <Loading text={t("正在比较两个文件夹…")} />
         ) : (
           <>
             <div className="np-dialog-muted">
-              {aName} ↔ {bName} · {res.same} 项一致
+              {t("{a} ↔ {b} · {n} 项一致", { a: aName, b: bName, n: res.same })}
             </div>
             <div className="np-cmp-list">
-              {section(`仅在 ${aName}`, "a", res.aOnly, selA)}
-              {section(`仅在 ${bName}`, "b", res.bOnly, selB)}
+              {section(t("仅在 {name}", { name: aName }), "a", res.aOnly, selA)}
+              {section(t("仅在 {name}", { name: bName }), "b", res.bOnly, selB)}
               {section(
-                "内容不同（复制方向决定以哪侧版本为准）",
+                t("内容不同（复制方向决定以哪侧版本为准）"),
                 "d",
                 res.differ,
                 selD,

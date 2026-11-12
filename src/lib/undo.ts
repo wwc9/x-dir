@@ -12,6 +12,7 @@ import { fileNameOf, parentPath } from "./path";
 import { usePanes } from "../stores/panes";
 import { useUi } from "../stores/ui";
 import { useJobs } from "../stores/jobs";
+import { t } from "./i18n";
 
 export type UndoEntry =
   /** 重命名（批量整批一条；就地重命名 = 长度 1）。from/to 均为完整路径 */
@@ -120,7 +121,7 @@ export const useUndo = create<UndoStore>()((set, get) => ({
           } else {
             useUi
               .getState()
-              .toast("回收站中未找到可恢复项（可能已清空或任务未完成）", "error");
+              .toast(t("回收站中未找到可恢复项（可能已清空或任务未完成）"), "error");
           }
           break;
         }

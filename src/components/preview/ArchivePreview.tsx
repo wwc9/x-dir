@@ -36,7 +36,9 @@ export function ArchivePreview({
       .then((l) => {
         if (reqRef.current !== req) return;
         setEntries(l.entries);
-        onInfo(`${l.total.toLocaleString()} 项${l.truncated ? "（已截断至 500）" : ""}`);
+        onInfo(
+          `${t("{n} 项", { n: l.total.toLocaleString() })}${l.truncated ? t("（已截断至 500）") : ""}`,
+        );
       })
       .catch((err) => {
         if (reqRef.current === req) onError(String(err));

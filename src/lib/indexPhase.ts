@@ -3,6 +3,7 @@
 // 纯函数（铁律：交互逻辑进 lib/ 并配单测），组件层只做状态持有。
 
 import type { IndexStatus } from "./ipc";
+import { t } from "./i18n";
 
 /** 开启开关后等待守护拉起的宽限窗（UAC 授权 + 进程启动 + 首次心跳） */
 export const INDEX_START_GRACE_MS = 15_000;
@@ -75,12 +76,12 @@ export function analyzeIndexPhase(
 export function readySummary(vols: IndexVolPhase[], totalEntries: number): string | null {
   const ready = vols.filter((v) => v.state === "ready");
   if (!ready.length) return null;
-  return `${ready.map((v) => v.letter).join("、")} 共 ${totalEntries.toLocaleString()} 项`;
+  return `${ready.map((v) => v.letter).join(t("、"))} ${t("共 {n} 项", { n: totalEntries.toLocaleString() })}`;
 }
 
 /** 失败卷清单一句话："C: 卷不可用"（无失败卷返回 null） */
 export function errorSummary(vols: IndexVolPhase[]): string | null {
   const errs = vols.filter((v) => v.state === "error");
   if (!errs.length) return null;
-  return errs.map((v) => `${v.letter}: ${v.error ?? "未知错误"}`).join(" · ");
+  return errs.map((v) => `${v.letter}: ${v.error ?? t("未知错误")}`).join(" · ");
 }

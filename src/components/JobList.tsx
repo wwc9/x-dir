@@ -83,8 +83,8 @@ function fractionOf(j: JobInfo): number | null {
 
 function percentText(j: JobInfo): string {
   // 排队/暂停是独立状态：覆盖百分比显示，让任务卡一眼可辨
-  if (j.phase === "queued") return "排队中";
-  if (j.phase === "paused") return "已暂停";
+  if (j.phase === "queued") return t("排队中");
+  if (j.phase === "paused") return t("已暂停");
   const f = fractionOf(j);
   return f === null ? "…" : `${Math.min(100, Math.round(f * 100))}%`;
 }
@@ -98,9 +98,9 @@ function JobRow({ job }: { job: JobInfo }) {
       </span>
       <div className="np-job-main">
         <div className="np-job-line">
-          <span className="np-job-label">{JOB_LABELS[job.mode]}</span>
+          <span className="np-job-label">{t(JOB_LABELS[job.mode])}</span>
           <span className="np-job-file np-ellipsis">
-            {job.currentPath ? fileNameOf(job.currentPath) : "准备中…"}
+            {job.currentPath ? fileNameOf(job.currentPath) : t("准备中…")}
           </span>
           <span className="np-job-pct">{percentText(job)}</span>
         </div>

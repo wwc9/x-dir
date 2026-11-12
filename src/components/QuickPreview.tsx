@@ -133,21 +133,21 @@ export function QuickPreviewHost() {
   function copyPath(en: FileEntry) {
     navigator.clipboard
       .writeText(en.path)
-      .then(() => useUi.getState().toast("路径已复制"))
-      .catch(() => useUi.getState().toast("复制失败", "error"));
+      .then(() => useUi.getState().toast(t("路径已复制")))
+      .catch(() => useUi.getState().toast(t("复制失败"), "error"));
   }
 
   function copyFile(en: FileEntry) {
     useClipboard.getState().set("copy", [en.path]);
-    useUi.getState().toast("已复制到应用剪贴板，可在窗格中粘贴");
+    useUi.getState().toast(t("已复制到应用剪贴板，可在窗格中粘贴"));
   }
 
   function removeFile(en: FileEntry) {
     void confirmDialog({
-      title: "删除文件",
-      message: `确定将 "${en.name}" 移入回收站吗？`,
+      title: t("删除文件"),
+      message: t("确定将 \"{name}\" 移入回收站吗？", { name: en.name }),
       kind: "warn",
-      okText: "删除",
+      okText: t("删除"),
     }).then((ok) => {
       if (!ok) return;
       close();
@@ -193,18 +193,20 @@ export function QuickPreviewHost() {
     if (canUseLoad && meta.load.stage === "text") {
       const d = meta.load.data;
       const lines = d.content ? d.content.split("\n").length : 0;
-      return `${d.encoding} · ${lines.toLocaleString()} 行${d.truncated ? " · 已截断" : ""}`;
+      return `${d.encoding} · ${t("{n} 行", { n: lines.toLocaleString() })}${d.truncated ? t(" · 已截断") : ""}`;
     }
     if (canUseLoad && meta.load.stage === "office") {
       const d = meta.load.data;
-      return `${d.sections.length} 节${d.truncated ? " · 已截断" : ""}`;
+      return `${t("{n} 节", { n: d.sections.length })}${d.truncated ? t(" · 已截断") : ""}`;
     }
-    if (kind === "pdf" && meta.pdfPages !== null) return `PDF · ${meta.pdfPages} 页`;
+    if (kind === "pdf" && meta.pdfPages !== null)
+      return t("PDF · {n} 页", { n: meta.pdfPages });
     if (kind === "officeBinary" && meta.pdfPages !== null)
-      return `转换预览 · ${meta.pdfPages} 页`;
+      return t("转换预览 · {n} 页", { n: meta.pdfPages });
     if (kind === "archive" && meta.infoText) return meta.infoText;
-    if (kind === "folder" && meta.infoText) return `文件夹 · ${meta.infoText}`;
-    return PREVIEW_LABELS[kind];
+    if (kind === "folder" && meta.infoText)
+      return t("文件夹 · {x}", { x: meta.infoText });
+    return t(PREVIEW_LABELS[kind]);
   };
 
   const spec = entry ? fileIcon(entry.name, entry.isDir, false) : null;
@@ -224,7 +226,7 @@ export function QuickPreviewHost() {
           <header className="np-pv-head">
             <AppIcon icon={spec.icon} size={DENSITY.iconMd} colorVar={spec.colorVar} />
             <span className="np-pv-name np-ellipsis">{entry.name}</span>
-            <span className="np-pv-badge">{PREVIEW_LABELS[kind]}</span>
+            <span className="np-pv-badge">{t(PREVIEW_LABELS[kind])}</span>
             <span className="np-pv-head-spacer" />
             <Button
               minimal

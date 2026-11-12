@@ -228,7 +228,7 @@ export function TitleBar() {
               <MenuItem
                 key={p}
                 icon={ic(FolderOpen)}
-                text={p === THIS_PC ? "此电脑" : p}
+                text={p === THIS_PC ? t("此电脑") : p}
                 onClick={() => {
                   setHistOpen(false);
                   navigateActive(p);
@@ -237,7 +237,10 @@ export function TitleBar() {
             ))}
             {recentFolders.length > HISTORY_SHOW_MAX && (
               <MenuItem
-                text={`仅显示最近 ${HISTORY_SHOW_MAX} 条（共 ${recentFolders.length} 条）`}
+                text={t("仅显示最近 {a} 条（共 {b} 条）", {
+                  a: HISTORY_SHOW_MAX,
+                  b: recentFolders.length,
+                })}
                 disabled
               />
             )}
@@ -288,7 +291,7 @@ export function TitleBar() {
             {KNOWN.map((k) => (
               <MenuItem
                 key={k.id}
-                text={k.label}
+                text={t(k.label)}
                 onClick={() => {
                   const p = known[k.id];
                   if (p) {
@@ -340,7 +343,7 @@ export function TitleBar() {
               onClick={() => {
                 const p = useLayout.getState().activePath();
                 if (p === THIS_PC) {
-                  useUi.getState().toast("“此电脑”不能加入收藏", "error");
+                  useUi.getState().toast(t("“此电脑”不能加入收藏"), "error");
                 } else {
                   useSettings.getState().addFavorite(p);
                 }
@@ -568,12 +571,12 @@ export function TitleBar() {
       {/* 界面语言切换（2026-10-21）：明暗切换钮右侧；显示目标语言缩写，点按即换 */}
       <button
         className="np-langbtn"
-        data-tip={lang === "zh" ? "切换到英文界面" : "Switch to Chinese"}
+        data-tip={lang === "zh" ? t("切换到英文界面") : "Switch to Chinese"}
         onClick={() =>
           useSettings.getState().update({ lang: lang === "zh" ? "en" : "zh" })
         }
       >
-        {lang === "zh" ? "EN" : "中"}
+        {lang === "zh" ? "EN" : t("中")}
       </button>
 
       {/* 窗口控制与功能钮之间：分组边界 + 安全间距（防误触窗口钮） */}

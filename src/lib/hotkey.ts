@@ -7,6 +7,7 @@
 // 之前。裸字母数字会吞掉全局输入，一律拒绝；单独 F1-F12 允许。
 
 import type { HotkeySpec, Settings } from "./ipc";
+import { t } from "./i18n";
 
 /** 录制判定结果：ok = 得到完整组合；pending = 修饰键未齐/按下纯修饰键，
  *  继续等待；invalid = 组合不成立（原因供提示） */
@@ -53,7 +54,7 @@ export function captureHotkey(e: HotkeyEventLike): HotkeyCapture {
   if (e.shiftKey) mods.push("Shift");
   // 裸主键（非 F1-F12）会吞全局输入：字母/数字/标点必须带修饰键
   if (!mods.length && !/^F\d{1,2}$/.test(main)) {
-    return { state: "invalid", reason: "需包含 Ctrl / Alt / Shift 修饰键（或单独使用 F1-F12）" };
+    return { state: "invalid", reason: t("需包含 Ctrl / Alt / Shift 修饰键（或单独使用 F1-F12）") };
   }
   return { state: "ok", combo: [...mods, main].join("+") };
 }

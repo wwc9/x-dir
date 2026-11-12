@@ -124,7 +124,7 @@ export function PreviewBody({
         ? api
             .previewReadText(entry.path, DENSITY.previewTextMaxBytes)
             .then((data): PreviewLoad => {
-              if (data.binary) throw new Error("二进制文件不支持按文本预览");
+              if (data.binary) throw new Error(t("二进制文件不支持按文本预览"));
               return { stage: "text", data };
             })
         : api
@@ -186,14 +186,14 @@ export function PreviewBody({
 
   const body = () => {
     if (!entry) {
-      return <div className="np-pv-none">{emptyHint}</div>;
+      return <div className="np-pv-none">{t(emptyHint)}</div>;
     }
     // 错误兜底只认本条目的状态（load 在条目切换时已重置，无陈旧泄漏）；
     // officeBinary 的 error 阶段 = 原生抽取失败，COM 兜底即将接手，不算终态错误
     const errNote =
       mediaError ??
       (load.stage === "error" && kind !== "officeBinary"
-        ? load.message || "无法预览此文件"
+        ? load.message || t("无法预览此文件")
         : undefined);
     if (errNote) {
       return (
@@ -232,7 +232,7 @@ export function PreviewBody({
               src={tiffSrc.url}
               alt={entry.name}
               rotateSignal={rotateSignal}
-              onError={() => setMediaError("TIFF 渲染失败")}
+              onError={() => setMediaError(t("TIFF 渲染失败"))}
             />
           );
         }
@@ -242,7 +242,7 @@ export function PreviewBody({
             src={convertFileSrc(entry.path)}
             alt={entry.name}
             rotateSignal={rotateSignal}
-            onError={() => setMediaError("图片解码失败，可能是不支持的格式")}
+            onError={() => setMediaError(t("图片解码失败，可能是不支持的格式"))}
           />
         );
       }
@@ -252,7 +252,7 @@ export function PreviewBody({
           <MediaPreview
             src={convertFileSrc(entry.path)}
             isAudio={kind === "audio"}
-            onError={() => setMediaError("媒体解码失败，可能缺少对应解码器")}
+            onError={() => setMediaError(t("媒体解码失败，可能缺少对应解码器"))}
           />
         );
       case "archive":
@@ -261,14 +261,14 @@ export function PreviewBody({
             key={entry.path}
             path={entry.path}
             onInfo={setInfoText}
-            onError={(m) => setMediaError(m || "压缩包解析失败（格式不支持或文件损坏）")}
+            onError={(m) => setMediaError(m || t("压缩包解析失败（格式不支持或文件损坏）"))}
           />
         );
       case "font":
         return (
           <FontPreview
             src={convertFileSrc(entry.path)}
-            onError={() => setMediaError("字体加载失败")}
+            onError={() => setMediaError(t("字体加载失败"))}
           />
         );
       case "text":
@@ -333,7 +333,7 @@ export function PreviewBody({
             <PdfPreview
               url={convertFileSrc(binPdf.path)}
               onDocInfo={setPdfPages}
-              onError={(m) => setMediaError(m || "转换后的 PDF 加载失败")}
+              onError={(m) => setMediaError(m || t("转换后的 PDF 加载失败"))}
               search={search}
             />
           </Suspense>
@@ -353,7 +353,9 @@ export function PreviewBody({
               // 路径不变若 URL 也不变，pdf.js 会拿旧字节（改色不生效的假象）
               url={`${convertFileSrc(entry.path)}?v=${entry.mtimeMs}`}
               onDocInfo={setPdfPages}
-              onError={(m) => setMediaError(m || "PDF 加载失败（加密或损坏的文件不支持预览）")}
+              onError={(m) =>
+                setMediaError(m || t("PDF 加载失败（加密或损坏的文件不支持预览）"))
+              }
               search={search}
             />
           </Suspense>

@@ -25,7 +25,7 @@ function engineInfo(): string {
   const chrome = /Chrome\/(\d+)/.exec(ua)?.[1];
   if (edg && chrome) return `WebView2 ${edg} · Chromium ${chrome}`;
   if (chrome) return `Chromium ${chrome}`;
-  return "未知";
+  return t("未知");
 }
 
 /** 设备配置（2026-11-06）：关于弹窗打开时拉一次——弱核显/内存紧张/老系统
@@ -77,7 +77,7 @@ export function AboutDialog() {
     const { check: checkUpdate } = await import("@tauri-apps/plugin-updater");
       const update = await checkUpdate();
       if (!update) {
-        useUi.getState().toast("应用内更新通道不可用，请手动下载", "error");
+        useUi.getState().toast(t("应用内更新通道不可用，请手动下载"), "error");
         setInPlace(null);
         return;
       }
@@ -106,7 +106,7 @@ export function AboutDialog() {
       const { relaunch } = await import("@tauri-apps/plugin-process");
       await relaunch();
     } catch (e) {
-      useUi.getState().toast(`自动更新失败：${String(e)}`, "error");
+      useUi.getState().toast(t("自动更新失败：{e}", { e: String(e) }), "error");
       setInPlace(null);
     }
   };
@@ -126,7 +126,7 @@ export function AboutDialog() {
     <Dialog
       isOpen={open}
       onClose={() => useUi.getState().closeAbout()}
-      title="关于 X-Dir"
+      title={t("关于 X-Dir")}
       icon={ic(Info)}
       canOutsideClickClose
       className="np-dialog"
@@ -144,23 +144,23 @@ export function AboutDialog() {
               <div className="np-about-id">
                 <span className="np-about-name">X-Dir</span>
                 <span className="np-about-ver">
-                  {check?.current ? `v${check.current}` : "版本信息获取中…"}
+                  {check?.current ? `v${check.current}` : t("版本信息获取中…")}
                 </span>
               </div>
             </div>
-            <div className="np-dialog-muted">{APP_INTRO}</div>
+            <div className="np-dialog-muted">{t(APP_INTRO)}</div>
 
             {/* 固定信息：作者 / 公众号 / 开源地址（完整 URL，可点直达仓库主页） */}
             <div className="np-props np-about-props">
-              <AboutProp k="开发者" v="王文铖" />
-              <AboutProp k="微信公众号" v="效率视界" />
+              <AboutProp k={t("开发者")} v="王文铖" />
+              <AboutProp k={t("微信公众号")} v="效率视界" />
               <div className="np-prop-row">
                 <span className="np-prop-key">{t("开源地址")}</span>
                 <span className="np-prop-val np-about-srcs">
                   <button
                     type="button"
                     className="np-linkbtn is-url"
-                    data-tip={`在浏览器打开：${REPO_URLS.gitee}`}
+                    data-tip={t("在浏览器打开：{u}", { u: REPO_URLS.gitee })}
                     onClick={() => void openUrl(REPO_URLS.gitee)}
                   >
                     {REPO_URLS.gitee}
@@ -168,7 +168,7 @@ export function AboutDialog() {
                   <button
                     type="button"
                     className="np-linkbtn is-url"
-                    data-tip={`在浏览器打开：${REPO_URLS.github}`}
+                    data-tip={t("在浏览器打开：{u}", { u: REPO_URLS.github })}
                     onClick={() => void openUrl(REPO_URLS.github)}
                   >
                     {REPO_URLS.github}
@@ -208,7 +208,7 @@ export function AboutDialog() {
               <div className="np-about-fail">
                 <div>{t("检查更新失败（双源均不可达）：")}</div>
                 <div className="np-about-errors">
-                  {(check.errors.length ? check.errors : ["原因未知"]).map((e) => (
+                  {(check.errors.length ? check.errors : [t("原因未知")]).map((e) => (
                     <div key={e}>· {e}</div>
                   ))}
                 </div>
@@ -223,8 +223,8 @@ export function AboutDialog() {
             {!busy && manifest && hasNew && (
               <div className="np-about-update">
                 <div className="np-about-update-title">
-                  发现新版本 v{manifest.version}
-                  {manifest.pubDate ? `（${manifest.pubDate} 发布）` : ""}
+                  {t("发现新版本")} v{manifest.version}
+                  {manifest.pubDate ? t("（{d} 发布）", { d: manifest.pubDate }) : ""}
                 </div>
                 {(() => {
                   // 分类分节（2026-11-12 用户定案「面板与 Release 描述一致」）：
@@ -236,7 +236,7 @@ export function AboutDialog() {
                     <div className="np-about-notes">
                       {secs.map((sec) => (
                         <div key={sec.title} className="np-about-note-sec">
-                          <div className="np-about-note-head">{sec.title}</div>
+                          <div className="np-about-note-head">{t(sec.title)}</div>
                           <ul>
                             {sec.items.map((n, i) => {
                               const dash = n.indexOf("——");
@@ -272,10 +272,10 @@ export function AboutDialog() {
                   >
                     {inPlace
                       ? inPlace.phase === "download"
-                        ? `下载中 ${inPlace.pct}%`
+                        ? t("下载中 {p}%", { p: inPlace.pct })
                         : inPlace.phase === "install"
-                          ? "安装中，完成后自动重启…"
-                          : "正在检查…"
+                          ? t("安装中，完成后自动重启…")
+                          : t("正在检查…")
                       : t("一键更新（自动安装）")}
                   </Button>
                   <Button

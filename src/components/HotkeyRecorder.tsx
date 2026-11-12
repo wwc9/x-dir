@@ -5,6 +5,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 
 import { captureHotkey } from "../lib/hotkey";
+import { t } from "../lib/i18n";
 
 export interface HotkeyRecorderProps {
   /** 当前热键串（如 "Ctrl+Alt+A"） */
@@ -75,7 +76,7 @@ export function HotkeyRecorder({ value, disabled, onApply, notify }: HotkeyRecor
           </Fragment>
         ))}
       </span>
-      <span className="np-hotrec-hint">{rec ? "按下组合键 · Esc 取消" : "点击更改"}</span>
+      <span className="np-hotrec-hint">{rec ? t("按下组合键 · Esc 取消") : t("点击更改")}</span>
     </button>
   );
 }

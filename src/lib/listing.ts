@@ -4,6 +4,7 @@
 
 import type { DupGroup, ListingFormat } from "./ipc";
 import { fileNameOf, isValidName } from "./path";
+import { t } from "./i18n";
 
 const esc = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
 
@@ -22,7 +23,7 @@ export interface ExportListingOptions {
  *  盘根等非法名回落「文件清单」） */
 export function exportListingDefaultName(dir: string): string {
   const n = fileNameOf(dir);
-  return isValidName(n) ? `${n}-文件清单` : "文件清单";
+  return isValidName(n) ? t("{n}-文件清单", { n }) : t("文件清单");
 }
 
 /** 可释放空间合计（每组 = 体积 × (份数 - 1)，保留一份口径） */

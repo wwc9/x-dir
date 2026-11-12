@@ -18,6 +18,7 @@ import { useSettings } from "../stores/settings";
 import { confirmDialog, useUi } from "../stores/ui";
 import { useUndo } from "./undo";
 import type { FileEntry } from "./ipc";
+import { t } from "./i18n";
 
 /** 会话级冲突策略记忆：冲突对话框勾选「本会话内不再询问」后置位，
  *  后续传输遇到冲突直接套用（重启即失效，不落盘） */
@@ -85,7 +86,7 @@ export async function transfer(
     };
     useJobs.getState().register(jobId, mode, destDir, sourceParents, onDone);
   } catch (e) {
-    useUi.getState().toast(`操作失败：${String(e)}`, "error");
+    useUi.getState().toast(t("操作失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -101,17 +102,17 @@ export async function deletePaths(
     const ok = await confirmDialog(
       permanent
         ? {
-            title: "永久删除确认",
-            message: `确定永久删除选中的 ${paths.length} 项吗？此操作不可恢复！`,
+            title: t("永久删除确认"),
+            message: t("确定永久删除选中的 {n} 项吗？此操作不可恢复！", { n: paths.length }),
             kind: "danger",
-            okText: "永久删除",
+            okText: t("永久删除"),
           }
         : {
-            title: "删除确认",
-            message: `确定把选中的 ${paths.length} 项移入回收站吗？`,
+            title: t("删除确认"),
+            message: t("确定把选中的 {n} 项移入回收站吗？", { n: paths.length }),
             kind: "warn",
-            okText: "移入回收站",
-            rememberLabel: "以后不再确认，直接移入回收站（可在设置 → 文件操作中恢复）",
+            okText: t("移入回收站"),
+            rememberLabel: t("以后不再确认，直接移入回收站（可在设置 → 文件操作中恢复）"),
             onRemember: () => useSettings.getState().update({ confirmDelete: false }),
           },
     );
@@ -138,7 +139,7 @@ export async function enqueueDelete(paths: string[], permanent: boolean): Promis
           };
     useJobs.getState().register(jobId, "delete", null, sourceParents, onDone, permanent);
   } catch (e) {
-    useUi.getState().toast(`删除失败：${String(e)}`, "error");
+    useUi.getState().toast(t("删除失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -152,10 +153,10 @@ export async function createEntry(
 ): Promise<void> {
   const name = await useUi.getState().openDialog<string | null>({
     type: "input",
-    title: spec?.title ?? (kind === "dir" ? "新建文件夹" : "新建文本文件"),
-    initial: spec?.initial ?? (kind === "dir" ? "新建文件夹" : "新建文本文件.txt"),
-    okText: "创建",
-    validate: (v) => (isValidName(v) ? null : "名称含非法字符或为 Windows 保留名"),
+    title: spec?.title ?? (kind === "dir" ? t("新建文件夹") : t("新建文本文件")),
+    initial: spec?.initial ?? (kind === "dir" ? t("新建文件夹") : t("新建文本文件.txt")),
+    okText: t("创建"),
+    validate: (v) => (isValidName(v) ? null : t("名称含非法字符或为 Windows 保留名")),
   });
   if (!name) return;
   try {
@@ -168,7 +169,7 @@ export async function createEntry(
     useUndo.getState().push({ kind: "newfolder", path: joinPath(parentDir, name) });
     onDone();
   } catch (e) {
-    useUi.getState().toast(`创建失败：${String(e)}`, "error");
+    useUi.getState().toast(t("创建失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -211,7 +212,7 @@ export async function createFolderInline(
   } catch (e) {
     panes.setPendingNew(tabId, null);
     panes.setEditing(tabId, null);
-    useUi.getState().toast(`创建失败：${String(e)}`, "error");
+    useUi.getState().toast(t("创建失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -247,7 +248,7 @@ export async function mergePdfs(
     );
     useJobs.getState().register(jobId, "pdfmerge", dir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`合并失败：${String(e)}`, "error");
+    useUi.getState().toast(t("合并失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -272,7 +273,7 @@ export async function runPdfSplit(
     );
     useJobs.getState().register(jobId, "pdfsplit", outDir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`拆分失败：${String(e)}`, "error");
+    useUi.getState().toast(t("拆分失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -302,7 +303,7 @@ export async function watermarkPdfs(entries: FileEntry[], dir: string): Promise<
     const { jobId } = await api.pdfWatermark(opts);
     useJobs.getState().register(jobId, "pdfwatermark", dir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`加水印失败：${String(e)}`, "error");
+    useUi.getState().toast(t("加水印失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -322,7 +323,7 @@ export async function extractPdfPages(entry: FileEntry, dir: string): Promise<vo
     const { jobId } = await api.pdfExtractPages(entry.path, spec, joinPath(dir, `${stem}_提取.pdf`));
     useJobs.getState().register(jobId, "pdfextract", dir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`提取失败：${String(e)}`, "error");
+    useUi.getState().toast(t("提取失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -339,7 +340,7 @@ export async function removePdfPages(entry: FileEntry, dir: string): Promise<voi
     const { jobId } = await api.pdfRemovePages(entry.path, spec, joinPath(dir, `${stem}_删页.pdf`));
     useJobs.getState().register(jobId, "pdfremove", dir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`删页失败：${String(e)}`, "error");
+    useUi.getState().toast(t("删页失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -349,7 +350,7 @@ export async function rotatePdf(entry: FileEntry, degrees: number): Promise<void
     const { jobId } = await api.pdfRotate(entry.path, degrees);
     useJobs.getState().register(jobId, "pdfrotate", null, [parentPath(entry.path) ?? ""]);
   } catch (e) {
-    useUi.getState().toast(`旋转失败：${String(e)}`, "error");
+    useUi.getState().toast(t("旋转失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -359,7 +360,7 @@ export async function compressPdfs(entries: FileEntry[], dir: string): Promise<v
     const { jobId } = await api.pdfCompress(entries.map((e) => e.path));
     useJobs.getState().register(jobId, "pdfcompress", dir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`压缩失败：${String(e)}`, "error");
+    useUi.getState().toast(t("压缩失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -384,7 +385,7 @@ export async function insertBlankPages(entries: FileEntry[], dir: string): Promi
     );
     useJobs.getState().register(jobId, "pdfinsertblank", dir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`插入空白页失败：${String(e)}`, "error");
+    useUi.getState().toast(t("插入空白页失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -415,7 +416,7 @@ export async function encryptPdfs(entries: FileEntry[], dir: string): Promise<vo
     );
     useJobs.getState().register(jobId, "pdfencrypt", dir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`加密失败：${String(e)}`, "error");
+    useUi.getState().toast(t("加密失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -434,7 +435,7 @@ export async function decryptPdfs(entries: FileEntry[], dir: string): Promise<vo
     );
     useJobs.getState().register(jobId, "pdfdecrypt", dir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`解密失败：${String(e)}`, "error");
+    useUi.getState().toast(t("解密失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -508,7 +509,7 @@ export async function pdfToPngs(entries: FileEntry[], dir: string): Promise<void
           path: e.path,
           message:
             err instanceof Error && err.name === "PasswordException"
-              ? "需要密码或密码错误（PDF 已加密）"
+              ? t("需要密码或密码错误（PDF 已加密）")
               : msg,
         });
       }
@@ -539,7 +540,7 @@ export async function officeToPdf(entries: FileEntry[], dir: string): Promise<vo
     const { jobId } = await api.officeToPdf(entries.map((e) => e.path));
     useJobs.getState().register(jobId, "officetopdf", dir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`转换失败：${String(e)}`, "error");
+    useUi.getState().toast(t("转换失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -549,7 +550,7 @@ export async function cleanOfficeMeta(entries: FileEntry[], dir: string): Promis
     const { jobId } = await api.cleanOfficeMeta(entries.map((e) => e.path));
     useJobs.getState().register(jobId, "cleanmeta", dir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`清理失败：${String(e)}`, "error");
+    useUi.getState().toast(t("清理失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -559,7 +560,7 @@ export async function exportOfficeText(entries: FileEntry[], dir: string): Promi
     const { jobId } = await api.officeToText(entries.map((e) => e.path));
     useJobs.getState().register(jobId, "officetotext", dir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`导出失败：${String(e)}`, "error");
+    useUi.getState().toast(t("导出失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -572,7 +573,7 @@ export async function convertEncoding(
     const { jobId } = await api.convertEncoding(entries.map((e) => e.path), target);
     useJobs.getState().register(jobId, "convertenc", null, entries.map((e) => parentPath(e.path) ?? ""));
   } catch (e) {
-    useUi.getState().toast(`转换失败：${String(e)}`, "error");
+    useUi.getState().toast(t("转换失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -588,7 +589,7 @@ export async function mergeCsvs(entries: FileEntry[], dir: string): Promise<void
     const { jobId } = await api.mergeCsv(res.paths, joinPath(dir, res.name));
     useJobs.getState().register(jobId, "mergecsv", dir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`合并失败：${String(e)}`, "error");
+    useUi.getState().toast(t("合并失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -604,7 +605,7 @@ export async function mergeTexts(entries: FileEntry[], dir: string): Promise<voi
     const { jobId } = await api.mergeTexts(res.paths, joinPath(dir, res.name));
     useJobs.getState().register(jobId, "mergetexts", dir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`合并失败：${String(e)}`, "error");
+    useUi.getState().toast(t("合并失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -633,10 +634,10 @@ export async function createFolders(
           "error",
         );
     } else {
-      useUi.getState().toast(`已创建 ${r.created.length} 个文件夹`);
+      useUi.getState().toast(t("已创建 {n} 个文件夹", { n: r.created.length }));
     }
   } catch (e) {
-    useUi.getState().toast(`创建失败：${String(e)}`, "error");
+    useUi.getState().toast(t("创建失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -651,7 +652,7 @@ export async function mergeXlsx(entries: FileEntry[], dir: string): Promise<void
     const { jobId } = await api.mergeXlsx(plan.paths, output, plan.mode);
     useJobs.getState().register(jobId, "mergexlsx", dir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`合并失败：${String(e)}`, "error");
+    useUi.getState().toast(t("合并失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -680,7 +681,7 @@ export async function zipEntries(entries: FileEntry[], dir: string): Promise<voi
     );
     useJobs.getState().register(jobId, "zip", dir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`压缩失败：${String(e)}`, "error");
+    useUi.getState().toast(t("压缩失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -713,7 +714,7 @@ export async function extractArchivesTo(
       }
     });
   } catch (e) {
-    useUi.getState().toast(`解压失败：${String(e)}`, "error");
+    useUi.getState().toast(t("解压失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -739,9 +740,9 @@ export async function pickExtractDestDir(): Promise<string | null> {
 async function promptExtractPassword(sources: string[], destDir: string): Promise<void> {
   const pwd = await useUi.getState().openDialog<string | null>({
     type: "input",
-    title: "压缩包已加密",
-    label: "输入解压密码后重试（密码错误将再次提示）",
-    okText: "解压",
+    title: t("压缩包已加密"),
+    label: t("输入解压密码后重试（密码错误将再次提示）"),
+    okText: t("解压"),
     mask: true,
   });
   if (!pwd) return;
@@ -756,7 +757,7 @@ function organizeKey(e: FileEntry, mode: "ext" | "month"): string {
     return `${d.getFullYear()}-${m}`;
   }
   const i = e.name.lastIndexOf(".");
-  return i > 0 ? e.name.slice(i + 1).toLowerCase() : "其他";
+  return i > 0 ? e.name.slice(i + 1).toLowerCase() : t("其他");
 }
 
 /** 按规则归类：选中文件分组建子文件夹并移入（移动走既有冲突流程与撤销栈） */
@@ -770,9 +771,9 @@ export async function organizeEntries(entries: FileEntry[], dir: string, mode: "
     list.push(e);
     groups.set(k, list);
   }
-  const label = mode === "ext" ? "扩展名" : "年月";
+  const label = mode === "ext" ? t("扩展名") : t("年月");
   if (groups.size === 1 && files.length === entries.length) {
-    useUi.getState().toast(`按${label}归类：全部对象已在同一组，无需移动`);
+    useUi.getState().toast(t("按{label}归类：全部对象已在同一组，无需移动", { label: t(label) }));
     return;
   }
   for (const [key, group] of groups) {
@@ -781,7 +782,9 @@ export async function organizeEntries(entries: FileEntry[], dir: string, mode: "
       await api.createDir(dir, key).catch(() => undefined);
       await transfer(group.map((e) => e.path), joinPath(dir, key), "move");
     } catch (e) {
-      useUi.getState().toast(`归组"${key}"失败：${String(e)}`, "error");
+      useUi
+        .getState()
+        .toast(t("归组“{key}”失败：{e}", { key, e: String(e) }), "error");
     }
   }
 }
@@ -803,9 +806,9 @@ export async function runExportListing(
       opts.recursive,
     );
     const name = fileNameOf(r.path);
-    useUi.getState().toast(`清单已导出：${name}（${r.count} 项）`);
+    useUi.getState().toast(t("清单已导出：{name}（{n} 项）", { name, n: r.count }));
   } catch (e) {
-    useUi.getState().toast(`导出失败：${String(e)}`, "error");
+    useUi.getState().toast(t("导出失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -820,7 +823,7 @@ export async function convertEol(entries: FileEntry[], to: "crlf" | "lf"): Promi
       entries.map((e) => parentPath(e.path) ?? ""),
     );
   } catch (e) {
-    useUi.getState().toast(`行尾转换失败：${String(e)}`, "error");
+    useUi.getState().toast(t("行尾转换失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -839,11 +842,16 @@ export async function createLinks(
       const par = parentPath(e.path);
       if (par) dirs.add(par);
     } catch (err) {
-      useUi.getState().toast(`创建链接"${e.name}"失败：${String(err)}`, "error");
+      useUi
+        .getState()
+        .toast(
+          t("创建链接“{name}”失败：{e}", { name: e.name, e: String(err) }),
+          "error",
+        );
     }
   }
   if (ok) {
-    useUi.getState().toast(`已创建 ${ok} 个链接`);
+    useUi.getState().toast(t("已创建 {n} 个链接", { n: ok }));
     onDone();
   }
 }
@@ -859,7 +867,7 @@ export async function combineParts(paths: string[]): Promise<void> {
     }
     useJobs.getState().register(jobId, "combine", null, [...dirs]);
   } catch (e) {
-    useUi.getState().toast(`合并失败：${String(e)}`, "error");
+    useUi.getState().toast(t("合并失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -874,7 +882,7 @@ export async function applyRenames(
   try {
     results = await api.renameItems(items);
   } catch (e) {
-    useUi.getState().toast(`批量重命名失败：${String(e)}`, "error");
+    useUi.getState().toast(t("批量重命名失败：{e}", { e: String(e) }), "error");
     return;
   }
   const ok = results.filter((r) => r.ok);
@@ -922,7 +930,7 @@ export async function imgCompress(entries: FileEntry[], dir: string): Promise<vo
     const { jobId } = await api.imgCompress(spec.paths, spec.target, spec.quality);
     useJobs.getState().register(jobId, "imgcompress", dir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`压缩失败：${String(e)}`, "error");
+    useUi.getState().toast(t("压缩失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -944,7 +952,7 @@ export async function imgWatermark(entries: FileEntry[], dir: string): Promise<v
     const { jobId } = await api.imgWatermark(paths, opts);
     useJobs.getState().register(jobId, "imgwatermark", dir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`加水印失败：${String(e)}`, "error");
+    useUi.getState().toast(t("加水印失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -966,7 +974,7 @@ export async function imgConvert(entries: FileEntry[], dir: string): Promise<voi
     );
     useJobs.getState().register(jobId, "imgconvert", dir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`转换失败：${String(e)}`, "error");
+    useUi.getState().toast(t("转换失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -990,7 +998,7 @@ export async function imgResize(entries: FileEntry[], dir: string): Promise<void
     );
     useJobs.getState().register(jobId, "imgresize", dir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`缩放失败：${String(e)}`, "error");
+    useUi.getState().toast(t("缩放失败：{e}", { e: String(e) }), "error");
   }
 }
 
@@ -1012,6 +1020,6 @@ export async function imgMontage(entries: FileEntry[], dir: string): Promise<voi
     const { jobId } = await api.imgMontage(paths, { ...opts, output });
     useJobs.getState().register(jobId, "imgmontage", dir, [dir]);
   } catch (e) {
-    useUi.getState().toast(`拼图失败：${String(e)}`, "error");
+    useUi.getState().toast(t("拼图失败：{e}", { e: String(e) }), "error");
   }
 }

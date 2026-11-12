@@ -101,7 +101,7 @@ export function NewFoldersDialog({
   onDone(names: string[] | null): void;
 }) {
   const t2 = useT();
-  const init = loadDialogPrefs("newFolders", { mode: "lines", pattern: "第{}章", start: 1, end: 10 });
+  const init = loadDialogPrefs("newFolders", { mode: "lines", pattern: t2("第{}章"), start: 1, end: 10 });
   const [mode, setMode] = useState<"lines" | "pattern">(
     init.mode === "pattern" ? "pattern" : "lines",
   );
@@ -187,7 +187,7 @@ export function NewFoldersDialog({
                   p.error ? "is-err" : p.name === p.req ? "is-same" : "is-chg"
                 }`}
               >
-                {p.error ?? p.name}
+                {p.error ? t2(p.error) : p.name}
               </span>
             </div>
           ))}
@@ -239,7 +239,7 @@ export function XlsxMergeDialog({
   const [mode, setMode] = useState<"sheets" | "rows">(() =>
     loadDialogPrefs("xlsxMerge", { mode: "sheets" }).mode === "rows" ? "rows" : "sheets",
   );
-  const [name, setName] = useState("合并表格.xlsx");
+  const [name, setName] = useState(t2("合并表格.xlsx"));
   const trimmed = name.trim();
   const valid = trimmed.length > 0;
   // 与 Rust 端同口径：缺 .xlsx 后缀时补上
@@ -339,7 +339,7 @@ export function PdfMergeDialog({
       smartArchiveStem(
         entries.map((e) => ({ name: nameOf(e.path), isDir: e.isDir })),
         dir ? fileNameOf(dir) : null,
-        "合并文档",
+        t2("合并文档"),
       ),
     [entries, dir],
   );
@@ -538,7 +538,7 @@ export function PdfWatermarkDialog({
     pageRange: "all",
     pageNumberFormat: "cn",
     datetimeFormat: "cn",
-    outName: "[原文件名]-水印",
+    outName: `[原文件名]-${t2("水印")}`,
   });
   const [text, setText] = useState(init.text);
   const [fontName, setFontName] = useState(init.fontName);
@@ -574,12 +574,12 @@ export function PdfWatermarkDialog({
     ? nowDate.getFullYear() + "/" + mm2 + "/" + dd2
     : datetimeFormat === "dash"
       ? nowDate.getFullYear() + "-" + mm2 + "-" + dd2
-      : nowDate.getFullYear() + "年" + mm2 + "月" + dd2 + "日";
+      : nowDate.getFullYear() + t2("年") + mm2 + t2("月") + dd2 + t2("日");
   // 预览与 Rust 端同口径：目录 = 文件所在目录（parent_dir），name 无 .pdf 后缀时补上
   const renderedName =
     outName.split("[原文件名]").join(stemOf(firstPath))
       .split("[原文件夹名]").join(dirOf(firstPath))
-      .split("[日期时间]").join(dtText) || "水印.pdf";
+      .split("[日期时间]").join(dtText) || t2("水印") + ".pdf";
   const previewPath =
     dirOf(firstPath) +
     "\\" +
@@ -629,7 +629,7 @@ export function PdfWatermarkDialog({
         : total <= 0
           ? t2("页数读取失败（文件可能损坏或加密）")
           : specParsed?.error
-            ? specParsed.error
+            ? t2(specParsed.error)
             : specParsed && specParsed.pages.length === 0
               ? t2("页码范围为空")
               : null;
@@ -823,7 +823,7 @@ export function PdfWatermarkDialog({
         </div>
         {(fontSizeErr || marginErr || specErr) && (
           <div className="np-dialog-error">
-            {[fontSizeErr, marginErr, specErr].filter(Boolean).join("；")}
+            {[fontSizeErr, marginErr, specErr].filter(Boolean).join(t2("；"))}
           </div>
         )}
         <div className="np-dialog-note">
@@ -965,7 +965,7 @@ export function MergeFilesDialog({
   const meta = FORMAT_META[format];
   const ext = isZip ? meta.ext : cfg.ext;
   const note = isZip ? meta.note : cfg.note;
-  const [name, setName] = useState<string>(cfg.defName);
+  const [name, setName] = useState<string>(t2(cfg.defName));
   // 用户手动改过名 = 冻结智能跟随（清单增删/冲突递增不再覆写）
   const [nameEdited, setNameEdited] = useState(false);
 
@@ -1016,7 +1016,7 @@ export function MergeFilesDialog({
       name: fileNameOf(p),
       isDir: entries.find((e) => e.path === p)?.isDir ?? false,
     }));
-    const stem = smartArchiveStem(infos, dir ? fileNameOf(dir) : null, cfg.fallbackStem);
+    const stem = smartArchiveStem(infos, dir ? fileNameOf(dir) : null, t2(cfg.fallbackStem));
     let cand = `${stem}.${ext0}`;
     let n = 2;
     while (existing?.has(cand.toLowerCase()) && n < 100) {
@@ -1170,7 +1170,7 @@ export function PdfPagesDialog({
   const wipeAll = !extract && pages !== null && pages.length >= (total ?? 0);
   const valid = pages !== null && !wipeAll;
   const stem = nameOf(entry.path).replace(/\.pdf$/i, "");
-  const outName = stem + (extract ? "_提取.pdf" : "_删页.pdf");
+  const outName = stem + (extract ? t2("_提取") : t2("_删页")) + ".pdf";
   const preview = joinPath(parentPath(entry.path) ?? "", outName);
   const brief = pages ? pagesToSpec(pages) : "";
 
@@ -1573,7 +1573,7 @@ export function PdfInsertBlankDialog({
               value={String(mode)}
               options={BLANK_MODES.map((m) => ({
                 value: String(m.value),
-                label: `${m.value} · ${m.label}`,
+                label: `${m.value} · ${t2(m.label)}`,
               }))}
               onChange={(v) => setMode(Number(v))}
             />
@@ -1606,8 +1606,8 @@ export function PdfInsertBlankDialog({
         {specErr && <div className="np-dialog-error">{specErr}</div>}
         <div className="np-dialog-note">
           <span className="np-dialog-note-row">{blankHint}</span>
-          <span className="np-dialog-note-row np-dialog-note-path" title={`${stem}_插页.pdf`}>
-            {t2("输出预览：{out}", { out: `${stem}_插页.pdf` })}
+          <span className="np-dialog-note-row np-dialog-note-path" title={`${stem}${t2("_插页")}.pdf`}>
+            {t2("输出预览：{out}", { out: `${stem}${t2("_插页")}.pdf` })}
           </span>
         </div>
       </DialogBody>
@@ -1854,8 +1854,8 @@ export function PdfEncryptDialog({
           <span className="np-dialog-note-row">
             {t2("三个开关默认全开 = 禁止打印/复制/编辑（权限密码持有者不受限）。")}
           </span>
-          <span className="np-dialog-note-row np-dialog-note-path" title={`${stem}_加密.pdf`}>
-            {t2("输出预览：{out}", { out: `${stem}_加密.pdf` })}
+          <span className="np-dialog-note-row np-dialog-note-path" title={`${stem}${t2("_加密")}.pdf`}>
+            {t2("输出预览：{out}", { out: `${stem}${t2("_加密")}.pdf` })}
           </span>
         </div>
       </DialogBody>
@@ -1916,8 +1916,8 @@ export function PdfDecryptDialog({
           <span className="np-dialog-note-row">
             {t2("未加密的文件自动跳过并计入失败回执。")}
           </span>
-          <span className="np-dialog-note-row np-dialog-note-path" title={`${stem}_解密.pdf`}>
-            {t2("输出预览：{out}", { out: `${stem}_解密.pdf` })}
+          <span className="np-dialog-note-row np-dialog-note-path" title={`${stem}${t2("_解密")}.pdf`}>
+            {t2("输出预览：{out}", { out: `${stem}${t2("_解密")}.pdf` })}
           </span>
         </div>
       </DialogBody>
