@@ -67,8 +67,9 @@
 | zip | MIT | OOXML 隐私清理重打包 + zip 压缩（含 AES-256 密码） |
 | sevenz-rust | Apache-2.0 | 7z 清单/解压 |
 | quick-xml | MIT OR Apache-2.0 | OOXML/ODF 文本抽取 |
-| calamine | MIT | xlsx/xlsm/xls/xlsb/ods 预览读取 + Excel 合并读取 |
-| rust_xlsxwriter | MIT | Excel 合并写出（唯一宽松协议的 xlsx 写库） |
+| calamine | MIT | xlsx/xlsm/xls/xlsb/ods 预览读取 + Excel 合并/拆分数据通道读取 |
+| rust_xlsxwriter | MIT | Excel 合并/拆分数据通道写出（唯一宽松协议的 xlsx 写库） |
+| umya-spreadsheet | MIT | Excel 合并/拆分保真通道（xlsx/xlsm 整档建模读写，样式/合并格/列宽/冻结/图表 roundtrip；2026-11-12 核验，zip 8.6 已在依赖树零新增版本） |
 | encoding_rs | MIT OR Apache-2.0 | 编码探测/转换 |
 | mailparse | 0BSD | eml 邮件预览 MIME 解析 |
 | cfb | MIT | msg 邮件预览 OLE 容器读流（旧版 doc/ppt 抽取同用） |

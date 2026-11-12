@@ -155,10 +155,17 @@ pub enum JobKind {
         password: Option<String>,
         encrypt_header: bool,
     },
-    /// Excel 工作簿合并（calamine 读 → rust_xlsxwriter 写 .xlsx）→ output
+    /// Excel 工作簿合并（calamine 读 → rust_xlsxwriter 写 .xlsx；全部源
+    /// xlsx/xlsm 且分表保留时走 umya 保真通道）→ output
     MergeXlsx {
         mode: crate::fs::xlsx::XlsxMergeMode,
         output: String,
+        opts: crate::fs::xlsx::MergeOpts,
+    },
+    /// Excel 拆分（按表/按行数/按列值/均分 N 份）：xlsx/xlsm 按表拆走 umya
+    /// 保真通道，输出到 <stem>_拆分 子文件夹
+    SplitXlsx {
+        opts: crate::fs::xlsx_split::SplitOpts,
     },
     /// 解压 zip/7z/rar/tar 系/gz/xz/bz2：每包解到 <dest>/<包名>/ 子目录
     /// （dest 走 enqueue 的 dest 参数）；password = 加密包解压密码（无则 None，
@@ -750,7 +757,7 @@ impl JobManager {
                             &mut failed,
                         );
                     }
-                    JobKind::MergeXlsx { mode, output } => {
+                    JobKind::MergeXlsx { mode, output, opts } => {
                         if let Some(par) = parent_of(output) {
                             dirty_dirs.push(par);
                         }
@@ -763,6 +770,33 @@ impl JobManager {
                             &sources,
                             output,
                             *mode,
+                            opts,
+                            &cancel,
+                            &mut prog,
+                            &mut em,
+                            &mut failed,
+                        );
+                    }
+                    JobKind::SplitXlsx { opts } => {
+                        for s in &sources {
+                            if let Some(par) = parent_of(s) {
+                                dirty_dirs.push(par.clone());
+                                if opts.sub_folder {
+                                    let stem = crate::fs::path::file_name_of(s);
+                                    let stem = match stem.rfind('.') {
+                                        Some(i) if i > 0 => stem[..i].to_string(),
+                                        _ => stem,
+                                    };
+                                    dirty_dirs.push(crate::fs::path::join_name(
+                                        &par,
+                                        &format!("{stem}_拆分"),
+                                    ));
+                                }
+                            }
+                        }
+                        crate::fs::xlsx_split::split_xlsx(
+                            &sources,
+                            opts,
                             &cancel,
                             &mut prog,
                             &mut em,

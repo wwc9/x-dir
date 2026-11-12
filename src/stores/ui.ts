@@ -60,6 +60,8 @@ export type DialogSpec =
   /** Excel 合并（右键"Excel 合并"，2026-10-17；2026-11-03 §4.9 清单化）：
    *  清单拖动定序 + 模式 + 输出名一次成形 */
   | { type: "xlsxMerge"; entries: FileEntry[] }
+  /** Excel 拆分（2026-11-12）：按表/按行数/按列值/均分 N 份，表清单异步拉取 */
+  | { type: "xlsxSplit"; entries: FileEntry[] }
   /** PDF 合并扩展（2026-10-22）：混列 PDF/图片 + 按文件夹分组 + 空白页凑偶数 */
   | { type: "pdfMerge"; variant: "files" | "folders"; entries: FileEntry[] }
   /** PDF 加水印（右键"PDF 加水印"，2026-10-22 参数化）：带选中 PDF 入场 */

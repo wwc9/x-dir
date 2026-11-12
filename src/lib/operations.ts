@@ -641,18 +641,67 @@ export async function createFolders(
   }
 }
 
-/** Excel 合并（清单拖动定序，2026-11-03 §4.9）：模式 + 输出名 → 任务引擎（mergexlsx） */
+/** Excel 合并（清单拖动定序，2026-11-03 §4.9；2026-11-12 参数集扩展）：
+ *  模式/工作表范围/表名规则/表头去重/来源列 → 任务引擎（mergexlsx） */
 export async function mergeXlsx(entries: FileEntry[], dir: string): Promise<void> {
   const plan = await useUi.getState().openDialog<
-    { paths: string[]; mode: "sheets" | "rows"; name: string } | null
+    {
+      paths: string[];
+      mode: "sheets" | "rows";
+      sheetScope: "visible" | "all";
+      nameRule: "smart" | "sheet" | "file";
+      dedupHeader: boolean;
+      sourceCol: "none" | "file" | "fileSheet";
+      name: string;
+    } | null
   >({ type: "xlsxMerge", entries });
   if (!plan) return;
   const output = joinPath(dir, plan.name);
   try {
-    const { jobId } = await api.mergeXlsx(plan.paths, output, plan.mode);
+    const { jobId } = await api.mergeXlsx(plan.paths, output, plan.mode, {
+      sheetScope: plan.sheetScope,
+      nameRule: plan.nameRule,
+      dedupHeader: plan.dedupHeader,
+      sourceCol: plan.sourceCol,
+    });
     useJobs.getState().register(jobId, "mergexlsx", dir, [dir]);
   } catch (e) {
     useUi.getState().toast(t("合并失败：{e}", { e: String(e) }), "error");
+  }
+}
+
+/** Excel 拆分（2026-11-12 新功能）：按表/按行数/按列值/均分 N 份，
+ *  表清单由对话框异步拉取；输出到 <stem>_拆分 子文件夹或源目录 */
+export async function splitXlsx(entries: FileEntry[], dir: string): Promise<void> {
+  const plan = await useUi.getState().openDialog<
+    {
+      paths: string[];
+      mode: "sheet" | "rows" | "value" | "parts";
+      sheetName?: string;
+      rowsPerPart: number;
+      colIndex: number;
+      parts: number;
+      includeHidden: boolean;
+      skipEmpty: boolean;
+      withHeader: boolean;
+      subFolder: boolean;
+    } | null
+  >({ type: "xlsxSplit", entries });
+  if (!plan) return;
+  try {
+    const { jobId } = await api.splitXlsx(plan.paths, plan.mode, {
+      sheetName: plan.sheetName,
+      rowsPerPart: plan.rowsPerPart,
+      colIndex: plan.colIndex,
+      parts: plan.parts,
+      includeHidden: plan.includeHidden,
+      skipEmpty: plan.skipEmpty,
+      withHeader: plan.withHeader,
+      subFolder: plan.subFolder,
+    });
+    useJobs.getState().register(jobId, "xlsxsplits", dir, [dir]);
+  } catch (e) {
+    useUi.getState().toast(t("拆分失败：{e}", { e: String(e) }), "error");
   }
 }
 

@@ -11,3 +11,5 @@ pub mod sevenzip;
 pub mod sort;
 pub mod textops;
 pub mod xlsx;
+pub mod xlsx_split;
+pub mod xlsx_style;

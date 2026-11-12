@@ -48,6 +48,7 @@ export type JobMode =
   | "mergecsv"
   | "mergetexts"
   | "mergexlsx"
+  | "xlsxsplits"
   | "zip"
   | "extract"
   | "imgcompress"

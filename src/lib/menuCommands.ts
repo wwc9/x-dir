@@ -67,6 +67,7 @@ import {
   Scaling,
   Scissors,
   Search,
+  Sheet,
   ShieldCheck,
   Shrink,
   Split,
@@ -219,7 +220,8 @@ export const BUILTIN_FNS: BuiltinFn[] = [
   { key: "csvConvert", label: "编码转换 ▸", desc: "UTF-8/GBK 编码互转", group: "办公与表格", icon: Languages, area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "csv,tsv,txt,md,log" }) },
   { key: "eolConvert", label: "行尾转换 ▸", desc: "CRLF 与 LF 行尾互转", group: "办公与表格", icon: Replace, area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", exts: "txt,md,csv,tsv,log,json,xml,yaml,yml,ini,sql,html,css,js,mjs,cjs,ts,tsx,jsx,py,java,cs,c,cpp,h,hpp,rs,go,sh,bat,ps1" }) },
   { key: "csvMerge", label: "CSV 合并", desc: "多 CSV 合并自动去重表头", group: "办公与表格", icon: Table, area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2, exts: "csv,tsv" }) },
-  { key: "xlsxMerge", label: "Excel 合并", desc: "多工作簿合并为一份", group: "办公与表格", icon: Table2, area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2, exts: "xlsx,xlsm,xls,xlsb,ods" }) },
+  { key: "xlsxMerge", label: "Excel 合并", desc: "多工作簿合并为一份（保真格式/含隐藏表/来源列）", group: "办公与表格", icon: Table2, area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2, exts: "xlsx,xlsm,xls,xlsb,ods" }) },
+  { key: "xlsxSplit", label: "Excel 拆分", desc: "按工作表/行数/列值拆为多个文件（保真格式）", group: "办公与表格", icon: Sheet, area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 1, exts: "xlsx,xlsm,xls,xlsb,ods" }) },
   { key: "textMerge", label: "文本合并", desc: "文本按选中顺序拼接", group: "办公与表格", icon: Text, area: "sel", supportsSel: true, supportsBlank: false, cond: C({ target: "file", minCount: 2, exts: "txt,md,log" }) },
   { key: "exportList", label: "导出文件清单", desc: "导出 CSV 清单，直存当前文件夹", group: "办公与表格", icon: ClipboardList, area: "both", supportsSel: true, supportsBlank: true, cond: C({}) },
 ];

@@ -94,14 +94,22 @@ pub fn merge_texts(
     })
 }
 
-/// Excel 工作簿合并（calamine 读 → rust_xlsxwriter 写 .xlsx；mode ∈ sheets/rows）
+/// Excel 工作簿合并（calamine 读 → rust_xlsxwriter 写 .xlsx；全部源
+/// xlsx/xlsm 且分表保留时自动走 umya 保真通道）。mode ∈ sheets/rows；
+/// sheetScope ∈ visible/all；nameRule ∈ smart/sheet/file；sourceCol ∈
+/// none/file/fileSheet（2026-11-12 参数集扩展，None 项 = 旧行为）
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn merge_xlsx(
     app: AppHandle,
     state: State<'_, AppState>,
     paths: Vec<String>,
     output: String,
     mode: String,
+    sheet_scope: Option<String>,
+    name_rule: Option<String>,
+    dedup_header: Option<bool>,
+    source_col: Option<String>,
 ) -> Result<JobId, AppError> {
     if paths.len() < 2 {
         return Err(AppError::new("E_INVALID_NAME", "合并至少需要 2 个文件"));
@@ -113,9 +121,15 @@ pub fn merge_xlsx(
     }
     let mode = crate::fs::xlsx::XlsxMergeMode::parse(&mode)
         .ok_or_else(|| AppError::new("E_INVALID_NAME", format!("未知合并模式：{mode}")))?;
+    let opts = crate::fs::xlsx::MergeOpts {
+        scope: crate::fs::xlsx::SheetScope::parse(sheet_scope.as_deref()),
+        name_rule: crate::fs::xlsx::SheetNameRule::parse(name_rule.as_deref()),
+        dedup_header: dedup_header.unwrap_or(true),
+        source_col: crate::fs::xlsx::SourceCol::parse(source_col.as_deref()),
+    };
     Ok(JobId {
         job_id: state.jobs.enqueue(
-            JobKind::MergeXlsx { mode, output },
+            JobKind::MergeXlsx { mode, output, opts },
             paths,
             None,
             Policy::Skip,
@@ -123,6 +137,95 @@ pub fn merge_xlsx(
             app,
         ),
     })
+}
+
+/// Excel 拆分（mode ∈ sheet/rows/value/parts；rows/value/parts 仅支持
+/// 单文件）。rowsPerPart/colIndex/parts 自带范围钳制，subFolder = 输出到
+/// `<stem>_拆分` 子文件夹
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn split_xlsx(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    paths: Vec<String>,
+    mode: String,
+    sheet_name: Option<String>,
+    rows_per_part: Option<u32>,
+    col_index: Option<u32>,
+    parts: Option<u32>,
+    include_hidden: Option<bool>,
+    skip_empty: Option<bool>,
+    with_header: Option<bool>,
+    sub_folder: Option<bool>,
+) -> Result<JobId, AppError> {
+    if paths.is_empty() {
+        return Err(AppError::new("E_INVALID_NAME", "至少需要 1 个文件"));
+    }
+    reject_exists(&paths)?;
+    let mode = crate::fs::xlsx_split::SplitMode::parse(&mode)
+        .ok_or_else(|| AppError::new("E_INVALID_NAME", format!("未知拆分模式：{mode}")))?;
+    if mode != crate::fs::xlsx_split::SplitMode::Sheet && paths.len() != 1 {
+        return Err(AppError::new(
+            "E_INVALID_NAME",
+            "按行数/按列值/均分拆分仅支持单个文件（按工作表拆分支持批量）",
+        ));
+    }
+    const XLSX_EXTS: [&str; 5] = ["xlsx", "xlsm", "xls", "xlsb", "ods"];
+    let bad = paths.iter().find(|p| {
+        !XLSX_EXTS.contains(
+            &crate::fs::path::file_name_of(p)
+                .rsplit('.')
+                .next()
+                .unwrap_or("")
+                .to_ascii_lowercase()
+                .as_str(),
+        )
+    });
+    if let Some(p) = bad {
+        return Err(AppError::new(
+            "E_INVALID_NAME",
+            format!("不支持的表格格式：{}", crate::fs::path::file_name_of(p)),
+        ));
+    }
+    let rows_per_part = rows_per_part.unwrap_or(1000).clamp(1, 1_048_575);
+    let parts = parts.unwrap_or(2).clamp(1, 200);
+    if col_index.unwrap_or(0) >= 16_384 {
+        return Err(AppError::new("E_INVALID_NAME", "依据列序号超出范围"));
+    }
+    let opts = crate::fs::xlsx_split::SplitOpts {
+        mode,
+        sheet_name: sheet_name.filter(|s| !s.is_empty()),
+        rows_per_part,
+        col_index: col_index.unwrap_or(0),
+        parts,
+        include_hidden: include_hidden.unwrap_or(false),
+        skip_empty: skip_empty.unwrap_or(false),
+        with_header: with_header.unwrap_or(true),
+        sub_folder: sub_folder.unwrap_or(true),
+    };
+    Ok(JobId {
+        job_id: state.jobs.enqueue(
+            JobKind::SplitXlsx { opts },
+            paths,
+            None,
+            Policy::Skip,
+            false,
+            app,
+        ),
+    })
+}
+
+/// Excel 工作表信息（拆分对话框选表/选列：表名 + 可见性 + 行列数 + 首行样本）。
+/// 轻量读取入 spawn_blocking，不占主线程
+#[tauri::command]
+pub async fn xlsx_sheet_info(path: String) -> Result<Vec<crate::fs::xlsx::SheetMeta>, AppError> {
+    reject_exists(std::slice::from_ref(&path))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::fs::xlsx::collect_sheet_meta(&path)
+            .map_err(|e| AppError::new("E_INVALID_NAME", format!("无法读取工作簿：{e}")))
+    })
+    .await
+    .map_err(|e| AppError::new("E_JOB_FAILED", format!("读取失败：{e}")))?
 }
 
 /// 压缩（zip / 7z / tar.gz；文件平铺、文件夹递归含顶层目录）。

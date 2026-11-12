@@ -30,6 +30,7 @@ export const JOB_LABELS: Record<JobMode, string> = {
   mergecsv: "表格合并",
   mergetexts: "文本合并",
   mergexlsx: "Excel 合并",
+  xlsxsplits: "Excel 拆分",
   zip: "压缩",
   extract: "解压",
   imgcompress: "图片压缩",

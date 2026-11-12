@@ -63,6 +63,7 @@ import {
   PdfEncryptDialog,
   PdfDecryptDialog,
   XlsxMergeDialog,
+  XlsxSplitDialog,
 } from "./ToolsDialogs";
 import {
   HashCalcDialog,
@@ -90,6 +91,7 @@ const WIDE_TYPES = new Set<string>([
   "pdfPages",
   "filesMerge",
   "xlsxMerge",
+  "xlsxSplit",
   "imgCompress",
   "imgWatermark",
   "imgConvert",
@@ -172,6 +174,8 @@ export function DialogHost() {
                         ? t("PDF 加水印")
                         : dialog?.type === "xlsxMerge"
                           ? t("Excel 合并")
+                          : dialog?.type === "xlsxSplit"
+                            ? t("Excel 拆分")
                           : dialog?.type === "imgCompress"
                   ? t("图片压缩")
                   : dialog?.type === "imgWatermark"
@@ -314,6 +318,10 @@ export function DialogHost() {
 
       {dialog?.type === "xlsxMerge" && (
         <XlsxMergeDialog entries={dialog.entries} onDone={(v) => resolve(v)} />
+      )}
+
+      {dialog?.type === "xlsxSplit" && (
+        <XlsxSplitDialog entries={dialog.entries} onDone={(v) => resolve(v)} />
       )}
 
       {dialog?.type === "filesMerge" && (

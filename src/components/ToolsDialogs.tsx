@@ -225,19 +225,47 @@ export function NewFoldersDialog({
   );
 }
 
-/** Excel 合并（2026-11-03 §4.9 对齐）：待处理清单拖动定序（表序/行序随清单）+
- *  模式（每源表一张目标表 / 纵向拼接去重复表头）+ 输出名与预览一次成形 */
+/** Excel 合并（2026-11-03 §4.9 对齐；2026-11-12 参数集扩展）：待处理清单
+ *  拖动定序 + 模式（分表保留/纵向拼接）+ 工作表范围（仅可见/含隐藏）+
+ *  表名规则（分表）+ 表头去重与来源列（拼接）+ 输出名一次成形。
+ *  全部源 xlsx/xlsm 且分表保留 = umya 保真通道（样式/合并格/列宽/冻结全留），
+ *  其余 = 数据通道（值 + xlsx 源逐格样式迁移） */
 export function XlsxMergeDialog({
   entries,
   onDone,
 }: {
   entries: FileEntry[];
-  onDone(v: { paths: string[]; mode: "sheets" | "rows"; name: string } | null): void;
+  onDone(v: {
+    paths: string[];
+    mode: "sheets" | "rows";
+    sheetScope: "visible" | "all";
+    nameRule: "smart" | "sheet" | "file";
+    dedupHeader: boolean;
+    sourceCol: "none" | "file" | "fileSheet";
+    name: string;
+  } | null): void;
 }) {
   const t2 = useT();
+  const init = loadDialogPrefs("xlsxMerge", {
+    mode: "sheets",
+    sheetScope: "visible",
+    nameRule: "smart",
+    dedupHeader: true,
+    sourceCol: "none",
+  });
   const [items, setItems] = useState<string[]>(() => pathsByNames(entries));
   const [mode, setMode] = useState<"sheets" | "rows">(() =>
-    loadDialogPrefs("xlsxMerge", { mode: "sheets" }).mode === "rows" ? "rows" : "sheets",
+    init.mode === "rows" ? "rows" : "sheets",
+  );
+  const [scope, setScope] = useState<"visible" | "all">(() =>
+    init.sheetScope === "all" ? "all" : "visible",
+  );
+  const [rule, setRule] = useState<"smart" | "sheet" | "file">(() =>
+    init.nameRule === "sheet" || init.nameRule === "file" ? init.nameRule : "smart",
+  );
+  const [dedup, setDedup] = useState(() => init.dedupHeader !== false);
+  const [srcCol, setSrcCol] = useState<"none" | "file" | "fileSheet">(() =>
+    init.sourceCol === "file" || init.sourceCol === "fileSheet" ? init.sourceCol : "none",
   );
   const [name, setName] = useState(t2("合并表格.xlsx"));
   const trimmed = name.trim();
@@ -245,9 +273,28 @@ export function XlsxMergeDialog({
   // 与 Rust 端同口径：缺 .xlsx 后缀时补上
   const withExt = trimmed.toLowerCase().endsWith(".xlsx") ? trimmed : `${trimmed}.xlsx`;
   const preview = joinPath(parentPath(entries[0]?.path ?? "") ?? "", withExt);
+  // 保真通道资格：全部源 xlsx/xlsm（xls/xlsb/ods 任一混入即数据通道）
+  const fidelity = entries.every((e) => {
+    const ext = fileNameOf(e.path).split(".").pop()?.toLowerCase() ?? "";
+    return ext === "xlsx" || ext === "xlsm";
+  });
   const submit = () => {
-    saveDialogPrefs("xlsxMerge", { mode });
-    onDone({ paths: items, mode, name: withExt });
+    saveDialogPrefs("xlsxMerge", {
+      mode,
+      sheetScope: scope,
+      nameRule: rule,
+      dedupHeader: dedup,
+      sourceCol: srcCol,
+    });
+    onDone({
+      paths: items,
+      mode,
+      sheetScope: scope,
+      nameRule: rule,
+      dedupHeader: dedup,
+      sourceCol: srcCol,
+      name: withExt,
+    });
   };
   return (
     <>
@@ -261,7 +308,46 @@ export function XlsxMergeDialog({
               onChange={setMode}
               options={[
                 { value: "sheets", label: t2("分表保留"), title: t2("每个源工作表一张目标表") },
-                { value: "rows", label: t2("纵向拼接"), title: t2("全部行并入一张表，重复表头自动去除") },
+                { value: "rows", label: t2("纵向拼接"), title: t2("全部行并入一张表") },
+              ]}
+            />
+          </FormRow>
+          <FormRow k={t2("工作表范围")} wide>
+            <Seg<"visible" | "all">
+              value={scope}
+              onChange={setScope}
+              options={[
+                { value: "visible", label: t2("仅可见表"), title: t2("跳过隐藏与深度隐藏的工作表") },
+                { value: "all", label: t2("含隐藏表"), title: t2("隐藏工作表一并并入") },
+              ]}
+            />
+          </FormRow>
+          <FormRow k={t2("表名规则")} off={mode === "rows"}>
+            <Seg<"smart" | "sheet" | "file">
+              value={rule}
+              onChange={setRule}
+              options={[
+                { value: "smart", label: t2("智能"), title: t2("单表文件 = 文件名，多表文件 = 文件名·表名") },
+                { value: "sheet", label: t2("仅表名"), title: t2("目标表名 = 源工作表名，重名自动加序号") },
+                { value: "file", label: t2("仅文件名"), title: t2("目标表名 = 源文件名，多表文件同名自动加序号") },
+              ]}
+            />
+          </FormRow>
+          <FormRow k={t2("重复表头")} off={mode === "sheets"}>
+            <Switch
+              checked={dedup}
+              onChange={(e) => setDedup(e.currentTarget.checked)}
+              innerLabel={t2("自动去除与首个文件相同的表头行")}
+            />
+          </FormRow>
+          <FormRow k={t2("来源列")} off={mode === "sheets"}>
+            <Seg<"none" | "file" | "fileSheet">
+              value={srcCol}
+              onChange={setSrcCol}
+              options={[
+                { value: "none", label: t2("不添加"), title: t2("不插入来源标记列") },
+                { value: "file", label: t2("文件名"), title: t2("首列插入来源文件名") },
+                { value: "fileSheet", label: t2("文件名·表"), title: t2("首列插入来源文件名·工作表名") },
               ]}
             />
           </FormRow>
@@ -279,6 +365,13 @@ export function XlsxMergeDialog({
         </div>
         <div className="np-dialog-note">
           <span className="np-dialog-note-row">
+            {mode === "sheets" && fidelity
+              ? t2("保真合并：样式、合并单元格、列宽、冻结窗格原样保留；输出为 .xlsx（.xlsm 的宏不迁移）。")
+              : mode === "sheets"
+                ? t2("数据合并：读出数值与文本后写入 .xlsx（xlsx/xlsm 源同步迁移单元格样式与合并单元格）。")
+                : t2("拼接合并：全部行并入一张表，xlsx/xlsm 源逐格迁移样式与数字格式，日期保留真实日期。")}
+          </span>
+          <span className="np-dialog-note-row">
             {t2(
               "按清单顺序合并 {n} 个工作簿（xlsx/xlsm/xls/xlsb/ods 均可读，统一输出 .xlsx），旁写新文件不覆盖原文件。",
               { n: entries.length },
@@ -291,6 +384,268 @@ export function XlsxMergeDialog({
       </DialogBody>
       <Footer
         okText={t2("合并")}
+        disabled={!valid}
+        onOk={submit}
+        onCancel={() => onDone(null)}
+      />
+    </>
+  );
+}
+
+/** Excel 拆分对话框（2026-11-12 新功能）：四模式——按工作表（批量支持，
+ *  umya 保真通道整表剥离）/ 按行数 / 按列值 / 均分 N 份（三者单文件）。
+ *  表清单与首行样本经 xlsx_sheet_info 异步拉取（选表 + 依据列选择器）；
+ *  参数随 dialogPrefs 记忆，输出落 <stem>_拆分 子文件夹（可关直落源目录） */
+type XlsxSheetMeta = {
+  name: string;
+  visible: boolean;
+  rows: number | null;
+  cols: number | null;
+  firstRow: string[] | null;
+};
+
+/** 0 基列序号 → Excel 列字母（A…Z, AA…） */
+function colLetter(i: number): string {
+  let n = i;
+  let out = "";
+  do {
+    out = String.fromCharCode(65 + (n % 26)) + out;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return out;
+}
+
+const XLSX_SPLIT_MODES = [
+  { value: "sheet", label: "按工作表" },
+  { value: "rows", label: "按行数" },
+  { value: "value", label: "按列值" },
+  { value: "parts", label: "均分 N 份" },
+] as const;
+
+export function XlsxSplitDialog({
+  entries,
+  onDone,
+}: {
+  entries: FileEntry[];
+  onDone(v: {
+    paths: string[];
+    mode: "sheet" | "rows" | "value" | "parts";
+    sheetName?: string;
+    rowsPerPart: number;
+    colIndex: number;
+    parts: number;
+    includeHidden: boolean;
+    skipEmpty: boolean;
+    withHeader: boolean;
+    subFolder: boolean;
+  } | null): void;
+}) {
+  const t2 = useT();
+  const init = loadDialogPrefs("xlsxSplit", {
+    mode: "sheet" as "sheet" | "rows" | "value" | "parts",
+    sheetName: "",
+    rowsPerPart: 1000,
+    colIndex: 0,
+    parts: 2,
+    includeHidden: false,
+    skipEmpty: false,
+    withHeader: true,
+    subFolder: true,
+  });
+  const [items, setItems] = useState<string[]>(() => pathsByNames(entries));
+  const [mode, setMode] = useState<"sheet" | "rows" | "value" | "parts">(() =>
+    XLSX_SPLIT_MODES.some((m) => m.value === init.mode) ? init.mode : "sheet",
+  );  const [sheets, setSheets] = useState<XlsxSheetMeta[] | null>(null);
+  const [infoErr, setInfoErr] = useState(false);
+  const [sheetName, setSheetName] = useState<string>(() => init.sheetName ?? "");
+  const [rowsText, setRowsText] = useState(String(init.rowsPerPart ?? 1000));
+  const [colIndex, setColIndex] = useState(() => init.colIndex ?? 0);
+  const [partsText, setPartsText] = useState(String(init.parts ?? 2));
+  const [includeHidden, setIncludeHidden] = useState(() => !!init.includeHidden);
+  const [skipEmpty, setSkipEmpty] = useState(() => !!init.skipEmpty);
+  const [withHeader, setWithHeader] = useState(() => init.withHeader !== false);
+  const [subFolder, setSubFolder] = useState(() => init.subFolder !== false);
+
+  // 表清单（单文件拉取；批量按表拆分只需首文件语境展示，实际按各文件自身表清单执行）
+  useEffect(() => {
+    let alive = true;
+    setSheets(null);
+    setInfoErr(false);
+    api
+      .xlsxSheetInfo(entries[0]?.path ?? "")
+      .then((r) => {
+        if (alive) setSheets(r);
+      })
+      .catch(() => {
+        if (alive) setInfoErr(true);
+      });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries[0]?.path]);
+
+  const rowsPerPart = Math.max(1, Math.floor(Number(rowsText) || 0));
+  const parts = Math.min(200, Math.max(1, Math.floor(Number(partsText) || 0)));
+  const single = entries.length === 1;
+  const rowLike = mode !== "sheet";
+  const valid = rowLike ? single && rowsPerPart >= 1 && parts >= 1 : items.length > 0;
+  const stem = fileNameOf(entries[0]?.path ?? "").replace(/\.[^.]+$/, "");
+  const outDir = subFolder
+    ? joinPath(parentPath(entries[0]?.path ?? "") ?? "", `${stem}_拆分`)
+    : (parentPath(entries[0]?.path ?? "") ?? "");
+  const example = {
+    sheet: t2("{stem}_<表名>.xlsx（每表一份）", { stem }),
+    rows: `${stem}_01.xlsx …`,
+    value: t2("{stem}_<列值>.xlsx（每组一份）", { stem }),
+    parts: `${stem}_第1份.xlsx …`,
+  }[mode];
+  const curSheet = sheets?.find((s) => s.name === sheetName) ?? sheets?.find((s) => s.visible) ?? sheets?.[0];
+  const cols = curSheet?.firstRow ?? null;
+  const submit = () => {
+    saveDialogPrefs("xlsxSplit", {
+      mode,
+      rowsPerPart,
+      colIndex,
+      parts,
+      includeHidden,
+      skipEmpty,
+      withHeader,
+      subFolder,
+    });
+    onDone({
+      paths: items,
+      mode,
+      sheetName: sheetName || undefined,
+      rowsPerPart,
+      colIndex: mode === "value" ? colIndex : 0,
+      parts,
+      includeHidden,
+      skipEmpty,
+      withHeader,
+      subFolder,
+    });
+  };
+  return (
+    <>
+      <DialogBody>
+        <QueueSection title={t2("待拆分文件")} items={items} onChange={setItems} />
+        <div className="np-pdfmform">
+          <FormRow k={t2("拆分方式")} wide>
+            <Seg<"sheet" | "rows" | "value" | "parts">
+              value={mode}
+              onChange={setMode}
+              options={XLSX_SPLIT_MODES.map((m) => ({
+                value: m.value,
+                label: t2(m.label),
+                title: t2(
+                  {
+                    sheet: "每个工作表导出为一个独立文件",
+                    rows: "每 N 行数据导出为一个文件",
+                    value: "按某列的取值分组，每组一个文件",
+                    parts: "数据行平均分成 N 份",
+                  }[m.value],
+                ),
+              }))}
+            />
+          </FormRow>
+          <FormRow k={t2("工作表")} off={mode === "sheet"}>
+            {sheets === null && !infoErr ? (
+              <span className="np-dialog-muted">{t2("读取中…")}</span>
+            ) : infoErr || !sheets?.length ? (
+              <span className="np-dialog-muted">{t2("无法读取工作簿")}</span>
+            ) : (
+              <NpSelect
+                value={curSheet?.name ?? ""}
+                options={sheets.map((s) => ({
+                  value: s.name,
+                  label:
+                    s.name + (s.visible ? "" : t2("（隐藏）")) +
+                    (s.rows != null ? ` · ${s.rows}` : ""),
+                }))}
+                onChange={(v) => {
+                  setSheetName(v);
+                  setColIndex(0);
+                }}
+              />
+            )}
+          </FormRow>
+          <FormRow k={t2("含隐藏表")} off={mode !== "sheet"}>
+            <Switch
+              checked={includeHidden}
+              onChange={(e) => setIncludeHidden(e.currentTarget.checked)}
+              innerLabel={t2("隐藏工作表一并拆出")}
+            />
+          </FormRow>
+          <FormRow k={t2("跳过空表")} off={mode !== "sheet"}>
+            <Switch
+              checked={skipEmpty}
+              onChange={(e) => setSkipEmpty(e.currentTarget.checked)}
+              innerLabel={t2("没有内容的表不产出文件")}
+            />
+          </FormRow>
+          <FormRow k={t2("每份行数")} off={mode !== "rows"}>
+            <InputGroup
+              size="small"
+              value={rowsText}
+              spellCheck={false}
+              onChange={(e) => setRowsText(e.target.value.replace(/[^\d]/g, ""))}
+              placeholder="1000"
+            />
+          </FormRow>
+          <FormRow k={t2("依据列")} off={mode !== "value"}>
+            {cols?.length ? (
+              <NpSelect
+                value={String(Math.min(colIndex, cols.length - 1))}
+                options={cols.map((c, i) => ({
+                  value: String(i),
+                  label: `${colLetter(i)} · ${c || t2("（空）")}`,
+                }))}
+                onChange={(v) => setColIndex(Number(v))}
+              />
+            ) : (
+              <span className="np-dialog-muted">{t2("先选择工作表")}</span>
+            )}
+          </FormRow>
+          <FormRow k={t2("拆成份数")} off={mode !== "parts"}>
+            <InputGroup
+              size="small"
+              value={partsText}
+              spellCheck={false}
+              onChange={(e) => setPartsText(e.target.value.replace(/[^\d]/g, ""))}
+              placeholder="2"
+            />
+          </FormRow>
+          <FormRow k={t2("每份带表头")} off={mode === "sheet"}>
+            <Switch
+              checked={withHeader}
+              onChange={(e) => setWithHeader(e.currentTarget.checked)}
+              innerLabel={t2("源表首行复制到每份顶部")}
+            />
+          </FormRow>
+          <FormRow k={t2("输出位置")}>
+            <Switch
+              checked={subFolder}
+              onChange={(e) => setSubFolder(e.currentTarget.checked)}
+              innerLabel={t2("存入 <stem>_拆分 子文件夹")}
+            />
+          </FormRow>
+        </div>
+        <div className="np-dialog-note">
+          <span className="np-dialog-note-row">
+            {rowLike && !single
+              ? t2("按行数/按列值/均分拆分仅支持单个文件——请只保留一个待拆分文件或改用「按工作表」。")
+              : mode === "sheet"
+                ? t2("按工作表拆分保真整表迁移（样式/合并单元格/列宽/冻结窗格），输出为 .xlsx。")
+                : t2("数据级拆分：xlsx/xlsm 源逐格迁移样式与数字格式，日期保留真实日期，重名自动加序号。")}
+          </span>
+          <span className="np-dialog-note-row np-dialog-note-path" title={outDir}>
+            {t2("输出预览：{out}", { out: `${joinPath(outDir, example)}` })}
+          </span>
+        </div>
+      </DialogBody>
+      <Footer
+        okText={t2("拆分")}
         disabled={!valid}
         onOk={submit}
         onCancel={() => onDone(null)}

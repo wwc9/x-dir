@@ -96,6 +96,10 @@ oxipng = "9"
 color_quant = "1"
 kamadak-exif = "0.6"
 rust_xlsxwriter = "0.99.1"
+# Excel 合并/拆分格式保真通道（2026-11-12）：umya MIT 读+写 xlsx（整档建模，
+# 样式/合并单元格/列宽/冻结窗格/图片图表 roundtrip）；数据级通道仍由上方
+# calamine（读值）+ rust_xlsxwriter（写值/重建样式）承担；zip 8.6 已在依赖树
+umya-spreadsheet = "3.1"
 
 # 截图与贴图（2026-10-24）：xcap Apache-2.0 显示器捕获（截屏引擎）；
 # base64 MIT/Apache-2.0 解码前端 PNG dataURL；global-shortcut 与

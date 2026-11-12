@@ -1025,10 +1025,71 @@ export const api = {
   /** 文本合并（空行分隔）→ output（UTF-8 BOM） */
   mergeTexts: (paths: string[], output: string) =>
     cmd<{ jobId: number }>("merge_texts", { paths, output }),
-  /** Excel 工作簿合并（calamine 读 → rust_xlsxwriter 写 .xlsx）；
-   *  mode ∈ "sheets"（每源表一张目标表）| "rows"（纵向拼接去重复表头） */
-  mergeXlsx: (paths: string[], output: string, mode: "sheets" | "rows") =>
-    cmd<{ jobId: number }>("merge_xlsx", { paths, output, mode }),
+  /** Excel 工作簿合并（全部源 xlsx/xlsm 且分表保留时走 umya 保真通道）；
+   *  mode ∈ "sheets"（每源表一张目标表）| "rows"（纵向拼接）；
+   *  sheetScope ∈ "visible"|"all"；nameRule ∈ "smart"|"sheet"|"file"；
+   *  dedupHeader 仅 rows；sourceCol ∈ "none"|"file"|"fileSheet"（rows 来源列） */
+  mergeXlsx: (
+    paths: string[],
+    output: string,
+    mode: "sheets" | "rows",
+    opts?: {
+      sheetScope: "visible" | "all";
+      nameRule: "smart" | "sheet" | "file";
+      dedupHeader: boolean;
+      sourceCol: "none" | "file" | "fileSheet";
+    },
+  ) =>
+    cmd<{ jobId: number }>("merge_xlsx", {
+      paths,
+      output,
+      mode,
+      sheetScope: opts?.sheetScope,
+      nameRule: opts?.nameRule,
+      dedupHeader: opts?.dedupHeader,
+      sourceCol: opts?.sourceCol,
+    }),
+  /** Excel 工作表信息（拆分对话框选表/选列：表名/可见性/行列数/首行样本，
+   *  rows/cols/firstRow 为 null = 超出解析预算未统计） */
+  xlsxSheetInfo: (path: string) =>
+    cmd<
+      Array<{
+        name: string;
+        visible: boolean;
+        rows: number | null;
+        cols: number | null;
+        firstRow: string[] | null;
+      }>
+    >("xlsx_sheet_info", { path }),
+  /** Excel 拆分：mode ∈ "sheet"|"rows"|"value"|"parts"；rows/value/parts
+   *  仅单文件；withHeader/subFolder 缺省 true，includeHidden/skipEmpty
+   *  仅 sheet 模式 */
+  splitXlsx: (
+    paths: string[],
+    mode: "sheet" | "rows" | "value" | "parts",
+    opts?: {
+      sheetName?: string;
+      rowsPerPart?: number;
+      colIndex?: number;
+      parts?: number;
+      includeHidden?: boolean;
+      skipEmpty?: boolean;
+      withHeader?: boolean;
+      subFolder?: boolean;
+    },
+  ) =>
+    cmd<{ jobId: number }>("split_xlsx", {
+      paths,
+      mode,
+      sheetName: opts?.sheetName,
+      rowsPerPart: opts?.rowsPerPart,
+      colIndex: opts?.colIndex,
+      parts: opts?.parts,
+      includeHidden: opts?.includeHidden,
+      skipEmpty: opts?.skipEmpty,
+      withHeader: opts?.withHeader,
+      subFolder: opts?.subFolder,
+    }),
   /** 压缩（文件平铺、文件夹递归含顶层目录）：format = zip/7z/targz（缺省
    *  zip）；password/encryptHeader 仅 7z（AES-256 + 加密文件清单） */
   zipFiles: (

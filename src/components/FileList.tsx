@@ -53,6 +53,7 @@ import {
   mergePdfs,
   mergeTexts,
   mergeXlsx,
+  splitXlsx,
   officeToPdf,
   extractArchives,
   extractArchivesTo,
@@ -1293,6 +1294,8 @@ export function FileList({
         return { label: t("CSV 合并…"), action: () => void mergeCsvs(sel, path) };
       case "xlsxMerge":
         return { label: t("Excel 合并…"), action: () => void mergeXlsx(sel, path) };
+      case "xlsxSplit":
+        return { label: t("Excel 拆分…"), action: () => void splitXlsx(sel, path) };
       case "textMerge":
         return { label: t("文本合并…"), action: () => void mergeTexts(sel, path) };
       case "exportList":
