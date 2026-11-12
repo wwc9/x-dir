@@ -34,6 +34,14 @@
   --np-cat-remove: #d1434b;
   --np-cat-convert: #7d64d8;
   --np-shadow: 0 12px 32px rgba(20, 28, 40, 0.14);
+  /* 玻璃拟态四枚（2026-11-12 右键菜单「霜」方案，design/menu-proposal-c-frost.html）：
+     半透明底 + 内高光描边 + 高光悬停条 + 光晕投影，深浅主题各一套 */
+  --np-glass: rgba(255, 255, 255, 0.72);
+  --np-glass-ring: rgba(255, 255, 255, 0.65);
+  --np-glass-hover: rgba(53, 116, 240, 0.14);
+  --np-glass-shadow:
+    0 12px 32px rgba(20, 28, 40, 0.18),
+    0 0 0 0.5px rgba(20, 28, 40, 0.08);
   /* 遮罩：所有 Dialog/Overlay backdrop 全局唯一浓度（.dark 另声明） */
   --np-overlay: rgba(15, 22, 34, 0.35);
   --np-accent-border: color-mix(in srgb, var(--np-accent) 45%, var(--np-border));
@@ -148,6 +156,12 @@ html.bp6-dark {
   --np-cat-remove: #f27073;
   --np-cat-convert: #a08df5;
   --np-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  --np-glass: rgba(38, 40, 44, 0.62);
+  --np-glass-ring: rgba(255, 255, 255, 0.12);
+  --np-glass-hover: rgba(92, 157, 255, 0.18);
+  --np-glass-shadow:
+    0 16px 44px rgba(0, 0, 0, 0.55),
+    0 0 0 0.5px rgba(0, 0, 0, 0.4);
   /* 深色遮罩换纯黑、浓度略高于浅色（0.35），压得住深色界面 */
   --np-overlay: rgba(0, 0, 0, 0.45);
   --np-hairline: rgba(255, 255, 255, 0.08);
@@ -248,6 +262,89 @@ body {
 }
 .bp6-menu-item {
   border-radius: var(--np-radius);
+}
+/* ═══ 右键菜单玻璃拟态（2026-11-12 用户定稿 = 方案 C「霜」，
+   design/menu-proposal-c-frost.html）：半透明底 + backdrop blur 让菜单
+   「浮」于内容之上；边界靠内高光描边（--np-glass-ring）而非外线；悬停 =
+   玻璃高光条 + accent 左指示条（::before 圆角短条浮现，文字不变色）。
+   作用域 = .np-ctx（ContextMenu 顶层容器）+ .np-ctx-pop（子菜单 Popover
+   通道，MenuItem popoverProps 传入，只影响右键菜单的子菜单飞出层）——
+   其余菜单/Popover 家族维持现版实底脸。@supports 兜底：不支持 blur 的
+   环境（极旧固定版 WebView2）回退实底卡片 ═══ */
+.np-ctx .bp6-menu,
+.np-ctx-pop .bp6-menu {
+  background: var(--np-glass);
+  backdrop-filter: blur(22px) saturate(1.4);
+  border: 1px solid var(--np-glass-ring);
+  border-radius: var(--np-radius-lg);
+  box-shadow: var(--np-glass-shadow);
+}
+/* 子菜单 Popover 外壳退场（外壳底色/描边全交给玻璃 .bp6-menu 本体） */
+.bp6-popover.np-ctx-pop {
+  box-shadow: none;
+}
+.np-ctx-pop .bp6-popover-content {
+  background: transparent;
+  border-radius: var(--np-radius-lg);
+}
+.np-ctx .bp6-menu-item,
+.np-ctx-pop .bp6-menu-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px 0 13px;
+  border-radius: 6px;
+}
+.np-ctx .bp6-menu-item:hover:not(.bp6-disabled),
+.np-ctx-pop .bp6-menu-item:hover:not(.bp6-disabled) {
+  background: var(--np-glass-hover);
+}
+/* accent 左指示条：3px 圆角短条悬停浮现（危险项染 danger） */
+.np-ctx .bp6-menu-item::before,
+.np-ctx-pop .bp6-menu-item::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--np-accent);
+  opacity: 0;
+}
+.np-ctx .bp6-menu-item:hover:not(.bp6-disabled)::before,
+.np-ctx-pop .bp6-menu-item:hover:not(.bp6-disabled)::before {
+  opacity: 1;
+}
+.np-ctx .bp6-menu-item.bp6-intent-danger {
+  color: var(--np-danger);
+}
+.np-ctx .bp6-menu-item.bp6-intent-danger::before,
+.np-ctx-pop .bp6-menu-item.bp6-intent-danger::before {
+  background: var(--np-danger);
+}
+.np-ctx .bp6-menu-item.bp6-intent-danger:hover:not(.bp6-disabled),
+.np-ctx-pop .bp6-menu-item.bp6-intent-danger:hover:not(.bp6-disabled) {
+  background: color-mix(in srgb, var(--np-danger) 12%, transparent);
+}
+.np-ctx .bp6-menu-item.bp6-disabled {
+  opacity: 0.55;
+}
+.np-ctx .bp6-menu-divider,
+.np-ctx-pop .bp6-menu-divider {
+  margin: 5px 8px;
+  border-color: var(--np-hairline);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .np-ctx .bp6-menu,
+  .np-ctx-pop .bp6-menu {
+    background: var(--np-surface);
+    border: none;
+    box-shadow:
+      0 0 0 1px var(--np-border),
+      var(--np-shadow);
+  }
 }
 /* 分段选择（§4.3：Blueprint ButtonGroup 现成件）。2026-10-24 定案 = 方案 A
    描边勾选 chip（design/wm-seg-proposals.html），替代 surface-2 轨道 + accent

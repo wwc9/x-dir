@@ -13,6 +13,8 @@ function renderItems(items: UiMenuItem[], close: () => void) {
         text={t(item.label ?? "")}
         disabled={item.disabled}
         intent={item.danger ? "danger" : undefined}
+        // 子菜单飞出层走玻璃脸（np-ctx-pop = index.css 右键菜单「霜」方案作用域）
+        popoverProps={{ popoverClassName: "np-ctx-pop" }}
         onClick={() => {
           if (item.sub) return;
           item.action?.();
@@ -48,7 +50,8 @@ export function ContextMenu() {
           close();
         }}
       />
-      <div className="fixed z-40" style={{ left: x, top: y }}>
+      {/* np-ctx = 玻璃拟态作用域（index.css「霜」方案），只承载右键菜单 */}
+      <div className="fixed z-40 np-ctx" style={{ left: x, top: y }}>
         <Menu>{renderItems(menu.items, close)}</Menu>
       </div>
     </>

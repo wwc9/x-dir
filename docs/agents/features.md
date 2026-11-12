@@ -114,7 +114,7 @@
 
 ### 3.1 右键菜单（数据驱动）
 
-**组件与模块**：`lib/menuCommands.ts`（内置功能注册表 + entryVisible 条件纯函数 + 默认布局构建器，配单测）+ `components/MenuEditor.tsx` + FileList `builtinMenuItem` 执行器。
+**组件与模块**：`lib/menuCommands.ts`（内置功能注册表 + entryVisible 条件纯函数 + 默认布局构建器，配单测）+ `components/MenuEditor.tsx` + FileList `builtinMenuItem` 执行器。**菜单脸 = 玻璃拟态**（2026-11-12 用户定稿 = 方案 C「霜」design/menu-proposal-c-frost.html：`--np-glass` 半透明底 + backdrop blur 22px + 内高光描边 + accent 左指示条悬停 + 危险项红染，作用域 `.np-ctx`/`.np-ctx-pop`，@supports 回退实底卡；规范条款见 ui-standards §4.1 玻璃 token 组）。
 
 - 菜单布局 = `settings.menuEntries`（有序 MenuEntry：builtin/sep × area 启用时机三档（两处出现/仅选中右键/仅空白处右键）× cond（对象/数量/扩展名）；条目行恒展示四个条件摘要 chip）。
 - 条件编辑器 = 锚定条目的 PopoverNext 浮层（不推移布局）+ np-seg 分段快选行 + `condSentence` 人话实时预览（配单测）；功能库**仅拖拽添加**（点击不入场）。
