@@ -539,15 +539,16 @@ export function ClipHistWindow() {
    *  定案上限 2.4→3 行高）：在 行高 3 / 卡片可用宽 上限内等比放大到最大，
    *  scale ≤ 1 保证**不超过图片本身尺寸**（自然 CSS 像素）。可用宽为 meta 行
    *  预算让位（2026-11-12 用户报：超宽缩略图挤压 meta 行，悬停动作组+chip
-   *  被裁切修正——预算按悬停最宽态 220px 计，标记悬停时自动隐藏见 CSS）。
+   *  被裁切修正——预算按悬停最宽态计；2026-11-12 用户再定案「标签右上、
+   *  按钮右下」chip 移回内容行后 meta 行只剩 时间+动作组，预算收至 180px）。
    *  行高变化由虚拟列表 measureElement 的 ResizeObserver 自动重测 */
   const fitThumb = (e: { currentTarget: HTMLImageElement }) => {
     const el = e.currentTarget;
     if (!el.naturalWidth || !el.naturalHeight) return;
     const card = el.closest(".np-clip-card");
-    // 可用宽 = 卡片内容宽 − 序号列与间距(26) − meta 行预算(220) − 卡片水平
+    // 可用宽 = 卡片内容宽 − 序号列与间距(26) − meta 行预算(180) − 卡片水平
     // padding(16)，下限 120
-    const capW = Math.max(120, (card?.clientWidth ?? 400) - 264);
+    const capW = Math.max(120, (card?.clientWidth ?? 400) - 222);
     const capH = DENSITY.rowH * 3;
     const scale = Math.min(1, capW / el.naturalWidth, capH / el.naturalHeight);
     el.style.width = `${(el.naturalWidth * scale).toFixed(1)}px`;
@@ -729,10 +730,23 @@ export function ClipHistWindow() {
                     />
                   ) : null}
                   <div className="np-clip-body">
-                    <span className="np-clip-preview">{it.preview}</span>
-                    {/* meta 行：相对时间 + 来源 + 悬停动作组 + 置顶/收藏标记 +
-                        类型 chip 行尾（2026-11-12 紧凑双行卡：chip 自内容行移入，
-                        内容行整行让给预览文本） */}
+                    {/* 内容行：预览文本 + 右上角置顶/收藏标记与类型 chip；
+                        meta 行：时间 · 来源 + 右下角动作组（2026-11-12 用户
+                        定案：标签右上、功能按钮右下） */}
+                    <div className="np-clip-crow">
+                      <span className="np-clip-preview">{it.preview}</span>
+                      {it.pinned && (
+                        <span className="np-clip-pinmark" data-tip="已置顶">
+                          <AppIcon icon={Pin} size={DENSITY.iconXs} />
+                        </span>
+                      )}
+                      {it.fav && (
+                        <span className="np-clip-favmark" data-tip="已收藏">
+                          <AppIcon icon={Star} size={DENSITY.iconXs} />
+                        </span>
+                      )}
+                      <span className={`np-clip-chip k-${kCls}`}>{kMeta.label}</span>
+                    </div>
                     <div className="np-clip-meta">
                       <span>{relTime(it.createdAt)}</span>
                       {it.source && (
@@ -793,17 +807,6 @@ export function ClipHistWindow() {
                           <AppIcon icon={Trash2} size={DENSITY.iconXs} />
                         </button>
                       </span>
-                      {it.pinned && (
-                        <span className="np-clip-pinmark" data-tip="已置顶">
-                          <AppIcon icon={Pin} size={DENSITY.iconXs} />
-                        </span>
-                      )}
-                      {it.fav && (
-                        <span className="np-clip-favmark" data-tip="已收藏">
-                          <AppIcon icon={Star} size={DENSITY.iconXs} />
-                        </span>
-                      )}
-                      <span className={`np-clip-chip k-${kCls}`}>{kMeta.label}</span>
                     </div>
                   </div>
                   </div>

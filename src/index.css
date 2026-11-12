@@ -6820,13 +6820,20 @@ body.np-col-resizing * {
   color: var(--np-muted);
   font-variant-numeric: tabular-nums;
 }
-/* 卡片主体：预览文本（2 行钳制）+ meta 行（时间 · 来源 · 动作 · 标记 · chip） */
+/* 卡片主体：内容行（预览 2 行钳制 + 右上角标记/类型 chip）+ meta 行
+   （时间 · 来源 + 右下角动作组）。2026-11-12 用户定案：标签右上、
+   功能按钮右下 */
 .np-clip-body {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+.np-clip-crow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
 }
 .np-clip-preview {
   flex: 1;
@@ -6840,12 +6847,10 @@ body.np-col-resizing * {
   -webkit-line-clamp: 2;
 }
 /* 类型 chip：类型色族淡染小标（图=蓝 文件=橙 其余=灰，--np-icon-* 语义同源）。
-   2026-11-12 紧凑双行卡定案：自内容行移入 meta 行尾（margin-left auto，
-   动作组浮现时与 actions 的 auto 分摊自由空间），padding 收为 2/5 适配
-   meta 行 18px 高度 */
+   内容行右上角（2026-11-12 用户定案自 meta 行尾移回；紧凑 padding 2/5 保留，
+   预览 flex:1 把 chip 顶到行右端） */
 .np-clip-chip {
   flex: none;
-  margin-left: auto;
   font-size: 10px;
   line-height: 1;
   padding: 2px 5px;
@@ -6862,7 +6867,7 @@ body.np-col-resizing * {
   background: color-mix(in srgb, var(--np-icon-folder) 16%, transparent);
   color: var(--np-icon-folder);
 }
-/* 置顶/收藏标记：meta 行右簇 accent 小图标（动作组与 chip 之间） */
+/* 置顶/收藏标记：内容行 chip 左侧 accent 小图标 */
 .np-clip-favmark {
   display: inline-flex;
   flex: none;
@@ -6875,17 +6880,17 @@ body.np-col-resizing * {
   align-self: center;
   color: var(--np-accent);
 }
-/* 悬停/选中态标记退场（2026-11-12 宽缩略图挤压 meta 行修正）：动作组此时
-   已含同款收藏/置顶钮（状态即图标+提示），标记纯冗余；display 切换不占高
-   ——meta min-height 恒 18px，换显前后等高 */
+/* 悬停/选中态标记退场：动作组此时含同款收藏/置顶钮（状态即图标+提示），
+   双星并列纯冗余；display 切换不占高——meta min-height 恒 18px，换显
+   前后等高，内容行也让宽给预览文本 */
 .np-clip-card:hover .np-clip-pinmark,
 .np-clip-row.is-sel .np-clip-pinmark,
 .np-clip-card:hover .np-clip-favmark,
 .np-clip-row.is-sel .np-clip-favmark {
   display: none;
 }
-/* meta 行：相对时间 · 来源应用 + 悬停动作组（margin-left auto）+ 置顶/收藏
-   标记 + 类型 chip（行尾，2026-11-12 紧凑双行卡移入）；
+/* meta 行：相对时间 · 来源应用 + 右下角悬停动作组（margin-left auto，
+   2026-11-12 用户定案功能按钮守右下）；
    整行 nowrap（2026-11-06 巡检修复：窄窗时间「11 小时前」折行竖排），
    溢出由来源 src 的 ellipsis 吸收；min-height 常驻预留动作钮高度（18px，
    2026-11-12 紧凑化 20→18）：动作组 display 切换不再撑高卡片（2026-11-07
