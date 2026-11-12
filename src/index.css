@@ -35,8 +35,10 @@
   --np-cat-convert: #7d64d8;
   --np-shadow: 0 12px 32px rgba(20, 28, 40, 0.14);
   /* 玻璃拟态四枚（2026-11-12 右键菜单「霜」方案，design/menu-proposal-c-frost.html）：
-     半透明底 + 内高光描边 + 高光悬停条 + 光晕投影，深浅主题各一套 */
-  --np-glass: rgba(255, 255, 255, 0.72);
+     半透明底 + 内高光描边 + 高光悬停条 + 光晕投影，深浅主题各一套。
+     alpha 实测校准（0.72 在应用纯白列表上不可感知）：浅 0.55 / 深 0.55，
+     文件列表行影透过玻璃可辨且正文对比度足 */
+  --np-glass: rgba(255, 255, 255, 0.55);
   --np-glass-ring: rgba(255, 255, 255, 0.65);
   --np-glass-hover: rgba(53, 116, 240, 0.14);
   --np-glass-shadow:
@@ -156,7 +158,7 @@ html.bp6-dark {
   --np-cat-remove: #f27073;
   --np-cat-convert: #a08df5;
   --np-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
-  --np-glass: rgba(38, 40, 44, 0.62);
+  --np-glass: rgba(32, 34, 38, 0.55);
   --np-glass-ring: rgba(255, 255, 255, 0.12);
   --np-glass-hover: rgba(92, 157, 255, 0.18);
   --np-glass-shadow:
