@@ -4391,7 +4391,6 @@ mod office_tests {
         assert_eq!(k1.len(), 64);
     }
 
-    #[test]
     /// 端到端（2026-11-11 表格预览增强）：rust_xlsxwriter 写带 numFmt 的
     /// 真实 xlsx → sheet_sections 全链路 → 百分数/小数位/千分位按格式渲染
     #[test]
@@ -4421,6 +4420,7 @@ mod office_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[test]
     fn cell_display_renders_dates_not_serials() {
         use crate::sheet_fmt::display_for;
         use calamine::{ExcelDateTime, ExcelDateTimeType};

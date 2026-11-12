@@ -2563,7 +2563,7 @@ mod tests {
         let stream_id = doc.add_object(stream);
         let content_id = doc.add_object(Object::Stream(Stream::new(
             dictionary! {},
-            format!("q /F0 12 Tf Q").into_bytes(),
+            "q /F0 12 Tf Q".as_bytes().to_vec(),
         )));
         let page_id = doc.add_object(dictionary! {
             "Type" => "Page",

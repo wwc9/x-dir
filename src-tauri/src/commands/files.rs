@@ -697,7 +697,7 @@ mod office_template_tests {
         // calamine = 项目预览同源读取器：能开即合法（表格/sheet 可枚举）
         let tmp = std::env::temp_dir().join("xdir_tpl_test.xlsx");
         std::fs::write(&tmp, b).unwrap();
-        let mut wb: calamine::Xlsx<_> = calamine::open_workbook(&tmp).expect("calamine 可打开");
+        let wb: calamine::Xlsx<_> = calamine::open_workbook(&tmp).expect("calamine 可打开");
         let sheets = wb.sheet_names().to_vec();
         assert!(!sheets.is_empty(), "至少一个工作表: {sheets:?}");
         std::fs::remove_file(&tmp).ok();
