@@ -304,15 +304,20 @@ body {
 .np-ctx-pop .bp6-menu-item:hover:not(.bp6-disabled) {
   background: var(--np-glass-hover);
 }
-/* accent 左指示条：3px 圆角短条悬停浮现（危险项染 danger） */
+/* accent 左指示条：3px 圆角短条悬停浮现（危险项染 danger）。
+   top50%+translateY 稳健居中——Blueprint 把 .bp6-menu-item::before 当行内
+   图标槽位（margin-top:3px / margin-right:8px），top/bottom 拉伸写法会被其
+   margin 顶偏不居中（2026-11-12 用户实测），此处归零 margin 改比例定位 */
 .np-ctx .bp6-menu-item::before,
 .np-ctx-pop .bp6-menu-item::before {
   content: "";
   position: absolute;
   left: 4px;
-  top: 6px;
-  bottom: 6px;
+  top: 50%;
   width: 3px;
+  height: 14px;
+  transform: translateY(-50%);
+  margin: 0;
   border-radius: 2px;
   background: var(--np-accent);
   opacity: 0;
