@@ -650,6 +650,7 @@ export async function mergeXlsx(entries: FileEntry[], dir: string): Promise<void
       mode: "sheets" | "rows";
       sheetScope: "visible" | "all";
       nameRule: "smart" | "sheet" | "file";
+      headerRows: number;
       dedupHeader: boolean;
       sourceCol: "none" | "file" | "fileSheet";
       name: string;
@@ -661,6 +662,7 @@ export async function mergeXlsx(entries: FileEntry[], dir: string): Promise<void
     const { jobId } = await api.mergeXlsx(plan.paths, output, plan.mode, {
       sheetScope: plan.sheetScope,
       nameRule: plan.nameRule,
+      headerRows: plan.headerRows,
       dedupHeader: plan.dedupHeader,
       sourceCol: plan.sourceCol,
     });
@@ -683,7 +685,7 @@ export async function splitXlsx(entries: FileEntry[], dir: string): Promise<void
       parts: number;
       includeHidden: boolean;
       skipEmpty: boolean;
-      withHeader: boolean;
+      headerRows: number;
       subFolder: boolean;
     } | null
   >({ type: "xlsxSplit", entries });
@@ -696,7 +698,7 @@ export async function splitXlsx(entries: FileEntry[], dir: string): Promise<void
       parts: plan.parts,
       includeHidden: plan.includeHidden,
       skipEmpty: plan.skipEmpty,
-      withHeader: plan.withHeader,
+      headerRows: plan.headerRows,
       subFolder: plan.subFolder,
     });
     useJobs.getState().register(jobId, "xlsxsplits", dir, [dir]);

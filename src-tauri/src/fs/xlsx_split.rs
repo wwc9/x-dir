@@ -61,8 +61,8 @@ pub struct SplitOpts {
     pub include_hidden: bool,
     /// 按表拆分：跳过空白表
     pub skip_empty: bool,
-    /// 每份带表头（rows/value/parts）
-    pub with_header: bool,
+    /// 每份表头行数（rows/value/parts；0 = 不带表头）
+    pub header_rows: u32,
     /// 输出到 `<stem>_拆分` 子文件夹（false = 直落源目录）
     pub sub_folder: bool,
 }
@@ -77,7 +77,7 @@ impl Default for SplitOpts {
             parts: 2,
             include_hidden: false,
             skip_empty: false,
-            with_header: true,
+            header_rows: 1,
             sub_folder: true,
         }
     }
@@ -353,16 +353,17 @@ fn split_rows_like(
         let mut cache = super::xlsx_style::FormatCache::default();
         let mut cells = 0usize;
 
-        // 表头（含样式）复制素材；数据行绝对行号供样式定位
-        let header_rows: Vec<(u32, &[Data])> = if opts.with_header {
-            vec![(start.0, all[0])]
-        } else {
-            Vec::new()
-        };
-        let data_rows: Vec<(u32, &[Data])> = all[if opts.with_header { 1 } else { 0 }..]
+        // 表头块（含样式）复制素材 = 前 header_rows 行；数据行绝对行号供样式定位
+        let n_head = (opts.header_rows as usize).min(all.len());
+        let header_rows: Vec<(u32, &[Data])> = all[..n_head]
             .iter()
             .enumerate()
-            .map(|(i, r)| (start.0 + i as u32 + u32::from(opts.with_header), *r))
+            .map(|(i, r)| (start.0 + i as u32, *r))
+            .collect();
+        let data_rows: Vec<(u32, &[Data])> = all[n_head..]
+            .iter()
+            .enumerate()
+            .map(|(i, r)| (start.0 + n_head as u32 + i as u32, *r))
             .collect();
         if data_rows.is_empty() {
             return Err("工作表没有数据行".into());
@@ -958,16 +959,16 @@ mod tests {
                 mode: SplitMode::Rows,
                 rows_per_part: 2,
                 sub_folder: false,
-                with_header: true,
+                header_rows: 2,
                 ..Default::default()
             },
             &cancel,
             || {},
         );
         assert!(failed.is_empty(), "{failed:?}");
-        // 源表 = 标题 + 表头 + 4 行 → with_header 取首行(标题)，数据 5 行 → 3 份 + 源 = 4 文件
+        // 源表 = 标题 + 表头 + 4 行 → header_rows=2 每份带 [标题,表头]，数据 4 行 → 2 份 + 源 = 3 文件
         let names = list_dir(&dir);
-        assert_eq!(names.len(), 4, "{names:?}");
+        assert_eq!(names.len(), 3, "{names:?}");
         let p1 = crate::fs::path::join_name(&dir, "明细_01.xlsx");
         // calamine 读出：日期列仍是 DateTime（不是字符串降级）
         let mut book = open_workbook_auto(to_extended(&p1)).unwrap();

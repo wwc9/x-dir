@@ -1028,7 +1028,8 @@ export const api = {
   /** Excel 工作簿合并（全部源 xlsx/xlsm 且分表保留时走 umya 保真通道）；
    *  mode ∈ "sheets"（每源表一张目标表）| "rows"（纵向拼接）；
    *  sheetScope ∈ "visible"|"all"；nameRule ∈ "smart"|"sheet"|"file"；
-   *  dedupHeader 仅 rows；sourceCol ∈ "none"|"file"|"fileSheet"（rows 来源列） */
+   *  headerRows = 拼接表头行数（0 = 无表头）；dedupHeader 仅 rows；
+   *  sourceCol ∈ "none"|"file"|"fileSheet"（rows 来源列） */
   mergeXlsx: (
     paths: string[],
     output: string,
@@ -1036,6 +1037,7 @@ export const api = {
     opts?: {
       sheetScope: "visible" | "all";
       nameRule: "smart" | "sheet" | "file";
+      headerRows: number;
       dedupHeader: boolean;
       sourceCol: "none" | "file" | "fileSheet";
     },
@@ -1046,6 +1048,7 @@ export const api = {
       mode,
       sheetScope: opts?.sheetScope,
       nameRule: opts?.nameRule,
+      headerRows: opts?.headerRows,
       dedupHeader: opts?.dedupHeader,
       sourceCol: opts?.sourceCol,
     }),
@@ -1062,8 +1065,8 @@ export const api = {
       }>
     >("xlsx_sheet_info", { path }),
   /** Excel 拆分：mode ∈ "sheet"|"rows"|"value"|"parts"；rows/value/parts
-   *  仅单文件；withHeader/subFolder 缺省 true，includeHidden/skipEmpty
-   *  仅 sheet 模式 */
+   *  仅单文件；headerRows = 每份表头行数（0 = 不带表头，缺省 1）；
+   *  subFolder 缺省 true，includeHidden/skipEmpty 仅 sheet 模式 */
   splitXlsx: (
     paths: string[],
     mode: "sheet" | "rows" | "value" | "parts",
@@ -1074,7 +1077,7 @@ export const api = {
       parts?: number;
       includeHidden?: boolean;
       skipEmpty?: boolean;
-      withHeader?: boolean;
+      headerRows?: number;
       subFolder?: boolean;
     },
   ) =>
@@ -1087,7 +1090,7 @@ export const api = {
       parts: opts?.parts,
       includeHidden: opts?.includeHidden,
       skipEmpty: opts?.skipEmpty,
-      withHeader: opts?.withHeader,
+      headerRows: opts?.headerRows,
       subFolder: opts?.subFolder,
     }),
   /** 压缩（文件平铺、文件夹递归含顶层目录）：format = zip/7z/targz（缺省

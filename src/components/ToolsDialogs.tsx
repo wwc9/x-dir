@@ -227,7 +227,8 @@ export function NewFoldersDialog({
 
 /** Excel 合并（2026-11-03 §4.9 对齐；2026-11-12 参数集扩展）：待处理清单
  *  拖动定序 + 模式（分表保留/纵向拼接）+ 工作表范围（仅可见/含隐藏）+
- *  表名规则（分表）+ 表头去重与来源列（拼接）+ 输出名一次成形。
+ *  表名规则（分表）+ 表头行数/去重/来源列（拼接，0 = 无表头）+ 输出名。
+ *  关联禁用 = 整行降灰 + 控件真 disabled（§4.9，点不动的灰行才是有效信号）。
  *  全部源 xlsx/xlsm 且分表保留 = umya 保真通道（样式/合并格/列宽/冻结全留），
  *  其余 = 数据通道（值 + xlsx 源逐格样式迁移） */
 export function XlsxMergeDialog({
@@ -240,6 +241,7 @@ export function XlsxMergeDialog({
     mode: "sheets" | "rows";
     sheetScope: "visible" | "all";
     nameRule: "smart" | "sheet" | "file";
+    headerRows: number;
     dedupHeader: boolean;
     sourceCol: "none" | "file" | "fileSheet";
     name: string;
@@ -250,6 +252,7 @@ export function XlsxMergeDialog({
     mode: "sheets",
     sheetScope: "visible",
     nameRule: "smart",
+    headerRows: 1,
     dedupHeader: true,
     sourceCol: "none",
   });
@@ -263,6 +266,8 @@ export function XlsxMergeDialog({
   const [rule, setRule] = useState<"smart" | "sheet" | "file">(() =>
     init.nameRule === "sheet" || init.nameRule === "file" ? init.nameRule : "smart",
   );
+  const [headText, setHeadText] = useState(String(init.headerRows ?? 1));
+  const headerRows = Math.min(100, Math.max(0, Math.floor(Number(headText) || 0)));
   const [dedup, setDedup] = useState(() => init.dedupHeader !== false);
   const [srcCol, setSrcCol] = useState<"none" | "file" | "fileSheet">(() =>
     init.sourceCol === "file" || init.sourceCol === "fileSheet" ? init.sourceCol : "none",
@@ -283,6 +288,7 @@ export function XlsxMergeDialog({
       mode,
       sheetScope: scope,
       nameRule: rule,
+      headerRows,
       dedupHeader: dedup,
       sourceCol: srcCol,
     });
@@ -291,6 +297,7 @@ export function XlsxMergeDialog({
       mode,
       sheetScope: scope,
       nameRule: rule,
+      headerRows,
       dedupHeader: dedup,
       sourceCol: srcCol,
       name: withExt,
@@ -326,6 +333,7 @@ export function XlsxMergeDialog({
             <Seg<"smart" | "sheet" | "file">
               value={rule}
               onChange={setRule}
+              disabled={mode === "rows"}
               options={[
                 { value: "smart", label: t2("智能"), title: t2("单表文件 = 文件名，多表文件 = 文件名·表名") },
                 { value: "sheet", label: t2("仅表名"), title: t2("目标表名 = 源工作表名，重名自动加序号") },
@@ -333,9 +341,21 @@ export function XlsxMergeDialog({
               ]}
             />
           </FormRow>
-          <FormRow k={t2("重复表头")} off={mode === "sheets"}>
+          <FormRow k={t2("表头行数")} off={mode === "sheets"}>
+            <InputGroup
+              size="small"
+              value={headText}
+              spellCheck={false}
+              disabled={mode === "sheets"}
+              title={t2("源表前 N 行视为表头，0 = 无表头（全部按数据并入）")}
+              onChange={(e) => setHeadText(e.target.value.replace(/[^\d]/g, ""))}
+              placeholder="1"
+            />
+          </FormRow>
+          <FormRow k={t2("重复表头")} off={mode === "sheets" || headerRows === 0}>
             <Switch
-              checked={dedup}
+              checked={dedup && headerRows > 0}
+              disabled={mode === "sheets" || headerRows === 0}
               onChange={(e) => setDedup(e.currentTarget.checked)}
               innerLabel={t2("自动去除与首个文件相同的表头行")}
             />
@@ -344,6 +364,7 @@ export function XlsxMergeDialog({
             <Seg<"none" | "file" | "fileSheet">
               value={srcCol}
               onChange={setSrcCol}
+              disabled={mode === "sheets"}
               options={[
                 { value: "none", label: t2("不添加"), title: t2("不插入来源标记列") },
                 { value: "file", label: t2("文件名"), title: t2("首列插入来源文件名") },
@@ -436,7 +457,7 @@ export function XlsxSplitDialog({
     parts: number;
     includeHidden: boolean;
     skipEmpty: boolean;
-    withHeader: boolean;
+    headerRows: number;
     subFolder: boolean;
   } | null): void;
 }) {
@@ -449,7 +470,7 @@ export function XlsxSplitDialog({
     parts: 2,
     includeHidden: false,
     skipEmpty: false,
-    withHeader: true,
+    headerRows: 1,
     subFolder: true,
   });
   const [items, setItems] = useState<string[]>(() => pathsByNames(entries));
@@ -463,7 +484,8 @@ export function XlsxSplitDialog({
   const [partsText, setPartsText] = useState(String(init.parts ?? 2));
   const [includeHidden, setIncludeHidden] = useState(() => !!init.includeHidden);
   const [skipEmpty, setSkipEmpty] = useState(() => !!init.skipEmpty);
-  const [withHeader, setWithHeader] = useState(() => init.withHeader !== false);
+  const [headText, setHeadText] = useState(String(init.headerRows ?? 1));
+  const headerRows = Math.min(100, Math.max(0, Math.floor(Number(headText) || 0)));
   const [subFolder, setSubFolder] = useState(() => init.subFolder !== false);
 
   // 表清单（单文件拉取；批量按表拆分只需首文件语境展示，实际按各文件自身表清单执行）
@@ -510,7 +532,7 @@ export function XlsxSplitDialog({
       parts,
       includeHidden,
       skipEmpty,
-      withHeader,
+      headerRows,
       subFolder,
     });
     onDone({
@@ -522,7 +544,7 @@ export function XlsxSplitDialog({
       parts,
       includeHidden,
       skipEmpty,
-      withHeader,
+      headerRows,
       subFolder,
     });
   };
@@ -550,7 +572,9 @@ export function XlsxSplitDialog({
             />
           </FormRow>
           <FormRow k={t2("工作表")} off={mode === "sheet"}>
-            {sheets === null && !infoErr ? (
+            {mode === "sheet" ? (
+              <span className="np-dialog-muted">{t2("按表拆分按各文件的表清单执行")}</span>
+            ) : sheets === null && !infoErr ? (
               <span className="np-dialog-muted">{t2("读取中…")}</span>
             ) : infoErr || !sheets?.length ? (
               <span className="np-dialog-muted">{t2("无法读取工作簿")}</span>
@@ -573,6 +597,7 @@ export function XlsxSplitDialog({
           <FormRow k={t2("含隐藏表")} off={mode !== "sheet"}>
             <Switch
               checked={includeHidden}
+              disabled={mode !== "sheet"}
               onChange={(e) => setIncludeHidden(e.currentTarget.checked)}
               innerLabel={t2("隐藏工作表一并拆出")}
             />
@@ -580,6 +605,7 @@ export function XlsxSplitDialog({
           <FormRow k={t2("跳过空表")} off={mode !== "sheet"}>
             <Switch
               checked={skipEmpty}
+              disabled={mode !== "sheet"}
               onChange={(e) => setSkipEmpty(e.currentTarget.checked)}
               innerLabel={t2("没有内容的表不产出文件")}
             />
@@ -616,11 +642,15 @@ export function XlsxSplitDialog({
               placeholder="2"
             />
           </FormRow>
-          <FormRow k={t2("每份带表头")} off={mode === "sheet"}>
-            <Switch
-              checked={withHeader}
-              onChange={(e) => setWithHeader(e.currentTarget.checked)}
-              innerLabel={t2("源表首行复制到每份顶部")}
+          <FormRow k={t2("表头行数")} off={mode === "sheet"}>
+            <InputGroup
+              size="small"
+              value={headText}
+              spellCheck={false}
+              disabled={mode === "sheet"}
+              title={t2("每份顶部复制源表前 N 行，0 = 不带表头")}
+              onChange={(e) => setHeadText(e.target.value.replace(/[^\d]/g, ""))}
+              placeholder="1"
             />
           </FormRow>
           <FormRow k={t2("输出位置")}>

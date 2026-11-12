@@ -119,6 +119,9 @@ impl SourceCol {
 pub struct MergeOpts {
     pub scope: SheetScope,
     pub name_rule: SheetNameRule,
+    /// 表头行数（纵向拼接：源表前 N 行视为表头，0 = 无表头全部按数据）
+    pub header_rows: u32,
+    /// 去重复表头（后续文件表头块与首个文件逐格相同时整块跳过）
     pub dedup_header: bool,
     pub source_col: SourceCol,
 }
@@ -128,6 +131,7 @@ impl Default for MergeOpts {
         Self {
             scope: SheetScope::Visible,
             name_rule: SheetNameRule::Smart,
+            header_rows: 1,
             dedup_header: true,
             source_col: SourceCol::None,
         }
@@ -383,7 +387,7 @@ pub(crate) fn run_merge_core(
     let mut used_names: HashSet<String> = HashSet::new();
     // rows 模式的单张目标表：懒建 + 按名复取（每次借用即取即还，规避自借冲突）
     const MERGED_SHEET: &str = "合并";
-    let mut header: Option<Vec<String>> = None;
+    let mut header: Option<Vec<Vec<String>>> = None;
     let mut row_cursor: u32 = 0;
     let mut cells: usize = 0;
     let source_header = opts.source_col.header();
@@ -512,19 +516,25 @@ pub(crate) fn run_merge_core(
                     }
                     XlsxMergeMode::Rows => {
                         let rows: Vec<&[Data]> = range.rows().collect();
-                        // 重复表头去除：首个非空首行作表头快照，后续逐格相同才跳过
-                        // （快照不含来源列——来源列每文件不同，去重只比数据部分）
-                        let mut skip_first = false;
-                        if let Some(f) = rows.first() {
-                            let texts: Vec<String> = f.iter().map(cell_text).collect();
+                        // 表头块 = 源表前 header_rows 行（0 = 无表头）；去重 =
+                        // 开启且本文件表头块与首个文件逐格相同时整块跳过（快照
+                        // 不含来源列——来源列每文件不同，去重只比数据部分）
+                        let n_head = (opts.header_rows as usize).min(rows.len());
+                        let mut skip_head = false;
+                        if n_head > 0 {
+                            let block: Vec<Vec<String>> = rows[..n_head]
+                                .iter()
+                                .map(|row| row.iter().map(cell_text).collect())
+                                .collect();
                             match &header {
                                 None => {
-                                    if texts.iter().any(|t| !t.is_empty()) {
-                                        header = Some(texts);
+                                    if block.iter().any(|row| row.iter().any(|t| !t.is_empty())) {
+                                        header = Some(block);
                                     }
                                 }
                                 Some(h) => {
-                                    skip_first = h.len() == texts.len() && *h == texts;
+                                    skip_head =
+                                        opts.dedup_header && h.len() == block.len() && *h == block;
                                 }
                             }
                         }
@@ -549,26 +559,24 @@ pub(crate) fn run_merge_core(
                         let mut r = row_cursor;
                         let extra: u32 = u32::from(source_header.is_some());
                         for (ri, row) in rows.iter().enumerate() {
-                            if ri == 0 && skip_first {
+                            let in_head = n_head > 0 && ri < n_head;
+                            if in_head && skip_head {
                                 continue;
                             }
-                            if ri == 0 {
-                                // 表头行：来源列头 + 原行
-                                if let Some(h) = source_header {
-                                    crate::fs::xlsx_style::write_value(
-                                        ws,
-                                        r,
-                                        0,
-                                        &Data::String((*h).into()),
-                                        None,
-                                    );
-                                }
-                            } else if extra == 1 {
+                            if extra == 1 {
+                                // 来源列：表头首行 = 列头文案，其余表头行留空，数据行 = 文件标签
+                                let col0 = if in_head && ri == 0 {
+                                    source_header.unwrap_or("").to_string()
+                                } else if in_head {
+                                    String::new()
+                                } else {
+                                    label.clone()
+                                };
                                 crate::fs::xlsx_style::write_value(
                                     ws,
                                     r,
                                     0,
-                                    &Data::String(label.clone()),
+                                    &Data::String(col0),
                                     None,
                                 );
                             }
@@ -984,6 +992,81 @@ mod tests {
         assert_eq!(rows[1][0], "甲");
         assert_eq!(rows[2][0], "乙");
         assert_eq!(rows.len(), 3);
+    }
+
+    #[test]
+    fn merge_rows_header_rows_and_dedup_gate() {
+        let dir = tempdir();
+        let a = crate::fs::path::join_name(&dir, "甲.xlsx");
+        let b = crate::fs::path::join_name(&dir, "乙.xlsx");
+        let cancel = AtomicBool::new(false);
+        // 双行表头夹具：行0 = 名称/数量，行1 = 单位/说明；数据各 1 行
+        let two_head = |n: &str, v: i64| {
+            vec![
+                vec![Data::String("名称".into()), Data::String("数量".into())],
+                vec![Data::String("单位".into()), Data::String("说明".into())],
+                vec![Data::String(n.into()), Data::Int(v)],
+            ]
+        };
+        write_book(&a, &[("Sheet1", two_head("甲", 1))]);
+        write_book(&b, &[("Sheet1", two_head("乙", 2))]);
+        // header_rows = 2 + 去重：乙的整块双行表头被去掉
+        let out = crate::fs::path::join_name(&dir, "双行表头.xlsx");
+        let failed = run_merge_core(
+            &[a.clone(), b.clone()],
+            &out,
+            XlsxMergeMode::Rows,
+            &MergeOpts {
+                header_rows: 2,
+                dedup_header: true,
+                ..Default::default()
+            },
+            &cancel,
+            |_| {},
+        );
+        assert!(failed.is_empty(), "{failed:?}");
+        let rows = &read_book(&out)[0].1;
+        assert_eq!(
+            rows,
+            &vec![
+                vec!["名称".to_string(), "数量".to_string()],
+                vec!["单位".to_string(), "说明".to_string()],
+                vec!["甲".to_string(), "1".to_string()],
+                vec!["乙".to_string(), "2".to_string()],
+            ]
+        );
+        // 去重关：乙的双行表头保留为数据
+        let out2 = crate::fs::path::join_name(&dir, "不去重.xlsx");
+        let failed = run_merge_core(
+            &[a.clone(), b.clone()],
+            &out2,
+            XlsxMergeMode::Rows,
+            &MergeOpts {
+                header_rows: 2,
+                dedup_header: false,
+                ..Default::default()
+            },
+            &cancel,
+            |_| {},
+        );
+        assert!(failed.is_empty(), "{failed:?}");
+        assert_eq!(read_book(&out2)[0].1.len(), 6);
+        // header_rows = 0：无表头概念，去重不生效，全部行按数据并入
+        let out3 = crate::fs::path::join_name(&dir, "无表头.xlsx");
+        let failed = run_merge_core(
+            &[a, b],
+            &out3,
+            XlsxMergeMode::Rows,
+            &MergeOpts {
+                header_rows: 0,
+                dedup_header: true,
+                ..Default::default()
+            },
+            &cancel,
+            |_| {},
+        );
+        assert!(failed.is_empty(), "{failed:?}");
+        assert_eq!(read_book(&out3)[0].1.len(), 6);
     }
 
     #[test]

@@ -96,8 +96,8 @@ pub fn merge_texts(
 
 /// Excel 工作簿合并（calamine 读 → rust_xlsxwriter 写 .xlsx；全部源
 /// xlsx/xlsm 且分表保留时自动走 umya 保真通道）。mode ∈ sheets/rows；
-/// sheetScope ∈ visible/all；nameRule ∈ smart/sheet/file；sourceCol ∈
-/// none/file/fileSheet（2026-11-12 参数集扩展，None 项 = 旧行为）
+/// sheetScope ∈ visible/all；nameRule ∈ smart/sheet/file；headerRows =
+/// 纵向拼接的表头行数（0 = 无表头）；sourceCol ∈ none/file/fileSheet
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub fn merge_xlsx(
@@ -108,6 +108,7 @@ pub fn merge_xlsx(
     mode: String,
     sheet_scope: Option<String>,
     name_rule: Option<String>,
+    header_rows: Option<u32>,
     dedup_header: Option<bool>,
     source_col: Option<String>,
 ) -> Result<JobId, AppError> {
@@ -124,6 +125,7 @@ pub fn merge_xlsx(
     let opts = crate::fs::xlsx::MergeOpts {
         scope: crate::fs::xlsx::SheetScope::parse(sheet_scope.as_deref()),
         name_rule: crate::fs::xlsx::SheetNameRule::parse(name_rule.as_deref()),
+        header_rows: header_rows.unwrap_or(1).clamp(0, 100),
         dedup_header: dedup_header.unwrap_or(true),
         source_col: crate::fs::xlsx::SourceCol::parse(source_col.as_deref()),
     };
@@ -155,7 +157,7 @@ pub fn split_xlsx(
     parts: Option<u32>,
     include_hidden: Option<bool>,
     skip_empty: Option<bool>,
-    with_header: Option<bool>,
+    header_rows: Option<u32>,
     sub_folder: Option<bool>,
 ) -> Result<JobId, AppError> {
     if paths.is_empty() {
@@ -200,7 +202,7 @@ pub fn split_xlsx(
         parts,
         include_hidden: include_hidden.unwrap_or(false),
         skip_empty: skip_empty.unwrap_or(false),
-        with_header: with_header.unwrap_or(true),
+        header_rows: header_rows.unwrap_or(1).clamp(0, 100),
         sub_folder: sub_folder.unwrap_or(true),
     };
     Ok(JobId {
