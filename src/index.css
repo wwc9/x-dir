@@ -7100,9 +7100,12 @@ body.np-col-resizing * {
   color: var(--np-fg);
   white-space: nowrap;
 }
-/* 搜索胶囊（方案 C 上移顶栏）：surface-2 填充 + pill 圆角 + 聚焦 ring */
+/* 搜索胶囊（方案 C 上移顶栏）：surface-2 填充 + pill 圆角 + 聚焦 ring。
+   定宽 200 不拉满中位（2026-11-12 用户反馈「不用那么长」）：右对齐与
+   折叠态图标同位（展开原地替换），中部留白让给拖拽区，窄窗可收缩 */
 .np-cliptb .np-clip-searchbar {
-  flex: 1;
+  flex: 0 1 200px;
+  margin-left: auto;
   min-width: 0;
   display: flex;
   align-items: center;
