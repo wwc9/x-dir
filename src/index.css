@@ -7181,7 +7181,9 @@ body.np-col-resizing * {
    「功能库…」唤起）：吸附右键菜单锚位、无遮罩点击外部即关——保持右键操作
    流连续。面板圆角 = 瞬态浮层档 --np-radius-lg（§4.1）；行高 = --np-row-h
    紧凑单行，图标中性 fg 与右键菜单同语言；搜索行 = 填充式 surface-2 胶囊
-   （focus ring 由容器 focus-within 承载，同剪贴板搜索行口径）═══ */
+   （focus ring 由容器 focus-within 承载，同剪贴板搜索行口径）。
+   无吸附箭头（2026-11-12 用户反馈：菱形下缘伸入面板 ~7px，咬掉搜索胶囊
+   左上角；定位钳制后箭头也常偏离锚位，装饰收益不抵瑕疵）═══ */
 .np-palette {
   position: fixed;
   z-index: 45;
@@ -7190,18 +7192,6 @@ body.np-col-resizing * {
   border-radius: var(--np-radius-lg);
   background: var(--np-surface);
   box-shadow: var(--np-shadow);
-}
-/* 吸附箭头：指向触发点（上缘左端，与右键菜单落点视觉衔接） */
-.np-palette::before {
-  content: "";
-  position: absolute;
-  left: 14px;
-  top: -5px;
-  width: 10px;
-  height: 10px;
-  transform: rotate(45deg);
-  border-radius: 2px;
-  background: var(--np-surface);
 }
 .np-palette-search {
   display: flex;

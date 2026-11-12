@@ -44,9 +44,10 @@ export function paletteAvailable(fn: BuiltinFn, sel: FileEntry[]): boolean {
   return fn.supportsBlank && entryVisible(fn.cond, "blank", null);
 }
 
-/** 面板全库清单：高频 12 项置顶 + 其余按注册表序；窗格工具（supportsSel/
- *  Blank 双 false，仅工具栏可用）不入面板——其执行器不在 listRegistry，
- *  右键语境无执行路径 */
+/** 面板全库清单：可用项稳定置顶 + 不可用项沉底（2026-11-12 用户定案；sort
+ *  ES2019 起稳定，两块各自保持高频 12 项 → 注册表原序）；窗格工具
+ *  （supportsSel/Blank 双 false，仅工具栏可用）不入面板——其执行器不在
+ *  listRegistry，右键语境无执行路径 */
 export function paletteItems(sel: FileEntry[]): PaletteItem[] {
   const quickSet = new Set<string>(PALETTE_QUICK_KEYS);
   const quick = PALETTE_QUICK_KEYS.map((k) => builtinByKey(k)).filter(
@@ -56,11 +57,13 @@ export function paletteItems(sel: FileEntry[]): PaletteItem[] {
     (f) =>
       !quickSet.has(f.key) && (f.supportsSel || f.supportsBlank),
   );
-  return [...quick, ...rest].map((fn) => ({
-    fn,
-    available: paletteAvailable(fn, sel),
-    search: `${fn.label}${fn.desc}${fn.group}`.toLowerCase(),
-  }));
+  return [...quick, ...rest]
+    .map((fn) => ({
+      fn,
+      available: paletteAvailable(fn, sel),
+      search: `${fn.label}${fn.desc}${fn.group}`.toLowerCase(),
+    }))
+    .sort((a, b) => Number(b.available) - Number(a.available));
 }
 
 /** 搜索过滤：search 针小写包含，query 按空格拆多词 AND（每词都须命中，

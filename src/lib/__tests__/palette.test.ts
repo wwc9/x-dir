@@ -33,16 +33,23 @@ describe("PALETTE_QUICK_KEYS", () => {
 });
 
 describe("paletteItems", () => {
-  it("高频 12 项排最前，其余按注册表序", () => {
-    const items = paletteItems([fe("a.pdf", false)]);
-    expect(items.slice(0, PALETTE_QUICK_KEYS.length).map((i) => i.fn.key)).toEqual([
-      ...PALETTE_QUICK_KEYS,
-    ]);
+  it("可用项稳定置顶、不可用沉底，两块各自保持高频 12 项 → 注册表原序", () => {
+    const sel = [fe("a.pdf", false)];
     const quickSet = new Set<string>(PALETTE_QUICK_KEYS);
-    const restReg = BUILTIN_FNS.filter(
-      (f) => !quickSet.has(f.key) && (f.supportsSel || f.supportsBlank),
-    ).map((f) => f.key);
-    expect(items.slice(PALETTE_QUICK_KEYS.length).map((i) => i.fn.key)).toEqual(restReg);
+    const base = [
+      ...PALETTE_QUICK_KEYS.map((k) => builtinByKey(k)!),
+      ...BUILTIN_FNS.filter(
+        (f) => !quickSet.has(f.key) && (f.supportsSel || f.supportsBlank),
+      ),
+    ];
+    const avail = base
+      .filter((f) => paletteAvailable(f, sel))
+      .map((f) => f.key);
+    const off = base
+      .filter((f) => !paletteAvailable(f, sel))
+      .map((f) => f.key);
+    expect(off.length).toBeGreaterThan(0);
+    expect(paletteItems(sel).map((i) => i.fn.key)).toEqual([...avail, ...off]);
   });
   it("窗格工具（双能力位皆 false）不入面板", () => {
     const keys = paletteItems([]).map((i) => i.fn.key);
