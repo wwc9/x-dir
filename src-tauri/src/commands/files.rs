@@ -296,7 +296,8 @@ pub fn create_file(parent_dir: String, name: String) -> Result<String, AppError>
     let p = join_name(&parent_dir, &name);
     // 办公格式带最小合法模板落盘（方案 A，2026-11-05 定案）：0 字节的
     // docx/xlsx/pptx 不是合法 OOXML（ZIP 容器缺 [Content_Types].xml 等部件），
-    // Office/WPS 打开报损坏；txt/md 空文件本就合法，维持 0 字节
+    // Office/WPS 打开报损坏，rtf 须带规范头；txt/md/csv/py 等纯文本空文件
+    // 本就合法，维持 0 字节（2026-11-12 新建格式扩充）
     if let Some(bytes) = office_template(&name) {
         fs::write(to_extended(&p), bytes)?;
     } else {
@@ -325,8 +326,8 @@ fn zip_parts(parts: &[(&str, &str)]) -> Vec<u8> {
 }
 
 /// 扩展名 → 最小合法模板字节（docx/pptx = zip 打包部件；xlsx = rust_xlsxwriter
-/// 空工作簿——项目唯一宽松协议 xlsx 写库，天然合法）；其余扩展名 None（0 字节）。
-/// OnceLock 惰性构建一次复用
+/// 空工作簿——项目唯一宽松协议 xlsx 写库，天然合法；rtf = 规范最小文档）；
+/// 其余扩展名 None（0 字节）。OnceLock 惰性构建一次复用
 fn office_template(name: &str) -> Option<&'static [u8]> {
     let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
     match ext.as_deref() {
@@ -438,6 +439,11 @@ fn office_template(name: &str) -> Option<&'static [u8]> {
                     ("ppt/theme/theme1.xml", &theme),
                 ])
             }))
+        }
+        Some("rtf") => {
+            // 最小合法 RTF（RTF 规范 1.x 范式）：写字板/Word/WPS 干净打开；
+            // 后续中文内容由编辑器运行时字体回退兜底，模板无需带字体表
+            Some(b"{\\rtf1\\ansi}".as_slice())
         }
         _ => None,
     }
@@ -707,6 +713,8 @@ mod office_template_tests {
     fn txt_md_stay_zero_bytes() {
         assert!(office_template("新建文本文档.txt").is_none());
         assert!(office_template("笔记.md").is_none());
+        assert!(office_template("表.csv").is_none());
+        assert!(office_template("脚本.py").is_none());
         assert!(office_template("无扩展名").is_none());
     }
 
@@ -729,6 +737,10 @@ mod office_template_tests {
                 assert!(bytes.is_empty(), "{name} 应为 0 字节");
             }
         }
+        // rtf = 规范最小文档（非 zip 容器、非 0 字节）
+        let rtf = create_file(d.to_string_lossy().into(), "f.rtf".into()).unwrap();
+        let bytes = std::fs::read(&rtf).unwrap();
+        assert!(bytes.starts_with(b"{\\rtf1"), "rtf 应带规范头");
         std::fs::remove_dir_all(&d).unwrap();
     }
 }

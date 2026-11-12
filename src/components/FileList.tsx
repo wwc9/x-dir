@@ -1433,9 +1433,10 @@ export function FileList({
               forceBump,
             ),
         };
-      // 「新建」子菜单：文件夹 + 常用格式（txt/md 为合法空文件 0 字节；docx/
-      // xlsx/pptx 由 Rust create_file 落盘最小合法 OOXML 模板——方案 A，
-      // 2026-11-05 定案，Office/WPS 干净打开不报修复）
+      // 「新建」子菜单：文件夹 + 常用格式（2026-11-12 扩充 CSV/RTF/Python；
+      // txt/md/csv/py 为合法空文件 0 字节；docx/xlsx/pptx 由 Rust create_file
+      // 落盘最小合法 OOXML 模板、rtf 带规范头——方案 A，2026-11-05 定案，
+      // Office/WPS 干净打开不报修复）
       case "new":
         return {
           label: t("新建"),
@@ -1445,8 +1446,11 @@ export function FileList({
               ["文本文档", "新建文本文档", "新建文本文档.txt", "file"],
               ["Word 文档", "新建 Word 文档", "新建 Word 文档.docx", "file"],
               ["Excel 工作表", "新建 Excel 工作表", "新建 Excel 工作表.xlsx", "file"],
+              ["CSV 表格", "新建 CSV 表格", "新建 CSV 表格.csv", "file"],
               ["PowerPoint 演示文稿", "新建 PowerPoint 演示文稿", "新建 PowerPoint 演示文稿.pptx", "file"],
               ["Markdown 文档", "新建 Markdown 文档", "新建 Markdown 文档.md", "file"],
+              ["RTF 富文本", "新建 RTF 富文本", "新建 RTF 富文本.rtf", "file"],
+              ["Python 脚本", "新建 Python 脚本", "新建 Python 脚本.py", "file"],
             ] as const
           ).map(([label, title, initial, kind]) => ({
             label,
