@@ -333,6 +333,7 @@ pub fn run() {
             commands::cliphist::cliphist_hide,
             commands::cliphist::cliphist_toggle,
             commands::cliphist::cliphist_set_pinned,
+            commands::cliphist::cliphist_debug_state,
             commands::cliphist::cliphist_set_maximized,
             commands::cliphist::cliphist_open_settings,
             commands::cliphist::cliphist_paste_to_pane,

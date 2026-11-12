@@ -224,6 +224,40 @@ pub fn cliphist_set_pinned(pinned: bool) -> Result<(), String> {
     Ok(())
 }
 
+/// 浮窗自动收诊断快照（2026-11-12 排查「点拖拽区后失焦事件丢失」）：OPEN/
+/// PINNED 状态位 + 呼出距今 ms + 前台是否本窗 + 窗口矩形 + 光标是否在窗内。
+/// 仅诊断用途（E2E/支持排障直调，不入 ipc.ts api 表）；v=2 标记二进制代际
+#[tauri::command]
+pub fn cliphist_debug_state(app: AppHandle) -> Result<serde_json::Value, String> {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetForegroundWindow};
+    let open = crate::cliphist::debug_open();
+    let pinned = crate::cliphist::debug_pinned();
+    let since_summon = crate::cliphist::now_ms() - crate::cliphist::debug_summoned_at();
+    let mut fg_self = false;
+    let mut cursor_in = false;
+    let mut rect = [0i32; 4];
+    if let Some(w) = app.get_webview_window("cliphist")
+        && let Ok(h) = w.hwnd()
+    {
+        fg_self = unsafe { GetForegroundWindow() } == h;
+        if let (Ok(pos), Ok(sz)) = (w.outer_position(), w.outer_size()) {
+            rect = [pos.x, pos.y, sz.width as i32, sz.height as i32];
+        }
+        let mut pt = POINT::default();
+        if unsafe { GetCursorPos(&mut pt) }.is_ok() {
+            cursor_in = pt.x >= rect[0]
+                && pt.y >= rect[1]
+                && pt.x < rect[0] + rect[2]
+                && pt.y < rect[1] + rect[3];
+        }
+    }
+    Ok(serde_json::json!({
+        "v": 2, "open": open, "pinned": pinned, "sinceSummonMs": since_summon,
+        "fgSelf": fg_self, "rect": rect, "cursorIn": cursor_in,
+    }))
+}
+
 /// 浮窗最大化/还原（顶栏窗口钮）：手动撑满所在显示器工作区
 #[tauri::command]
 pub fn cliphist_set_maximized(app: AppHandle, maximized: bool) -> Result<(), String> {
