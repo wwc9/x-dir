@@ -540,23 +540,20 @@ export function ClipHistWindow() {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [pasteItem, pinItem, delItem, goTo, togglePick, mergePaste]);
 
-  /** 缩略图等比清晰适配（onLoad，2026-11-12 用户反馈补）：显示尺寸先压到
-   *  源物理像素 1:1（natural/dpr CSS px——低分辨率位图如 228×66 截块在高
-   *  DPI 下放大即糊，1:1 显示逐像素锐利），再在 行高 2.4 / 卡片宽 45% 上限
-   *  内等比缩小；纵横比恒定、只缩不放。行高变化由虚拟列表 measureElement
-   *  的 ResizeObserver 自动重测 */
+  /** 缩略图等比适配（onLoad，2026-11-12 用户定案「尽可能大」）：在 行高 2.4
+   *  / 卡片可用宽 上限内等比放大到最大，scale ≤ 1 保证**不超过图片本身尺寸**
+   *  （自然 CSS 像素）；预留 ~90px 预览文字位。行高变化由虚拟列表
+   *  measureElement 的 ResizeObserver 自动重测 */
   const fitThumb = (e: { currentTarget: HTMLImageElement }) => {
     const el = e.currentTarget;
-    const dpr = window.devicePixelRatio || 1;
-    const w1 = el.naturalWidth / dpr;
-    const h1 = el.naturalHeight / dpr;
-    if (!w1 || !h1) return;
+    if (!el.naturalWidth || !el.naturalHeight) return;
     const card = el.closest(".np-clip-card");
-    const capW = ((card?.clientWidth ?? 400) * 2) / 4.5;
+    // 可用宽 = 卡片内容宽 − 序号列与间距(28) − 预览文字保留位(90)，下限 120
+    const capW = Math.max(120, (card?.clientWidth ?? 400) - 118);
     const capH = DENSITY.rowH * 2.4;
-    const scale = Math.min(1, capW / w1, capH / h1);
-    el.style.width = `${(w1 * scale).toFixed(1)}px`;
-    el.style.height = `${(h1 * scale).toFixed(1)}px`;
+    const scale = Math.min(1, capW / el.naturalWidth, capH / el.naturalHeight);
+    el.style.width = `${(el.naturalWidth * scale).toFixed(1)}px`;
+    el.style.height = `${(el.naturalHeight * scale).toFixed(1)}px`;
   };
 
   const onScroll = useCallback(() => {
@@ -604,10 +601,10 @@ export function ClipHistWindow() {
             />
           </div>
         ) : (
-          /* 折叠态 = 仅一枚搜索图标（np-winbtn 顶栏图标钮基底）；点开或
-              直接键入任意字符展开完整搜索框（2026-11-12 用户定案） */
+          /* 折叠态 = 仅一枚搜索图标（np-winbtn 顶栏图标钮基底），右对齐与
+              窗口钮成组；点开或直接键入任意字符展开完整搜索框（2026-11-12 用户定案） */
           <button
-            className="np-winbtn"
+            className="np-winbtn np-clip-searchtoggle"
             data-tip="搜索（键入任意字符亦可唤起）"
             aria-label="搜索剪贴板历史"
             onClick={() => setSearchOpen(true)}

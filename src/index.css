@@ -6905,9 +6905,9 @@ body.np-col-resizing * {
   opacity: 0.85;
 }
 /* 图片条目缩略图：等比缩放不裁切不变形。显示尺寸由前端 fitThumb(onLoad)
-   精确设定：先压到源物理像素 1:1（natural/dpr——低分辨率位图放大即糊，
-   2026-11-12 用户反馈），再在 行高 2.4 / 卡片宽 45% 上限内等比缩小，只缩
-   不放；此处 max-height 仅为加载前兜底。点击放大看原图 */
+   精确设定：在 行高 2.4 / 卡片可用宽 上限内等比放大到最大，且 scale ≤ 1
+   不超过图片本身尺寸（2026-11-12 用户定案「尽可能大」）；此处 max-height
+   仅为加载前兜底。点击放大看原图 */
 .np-clip-thumb {
   display: block;
   max-height: calc(var(--np-row-h) * 2.4);
@@ -6918,6 +6918,10 @@ body.np-col-resizing * {
   background: var(--np-surface);
   border: 1px solid var(--np-hairline);
   flex: none;
+}
+/* 折叠态搜索图标右对齐（与窗口钮成组；展开态搜索条占弹性中位不受影响） */
+.np-clip-searchtoggle {
+  margin-left: auto;
 }
 /* 图片放大预览覆盖层（T2-1）：全窗覆盖、点击/Esc 关闭 */
 .np-clip-viewer {
