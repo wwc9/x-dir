@@ -68,10 +68,8 @@ export function ClipHistWindow() {
   /** 浮窗最大化（顶栏钮/双击顶栏，Rust 侧手动工作区方案；重开后复位） */
   const [isMaxed, setIsMaxed] = useState(false);
   /** 搜索展开态（2026-11-12 用户定案：呼出默认折叠 = 只显图标、不聚焦——
-   *  列表模式快捷键即刻全效；键入任意字符或点图标才展开，Esc 收起清词）。
-   *  searchFocused 仅驱动页脚提示切换 */
+   *  列表模式快捷键即刻全效；键入任意字符或点图标展开，Esc 收起清词） */
   const [searchOpen, setSearchOpen] = useState(false);
-  const [searchFocused, setSearchFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   // 装载协程防乱序：仅最后一次发起的请求可落盘（搜索防抖/翻页竞态）
@@ -600,8 +598,6 @@ export function ClipHistWindow() {
               spellCheck={false}
               placeholder="搜索文本与文件路径…"
               onChange={(e) => setQuery(e.target.value)}
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setSearchFocused(false)}
             />
           </div>
         ) : (
@@ -823,7 +819,11 @@ export function ClipHistWindow() {
         </div>
       )}
       {/* 页脚悬浮胶囊（方案 C）：整行键帽式快捷键说明（2026-11-12 用户需求：
-          条目计数移顶栏、快捷键以 np-kbd 键帽包裹）。flash 回执占位同高 */}
+          条目计数移顶栏、快捷键以 np-kbd 键帽包裹）。清单**固定不随焦点态
+          跳变**（2026-11-12 用户反馈「快捷键又变化了」）——统一用任意状态
+          都生效的键位：取条 = Alt+1-9（裸 1-9 仅列表模式生效不作展示）、
+          勾选 = Ctrl+点击（Space 列表模式同样生效，见 shortcuts.ts）。仅
+          勾选态与常驻态（Enter 语义不同）各自成清单。flash 回执占位同高 */}
       <div className="np-clip-foot">
         {flash ? (
           <span className="np-clip-flash">{flash}</span>
@@ -837,36 +837,27 @@ export function ClipHistWindow() {
                   { k: "Ctrl+点击", l: "增删勾选" },
                   { k: "Esc", l: "取消" },
                 ]
-              : searchFocused
+              : winPinned
                 ? [
-                    { k: "输入", l: "搜索" },
-                    { k: "↑↓", l: "选择" },
+                    { k: "↑↓/WS", l: "选择" },
+                    { k: "Enter", l: "复制" },
+                    { k: "Alt+1-9", l: "取条" },
+                    { k: "Space/Ctrl+点击", l: "勾选" },
+                    { k: "Tab", l: "切分类" },
+                    { k: "Ctrl+P", l: "置顶" },
+                    { k: "Del", l: "删除" },
+                    { k: "Esc", l: "关闭" },
+                  ]
+                : [
+                    { k: "↑↓/WS", l: "选择" },
                     { k: "Enter", l: "粘贴" },
                     { k: "Alt+1-9", l: "取条" },
+                    { k: "Space/Ctrl+点击", l: "勾选" },
                     { k: "Tab", l: "切分类" },
-                    { k: "Esc", l: "收起搜索" },
+                    { k: "Ctrl+P", l: "置顶" },
+                    { k: "Del", l: "删除" },
+                    { k: "Esc", l: "关闭" },
                   ]
-                : winPinned
-                  ? [
-                      { k: "↑↓/WS", l: "选择" },
-                      { k: "Enter", l: "复制" },
-                      { k: "1-9", l: "取条" },
-                      { k: "Space/Ctrl+点击", l: "勾选" },
-                      { k: "Tab", l: "切分类" },
-                      { k: "Ctrl+P", l: "置顶" },
-                      { k: "Del", l: "删除" },
-                      { k: "Esc", l: "关闭" },
-                    ]
-                  : [
-                      { k: "↑↓/WS", l: "选择" },
-                      { k: "Enter", l: "粘贴" },
-                      { k: "1-9", l: "取条" },
-                      { k: "Space/Ctrl+点击", l: "勾选" },
-                      { k: "Tab", l: "切分类" },
-                      { k: "Ctrl+P", l: "置顶" },
-                      { k: "Del", l: "删除" },
-                      { k: "Esc", l: "关闭" },
-                    ]
             ).map(({ k, l }) => (
               <span key={k + l} className="np-clip-key">
                 <span className="np-kbd">{k}</span>
