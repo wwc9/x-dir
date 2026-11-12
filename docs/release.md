@@ -115,3 +115,4 @@ powershell -ExecutionPolicy Bypass -Command "$env:GITHUB_TOKEN=[Environment]::Ge
 | PS5.1 读中文文件 | 一律 `-Encoding UTF8`；写 curl 直读的临时文件用无 BOM UTF-8（BOM 令 updater JSON 解析失败） |
 | updater notes 类型 | latest.json 的 `notes` 必须是字符串（数组会 `invalid type: sequence` 检查即败） |
 | exe 未签名 | Release 说明提醒 SmartScreen 弹「未知发布者」选「仍要运行」 |
+| 安装版与 dev 版同时运行 | 全局热键（截图/剪贴板）RegisterHotKey 先到先得——热键召唤的是**先启动实例**的浮窗（可能是旧版），表现与最新代码不符时先查是否双实例（`tasklist | findstr x-dir`），开发验证/冒烟前先退出另一实例 |

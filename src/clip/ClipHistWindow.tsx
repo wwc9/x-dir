@@ -1,14 +1,15 @@
-// 剪贴板历史浮窗（§3.7，Ditto 式）：自绘顶栏（标题 + 置顶/最小化/最大化/
-// 关闭 + 拖动）+ 搜索框 + 类型段选 + 虚拟列表 + 状态行。数据过滤/分页全在
+// 剪贴板历史浮窗（§3.7，Ditto 式）：自绘顶栏（标题 + 搜索 + 置顶/最小化/最大化/
+// 关闭 + 拖动）+ 类型段选 + 虚拟列表 + 状态行。数据过滤/分页全在
 // Rust 端（铁律 3），列表只渲染可见行（铁律 1，TanStack Virtual 动态行高——
-// 预览自适应最多 3 行）。键盘双模式：**输入模式**（焦点在搜索框）= 可打印
-// 字符/空格/数字/Del 进搜索词，↑↓/Enter/Alt+1-9/Ctrl+P 仍作用列表，Esc
-// 清词退出；**列表模式**（焦点在 body/按钮）= 页脚全部快捷键生效（↑↓/WS
-// 选择 · Enter 粘贴 · 1-9 取条 · Space 勾选 · Ctrl+P 置顶 · Del 删除 ·
-// Esc 关闭）。焦点自卫只在呼出后的宽限期把焦点归还搜索框（中文 IME 起始
-// 组合需要焦点），宽限期外 body 焦点是合法列表模式不再抢回——否则裸
-// 1-9/Space/Del 永远进不了列表模式（2026-11-12 用户实测冲突根因）。
-// 自动收由 Rust 管理；本页经窗口 focus 事件感知「被呼出」→ 刷新并聚焦。
+// 预览自适应最多 3 行）。搜索默认折叠 = 只显一枚图标（2026-11-12 用户定案，
+// 呼出即列表模式）：键入任意字符或点图标展开并聚焦（含 IME 组合首键承接），
+// Esc 收起清词，再按关窗。展开后 = 输入模式：可打印字符/空格/数字/Del 进
+// 搜索词，↑↓/Enter/Alt+1-9/Ctrl+P 仍作用列表；未展开 = 列表模式：页脚全部
+// 快捷键生效（↑↓/WS 选择 · Enter 粘贴 · 1-9 取条 · Space 勾选 · Ctrl+P
+// 置顶 · Del 删除 · Esc 关闭），点行内动作钮持有的焦点被 keydown 路由回
+// 列表语义。全程不做焦点抢夺——「快捷键与搜索框冲突」自折叠化起根除。
+// 自动收由 Rust 管理（失焦停靠，置顶常驻豁免）；本页经窗口 focus 事件感知
+// 「被呼出」→ 复位折叠态并刷新。
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -66,9 +67,11 @@ export function ClipHistWindow() {
   const [winPinned, setWinPinned] = useState(false);
   /** 浮窗最大化（顶栏钮/双击顶栏，Rust 侧手动工作区方案；重开后复位） */
   const [isMaxed, setIsMaxed] = useState(false);
-  /** 输入模式 = 焦点在搜索框（开窗默认聚焦）：页脚快捷键清单随之切换，
-   *  Esc 返回列表模式的出口在页脚可见（可发现性） */
-  const [typing, setTyping] = useState(true);
+  /** 搜索展开态（2026-11-12 用户定案：呼出默认折叠 = 只显图标、不聚焦——
+   *  列表模式快捷键即刻全效；键入任意字符或点图标才展开，Esc 收起清词）。
+   *  searchFocused 仅驱动页脚提示切换 */
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   // 装载协程防乱序：仅最后一次发起的请求可落盘（搜索防抖/翻页竞态）
@@ -83,12 +86,11 @@ export function ClipHistWindow() {
   // 纯属浪费——用户真正呼出时 focus 路径本来就会重拉。首次获得焦点才放行
   // 数据通道；focus 事件极端丢失时由 400ms 焦点自卫兜底武装
   const armed = useRef(false);
-  // 最近一次窗口呼出时刻（focusSearch/onFocusChanged 刷新）：焦点自卫只在
-  // 呼出后宽限期内归还搜索框，平时不抢焦点（保住列表模式快捷键）
-  const lastActivate = useRef(0);
+  // 搜索展开后待补进搜索词的首字符（键入唤起时该字符先于焦点落位被拦下）
+  const pendingChar = useRef<string | null>(null);
   // 键盘/事件处理器读取的最新态（避免重绑 window 监听、闭包过期）
-  const stateRef = useRef({ items, sel, query, kind, directPaste, winPinned, isMaxed, picked, viewImg });
-  stateRef.current = { items, sel, query, kind, directPaste, winPinned, isMaxed, picked, viewImg };
+  const stateRef = useRef({ items, sel, query, kind, directPaste, winPinned, isMaxed, picked, viewImg, searchOpen });
+  stateRef.current = { items, sel, query, kind, directPaste, winPinned, isMaxed, picked, viewImg, searchOpen };
 
   const fetchPage = useCallback(
     async (offset: number, append: boolean, keep: number | null) => {
@@ -126,6 +128,18 @@ export function ClipHistWindow() {
     const t = window.setTimeout(() => void fetchPage(0, false, null), 120);
     return () => window.clearTimeout(t);
   }, [query, kind, fetchPage]);
+
+  /** 搜索展开后落焦点并补首字符（2026-11-12 折叠搜索定案）：focus 与渲染
+   *  同 tick 落位；键入唤起时该字符先于焦点被拦下，从这里补进搜索词 */
+  useEffect(() => {
+    if (!searchOpen) return;
+    inputRef.current?.focus();
+    if (pendingChar.current) {
+      const ch = pendingChar.current;
+      pendingChar.current = null;
+      setQuery((q) => q + ch);
+    }
+  }, [searchOpen]);
 
   // 挂载一次性接线：偏好（直接粘贴 + 深浅色，轻量窗不走 settings store）、
   // cliphist-updated 事件（聚焦中才刷新）、窗口 focus（= Rust 呼出）刷新+聚焦
@@ -179,24 +193,6 @@ export function ClipHistWindow() {
       unImported = f;
     });
     let unFocus: (() => void) | undefined;
-    const focusSearch = () => {
-      lastActivate.current = Date.now();
-      // WebView2 激活序列会在原生焦点落定后把 activeElement 重置为 body：
-      // 单次延迟聚焦在「页面首次被激活」时仍会被冲掉（2026-10-31 E2E 实测），
-      // 120/350/700ms 三重试兜底覆盖激活完成时刻，幂等无害
-      [120, 350, 700].forEach((ms) => {
-        window.setTimeout(() => {
-          if (Date.now() - lastActivate.current >= 1500) return;
-          if (document.activeElement !== inputRef.current) {
-            inputRef.current?.focus();
-            inputRef.current?.select();
-          }
-        }, ms);
-      });
-    };
-    // DOM focus 兜底：capabilities 修复后 tauri://focus 为主，浏览器焦点事件
-    // 双保险（停靠态窗口常驻可见，部分环境只触发其中之一）
-    window.addEventListener("focus", focusSearch);
     // 边缘拖拽调宽高 → 防抖 600ms 持久化（最大化态为工作区尺寸，不落盘）；
     // 建窗时 Rust 读回 cliphistWinW/H（2026-10-31）
     let saveSizeT: number | undefined;
@@ -210,26 +206,14 @@ export function ClipHistWindow() {
       }, 600);
     };
     window.addEventListener("resize", onWinResize);
-    // 焦点自卫（2026-10-31 终案；2026-11-12 加宽限期）：冷启动首次激活时
-    // WebView2 激活序列可能在事件 + 三重试之后仍重置 activeElement——低频
-    // 守卫接管，**仅呼出后 1.5s 宽限期内**且焦点悬在 body 时归还搜索框；
-    // 此前无条件归还：点击列表行后 activeElement 落 body 即被抢回搜索框，
-    // 裸 1-9/Space/W-S/Del 永远进不了列表模式（用户实测「快捷键与搜索框
-    // 冲突」根因）。宽限期外 body 焦点 = 合法列表模式，不触碰；停靠态
-    // hasFocus=false 自空转。顺带兜底武装数据通道（focus 事件先于监听
-    // 注册到达的极端时序）
+    // 数据武装兜底（focus 事件先于监听注册到达的极端时序）：呼出后首次
+    // hasFocus 时放行数据通道。不再做任何焦点归还——呼出默认折叠搜索
+    // （2026-11-12 用户定案），列表模式快捷键即刻全效，强抢焦点反而制造
+    // 「快捷键与搜索框冲突」
     const focusGuard = window.setInterval(() => {
-      if (document.hasFocus()) {
-        if (!armed.current) {
-          armed.current = true;
-          void fetchPage(0, false, null);
-        }
-        if (
-          Date.now() - lastActivate.current < 1500 &&
-          document.activeElement === document.body
-        ) {
-          inputRef.current?.focus();
-        }
+      if (document.hasFocus() && !armed.current) {
+        armed.current = true;
+        void fetchPage(0, false, null);
       }
     }, 400);
     void getCurrentWindow()
@@ -247,7 +231,8 @@ export function ClipHistWindow() {
         } else {
           void fetchPage(0, false, null);
         }
-        focusSearch();
+        // 呼出复位折叠态（2026-11-12 用户定案）：默认只显搜索图标、不聚焦
+        setSearchOpen(false);
       })
       .then((f) => {
         unFocus = f;
@@ -258,7 +243,6 @@ export function ClipHistWindow() {
       unImported?.();
       unFocus?.();
       window.clearInterval(focusGuard);
-      window.removeEventListener("focus", focusSearch);
       window.removeEventListener("resize", onWinResize);
       window.clearTimeout(saveSizeT);
       window
@@ -431,8 +415,14 @@ export function ClipHistWindow() {
     const onKey = (e: KeyboardEvent) => {
       // IME 组合输入中不接管：Enter=提交候选、Esc=取消组合（截图文字工具
       // 同口径；合成键在中文输入法下 key 呈 "Process"，天然不命中各分支）
-      if (e.isComposing || e.keyCode === 229) return;
-      const { items: list, sel: i, query: q, picked: pk } = stateRef.current;
+      if (e.isComposing || e.keyCode === 229) {
+        // IME 组合首键（无焦点可编辑时组合尚未开启）：展开搜索框承接后续
+        // 组合文本——focus 在 keydown 同步落位，组合即附着到输入框；不插字符
+        //（组合首键的原始字母取不到）、不 preventDefault
+        if (!stateRef.current.searchOpen) setSearchOpen(true);
+        return;
+      }
+      const { items: list, sel: i, picked: pk } = stateRef.current;
       const cur = list[i];
       // 按钮焦点劫持修复（2026-11-12）：行内动作钮（收藏/置顶/删除等）点击后
       // 持有焦点，Enter/Space 会二次触发该按钮（无意翻转收藏/置顶）——路由到
@@ -482,8 +472,8 @@ export function ClipHistWindow() {
           return;
         }
       }
-      // 聚焦兜底：冷启动首次激活时三重试仍可能被 WebView2 激活序列冲掉——
-      // 可打印字符落键到 body 时夺回输入焦点，并把该字符补进搜索词（免丢键）
+      // 折叠（或展开未聚焦）时键入任意字符 = 唤起搜索并补该字符
+      // （2026-11-12 折叠搜索定案）；展开且聚焦时输入框自然承接不走此支
       if (
         e.key.length === 1 &&
         !e.ctrlKey &&
@@ -491,8 +481,9 @@ export function ClipHistWindow() {
         !e.metaKey &&
         document.activeElement !== inputRef.current
       ) {
-        inputRef.current?.focus();
-        setQuery((q) => q + e.key);
+        e.preventDefault();
+        pendingChar.current = e.key;
+        setSearchOpen(true);
         return;
       }
       switch (e.key) {
@@ -520,15 +511,10 @@ export function ClipHistWindow() {
             setViewImg(null);
           } else if (pk.size > 0) {
             setPicked(new Set());
-          } else if (q) {
-            // 清词并退出输入模式：焦点留在搜索框会让数字/空格/Del 继续被当
-            // 编辑键，列表快捷键看起来失效（blur 后回列表模式全部生效）
+          } else if (stateRef.current.searchOpen) {
+            // 收起搜索并清词（回列表模式），再按一次关窗
             setQuery("");
-            inputRef.current?.blur();
-          } else if (document.activeElement === inputRef.current) {
-            // 空词输入模式（开窗默认聚焦搜索框）：第一段 Esc 退回列表模式
-            // （页脚全部快捷键生效），第二段才关窗
-            inputRef.current?.blur();
+            setSearchOpen(false);
           } else {
             void api.cliphistHide().catch(() => undefined);
           }
@@ -553,6 +539,25 @@ export function ClipHistWindow() {
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [pasteItem, pinItem, delItem, goTo, togglePick, mergePaste]);
+
+  /** 缩略图等比清晰适配（onLoad，2026-11-12 用户反馈补）：显示尺寸先压到
+   *  源物理像素 1:1（natural/dpr CSS px——低分辨率位图如 228×66 截块在高
+   *  DPI 下放大即糊，1:1 显示逐像素锐利），再在 行高 2.4 / 卡片宽 45% 上限
+   *  内等比缩小；纵横比恒定、只缩不放。行高变化由虚拟列表 measureElement
+   *  的 ResizeObserver 自动重测 */
+  const fitThumb = (e: { currentTarget: HTMLImageElement }) => {
+    const el = e.currentTarget;
+    const dpr = window.devicePixelRatio || 1;
+    const w1 = el.naturalWidth / dpr;
+    const h1 = el.naturalHeight / dpr;
+    if (!w1 || !h1) return;
+    const card = el.closest(".np-clip-card");
+    const capW = ((card?.clientWidth ?? 400) * 2) / 4.5;
+    const capH = DENSITY.rowH * 2.4;
+    const scale = Math.min(1, capW / w1, capH / h1);
+    el.style.width = `${(w1 * scale).toFixed(1)}px`;
+    el.style.height = `${(h1 * scale).toFixed(1)}px`;
+  };
 
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -584,19 +589,32 @@ export function ClipHistWindow() {
         <span className="np-cliptb-id" data-tauri-drag-region>
           <span className="np-cliptb-title">剪贴板</span>
         </span>
-        <div className="np-clip-searchbar">
-          <AppIcon icon={Search} size={DENSITY.iconSm} />
-          <input
-            ref={inputRef}
-            className="np-clip-search"
-            value={query}
-            spellCheck={false}
-            placeholder="搜索文本与文件路径…"
-            onChange={(e) => setQuery(e.target.value)}
-            onFocus={() => setTyping(true)}
-            onBlur={() => setTyping(false)}
-          />
-        </div>
+        {searchOpen ? (
+          <div className="np-clip-searchbar">
+            <AppIcon icon={Search} size={DENSITY.iconSm} />
+            <input
+              ref={inputRef}
+              className="np-clip-search"
+              value={query}
+              spellCheck={false}
+              placeholder="搜索文本与文件路径…"
+              onChange={(e) => setQuery(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
+            />
+          </div>
+        ) : (
+          /* 折叠态 = 仅一枚搜索图标（np-winbtn 顶栏图标钮基底）；点开或
+              直接键入任意字符展开完整搜索框（2026-11-12 用户定案） */
+          <button
+            className="np-winbtn"
+            data-tip="搜索（键入任意字符亦可唤起）"
+            aria-label="搜索剪贴板历史"
+            onClick={() => setSearchOpen(true)}
+          >
+            <AppIcon icon={Search} size={DENSITY.iconSm} />
+          </button>
+        )}
         <button
           className="np-winbtn"
           data-tip="打开 X-Dir 设置（浮窗收起）"
@@ -702,6 +720,7 @@ export function ClipHistWindow() {
                       className="np-clip-thumb"
                       src={it.thumb}
                       alt=""
+                      onLoad={fitThumb}
                       data-tip="点击放大预览"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -819,8 +838,8 @@ export function ClipHistWindow() {
             <span className="np-clip-keys">
               {picked.size > 0
                 ? `已勾选 ${picked.size} 条 · Enter 合并粘贴 · Space 续选 · Esc 取消`
-                : typing
-                  ? "输入即搜索 · ↑↓ 选择 · Enter 粘贴 · Alt+1-9 取条 · Esc 返回列表"
+                : searchFocused
+                  ? "输入即搜索 · ↑↓ 选择 · Enter 粘贴 · Alt+1-9 取条 · Esc 收起搜索"
                   : winPinned
                     ? "↑↓/WS 选择 · Enter 复制（常驻中） · 1-9 取条 · Space 勾选 · Ctrl+P 置顶 · Del 删除 · Esc 关闭"
                     : "↑↓/WS 选择 · Enter 粘贴 · 1-9 取条 · Space 勾选 · Ctrl+P 置顶 · Del 删除 · Esc 关闭"}

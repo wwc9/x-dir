@@ -6904,15 +6904,13 @@ body.np-col-resizing * {
   white-space: nowrap;
   opacity: 0.85;
 }
-/* 图片条目缩略图：等比缩放不裁切不变形（2026-11-12 用户反馈 cover 定盒
-   裁切 + 128 源放大发糊根因修复）。max 约束 + auto 尺寸 = 浏览器按天然
-   纵横比缩放，只缩不放：截图类（源缩略长边 320，THUMB_EDGE）在 2.4 行
-   高度上限内清晰显示，小图标按原尺寸显示不发糊；宽 45% 上限保预览文字
-   空间。点击放大看原图 */
+/* 图片条目缩略图：等比缩放不裁切不变形。显示尺寸由前端 fitThumb(onLoad)
+   精确设定：先压到源物理像素 1:1（natural/dpr——低分辨率位图放大即糊，
+   2026-11-12 用户反馈），再在 行高 2.4 / 卡片宽 45% 上限内等比缩小，只缩
+   不放；此处 max-height 仅为加载前兜底。点击放大看原图 */
 .np-clip-thumb {
   display: block;
   max-height: calc(var(--np-row-h) * 2.4);
-  max-width: 45%;
   width: auto;
   height: auto;
   object-fit: contain;
