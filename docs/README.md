@@ -6,6 +6,7 @@ X-Dir 是一款 Windows 桌面文件管理器（Tauri 2 + React 19 + Rust）。�
 ## 使用者
 
 - [README.md](../README.md) / [README.en.md](../README.en.md)：功能总览、界面截图、安装方式
+- [docs/manual/](manual/README.md)：**完整使用手册**——从安装启动到功能库逐工具图文讲解（14 篇基础 + 44 篇工具，全部实机截图）
 
 ## 贡献者与 AI 编码代理
 

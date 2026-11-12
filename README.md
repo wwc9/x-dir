@@ -146,6 +146,7 @@ README 工具箱截图采集：`tools/readme-shots.ps1`（UIA 无障碍驱动实
 
 ## 文档
 
+- **[`docs/manual/`](docs/manual/README.md) —— 完整使用手册**：从基础使用到功能库 40+ 个工具的逐项图文讲解（每个功能一篇，全部实机截图）
 - [`AGENTS.md`](AGENTS.md) —— 工程规范与组件标准（设计 token、组件清单、审计测试）
 - [`REQUIREMENTS.md`](REQUIREMENTS.md) —— 需求与技术路线（唯一需求源）
 - [`design/preview.html`](design/preview.html) —— 独立静态 UI 预览（不参与构建）
