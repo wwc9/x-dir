@@ -13,8 +13,12 @@ function renderItems(items: UiMenuItem[], close: () => void) {
         text={t(item.label ?? "")}
         disabled={item.disabled}
         intent={item.danger ? "danger" : undefined}
-        // 子菜单飞出层走玻璃脸（np-ctx-pop = index.css 右键菜单「霜」方案作用域）
-        popoverProps={{ popoverClassName: "np-ctx-pop" }}
+        // 子菜单飞出层走玻璃脸（np-ctx-pop = index.css 右键菜单「霜」方案作用域）。
+        // usePortal:true 必须显式覆写——Blueprint v6 子菜单默认 usePortal:false
+        // 内联在菜单 ul 里，靠 position:fixed 定位；玻璃卡片的 backdrop-filter
+        // 会成为 fixed 后代的包含块，子菜单被夹进菜单滚动区（出现滚动条且本体
+        // 被裁剪）。portal 渲染后定位脱离玻璃祖先，飞出层悬浮于全应用之上
+        popoverProps={{ popoverClassName: "np-ctx-pop", usePortal: true }}
         onClick={() => {
           if (item.sub) return;
           item.action?.();
