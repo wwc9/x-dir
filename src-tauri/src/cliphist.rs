@@ -1326,8 +1326,14 @@ pub(crate) fn ensure_clip_window(app: &AppHandle) -> Result<(), String> {
 
 /// 收浮窗：停靠屏幕外（不销毁、不 SW_HIDE），复位开关。停靠的窗口仍持有
 /// 系统焦点——必须把焦点还给呼出前的窗口（paste_target），否则 Esc 关闭后
-/// 键盘输入会落进看不见的窗口里（2026-10-31 E2E 实测）；用户主动点了别的
-/// 窗口时焦点已不在本进程，SetForegroundWindow 会被系统拒绝，无副作用。
+/// 键盘输入会落进看不见的窗口里（2026-10-31 E2E 实测）。**归还门闸 = 浮窗
+/// 仍持前台**：Esc/热键关闭路径照常归还；看门狗收窗时前台往往已被接手——
+/// 接手者是**本进程自己的窗口**（截图覆盖窗/主窗）时本进程即前台进程，
+/// SetForegroundWindow 必然成功 = 从自家窗口抢焦点，截图覆盖窗失焦自毁
+/// （2026-11-12 用户报「打开剪贴板后截图过一会儿闪退」根因）；接手者是别的
+/// 进程时系统本就会拒绝调用（与跳过等效），故统一按门闸跳过。
+/// （旧注释「点了别的窗口时调用必被拒绝无副作用」只在别的进程持前台时
+/// 成立，对本进程窗口不成立——即本次修正）
 /// 焦点归还延迟 200ms（2026-11-06 修复「快关快开浮窗无焦点不自动收」）：
 /// 立即归还会把前台权限转让给目标窗口，随后的重开受 Windows 前台锁定
 /// 拒绝 set_focus——浮窗显示着却无焦点，点击别处也不发失焦事件 = 永不
@@ -1338,7 +1344,9 @@ pub(crate) fn close_clip_window(app: &AppHandle) {
     #[cfg(windows)]
     {
         use windows::Win32::Foundation::HWND;
-        use windows::Win32::UI::WindowsAndMessaging::{IsWindow, SetForegroundWindow};
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GetForegroundWindow, IsWindow, SetForegroundWindow,
+        };
         let state = app.state::<AppState>();
         let raw = state.cliphist.paste_target.load(Ordering::SeqCst);
         if raw != 0 && unsafe { IsWindow(Some(HWND(raw as *mut std::ffi::c_void))) }.as_bool() {
@@ -1346,10 +1354,20 @@ pub(crate) fn close_clip_window(app: &AppHandle) {
             struct SendHwnd(pub isize);
             unsafe impl Send for SendHwnd {}
             let target = SendHwnd(raw);
+            let app2 = app.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_millis(200));
                 // 重开即取消归还（前台权限留给浮窗自己）
-                if !CLIPHIST_OPEN.load(Ordering::SeqCst) {
+                if CLIPHIST_OPEN.load(Ordering::SeqCst) {
+                    return;
+                }
+                // 门闸：仅浮窗仍持前台才归还（见上函数注释）。fire 时刻即时
+                // 比对——park 只是挪位置，Esc 路径此刻前台仍是浮窗
+                let clip_fg = app2
+                    .get_webview_window("cliphist")
+                    .and_then(|w| w.hwnd().ok())
+                    .is_some_and(|h| unsafe { GetForegroundWindow() } == h);
+                if clip_fg {
                     let _ = unsafe { SetForegroundWindow(HWND(target.0 as *mut std::ffi::c_void)) };
                 }
             });
