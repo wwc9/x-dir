@@ -141,6 +141,7 @@
   .bar.todo { background:color-mix(in srgb, var(--muted) 55%, var(--surface)); }
   .log.done .t { opacity:.6; } /* 已完成淡化（滴答清单惯例：完成不失信息密度） */
   .log .t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .log.more { color:var(--muted); opacity:.7; }
   /* 悬停快记角标（滴答「点空白即新建」的低噪声变体：hover 才出现，不挤占格面） */
   .qa {
     position:absolute; right:4px; bottom:4px; width:18px; height:18px; display:none;
@@ -311,7 +312,7 @@
     <li><b>导出</b>：范围三档 = 月度 / 年度 / 自定义日期区间；Markdown 任务清单语法（已完成 `- [x]`、其余 `- [ ]` + 状态词）</li>
     <li><b>数据</b>：班休 = holiday-cn 打包 JSON（MIT，2024–2027）；农历节气 = solarlunar 纯算法（ISC）；记录 = config/worklog.json（Rust 原子写，随配置导出）</li>
   </ul>
-  <div class="ft">预览数据为<b>真实班休与实算农历</b>；工作记录为虚构样例（覆盖长/短任务×三态×单日多条：长文格子内截断、悬停看全文，格子只显前 3 条）。默认停在 2026-10 展示调休（10-10 班），点「今天」看 2026-11（含执行中/待办示例）。确认后按 design/calendar-plan.md 实施。</div>
+  <div class="ft">预览数据为<b>真实班休与实算农历</b>；工作记录为虚构样例（覆盖长/短任务×三态×单日多条：长文格子内截断、悬停看全文，格子只显 2 行 + 省略行）。默认停在 2026-10 展示调休（10-10 班），点「今天」看 2026-11（含执行中/待办示例）。确认后按 design/calendar-plan.md 实施。</div>
 </div>
 
 <div class="theme" id="themeBtn">◐ 深浅主题</div>
@@ -325,7 +326,7 @@ const CAL_HOLIDAYS = {"2026":[["01-01","元旦",1],["01-02","元旦",1],["01-03"
 /* ═══ 示例工作条目（虚构，人设与仓库历史一致；s: todo=待办 doing=执行中 done=已完成） ═══ */
 const SEED = {
   // 样例覆盖：短句 / 长文（格子内截断省略号 + 悬停看全文）/ 三种状态 / 单日多条
-  // （格子最多显 3 条，超出部分在右侧详情面板完整呈现）
+  // （格子最多显 2 行，更多以「… 还有 N 条」省略行示意，右侧详情面板完整呈现）
   "2026-02-25": [
     { t: "春节假期复盘：节前遗留的 3 个工单已清零", s: "done" },
     { t: "排定一季度审计进场时间表", s: "done" },
@@ -358,7 +359,7 @@ const SEED = {
     { t: "上午核对底稿抽样", s: "done" },
     { t: "下午 3 点与客户电话会议确认期初余额，会后整理纪要并同步项目组全员", s: "done" },
     { t: "起草工作日历功能方案", s: "doing" },
-    { t: "预约下周客户现场盘点（格子只显前 3 条，本条在右侧面板可见）", s: "todo" },
+    { t: "预约下周客户现场盘点（格子只显 2 行，本条折叠进省略行）", s: "todo" },
   ],
   "2026-11-11": [
     { t: "剪贴板浮窗紧凑重构回归测试", s: "done" },
@@ -428,9 +429,10 @@ function render() {
     const subCls = { plain: "plain", fest: "fest", term: "term", solarfest: "solarfest" }[sub.tag] || "plain";
     const subHtml = `<span class="sub ${subCls}">${inMonth ? sub.text : ""}</span>`;
     const tip = list.map((e) => `● ${STATUS[e.s]}：${e.t}`).join("\n");
-    const logHtml = list.slice(0, 3).map((e) =>
+    // 格子条目摘要最多 2 行（2026-11-13 用户反馈），更多以省略行示意
+    const logHtml = list.slice(0, 2).map((e) =>
       `<div class="log${e.s === "done" ? " done" : ""}"${tip ? ` title="${esc(tip)}"` : ""}><i class="bar ${e.s}"></i><span class="t">${esc(e.t)}</span></div>`
-    ).join("");
+    ).join("") + (list.length > 2 ? `<div class="log more">… 还有 ${list.length - 2} 条</div>` : "");
     const qa = inMonth ? `<button class="qa" title="添加一条工作">＋</button>` : "";
     return `<div class="${cls}" data-k="${inMonth ? k : ""}"><div class="crow"><span class="${numCls}">${c.d}</span>${subHtml}${badge}</div>${logHtml}${qa}</div>`;
   }).join("");

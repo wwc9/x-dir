@@ -1778,6 +1778,7 @@ export const EN: Record<string, string> = {
   "删除这条工作": "Delete this entry",
   "这条工作做了什么 / 要做什么…": "What was done / needs doing…",
   "{a} 条 · {b} 字": "{a} entries · {b} chars",
+  "还有 {n} 条": "{n} more",
   "已保存 {t}": "Saved {t}",
   "本月已记录 {d} 天 · 完成 {n} 条": "{d} days recorded this month · {n} done",
   "工作记录保存失败：{k}": "Failed to save work log: {k}",

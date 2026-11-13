@@ -7603,6 +7603,10 @@ body.np-col-resizing * {
 .np-cal-log.is-done .np-cal-logtext {
   opacity: 0.6;
 }
+.np-cal-log.is-more {
+  color: var(--np-muted);
+  opacity: 0.7;
+}
 .np-cal-logtext {
   min-width: 0;
   white-space: nowrap;

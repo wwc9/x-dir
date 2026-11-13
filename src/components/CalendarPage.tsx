@@ -349,7 +349,7 @@ export function CalendarPage() {
                         </span>
                       )}
                     </div>
-                    {list.slice(0, 3).map((e, j) => (
+                    {list.slice(0, 2).map((e, j) => (
                       <div
                         key={j}
                         className={e.status === "done" ? "np-cal-log is-done" : "np-cal-log"}
@@ -358,6 +358,13 @@ export function CalendarPage() {
                         <span className="np-cal-logtext">{e.text}</span>
                       </div>
                     ))}
+                    {list.length > 2 && (
+                      <div className="np-cal-log is-more">
+                        <span className="np-cal-logtext">
+                          {t("还有 {n} 条", { n: list.length - 2 })}
+                        </span>
+                      </div>
+                    )}
                     {cell.inMonth && (
                       <button
                         className="np-cal-qa"
