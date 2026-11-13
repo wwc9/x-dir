@@ -7834,3 +7834,235 @@ body.np-col-resizing * {
     max-height: 220px;
   }
 }
+
+/* ── 工作日历增强批（2026-11-13）：搜索 / 拖拽 / 勾完成 / 分类着色 / 年热力图 / 设置区块 ── */
+.np-cal-searchwrap {
+  position: relative;
+  display: inline-flex;
+}
+.np-cal-search {
+  width: 190px;
+}
+.np-cal-hits {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 40;
+  width: 340px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--np-surface);
+  border: 1px solid var(--np-hairline);
+  border-radius: var(--np-radius-lg);
+  box-shadow: var(--np-shadow);
+}
+.np-cal-hitempty {
+  padding: 8px 10px;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-cal-hit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--np-radius);
+  background: transparent;
+  color: var(--np-fg);
+  font: inherit;
+  font-size: var(--np-font-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.np-cal-hit:hover {
+  background: var(--np-hover);
+}
+.np-cal-hitdate {
+  flex: 0 0 auto;
+  color: var(--np-muted);
+}
+.np-cal-hittext {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.np-cal-hittext b {
+  color: var(--np-accent);
+  font-weight: 600;
+}
+.np-cal-cell.is-drop {
+  background: var(--np-sel);
+  box-shadow: inset 0 0 0 2px var(--np-accent);
+}
+.np-cal-log {
+  position: relative;
+}
+.np-cal-check {
+  position: absolute;
+  right: 2px;
+  top: 1px;
+  display: none;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-sel);
+  color: var(--np-accent);
+}
+.np-cal-log:hover .np-cal-check {
+  display: grid;
+}
+.np-cal-check:hover {
+  background: var(--np-success);
+  color: var(--np-accent-fg);
+}
+.np-cal-bar.is-cat-red {
+  background: var(--np-tag-red);
+}
+.np-cal-bar.is-cat-orange {
+  background: var(--np-tag-orange);
+}
+.np-cal-bar.is-cat-yellow {
+  background: var(--np-tag-yellow);
+}
+.np-cal-bar.is-cat-green {
+  background: var(--np-tag-green);
+}
+.np-cal-bar.is-cat-blue {
+  background: var(--np-tag-blue);
+}
+.np-cal-bar.is-cat-purple {
+  background: var(--np-tag-purple);
+}
+.np-cal-entry.is-sel {
+  box-shadow: inset 0 0 0 1px var(--np-accent);
+}
+.np-cal-ecat {
+  display: flex;
+  min-width: 0;
+}
+.np-cal-catsel {
+  width: 130px;
+}
+/* 年视图热力图 */
+.np-cal-heatcard {
+  padding: 16px;
+  gap: 10px;
+  justify-content: center;
+}
+.np-cal-heatwrap {
+  overflow-x: auto;
+}
+.np-cal-heat {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 18px);
+  gap: 3px;
+}
+.np-cal-heatcol {
+  display: contents;
+}
+.np-cal-hday {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: var(--np-surface-2);
+}
+button.np-cal-hday:hover {
+  box-shadow: 0 0 0 1px var(--np-accent);
+}
+.np-cal-hday.is-blank {
+  background: transparent;
+}
+.np-cal-hday.is-l1 {
+  background: color-mix(in srgb, var(--np-accent) 30%, var(--np-surface-2));
+}
+.np-cal-hday.is-l2 {
+  background: color-mix(in srgb, var(--np-accent) 55%, var(--np-surface-2));
+}
+.np-cal-hday.is-l3 {
+  background: color-mix(in srgb, var(--np-accent) 78%, var(--np-surface));
+}
+.np-cal-hday.is-l4 {
+  background: var(--np-accent);
+}
+.np-cal-heatlegend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+/* 设置 → 日历：分类与定期模板区块 */
+.np-cal-catlist,
+.np-cal-rtlist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--np-gap);
+}
+.np-cal-catrow {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+}
+.np-cal-catdot {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--np-radius-pill);
+}
+.np-cal-catadd {
+  flex: 1;
+}
+.np-cal-rtrow {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+}
+.np-cal-rtrow.is-off {
+  opacity: 0.5;
+}
+.np-cal-rttext {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.np-cal-rttext small {
+  margin-left: 8px;
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+}
+.np-cal-rempty {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-cal-wdrow {
+  display: inline-flex;
+  gap: 4px;
+}
+.np-cal-wd {
+  min-width: 24px;
+  height: 20px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--np-radius-pill);
+  background: transparent;
+  color: var(--np-muted);
+  font: inherit;
+  font-size: var(--np-font-sm);
+}
+.np-cal-wd.is-on {
+  background: var(--np-sel);
+  color: var(--np-accent);
+  font-weight: 600;
+}

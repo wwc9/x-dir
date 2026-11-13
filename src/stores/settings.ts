@@ -94,6 +94,9 @@ function toPlain(s: SettingsStore): Settings {  return {
     calendarEnabled: s.calendarEnabled,
     calendarHotkey: s.calendarHotkey,
     calendarShowLunar: s.calendarShowLunar,
+    calendarCategories: s.calendarCategories,
+    calendarColorBy: s.calendarColorBy,
+    calendarRecurrence: s.calendarRecurrence,
     shotShadowW: s.shotShadowW,
     shotBorderW: s.shotBorderW,
     shotBorderColor: s.shotBorderColor,
@@ -360,6 +363,10 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     if (typeof merged.calendarShowLunar !== "boolean") merged.calendarShowLunar = true;
     if (typeof merged.calendarHotkey !== "string" || !merged.calendarHotkey)
       merged.calendarHotkey = DEFAULT_SETTINGS.calendarHotkey;
+    // 分类/着色维度/定期模板（2026-11-13 增强批）：脏档回落默认
+    if (!Array.isArray(merged.calendarCategories)) merged.calendarCategories = DEFAULT_SETTINGS.calendarCategories;
+    if (merged.calendarColorBy !== "category") merged.calendarColorBy = "status";
+    if (!Array.isArray(merged.calendarRecurrence)) merged.calendarRecurrence = [];
     // 右键菜单迁移：旧档缺 menuEntries 字段时生成出厂布局（用户刻意清空的
     // 空数组不被重置）。命令模板功能已下线（2026-10-14）：引用自定义命令的
     // 条目一律剔除——模板数据（customCommands）留档但不再渲染/可编辑

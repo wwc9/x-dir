@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildExport,
   dayKind,
+  dueDatesInRange,
   exportFileName,
   holidayOf,
   isWeekend,
@@ -14,6 +15,7 @@ import {
   monthMatrix,
   rangeKeys,
   rangeStats,
+  weekRangeContaining,
   type Worklog,
 } from "../calendar";
 
@@ -157,5 +159,81 @@ describe("buildExport（任务清单语法三档范围）", () => {
     const r = buildExport(wl, { mode: "range", start: "2026-10-31", end: "2026-10-01" });
     expect(r.content).toContain("共记录 0 天 · 0 条");
     expect(r.content).not.toContain("## ");
+  });
+
+  it("分类前缀：categories 提供时挂分类条目行首加 [分类名] ", () => {
+    const wlc: Worklog = {
+      "2026-10-12": [
+        { text: "带分类的活", status: "done", category: "work" },
+        { text: "没分类的活", status: "done" },
+      ],
+    };
+    const r = buildExport(wlc, { mode: "month", y: 2026, m: 10 }, new Date(), [
+      { id: "work", name: "工作" },
+    ]);
+    expect(r.content).toContain("- [x] [工作] 带分类的活");
+    expect(r.content).toContain("- [x] 没分类的活");
+    // 不提供 categories 时不加前缀
+    const r2 = buildExport(wlc, { mode: "month", y: 2026, m: 10 });
+    expect(r2.content).not.toContain("[工作]");
+  });
+});
+
+describe("dueDatesInRange（定期任务模板生成式规则引擎）", () => {
+  it("weekly：每周一命中 2026-10 的四个周一", () => {
+    expect(dueDatesInRange({ kind: "weekly", days: [0] }, "2026-10-01", "2026-10-31")).toEqual([
+      "2026-10-05",
+      "2026-10-12",
+      "2026-10-19",
+      "2026-10-26",
+    ]);
+  });
+
+  it("workdays：法定休日不含、调休班日含（10-10 周六班入选）", () => {
+    const keys = dueDatesInRange({ kind: "workdays" }, "2026-10-01", "2026-10-31");
+    expect(keys).not.toContain("2026-10-01"); // 国庆休
+    expect(keys).not.toContain("2026-10-03"); // 休（周五）
+    expect(keys).toContain("2026-10-10"); // 调休班日（周六）
+    expect(keys).not.toContain("2026-10-11"); // 普通周六
+    expect(keys).toHaveLength(18);
+  });
+
+  it("weekly + postponeHoliday：国庆周的三顺延到首个非法定休日（10-08），其余照旧", () => {
+    expect(
+      dueDatesInRange({ kind: "weekly", days: [2] }, "2026-10-01", "2026-10-31", {
+        postponeHoliday: true,
+      }),
+    ).toEqual(["2026-10-08", "2026-10-14", "2026-10-21", "2026-10-28"]);
+  });
+
+  it("monthly：D 号超过当月天数时钳制到月末", () => {
+    expect(dueDatesInRange({ kind: "monthly", day: 31 }, "2026-10-01", "2026-10-31")).toEqual([
+      "2026-10-31",
+    ]);
+    expect(dueDatesInRange({ kind: "monthly", day: 31 }, "2026-11-01", "2026-11-30")).toEqual([
+      "2026-11-30",
+    ]);
+  });
+
+  it("yearly：2-29 仅闰年生成；范围倒置为空", () => {
+    expect(dueDatesInRange({ kind: "yearly", m: 2, d: 29 }, "2028-02-01", "2028-03-01")).toEqual([
+      "2028-02-29",
+    ]);
+    expect(dueDatesInRange({ kind: "yearly", m: 2, d: 29 }, "2027-02-01", "2027-03-01")).toEqual([]);
+    expect(dueDatesInRange({ kind: "weekly", days: [0] }, "2026-10-31", "2026-10-01")).toEqual([]);
+  });
+
+  it("weekRangeContaining：周一起始自然周", () => {
+    expect(weekRangeContaining("2026-11-13")).toEqual([
+      "2026-11-09",
+      "2026-11-10",
+      "2026-11-11",
+      "2026-11-12",
+      "2026-11-13",
+      "2026-11-14",
+      "2026-11-15",
+    ]);
+    expect(weekRangeContaining("2026-11-09")[0]).toBe("2026-11-09"); // 周一自己
+    expect(weekRangeContaining("2026-11-15")[6]).toBe("2026-11-15"); // 周日自己
   });
 });

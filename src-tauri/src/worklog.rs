@@ -13,6 +13,12 @@ pub struct WorkEntry {
     pub text: String,
     /// "todo" | "doing" | "done"（白名单外回落 done，防脏档渲染失控）
     pub status: String,
+    /// 分类 id（设置内定义；None = 未分类。旧档缺字段自动回落，不迁移）
+    #[serde(default)]
+    pub category: Option<String>,
+    /// 定期任务模板 id（生成式实例溯源；None = 手动条目，生成引擎据此防重）
+    #[serde(default, rename = "gen")]
+    pub gen_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -52,6 +58,8 @@ fn sanitize_entries(entries: Vec<WorkEntry>) -> Vec<WorkEntry> {
             WorkEntry {
                 text: e.text,
                 status,
+                category: e.category,
+                gen_id: e.gen_id,
             }
         })
         .collect()
@@ -127,6 +135,7 @@ pub fn set_day(date: &str, entries: Vec<WorkEntry>) -> Result<(), String> {
     let mut data = load_from(&path);
     apply_set_day(&mut data, date, entries);
     data.version = 1;
+    rotate_if_changed(&path);
     save_to(&path, &data)
 }
 
@@ -150,6 +159,90 @@ fn apply_set_day(data: &mut WorklogData, date: &str, entries: Vec<WorkEntry>) {
     }
 }
 
+/// 自动备份轮换（2026-11-13 增强批）：内容变化落盘前，当前档拷进 .bak.1，
+/// 旧 .bak.1→.bak.2→.bak.3 逐级顺移（保留最近 3 份历史）；内容与 .bak.1
+/// 相同（重复保存）时不轮换，防无谓 churn。
+const BACKUP_COPIES: u32 = 3;
+
+fn rotate_backups(path: &Path) {
+    for i in (1..=BACKUP_COPIES).rev() {
+        let from = if i == 1 {
+            path.to_path_buf()
+        } else {
+            path.with_extension(format!("json.bak.{}", i - 1))
+        };
+        let to = path.with_extension(format!("json.bak.{}", i));
+        if from.exists() {
+            let _ = std::fs::copy(&from, &to);
+        }
+    }
+}
+
+/// 内容有变化才轮换备份（与 .bak.1 比对，重复保存不 churn）
+fn rotate_if_changed(path: &Path) {
+    let cur = std::fs::read_to_string(path).unwrap_or_default();
+    let bak1 = std::fs::read_to_string(path.with_extension("json.bak.1")).unwrap_or_default();
+    if cur != bak1 {
+        rotate_backups(path);
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorklogHit {
+    pub date: String,
+    pub index: usize,
+    pub text: String,
+    pub status: String,
+    pub category: Option<String>,
+}
+
+/// 搜索核心（路径注入，生产与测试同源）：大小写不敏感子串；纯 ASCII 字母
+/// 数字查询额外走拼音首字母通道（复用 fs::search::pinyin_initials，搜
+/// "dh" 命中「电话会议」）。category = Some 时按分类过滤。命中上限 200。
+fn search_core(path: &Path, query: &str, category: Option<&str>) -> Vec<WorklogHit> {
+    let q = query.trim().to_lowercase();
+    let mut hits = Vec::new();
+    if q.is_empty() {
+        return hits;
+    }
+    let ascii_q = q.chars().all(|c| c.is_ascii_alphanumeric());
+    let data = load_from(path);
+    for (date, list) in &data.days {
+        for (i, e) in list.iter().enumerate() {
+            if e.text.is_empty() {
+                continue;
+            }
+            if category.is_some_and(|cat| e.category.as_deref() != Some(cat)) {
+                continue;
+            }
+            let matched = e.text.to_lowercase().contains(&q)
+                || (ascii_q
+                    && crate::fs::search::pinyin_initials(&e.text)
+                        .is_some_and(|py| py.to_lowercase().contains(&q)));
+            if matched {
+                hits.push(WorklogHit {
+                    date: date.clone(),
+                    index: i,
+                    text: e.text.clone(),
+                    status: e.status.clone(),
+                    category: e.category.clone(),
+                });
+                if hits.len() >= 200 {
+                    return hits;
+                }
+            }
+        }
+    }
+    hits
+}
+
+/// 全量搜索（生产入口：worklog_path + 锁）
+pub fn search(query: &str, category: Option<&str>) -> Result<Vec<WorklogHit>, String> {
+    let _g = WORKLOG_LOCK.lock().map_err(|e| e.to_string())?;
+    Ok(search_core(&worklog_path(), query, category))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -165,6 +258,8 @@ mod tests {
         WorkEntry {
             text: text.into(),
             status: status.into(),
+            category: None,
+            gen_id: None,
         }
     }
 
@@ -225,6 +320,88 @@ mod tests {
             return Err("月份超出范围".to_string());
         }
         Ok(())
+    }
+
+    #[test]
+    fn backup_rotation_keeps_recent_history() {
+        let path = tmp_worklog("backup");
+        std::fs::remove_file(&path).ok();
+        let mut data = WorklogData::default();
+        apply_set_day(&mut data, "2026-10-14", vec![entry("v1", "done")]);
+        data.version = 1;
+        save_to(&path, &data).unwrap();
+        assert!(!path.with_extension("json.bak.1").exists()); // 首次写入无历史
+        let mut data = load_from(&path);
+        apply_set_day(&mut data, "2026-10-14", vec![entry("v2", "done")]);
+        rotate_if_changed(&path);
+        save_to(&path, &data).unwrap();
+        assert!(
+            std::fs::read_to_string(path.with_extension("json.bak.1"))
+                .unwrap()
+                .contains("v1")
+        );
+        assert!(std::fs::read_to_string(&path).unwrap().contains("v2"));
+        let mut data = load_from(&path);
+        apply_set_day(&mut data, "2026-10-14", vec![entry("v3", "done")]);
+        rotate_if_changed(&path);
+        save_to(&path, &data).unwrap();
+        assert!(
+            std::fs::read_to_string(path.with_extension("json.bak.2"))
+                .unwrap()
+                .contains("v1")
+        );
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn search_matches_substring_pinyin_and_category() {
+        let path = tmp_worklog("search");
+        std::fs::remove_file(&path).ok();
+        let mut data = WorklogData::default();
+        apply_set_day(
+            &mut data,
+            "2026-10-12",
+            vec![
+                WorkEntry {
+                    text: "电话会议确认期初余额".into(),
+                    status: "done".into(),
+                    category: Some("work".into()),
+                    gen_id: None,
+                },
+                WorkEntry {
+                    text: "回复邮件".into(),
+                    status: "todo".into(),
+                    category: None,
+                    gen_id: None,
+                },
+            ],
+        );
+        apply_set_day(
+            &mut data,
+            "2026-11-13",
+            vec![WorkEntry {
+                text: "日历功能方案评审".into(),
+                status: "doing".into(),
+                category: Some("work".into()),
+                gen_id: None,
+            }],
+        );
+        save_to(&path, &data).unwrap();
+        // 子串
+        let hits = search_core(&path, "会议", None);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].date, "2026-10-12");
+        // 拼音首字母
+        let hits = search_core(&path, "dhhy", None);
+        assert_eq!(hits.len(), 1);
+        assert!(hits[0].text.contains("电话会议"));
+        // 分类过滤
+        let hits = search_core(&path, "会议", Some("work"));
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].category.as_deref(), Some("work"));
+        // 空查询 = 空
+        assert!(search_core(&path, "  ", None).is_empty());
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
     }
 
     #[test]

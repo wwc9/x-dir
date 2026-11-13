@@ -7,13 +7,17 @@ import { Button, DialogFooter } from "@blueprintjs/core";
 
 import { useT } from "../lib/i18n";
 import { useUi } from "../stores/ui";
-import { api } from "../lib/ipc";
+import { useSettings } from "../stores/settings";
+import { api, type WorkEntry, type WorklogXlsxRow, type WorklogXlsxStat } from "../lib/ipc";
 import {
   buildExport,
   dateKey,
+  dayKindLabel,
   parseKey,
   rangeKeys,
   rangeStats,
+  weekRangeContaining,
+  WEEK_ZH,
   type ExportRange,
   type Worklog,
 } from "../lib/calendar";
@@ -42,6 +46,7 @@ function rangeValid(start: string, end: string): boolean {
 
 export function WorklogExportDialog({ onDone }: { onDone: () => void }) {
   const t = useT();
+  const categories = useSettings((st) => st.calendarCategories);
   const today = new Date();
   const [mode, setMode] = useState<Mode>("month");
   const [y, setY] = useState(today.getFullYear());
@@ -56,6 +61,7 @@ export function WorklogExportDialog({ onDone }: { onDone: () => void }) {
     ),
   );
   const [worklog, setWorklog] = useState<Worklog>({});
+  const [fmt, setFmt] = useState<"md" | "xlsx">("md");
   const fetchSeq = useRef(0);
 
   const range: ExportRange = useMemo(() => {
@@ -95,17 +101,92 @@ export function WorklogExportDialog({ onDone }: { onDone: () => void }) {
   const stats = rangeStats(worklog, range);
   const preview = buildExport(worklog, range);
 
+  const statusLabel: Record<WorkEntry["status"], string> = {
+    todo: t("待办"),
+    doing: t("执行中"),
+    done: t("已完成"),
+  };
+
+  /** XLSX 明细行（前端组装中文展示串，Rust 只校验路径与写表） */
+  const buildXlsxRows = (): WorklogXlsxRow[] => {
+    const rows: WorklogXlsxRow[] = [];
+    for (const key of rangeKeys(range)) {
+      const list = worklog[key] ?? [];
+      if (!list.length) continue;
+      const p = parseKey(key)!;
+      const weekday = WEEK_ZH[(new Date(p.y, p.m - 1, p.d).getDay() + 6) % 7];
+      const kind = dayKindLabel(p.y, p.m, p.d);
+      for (const e of list) {
+        if (!e.text) continue;
+        rows.push({
+          date: key,
+          weekday,
+          kind,
+          status: statusLabel[e.status],
+          category: e.category
+            ? (categories.find((c) => c.id === e.category)?.name ?? t("未分类"))
+            : t("未分类"),
+          text: e.text,
+        });
+      }
+    }
+    return rows;
+  };
+
+  const copyWeek = async () => {
+    try {
+      const week = weekRangeContaining(
+        dateKey(today.getFullYear(), today.getMonth() + 1, today.getDate()),
+      );
+      const merged: Worklog = {};
+      const months = new Set(week.map((k) => k.slice(0, 7)));
+      for (const ym of months) {
+        const [y, m] = ym.split("-").map(Number);
+        for (const day of await api.worklogGetMonth(y, m)) merged[day.date] = day.entries;
+      }
+      const md = buildExport(
+        merged,
+        { mode: "range", start: week[0], end: week[6] },
+        new Date(),
+        categories,
+      );
+      await api.setClipboardText(md.content);
+      useUi.getState().toast(t("本周小结已复制到剪贴板"));
+    } catch (e) {
+      useUi.getState().toast(t("复制失败：{e}", { e: String(e) }), "error");
+    }
+  };
+
   const doExport = async () => {
     const { save } = await import("@tauri-apps/plugin-dialog");
+    const isXlsx = fmt === "xlsx";
+    const fileName = isXlsx ? `${preview.fileName.slice(0, -3)}.xlsx` : preview.fileName;
     const path = await save({
       title: t("导出工作记录"),
-      defaultPath: preview.fileName,
-      filters: [{ name: "Markdown", extensions: ["md"] }],
+      defaultPath: fileName,
+      filters: [
+        isXlsx
+          ? { name: "Excel", extensions: ["xlsx"] }
+          : { name: "Markdown", extensions: ["md"] },
+      ],
     });
     if (!path) return;
     try {
-      await api.saveTextFile(path, preview.content);
-      useUi.getState().toast(t("已导出 {f}", { f: preview.fileName }));
+      if (isXlsx) {
+        const rows = buildXlsxRows();
+        const statsRows: WorklogXlsxStat[] = [
+          { label: t("记录天数"), value: String(stats.days) },
+          { label: t("条目数"), value: String(stats.items) },
+          { label: t("已完成"), value: String(stats.done) },
+          { label: t("执行中"), value: String(stats.doing) },
+          { label: t("待办"), value: String(stats.todo) },
+        ];
+        const r = await api.worklogExportXlsx(path, rows, statsRows);
+        useUi.getState().toast(t("已导出 {n} 条明细", { n: r.rows }));
+      } else {
+        await api.saveTextFile(path, preview.content);
+        useUi.getState().toast(t("已导出 {f}", { f: preview.fileName }));
+      }
       onDone();
     } catch (e) {
       useUi.getState().toast(t("导出失败：{e}", { e: String(e) }), "error");
@@ -139,6 +220,16 @@ export function WorklogExportDialog({ onDone }: { onDone: () => void }) {
               { value: "range", label: t("自定义") },
             ]}
             onChange={(v) => setMode(v)}
+          />
+        </div>
+        <div className="frow"><span className="k">{t("格式")}</span>
+          <Seg<"md" | "xlsx">
+            value={fmt}
+            options={[
+              { value: "md", label: t("Markdown") },
+              { value: "xlsx", label: t("Excel") },
+            ]}
+            onChange={(v) => setFmt(v)}
           />
         </div>
         {mode === "month" && (
@@ -235,6 +326,14 @@ export function WorklogExportDialog({ onDone }: { onDone: () => void }) {
       <DialogFooter
         actions={
           <>
+            <Button
+              size="small"
+              minimal
+              data-tip={t("本周（周一起始）小结 Markdown 直接进剪贴板，粘贴进邮件/文档即可")}
+              onClick={() => void copyWeek()}
+            >
+              {t("复制本周小结")}
+            </Button>
             <Button size="small" onClick={onDone}>
               {t("取消")}
             </Button>

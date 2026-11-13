@@ -14,6 +14,10 @@ export type CalStatus = "todo" | "doing" | "done";
 export interface WorkEntry {
   text: string;
   status: CalStatus;
+  /** 分类 id（settings.calendarCategories 内定义；缺省 = 未分类） */
+  category?: string;
+  /** 定期任务模板 id（生成式实例溯源） */
+  gen?: string;
 }
 
 /** 全量工作记录：键 = "yyyy-MM-dd"（本地时区，与文件列表 mtime 展示口径一致） */
@@ -140,6 +144,106 @@ export function lunarLine(y: number, m: number, d: number): string {
   return sub.tag === "plain" ? `农历${sub.text} · ${gz}` : `${sub.text} · ${gz}`;
 }
 
+// ── 定期任务（模板生成式）规则引擎 ──
+
+export interface CalendarCategoryInfo {
+  id: string;
+  name: string;
+}
+
+/** 由真实日期键推星期索引（0=周一 … 6=周日，与规则 weekly.days 口径一致） */
+export function weekdayIndexOf(key: string): number {
+  const p = parseKey(key);
+  if (!p) return -1;
+  return (new Date(p.y, p.m - 1, p.d).getDay() + 6) % 7;
+}
+
+/** 某月天数（闰年口径） */
+export function daysInMonth(y: number, m: number): number {
+  return new Date(y, m, 0).getDate();
+}
+
+/**
+ * 定期规则在 [startKey, endKey] 闭区间内的应生成日期（升序去重）。
+ * - weekly：命中 weekIndex 集合的日子
+ * - workdays：每工作日 = dayKind work/on（法定休日不含、调休班日含——
+ *   班休数据即中国日历正确性来源，这是与通用日历产品的差异化点）
+ * - monthly：D 号（当月天数不足时钳制到月末，月底结算场景）
+ * - yearly：M-D（当年无此日——如 2-29 平年——则当年不生成）
+ * - postponeHoliday：weekly/monthly/yearly 命中法定休日时顺延到下一个
+ *   非法定休日（多任务顺延撞日时去重）；workdays 规则自带避休，不适用
+ */
+export function dueDatesInRange(
+  rule: RecurrenceRuleLike,
+  startKey: string,
+  endKey: string,
+  opts?: { postponeHoliday?: boolean },
+): string[] {
+  const a = parseKey(startKey);
+  const b = parseKey(endKey);
+  if (!a || !b) return [];
+  const t0 = new Date(a.y, a.m - 1, a.d).getTime();
+  const t1 = new Date(b.y, b.m - 1, b.d).getTime();
+  if (t1 < t0) return [];
+  const postpone = opts?.postponeHoliday ?? false;
+  const out = new Set<string>();
+  for (let t = t0; t <= t1; t += 86_400_000) {
+    const dt = new Date(t);
+    const y = dt.getFullYear();
+    const m = dt.getMonth() + 1;
+    const d = dt.getDate();
+    const key = dateKey(y, m, d);
+    let hit = false;
+    if (rule.kind === "weekly") {
+      hit = rule.days.includes((dt.getDay() + 6) % 7);
+    } else if (rule.kind === "workdays") {
+      hit = dayKind(y, m, d).kind === "work" || dayKind(y, m, d).kind === "on";
+    } else if (rule.kind === "monthly") {
+      hit = d === Math.min(rule.day, daysInMonth(y, m));
+    } else {
+      hit = m === rule.m && d === rule.d;
+    }
+    if (!hit) continue;
+    let finalKey = key;
+    if (postpone && rule.kind !== "workdays") {
+      const [py, pm, pd] = [y, m, d];
+      let t2 = new Date(py, pm - 1, pd).getTime();
+      // 最多顺延 31 天防呆（全年休日不可能连这么久）
+      for (let guard = 0; guard < 31; guard++) {
+        const d2 = new Date(t2);
+        const y2 = d2.getFullYear();
+        const m2 = d2.getMonth() + 1;
+        const d2n = d2.getDate();
+        if (holidayOf(y2, m2, d2n)?.off !== true) break;
+        t2 += 86_400_000;
+      }
+      const d2 = new Date(t2);
+      finalKey = dateKey(d2.getFullYear(), d2.getMonth() + 1, d2.getDate());
+    }
+    out.add(finalKey);
+  }
+  return [...out].sort();
+}
+
+/** 模板生成规则（与 ipc.RecurrenceRule 结构一致的判别联合，避免跨层依赖） */
+export type RecurrenceRuleLike =
+  | { kind: "weekly"; days: number[] }
+  | { kind: "workdays" }
+  | { kind: "monthly"; day: number }
+  | { kind: "yearly"; m: number; d: number };
+
+/** 包含某日的自然周（周一起始）7 个日期键 */
+export function weekRangeContaining(key: string): string[] {
+  const p = parseKey(key);
+  if (!p) return [];
+  const lead = (new Date(p.y, p.m - 1, p.d).getDay() + 6) % 7;
+  const monday = new Date(p.y, p.m - 1, p.d - lead);
+  return Array.from({ length: 7 }, (_, i) => {
+    const dt = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+    return dateKey(dt.getFullYear(), dt.getMonth() + 1, dt.getDate());
+  });
+}
+
 // ── 导出（三档范围）与统计 ──
 
 export type ExportRange =
@@ -199,10 +303,10 @@ export function rangeStats(worklog: Worklog, range: ExportRange): ExportStats {
   return st;
 }
 
-const WEEK_ZH = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"] as const;
+export const WEEK_ZH = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"] as const;
 
-/** 日期小节尾注：`国庆节·休` / `调休·班` / `周末` / `工作日` */
-function dayKindLabel(y: number, m: number, d: number): string {
+/** 日期小节尾注：`国庆节·休` / `调休·班` / `周末` / `工作日`（详情 chip 与 XLSX 类型列共用） */
+export function dayKindLabel(y: number, m: number, d: number): string {
   const { kind, holiday } = dayKind(y, m, d);
   if (kind === "off") return `${holiday?.name ?? ""}·休`;
   if (kind === "on") return `调休·班（${holiday?.name ?? ""}）`;
@@ -231,11 +335,13 @@ const STATUS_SUFFIX: Record<CalStatus, string> = {
 };
 
 /** 构建 Markdown 导出全文：统计头 → 逐日小节（升序，跳过无记录日）→
- *  逐条任务清单语法（已完成 `- [x]`，待办/执行中 `- [ ]` + 状态词） */
+ *  逐条任务清单语法（已完成 `- [x]`，待办/执行中 `- [ ]` + 状态词）；
+ *  categories 提供时，挂分类的条目行首加 `[分类名] ` 前缀 */
 export function buildExport(
   worklog: Worklog,
   range: ExportRange,
   now = new Date(),
+  categories?: CalendarCategoryInfo[],
 ): { fileName: string; content: string } {
   const stats = rangeStats(worklog, range);
   const lines: string[] = [
@@ -254,7 +360,8 @@ export function buildExport(
     for (const e of list) {
       if (!e.text) continue;
       const mark = e.status === "done" ? "- [x]" : "- [ ]";
-      lines.push(`${mark} ${e.text}${STATUS_SUFFIX[e.status]}`);
+      const cat = e.category ? categories?.find((c) => c.id === e.category)?.name : undefined;
+      lines.push(`${mark} ${cat ? `[${cat}] ` : ""}${e.text}${STATUS_SUFFIX[e.status]}`);
     }
   }
   lines.push("");

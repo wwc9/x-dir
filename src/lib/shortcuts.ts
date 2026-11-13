@@ -314,6 +314,24 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
         label: "日历页：上一月 / 下一月",
         scope: "component",
       },
+      {
+        id: "calendar-copy",
+        keys: ["Ctrl+C"],
+        label: "日历页：复制选中日期全部条目",
+        scope: "component",
+      },
+      {
+        id: "calendar-paste",
+        keys: ["Ctrl+V"],
+        label: "日历页：粘贴到选中日期",
+        scope: "component",
+      },
+      {
+        id: "calendar-del",
+        keys: ["Delete"],
+        label: "日历页：删除右栏选中的条目",
+        scope: "component",
+      },
     ],
   },
 ];

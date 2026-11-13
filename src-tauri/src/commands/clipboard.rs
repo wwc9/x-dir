@@ -39,3 +39,9 @@ pub fn clear_clipboard() -> Result<(), AppError> {
         Ok(())
     }
 }
+
+/// 写入纯文本到系统剪贴板（工作日历「复制本周小结」，2026-11-13 增强批）
+#[tauri::command]
+pub fn set_clipboard_text(text: String) -> Result<(), AppError> {
+    crate::clip::set_text(&text).map_err(|e| AppError::new("E_IO", e))
+}

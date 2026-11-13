@@ -96,7 +96,9 @@ export type DialogSpec =
   /** PDF 解密（2026-11-11）：权限密码输入，回执给 decryptPdfs */
   | { type: "pdfDecrypt"; entries: FileEntry[] }
   /** 工作日历导出（2026-11-13）：三档范围（月度/年度/自定义日期区间）导出工作 Markdown */
-  | { type: "worklogExport" };
+  | { type: "worklogExport" }
+  /** 定期任务模板编辑（2026-11-13 增强批）：presetDay = 格子右键带入的日期（预填每月 D 号） */
+  | { type: "recurrenceEdit"; presetDay?: number; templateId?: string };
 
 /** 提示弹窗语义级别：info=主操作、warn=警示、danger=不可逆/错误 */
 export type DialogKind = "info" | "warn" | "danger";

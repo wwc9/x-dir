@@ -72,6 +72,7 @@ import {
   TouchDialog,
 } from "./FiletoolsDialogs";
 import { WorklogExportDialog } from "./WorklogExportDialog";
+import { RecurrenceEditDialog } from "./RecurrenceEditDialog";
 import { DENSITY } from "../lib/tokens";
 import { useUi, type DialogKind, type DialogSpec } from "../stores/ui";
 import { useSettings } from "../stores/settings";
@@ -201,7 +202,9 @@ export function DialogHost() {
                                       ? t("属性")
                                       : dialog?.type === "worklogExport"
                                         ? t("导出工作记录")
-                                        : "";
+                                        : dialog?.type === "recurrenceEdit"
+                                          ? t("定期任务")
+                                          : "";
   // 标题图标：confirm/alert 按 kind；冲突预检固定警示；其余无图标
   const icon =
     dialog?.type === "confirm" || dialog?.type === "alert"
@@ -373,6 +376,9 @@ export function DialogHost() {
       )}
       {dialog?.type === "worklogExport" && (
         <WorklogExportDialog onDone={close} />
+      )}
+      {dialog?.type === "recurrenceEdit" && (
+        <RecurrenceEditDialog onDone={close} />
       )}
       {dialog?.type === "pdfSplit" && (
         <PdfSplitDialog entry={dialog.entry} dir={dialog.dir} onDone={(v) => resolve(v)} />

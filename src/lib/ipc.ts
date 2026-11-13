@@ -474,6 +474,12 @@ export interface Settings {
   calendarHotkey: string;
   /** 格子内显示农历/节气/传统节日副标题 */
   calendarShowLunar: boolean;
+  /** 任务分类定义（条目按 id 引用；色 = --np-tag-* 六色） */
+  calendarCategories: CalendarCategory[];
+  /** 格子竖条着色维度：按状态（默认）/ 按分类 */
+  calendarColorBy: "status" | "category";
+  /** 定期任务模板（模板生成式：保存时往后生成 90 天实例，实例独立可改可删） */
+  calendarRecurrence: RecurrenceTemplate[];
   /** 排除应用（逗号/分号分隔进程名，T1-1；命中则该应用复制不入库） */
   cliphistExcludeApps: string;
   /** 富文本保真（T3-1）：文本条目附带存 HTML 片段，粘贴回 Word/浏览器保留格式 */
@@ -595,6 +601,12 @@ export const DEFAULT_SETTINGS: Settings = {
   calendarEnabled: true,
   calendarHotkey: "Ctrl+Alt+D",
   calendarShowLunar: true,
+  calendarCategories: [
+    { id: "work", name: "工作", color: "blue" },
+    { id: "personal", name: "个人", color: "green" },
+  ],
+  calendarColorBy: "status",
+  calendarRecurrence: [],
   cliphistExcludeApps: "keepass.exe,keepassxc.exe,1password.exe",
   cliphistRichText: true,
   uiRadius: 10,
@@ -633,12 +645,69 @@ export interface HotkeySpec {
 export interface WorkEntry {
   text: string;
   status: "todo" | "doing" | "done";
+  /** 分类 id（settings.calendarCategories 内定义；缺省 = 未分类） */
+  category?: string;
+  /** 定期任务模板 id（生成式实例溯源；模板引擎据此防重） */
+  gen?: string;
 }
 
 /** 某日全部条目（date = "yyyy-MM-dd"；仅含有条目的日期下发） */
 export interface WorklogDay {
   date: string;
   entries: WorkEntry[];
+}
+
+/** 全量搜索命中（date 升序；上限 200 条，Rust 端截断） */
+export interface WorklogHit {
+  date: string;
+  index: number;
+  text: string;
+  status: WorkEntry["status"];
+  category?: string | null;
+}
+
+/** 任务分类（色 = --np-tag-* 六色 token，与文件着色规则同源） */
+export interface CalendarCategory {
+  id: string;
+  name: string;
+  color: TagColor;
+}
+
+/** 定期任务规则（模板生成式：有限档位，不做完整 RRULE 系列） */
+export type RecurrenceRule =
+  | { kind: "weekly"; days: number[] } // 0=周一 … 6=周日
+  | { kind: "workdays" } // 每工作日 = kind work/on（法定休日不含、调休班日含）
+  | { kind: "monthly"; day: number } // 每月 D 号（月末钳制）
+  | { kind: "yearly"; m: number; d: number }; // 每年 M-D
+
+export interface RecurrenceTemplate {
+  id: string;
+  text: string;
+  status: WorkEntry["status"];
+  category?: string;
+  rule: RecurrenceRule;
+  /** 避开法定休日：命中休日顺延到下一个非法定休日（仅 weekly/monthly/yearly） */
+  postponeHoliday: boolean;
+  enabled: boolean;
+}
+
+/** XLSX 导出行（前端按展示口径组装好中文显示串，Rust 只校验路径与写表） */
+export interface WorklogXlsxRow {
+  date: string;
+  weekday: string;
+  kind: string;
+  status: string;
+  category: string;
+  text: string;
+}
+
+export interface WorklogXlsxStat {
+  label: string;
+  value: string;
+}
+
+export interface WorklogXlsxSummary {
+  rows: number;
 }
 
 /** 后端命令错误（Rust AppError 序列化为 {code,message}；Err(String) 命令
@@ -1320,6 +1389,14 @@ export const api = {
   /** 工作日历：写某日条目（空清单 = 删除该日） */
   worklogSetDay: (date: string, entries: WorkEntry[]) =>
     cmd<void>("worklog_set_day", { date, entries }),
+  /** 工作日历：全量搜索（子串 + 拼音首字母，可按分类过滤，上限 200） */
+  worklogSearch: (query: string, category?: string) =>
+    cmd<WorklogHit[]>("worklog_search", { query, category }),
+  /** 工作日历：导出 XLSX（统计 + 明细两表；rows 为前端组装好的展示串） */
+  worklogExportXlsx: (path: string, rows: WorklogXlsxRow[], stats: WorklogXlsxStat[]) =>
+    cmd<WorklogXlsxSummary>("worklog_export_xlsx", { path, rows, stats }),
+  /** 写纯文本进系统剪贴板（复制本周小结等） */
+  setClipboardText: (text: string) => cmd<void>("set_clipboard_text", { text }),
   /** 剪贴板历史：浮窗置顶常驻开关（true = 失焦不自动收窗，Esc/热键仍收） */
   cliphistSetPinned: (pinned: boolean) => cmd<void>("cliphist_set_pinned", { pinned }),
   /** 剪贴板历史：浮窗最大化/还原（撑满所在显示器工作区，Rust 侧手动尺寸方案） */

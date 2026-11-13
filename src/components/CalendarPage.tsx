@@ -1,29 +1,42 @@
-// 工作日历整页（2026-11-13 新功能，design/calendar-plan.md §4）：占满顶栏以下
-// 区域（np-menupage 壳，与定制页/全盘搜索页同构，整页互斥）。左 = 月视图
-// （6×7 周一起始，首行单行收纳 日期+农历/节日+班休徽标，条目摘要带状态竖条），
-// 右 = 当日条目编辑面板（状态三态 Seg + 自动保存）。数据在 Rust 端
-// config/worklog.json（铁律 3：按月下发，前端不囤全量）；导出走
-// worklogExport 对话框。键盘：方向键移格 / Enter 新增 / T 今天 / PgUp PgDn 翻月。
+// 工作日历整页（2026-11-13 新功能；2026-11-13 增强批：搜索 / 任务分类 /
+// 拖拽改期 / 条目右键轻菜单 / Ctrl-C·V·Delete 键盘补全 / 年视图热力图 /
+// 定期任务入口）。占满顶栏以下区域（np-menupage 壳，与定制页/全盘搜索页
+// 同构，整页互斥）。左 = 月视图（首行单行收纳 日期+农历/节日+班休徽标，
+// 条目摘要 ≤2 行带状态竖条）或年视图热力图；右 = 当日条目编辑面板。
+// 数据在 Rust 端 config/worklog.json（铁律 3：按月下发，前端不囤全量）。
+// 键盘：方向键移格 / Enter 新增 / T 今天 / PgUp PgDn 翻月 / Ctrl-C·V 跨日
+// 复制粘贴 / Delete 删除选中条目。
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { Button } from "@blueprintjs/core";
-import { ArrowLeft, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
+import { Button, InputGroup } from "@blueprintjs/core";
+import {
+  ArrowLeft,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Search,
+  X,
+} from "lucide-react";
 
 import { useSettings } from "../stores/settings";
-import { useUi } from "../stores/ui";
+import { useUi, type MenuItem } from "../stores/ui";
 import { t, useT } from "../lib/i18n";
-import { api, type WorkEntry } from "../lib/ipc";
+import { api, type WorkEntry, type WorklogHit } from "../lib/ipc";
 import {
   dateKey,
-  type Worklog,
   dayKind,
   holidayOf,
   lunarLine,
   lunarSubtitle,
   monthMatrix,
+  parseKey,
+  WEEK_ZH,
   type SubTag,
+  type Worklog,
 } from "../lib/calendar";
 import { AppIcon, ic } from "./AppIcon";
 import { Seg } from "./ImgDialogs";
+import { NpSelect } from "./NpSelect";
 import { DENSITY } from "../lib/tokens";
 
 const TODAY = new Date();
@@ -32,7 +45,12 @@ const TODAY_KEY = dateKey(TODAY.getFullYear(), TODAY.getMonth() + 1, TODAY.getDa
 const STATUS_ORDER = ["todo", "doing", "done"] as const;
 
 /** 日期单元格用真实日期（首尾行的越界 d 由 Date 自动翻月），统一以真实键存取 */
-function realDate(cell: { y: number; m: number; d: number }): { ry: number; rm: number; rd: number; key: string } {
+function realDate(cell: { y: number; m: number; d: number }): {
+  ry: number;
+  rm: number;
+  rd: number;
+  key: string;
+} {
   const dt = new Date(cell.y, cell.m - 1, cell.d);
   const ry = dt.getFullYear();
   const rm = dt.getMonth() + 1;
@@ -40,15 +58,40 @@ function realDate(cell: { y: number; m: number; d: number }): { ry: number; rm: 
   return { ry, rm, rd, key: dateKey(ry, rm, rd) };
 }
 
+/** 搜索命中高亮：大小写不敏感切分，命中段加粗 */
+function highlightText(text: string, query: string): Array<{ t: string; hit: boolean }> {
+  const q = query.trim();
+  if (!q) return [{ t: text, hit: false }];
+  const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig");
+  const out: Array<{ t: string; hit: boolean }> = [];
+  let last = 0;
+  for (const m of text.matchAll(re)) {
+    const i = m.index ?? 0;
+    if (i > last) out.push({ t: text.slice(last, i), hit: false });
+    out.push({ t: text.slice(i, i + m[0].length), hit: true });
+    last = i + m[0].length;
+  }
+  if (last < text.length) out.push({ t: text.slice(last), hit: false });
+  return out;
+}
+
 export function CalendarPage() {
   const t = useT();
   const showLunar = useSettings((s) => s.calendarShowLunar);
-  const calendarHotkey = useSettings((s) => s.calendarHotkey);
+  const categories = useSettings((s) => s.calendarCategories);
+  const colorBy = useSettings((s) => s.calendarColorBy);
+  const [view, setView] = useState<"month" | "year">("month");
   const [y, setY] = useState(TODAY.getFullYear());
   const [m, setM] = useState(TODAY.getMonth() + 1);
   const [sel, setSel] = useState(TODAY_KEY);
   const [worklog, setWorklog] = useState<Worklog>({});
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [selEntry, setSelEntry] = useState<number | null>(null);
+  const [query, setQuery] = useState("");
+  const [hits, setHits] = useState<WorklogHit[] | null>(null);
+  const [dropKey, setDropKey] = useState<string | null>(null);
+  const dragRef = useRef<{ from: string; index: number } | null>(null);
+  const dayClipboard = useRef<WorkEntry[] | null>(null);
   const worklogRef = useRef<Worklog>({});
   const pendingRef = useRef<Map<string, WorkEntry[]>>(new Map());
   const saveTimer = useRef<number | undefined>(undefined);
@@ -63,7 +106,6 @@ export function CalendarPage() {
     }),
     [t],
   );
-
   /** 全量冲刷未落盘修改（翻月/卸载前调用，防串月丢更新） */
   const flushAll = useCallback(() => {
     window.clearTimeout(saveTimer.current);
@@ -76,28 +118,60 @@ export function CalendarPage() {
     }
   }, [t]);
 
-  // 翻月：先冲刷上一月未落盘修改，再拉取新月数据（服务端值并入本地态）
+  // 翻月：先冲刷未落盘修改，再拉取数据并入本地态（年视图 = 全年 12 个月）
   useEffect(() => {
     flushAll();
+    if (view === "month") {
+      let alive = true;
+      void api
+        .worklogGetMonth(y, m)
+        .then((days) => {
+          if (!alive) return;
+          setWorklog((prev) => {
+            const next = { ...prev };
+            for (const d of days) next[d.date] = d.entries;
+            return next;
+          });
+        })
+        .catch((e) => useUi.getState().toast(String(e), "error"));
+      return () => {
+        alive = false;
+      };
+    }
     let alive = true;
-    void api
-      .worklogGetMonth(y, m)
-      .then((days) => {
-        if (!alive) return;
-        setWorklog((prev) => {
-          const next = { ...prev };
-          for (const d of days) next[d.date] = d.entries;
-          return next;
-        });
-      })
-      .catch((e) => useUi.getState().toast(String(e), "error"));
+    void Promise.all(
+      Array.from({ length: 12 }, (_, i) => api.worklogGetMonth(y, i + 1).catch(() => [])),
+    ).then((months) => {
+      if (!alive) return;
+      setWorklog((prev) => {
+        const next = { ...prev };
+        for (const days of months) for (const d of days) next[d.date] = d.entries;
+        return next;
+      });
+    });
     return () => {
       alive = false;
     };
-  }, [y, m, flushAll]);
+  }, [view, y, m, flushAll]);
 
   // 卸载兜底冲刷
   useEffect(() => () => flushAll(), [flushAll]);
+
+  // 搜索（250ms 防抖；空查询收起结果）
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setHits(null);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void api
+        .worklogSearch(q)
+        .then((rs) => setHits(rs))
+        .catch(() => setHits([]));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [query]);
 
   /** 改某日条目：本地态即时 + 800ms 防抖批量落盘（空清单 = 删日） */
   const mutate = useCallback(
@@ -133,6 +207,10 @@ export function CalendarPage() {
 
   const stepMonth = useCallback(
     (delta: number) => {
+      if (view === "year") {
+        setY((prev) => prev + delta);
+        return;
+      }
       let nm = m + delta;
       let ny = y;
       if (nm < 1) {
@@ -145,7 +223,7 @@ export function CalendarPage() {
       setY(ny);
       setM(nm);
     },
-    [y, m],
+    [view, y, m],
   );
 
   const gotoOffset = useCallback((days: number) => {
@@ -167,10 +245,19 @@ export function CalendarPage() {
     setSel(TODAY_KEY);
   }, []);
 
+  const jumpToDate = useCallback((key: string) => {
+    const p = key.split("-").map(Number);
+    setView("month");
+    setY(p[0]);
+    setM(p[1]);
+    setSel(key);
+  }, []);
+
   /** 新增一条（双击格子 / 悬停 ＋ / Enter），并聚焦其输入框 */
   const addEntry = useCallback(
     (key: string) => {
       setSel(key);
+      setView("month");
       const p = key.split("-").map(Number);
       setY(p[0]);
       setM(p[1]);
@@ -181,9 +268,126 @@ export function CalendarPage() {
     [mutate],
   );
 
+  /** 条目迁移（拖放 / 右键菜单同源）：源日删除 + 目标日追加 */
+  const moveEntry = useCallback(
+    (from: string, index: number, to: string) => {
+      if (from === to) return;
+      const src = [...(worklogRef.current[from] ?? [])];
+      const [entry] = src.splice(index, 1);
+      if (!entry) return;
+      mutate(from, src);
+      mutate(to, [...(worklogRef.current[to] ?? []), entry]);
+    },
+    [mutate],
+  );
+
+  /** 条目行右键轻菜单：三态标记 / 迁移 / 删除（useUi.openMenu 现成基建） */
+  const entryMenu = useCallback(
+    (key: string, index: number, x: number, y: number) => {
+      const entry = (worklogRef.current[key] ?? [])[index];
+      if (!entry) return;
+      const moveTo = (to: string) => moveEntry(key, index, to);
+      const items: MenuItem[] = [
+        ...STATUS_ORDER.map((s) => ({
+          label: statusLabel[s],
+          disabled: entry.status === s,
+          action: () => {
+            const list = [...(worklogRef.current[key] ?? [])];
+            if (!list[index]) return;
+            list[index] = { ...list[index], status: s };
+            mutate(key, list);
+          },
+        })),
+        { sep: true },
+        { label: t("迁移到昨天"), action: () => moveTo(offsetKey(key, -1)) },
+        { label: t("迁移到明天"), action: () => moveTo(offsetKey(key, 1)) },
+        { label: t("迁移到下周同一天"), action: () => moveTo(offsetKey(key, 7)) },
+        {
+          label: t("迁移到指定日期…"),
+          action: () => {
+            void useUi
+              .getState()
+              .openDialog<string>({
+                type: "input",
+                title: t("迁移到指定日期"),
+                label: t("日期（yyyy-MM-dd）"),
+                initial: key,
+                validate: (v) => (parseKey(v.trim()) ? null : t("格式 yyyy-MM-dd")),
+              })
+              .then((v) => {
+                const k = v?.trim();
+                if (k) moveTo(k);
+              });
+          },
+        },
+        { sep: true },
+        {
+          label: t("删除"),
+          danger: true,
+          action: () => {
+            const list = (worklogRef.current[key] ?? []).filter((_, j) => j !== index);
+            mutate(key, list);
+          },
+        },
+      ];
+      useUi.getState().openMenu(items, x, y);
+    },
+    [mutate, moveEntry, statusLabel, t],
+  );
+
+  /** 格子空白右键：新增 / 定期任务 / 粘贴 */
+  const cellMenu = useCallback(
+    (key: string, x: number, y: number) => {
+      const clip = dayClipboard.current;
+      const items: MenuItem[] = [
+        { label: t("添加一条工作"), action: () => addEntry(key) },
+        {
+          label: t("添加定期任务…"),
+          action: () => {
+            const p = parseKey(key);
+            void useUi.getState().openDialog({ type: "recurrenceEdit", presetDay: p?.d });
+          },
+        },
+      ];
+      if (clip?.length) {
+        items.push({ sep: true }, {
+          label: t("粘贴 {n} 条", { n: clip.length }),
+          action: () =>
+            mutate(key, [...(worklogRef.current[key] ?? []), ...clip.map((e) => ({ ...e }))]),
+        });
+      }
+      useUi.getState().openMenu(items, x, y);
+    },
+    [addEntry, mutate, t],
+  );
+
   // 页内键盘（输入控件聚焦时让位：textarea 内 Enter 是换行、方向键是移光标）
   const onPageKeyDown = (e: React.KeyboardEvent) => {
     if (e.target instanceof HTMLElement && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (ctrl && e.key.toLowerCase() === "c") {
+      e.preventDefault();
+      dayClipboard.current = (worklogRef.current[sel] ?? []).map((x) => ({ ...x }));
+      if (dayClipboard.current.length) {
+        useUi.getState().toast(t("已复制 {n} 条，点目标格子右键粘贴", { n: dayClipboard.current.length }));
+      }
+      return;
+    }
+    if (ctrl && e.key.toLowerCase() === "v") {
+      e.preventDefault();
+      const clip = dayClipboard.current;
+      if (clip?.length) {
+        mutate(sel, [...(worklogRef.current[sel] ?? []), ...clip.map((x) => ({ ...x }))]);
+      }
+      return;
+    }
+    if (e.key === "Delete" && selEntry != null) {
+      e.preventDefault();
+      const list = (worklogRef.current[sel] ?? []).filter((_, j) => j !== selEntry);
+      mutate(sel, list);
+      setSelEntry(null);
+      return;
+    }
     const dirs: Record<string, number> = {
       ArrowLeft: -1,
       ArrowRight: 1,
@@ -221,6 +425,46 @@ export function CalendarPage() {
     monthDone += list.filter((e) => e.status === "done").length;
   }
   const kind = dayKind(selParts[0], selParts[1], selParts[2]);
+  const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+  /** 竖条色类：状态维度（默认）/ 分类维度（未分类回落待办灰） */
+  const barCls = useCallback(
+    (e: WorkEntry): string => {
+      if (colorBy === "category" && e.category && catById.has(e.category)) {
+        return `np-cal-bar is-cat-${catById.get(e.category)!.color}`;
+      }
+      return `np-cal-bar is-${e.status}`;
+    },
+    [colorBy, catById],
+  );
+
+  // ── 年视图热力图数据 ──
+  const heat = useMemo(() => {
+    const countOf = (key: string) =>
+      (worklog[key] ?? []).filter((e) => e.text).length;
+    const jan1 = new Date(y, 0, 1);
+    const lead = (jan1.getDay() + 6) % 7;
+    const start = new Date(y, 0, 1 - lead);
+    const weeks: Array<Array<{ key: string; d: number; n: number } | null>> = [];
+    for (let t = start.getTime(); ; t += 7 * 86_400_000) {
+      const week: Array<{ key: string; d: number; n: number } | null> = [];
+      for (let di = 0; di < 7; di++) {
+        const dt = new Date(t + di * 86_400_000);
+        if (dt.getFullYear() !== y) {
+          week.push(null);
+          continue;
+        }
+        const key = dateKey(dt.getFullYear(), dt.getMonth() + 1, dt.getDate());
+        week.push({ key, d: dt.getDate(), n: countOf(key) });
+      }
+      weeks.push(week);
+      const last = new Date(t + 6 * 86_400_000);
+      if (last.getFullYear() > y) break;
+      if (last.getFullYear() === y && last.getMonth() === 11 && last >= new Date(y, 11, 31)) break;
+    }
+    return weeks;
+  }, [worklog, y]);
+
+  const hitList = hits;
 
   return (
     <section className="np-menupage" onKeyDown={onPageKeyDown}>
@@ -239,31 +483,81 @@ export function CalendarPage() {
         </button>
         <span className="np-menupage-title">{t("工作日历")}</span>
         <span className="np-cal-hint">
-          {t("系统级快捷键 {k} 唤起 · 方向键移格 · Enter 新增 · T 今天", {
-            k: calendarHotkey,
-          })}
+          {t("方向键移格 · Enter 新增 · T 今天 · Ctrl-C/V 跨日复制 · 拖拽条目改期")}
         </span>
         <span className="np-cal-nav">
+          <span className="np-cal-searchwrap">
+            <InputGroup
+              small
+              leftElement={ic(Search)}
+              className="np-cal-search"
+              placeholder={t("搜索工作记录（拼音首字母亦可）")}
+              value={query}
+              spellCheck={false}
+              onChange={(e) => setQuery(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.stopPropagation();
+                  setHits(null);
+                  setQuery("");
+                  e.currentTarget.blur();
+                }
+              }}
+            />
+            {hitList !== null && (
+              <div className="np-cal-hits">
+                {hitList.length === 0 && (
+                  <div className="np-cal-hitempty">{t("无匹配结果")}</div>
+                )}
+                {hitList.map((h, i) => (
+                  <button
+                    key={`${h.date}-${h.index}-${i}`}
+                    className="np-cal-hit"
+                    onClick={() => {
+                      jumpToDate(h.date);
+                      setHits(null);
+                    }}
+                  >
+                    <span className="np-cal-hitdate">{h.date.slice(5)}</span>
+                    <i className={`np-cal-bar is-${h.status}`} />
+                    <span className="np-cal-hittext">
+                      {highlightText(h.text, query).map((seg, j) =>
+                        seg.hit ? <b key={j}>{seg.t}</b> : <span key={j}>{seg.t}</span>,
+                      )}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </span>
+          <Seg<"month" | "year">
+            value={view}
+            options={[
+              { value: "month", label: t("月") },
+              { value: "year", label: t("年") },
+            ]}
+            onChange={(v) => setView(v)}
+          />
           <Button
             minimal
             size="small"
             icon={ic(ChevronLeft)}
-            aria-label={t("上一月")}
-            data-tip={t("上一月（PageUp）")}
+            aria-label={view === "year" ? t("上一年") : t("上一月")}
+            data-tip={view === "year" ? t("上一年") : t("上一月（PageUp）")}
             onClick={() => stepMonth(-1)}
           />
           <span className="np-cal-ym">
             {y}
             {t("年")}
-            {m}
-            {t("月")}
+            {view === "month" && m}
+            {view === "month" && t("月")}
           </span>
           <Button
             minimal
             size="small"
             icon={ic(ChevronRight)}
-            aria-label={t("下一月")}
-            data-tip={t("下一月（PageDown）")}
+            aria-label={view === "year" ? t("下一年") : t("下一月")}
+            data-tip={view === "year" ? t("下一年") : t("下一月（PageDown）")}
             onClick={() => stepMonth(1)}
           />
           <Button minimal size="small" className="np-cal-todaybtn" onClick={gotoToday}>
@@ -284,188 +578,287 @@ export function CalendarPage() {
       </header>
       <div className="np-menupage-body">
         <div className="np-cal-body">
-          <div className="np-cal-card">
-            <div className="np-cal-week">
-              {["一", "二", "三", "四", "五", "六", "日"].map((w) => (
-                <span key={w}>{w}</span>
-              ))}
-            </div>
-            <div className="np-cal-grid">
-              {cells.map((cell, i) => {
-                const { ry, rm, rd, key } = realDate(cell);
-                const hol = holidayOf(ry, rm, rd);
-                const sub = lunarSubtitle(ry, rm, rd);
-                const list = worklog[key] ?? [];
-                const dt = new Date(ry, rm - 1, rd);
-                const wkend = dt.getDay() === 0 || dt.getDay() === 6;
-                const cls = [
-                  "np-cal-cell",
-                  cell.inMonth ? "" : "is-dim",
-                  key === sel ? "is-sel" : "",
-                  wkend ? "is-wkend" : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ");
-                const subCls: Record<SubTag, string> = {
-                  fest: "is-fest",
-                  term: "is-term",
-                  solarfest: "is-solarfest",
-                  plain: "",
-                };
-                return (
-                  <div
-                    key={`${i}-${key}`}
-                    className={cls}
-                    data-cal-key={cell.inMonth ? key : ""}
-                    data-tip={
-                      list.length
-                        ? list.map((e) => `● ${statusLabel[e.status]}：${e.text}`).join("\n")
-                        : undefined
-                    }
-                    onClick={(e) => {
-                      const k = (e.currentTarget as HTMLElement).dataset.calKey;
-                      if (!k) return;
-                      if ((e.target as HTMLElement).closest(".np-cal-qa")) {
-                        addEntry(k);
-                        return;
-                      }
-                      setSel(k);
-                    }}
-                    onDoubleClick={(e) => {
-                      const k = (e.currentTarget as HTMLElement).dataset.calKey;
-                      if (k) addEntry(k);
-                    }}
-                  >
-                    <div className="np-cal-crow">
-                      <span className={key === TODAY_KEY ? "np-cal-dnum is-today" : "np-cal-dnum"}>
-                        {cell.d}
-                      </span>
-                      {showLunar && (
-                        <span className={`np-cal-sub ${subCls[sub.tag]}`}>{sub.text}</span>
-                      )}
-                      {hol && (
-                        <span className={`np-cal-badge ${hol.off ? "is-off" : "is-on"}`}>
-                          {hol.off ? t("休") : t("班")}
-                        </span>
+          {view === "year" ? (
+            <div className="np-cal-card np-cal-heatcard">
+              <div className="np-cal-heatwrap">
+                <div className="np-cal-heat">
+                  {heat.map((week, wi) => (
+                    <div className="np-cal-heatcol" key={wi}>
+                      {week.map((cell, di) =>
+                        cell ? (
+                          <button
+                            key={cell.key}
+                            className={`np-cal-hday is-l${Math.min(4, cell.n === 0 ? 0 : cell.n <= 1 ? 1 : cell.n <= 2 ? 2 : cell.n <= 4 ? 3 : 4)}`}
+                            data-tip={`${cell.key.slice(5).replace("-", "月")}日 · ${cell.n} 条`}
+                            onClick={() => jumpToDate(cell.key)}
+                          />
+                        ) : (
+                          <span key={`b-${wi}-${di}`} className="np-cal-hday is-blank" />
+                        ),
                       )}
                     </div>
-                    {list.slice(0, 2).map((e, j) => (
-                      <div
-                        key={j}
-                        className={e.status === "done" ? "np-cal-log is-done" : "np-cal-log"}
-                      >
-                        <i className={`np-cal-bar is-${e.status}`} />
-                        <span className="np-cal-logtext">{e.text}</span>
-                      </div>
-                    ))}
-                    {list.length > 2 && (
-                      <div className="np-cal-log is-more">
-                        <span className="np-cal-logtext">
-                          {t("还有 {n} 条", { n: list.length - 2 })}
-                        </span>
-                      </div>
-                    )}
-                    {cell.inMonth && (
-                      <button
-                        className="np-cal-qa"
-                        aria-label={t("添加一条工作")}
-                        data-tip={t("添加一条工作")}
-                        tabIndex={-1}
-                      >
-                        {t("＋")}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <aside className="np-cal-detail">
-            <div className="np-cal-d1">
-              {selParts[1]}
-              {t("月")}
-              {selParts[2]}
-              {t("日")}
-              <small>
-                {" "}
-                {t(
-                  ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"][
-                    (selDt.getDay() + 6) % 7
-                  ],
-                )}
-              </small>
-            </div>
-            <div className="np-cal-d2">{lunarLine(selParts[0], selParts[1], selParts[2])}</div>
-            <div className="np-cal-chips">
-              {kind.kind === "off" && <span className="np-cal-chip is-off">{t("{n} · 休", { n: kind.holiday?.name ?? "" })}</span>}
-              {kind.kind === "on" && (
-                <span className="np-cal-chip is-on">{t("调休 · 班（{n}）", { n: kind.holiday?.name ?? "" })}</span>
-              )}
-              {kind.kind === "weekend" && <span className="np-cal-chip">{t("周末")}</span>}
-              {kind.kind === "work" && <span className="np-cal-chip">{t("工作日")}</span>}
-            </div>
-            <div className="np-cal-elist">
-              {selEntries.length === 0 && (
-                <div className="np-cal-empty">
-                  {t("这一天还没有记录，点「添加一条工作」或直接双击格子。")}
+                  ))}
                 </div>
-              )}
-              {selEntries.map((e, i) => (
-                <EntryCard
-                  key={i}
-                  index={i}
-                  entry={e}
-                  overdue={selOverdue && e.status !== "done"}
-                  statusLabel={statusLabel}
-                  onChange={(next) => {
-                    const list = [...selEntries];
-                    list[i] = next;
-                    mutate(sel, list);
-                  }}
-                  onRemove={() => {
-                    const list = selEntries.filter((_, j) => j !== i);
-                    mutate(sel, list);
-                  }}
-                  refLast={i === selEntries.length - 1 ? lastEntryRef : undefined}
-                />
-              ))}
+              </div>
+              <div className="np-cal-heatlegend">
+                <span>{t("少")}</span>
+                {[0, 1, 2, 3, 4].map((l) => (
+                  <i key={l} className={`np-cal-hday is-l${l}`} />
+                ))}
+                <span>{t("多")}</span>
+              </div>
             </div>
-            <Button
-              className="np-cal-addbtn"
-              minimal
-              size="small"
-              icon={ic(Plus)}
-              onClick={() => addEntry(sel)}
-            >
-              {t("添加一条工作")}
-            </Button>
-            <div className="np-cal-dfoot">
-              <span>
-                {t("{a} 条 · {b} 字", {
-                  a: selEntries.length,
-                  b: selEntries.reduce((a, e) => a + e.text.length, 0),
-                })}
-              </span>
-              <span>
-                {savedAt
-                  ? t("已保存 {t}", { t: savedAt })
-                  : t("本月已记录 {d} 天 · 完成 {n} 条", { d: monthDays, n: monthDone })}
-              </span>
-            </div>
-          </aside>
+          ) : (
+            <>
+              <div className="np-cal-card">
+                <div className="np-cal-week">
+                  {["一", "二", "三", "四", "五", "六", "日"].map((w) => (
+                    <span key={w}>{w}</span>
+                  ))}
+                </div>
+                <div className="np-cal-grid">
+                  {cells.map((cell, i) => {
+                    const { ry, rm, rd, key } = realDate(cell);
+                    const hol = holidayOf(ry, rm, rd);
+                    const sub = lunarSubtitle(ry, rm, rd);
+                    const list = worklog[key] ?? [];
+                    const dt = new Date(ry, rm - 1, rd);
+                    const wkend = dt.getDay() === 0 || dt.getDay() === 6;
+                    const cls = [
+                      "np-cal-cell",
+                      cell.inMonth ? "" : "is-dim",
+                      key === sel ? "is-sel" : "",
+                      wkend ? "is-wkend" : "",
+                      dropKey === key ? "is-drop" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ");
+                    const subCls: Record<SubTag, string> = {
+                      fest: "is-fest",
+                      term: "is-term",
+                      solarfest: "is-solarfest",
+                      plain: "",
+                    };
+                    return (
+                      <div
+                        key={`${i}-${key}`}
+                        className={cls}
+                        data-cal-key={cell.inMonth ? key : ""}
+                        data-tip={
+                          list.length
+                            ? list.map((e) => `● ${statusLabel[e.status]}：${e.text}`).join("\n")
+                            : undefined
+                        }
+                        onClick={(e) => {
+                          const k = (e.currentTarget as HTMLElement).dataset.calKey;
+                          if (!k) return;
+                          if ((e.target as HTMLElement).closest(".np-cal-qa")) {
+                            addEntry(k);
+                            return;
+                          }
+                          setSel(k);
+                        }}
+                        onDoubleClick={(e) => {
+                          const k = (e.currentTarget as HTMLElement).dataset.calKey;
+                          if (k) addEntry(k);
+                        }}
+                        onContextMenu={(e) => {
+                          if ((e.target as HTMLElement).closest(".np-cal-log")) return;
+                          e.preventDefault();
+                          const k = (e.currentTarget as HTMLElement).dataset.calKey;
+                          if (k) cellMenu(k, e.clientX, e.clientY);
+                        }}
+                        onDragOver={(e) => {
+                          if (!dragRef.current || !cell.inMonth) return;
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                          if (dropKey !== key) setDropKey(key);
+                        }}
+                        onDragLeave={() => {
+                          if (dropKey === key) setDropKey(null);
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const dr = dragRef.current;
+                          if (dr && dr.from !== key) moveEntry(dr.from, dr.index, key);
+                          dragRef.current = null;
+                          setDropKey(null);
+                        }}
+                      >
+                        <div className="np-cal-crow">
+                          <span className={key === TODAY_KEY ? "np-cal-dnum is-today" : "np-cal-dnum"}>
+                            {cell.d}
+                          </span>
+                          {showLunar && (
+                            <span className={`np-cal-sub ${subCls[sub.tag]}`}>{sub.text}</span>
+                          )}
+                          {hol && (
+                            <span className={`np-cal-badge ${hol.off ? "is-off" : "is-on"}`}>
+                              {hol.off ? t("休") : t("班")}
+                            </span>
+                          )}
+                        </div>
+                        {list.slice(0, 2).map((e, j) => (
+                          <div
+                            key={j}
+                            className={e.status === "done" ? "np-cal-log is-done" : "np-cal-log"}
+                            draggable
+                            onDragStart={(e) => {
+                              dragRef.current = { from: key, index: j };
+                              e.dataTransfer.effectAllowed = "move";
+                              e.dataTransfer.setData("text/plain", key);
+                            }}
+                            onDragEnd={() => {
+                              dragRef.current = null;
+                              setDropKey(null);
+                            }}
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              entryMenu(key, j, e.clientX, e.clientY);
+                            }}
+                          >
+                            <i className={barCls(e)} />
+                            <span className="np-cal-logtext">{e.text}</span>
+                            <button
+                              className="np-cal-check"
+                              aria-label={e.status === "done" ? t("标记待办") : t("标记已完成")}
+                              data-tip={e.status === "done" ? t("标记待办") : t("标记已完成")}
+                              tabIndex={-1}
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                const next = [...(worklogRef.current[key] ?? [])];
+                                if (!next[j]) return;
+                                next[j] = { ...next[j], status: next[j].status === "done" ? "todo" : "done" };
+                                mutate(key, next);
+                              }}
+                            >
+                              <AppIcon icon={Check} size={DENSITY.iconXs} />
+                            </button>
+                          </div>
+                        ))}
+                        {list.length > 2 && (
+                          <div className="np-cal-log is-more">
+                            <span className="np-cal-logtext">
+                              {t("还有 {n} 条", { n: list.length - 2 })}
+                            </span>
+                          </div>
+                        )}
+                        {cell.inMonth && (
+                          <button
+                            className="np-cal-qa"
+                            aria-label={t("添加一条工作")}
+                            data-tip={t("添加一条工作")}
+                            tabIndex={-1}
+                          >
+                            {t("＋")}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <aside className="np-cal-detail">
+                <div className="np-cal-d1">
+                  {selParts[1]}
+                  {t("月")}
+                  {selParts[2]}
+                  {t("日")}
+                  <small> {WEEK_ZH[(selDt.getDay() + 6) % 7]}</small>
+                </div>
+                <div className="np-cal-d2">{lunarLine(selParts[0], selParts[1], selParts[2])}</div>
+                <div className="np-cal-chips">
+                  {kind.kind === "off" && (
+                    <span className="np-cal-chip is-off">{t("{n} · 休", { n: kind.holiday?.name ?? "" })}</span>
+                  )}
+                  {kind.kind === "on" && (
+                    <span className="np-cal-chip is-on">
+                      {t("调休 · 班（{n}）", { n: kind.holiday?.name ?? "" })}
+                    </span>
+                  )}
+                  {kind.kind === "weekend" && <span className="np-cal-chip">{t("周末")}</span>}
+                  {kind.kind === "work" && <span className="np-cal-chip">{t("工作日")}</span>}
+                </div>
+                <div className="np-cal-elist">
+                  {selEntries.length === 0 && (
+                    <div className="np-cal-empty">
+                      {t("这一天还没有记录，点「添加一条工作」或直接双击格子。")}
+                    </div>
+                  )}
+                  {selEntries.map((e, i) => (
+                    <EntryCard
+                      key={i}
+                      index={i}
+                      entry={e}
+                      overdue={selOverdue && e.status !== "done"}
+                      selected={selEntry === i}
+                      statusLabel={statusLabel}
+                      categories={categories}
+                      onSelect={() => setSelEntry(i)}
+                      onChange={(next) => {
+                        const list = [...selEntries];
+                        list[i] = next;
+                        mutate(sel, list);
+                      }}
+                      onRemove={() => {
+                        const list = selEntries.filter((_, j) => j !== i);
+                        mutate(sel, list);
+                        setSelEntry(null);
+                      }}
+                      refLast={i === selEntries.length - 1 ? lastEntryRef : undefined}
+                    />
+                  ))}
+                </div>
+                <Button
+                  className="np-cal-addbtn"
+                  minimal
+                  size="small"
+                  icon={ic(Plus)}
+                  onClick={() => addEntry(sel)}
+                >
+                  {t("添加一条工作")}
+                </Button>
+                <div className="np-cal-dfoot">
+                  <span>
+                    {t("{a} 条 · {b} 字", {
+                      a: selEntries.length,
+                      b: selEntries.reduce((a, e) => a + e.text.length, 0),
+                    })}
+                  </span>
+                  <span>
+                    {savedAt
+                      ? t("已保存 {t}", { t: savedAt })
+                      : t("本月已记录 {d} 天 · 完成 {n} 条", { d: monthDays, n: monthDone })}
+                  </span>
+                </div>
+              </aside>
+            </>
+          )}
         </div>
       </div>
     </section>
   );
 }
 
-/** 单条工作卡：状态三态 Seg + 悬停删除 + 自增高透明输入（已完成淡化/过期标红） */
+/** 日期键位移（右键迁移昨天/明天/下周用） */
+function offsetKey(key: string, days: number): string {
+  const p = key.split("-").map(Number);
+  const dt = new Date(p[0], p[1] - 1, p[2] + days);
+  return dateKey(dt.getFullYear(), dt.getMonth() + 1, dt.getDate());
+}
+
+/** 单条工作卡：状态三态 Seg + 分类选择 + 悬停删除 + 自增高透明输入
+ *  （已完成淡化/过期标红/单击卡片选中供 Delete 删除） */
 function EntryCard({
   index,
   entry,
   overdue,
+  selected,
   statusLabel,
+  categories,
+  onSelect,
   onChange,
   onRemove,
   refLast,
@@ -473,7 +866,10 @@ function EntryCard({
   index: number;
   entry: WorkEntry;
   overdue: boolean;
+  selected: boolean;
   statusLabel: Record<(typeof STATUS_ORDER)[number], string>;
+  categories: Array<{ id: string; name: string }>;
+  onSelect(): void;
   onChange(next: WorkEntry): void;
   onRemove(): void;
   refLast?: RefObject<HTMLTextAreaElement | null>;
@@ -488,11 +884,12 @@ function EntryCard({
     "np-cal-entry",
     entry.status === "done" ? "is-done" : "",
     overdue ? "is-overdue" : "",
+    selected ? "is-sel" : "",
   ]
     .filter(Boolean)
     .join(" ");
   return (
-    <div className={cls}>
+    <div className={cls} onMouseDown={onSelect}>
       <div className="np-cal-erow">
         <Seg<(typeof STATUS_ORDER)[number]>
           value={entry.status}
@@ -504,7 +901,10 @@ function EntryCard({
           className="np-cal-edel"
           aria-label={t("删除这条工作")}
           data-tip={t("删除这条工作")}
-          onClick={onRemove}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
         >
           <AppIcon icon={X} size={DENSITY.iconXs} />
         </button>
@@ -520,6 +920,19 @@ function EntryCard({
           fit(e.currentTarget);
         }}
       />
+      <div className="np-cal-ecat">
+        <NpSelect<string>
+          className="np-cal-catsel"
+          value={entry.category ?? ""}
+          title={t("任务分类")}
+          options={[
+            { value: "", label: t("未分类") },
+            ...categories.map((c) => ({ value: c.id, label: c.name })),
+          ]}
+          onChange={(v) => onChange({ ...entry, category: v || undefined })}
+        />
+      </div>
     </div>
   );
 }
+
