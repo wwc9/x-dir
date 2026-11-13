@@ -467,6 +467,13 @@ export interface Settings {
   cliphistCapacity: number;
   /** 保留天数（0 = 永不按时清理；置顶条目豁免清理） */
   cliphistKeepDays: number;
+  /** ── 工作日历（2026-11-13，design/calendar-plan.md）── */
+  /** 工作日历启用开关（关闭 = 系统热键注销，主窗页面入口保留置灰提示） */
+  calendarEnabled: boolean;
+  /** 呼出热键（tauri-plugin-global-shortcut 字符串，可自定义录制） */
+  calendarHotkey: string;
+  /** 格子内显示农历/节气/传统节日副标题 */
+  calendarShowLunar: boolean;
   /** 排除应用（逗号/分号分隔进程名，T1-1；命中则该应用复制不入库） */
   cliphistExcludeApps: string;
   /** 富文本保真（T3-1）：文本条目附带存 HTML 片段，粘贴回 Word/浏览器保留格式 */
@@ -585,6 +592,9 @@ export const DEFAULT_SETTINGS: Settings = {
   cliphistDirectPaste: true,
   cliphistCapacity: 500,
   cliphistKeepDays: 30,
+  calendarEnabled: true,
+  calendarHotkey: "Ctrl+Alt+D",
+  calendarShowLunar: true,
   cliphistExcludeApps: "keepass.exe,keepassxc.exe,1password.exe",
   cliphistRichText: true,
   uiRadius: 10,
@@ -617,6 +627,18 @@ export interface ClipHistPage {
 export interface HotkeySpec {
   id: string;
   hotkey: string;
+}
+
+/** 工作日历条目（text 非空；status 白名单 todo/doing/done，与 Rust worklog.rs 镜像） */
+export interface WorkEntry {
+  text: string;
+  status: "todo" | "doing" | "done";
+}
+
+/** 某日全部条目（date = "yyyy-MM-dd"；仅含有条目的日期下发） */
+export interface WorklogDay {
+  date: string;
+  entries: WorkEntry[];
 }
 
 /** 后端命令错误（Rust AppError 序列化为 {code,message}；Err(String) 命令
@@ -1292,6 +1314,12 @@ export const api = {
   systemInfo: () =>
     cmd<SystemInfo>("system_info"),
   cliphistToggle: () => cmd<void>("cliphist_toggle"),
+  /** 工作日历：读某月全部有条目日期（2026-11-13 新功能） */
+  worklogGetMonth: (year: number, month: number) =>
+    cmd<WorklogDay[]>("worklog_get_month", { year, month }),
+  /** 工作日历：写某日条目（空清单 = 删除该日） */
+  worklogSetDay: (date: string, entries: WorkEntry[]) =>
+    cmd<void>("worklog_set_day", { date, entries }),
   /** 剪贴板历史：浮窗置顶常驻开关（true = 失焦不自动收窗，Esc/热键仍收） */
   cliphistSetPinned: (pinned: boolean) => cmd<void>("cliphist_set_pinned", { pinned }),
   /** 剪贴板历史：浮窗最大化/还原（撑满所在显示器工作区，Rust 侧手动尺寸方案） */

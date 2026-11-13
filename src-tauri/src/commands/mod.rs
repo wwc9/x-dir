@@ -25,3 +25,4 @@ pub mod terminal;
 pub mod text_cmds;
 pub mod update;
 pub mod watch;
+pub mod worklog_cmds;

@@ -63,10 +63,20 @@ export function captureHotkey(e: HotkeyEventLike): HotkeyCapture {
  *  剪贴板历史；关闭的功能不入册（后端 unregister_all 后按本表重建）。
  *  App.tsx 启动与 SettingsPanel 改动共用，防止两处各写一份漂移 */
 export function hotkeySpecs(
-  st: Pick<Settings, "shotEnabled" | "shotHotkey" | "cliphistEnabled" | "cliphistHotkey">,
+  st: Pick<
+    Settings,
+    | "shotEnabled"
+    | "shotHotkey"
+    | "cliphistEnabled"
+    | "cliphistHotkey"
+    | "calendarEnabled"
+    | "calendarHotkey"
+  >,
 ): HotkeySpec[] {
   const specs: HotkeySpec[] = [];
   if (st.shotEnabled) specs.push({ id: "shot-open", hotkey: st.shotHotkey });
   if (st.cliphistEnabled) specs.push({ id: "cliphist-toggle", hotkey: st.cliphistHotkey });
+  // 工作日历（2026-11-13）：唤起主窗直达日历整页
+  if (st.calendarEnabled) specs.push({ id: "calendar-open", hotkey: st.calendarHotkey });
   return specs;
 }

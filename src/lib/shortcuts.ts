@@ -275,6 +275,47 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       },
     ],
   },
+  {
+    title: "工作日历",
+    items: [
+      {
+        id: "calendar-open",
+        keys: ["Ctrl+Alt+D"],
+        label: "打开工作日历（系统级热键，任意界面生效；键位可在设置 → 日历自定义录制）",
+        scope: "system",
+      },
+      {
+        id: "calendar-page-close",
+        keys: ["Esc"],
+        label: "关闭工作日历页（输入框内先失焦）",
+        scope: "global",
+      },
+      {
+        id: "calendar-nav",
+        keys: ["↑ / ↓ / ← / →"],
+        label: "日历页：移动选中日期（跨月自动翻页）",
+        scope: "component",
+      },
+      {
+        id: "calendar-new",
+        keys: ["Enter"],
+        label: "日历页：新增一条工作并聚焦输入",
+        scope: "component",
+      },
+      {
+        id: "calendar-today",
+        keys: ["T"],
+        label: "日历页：回到今天",
+        scope: "component",
+      },
+      {
+        id: "calendar-page-turn",
+        keys: ["PageUp / PageDown"],
+        label: "日历页：上一月 / 下一月",
+        scope: "component",
+      },
+    ],
+  },
 ];
 
 /** scope=global 的全部 id（测试覆盖校验用） */

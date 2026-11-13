@@ -44,12 +44,14 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { Sidebar } from "./components/Sidebar";
 import { TitleBar } from "./components/TitleBar";
 import { MenuEditorPage } from "./components/MenuEditorPage";
+import { CalendarPage } from "./components/CalendarPage";
 
 export default function App() {
   const tree = useLayout((s) => s.tree);
   // 独立页（占满顶栏以下整区）：打开时替换侧栏 + 导航树 + 窗格区
   const menuPage = useUi((s) => s.menuPage);
   const gsearchOpen = useUi((s) => s.globalSearch);
+  const calendarOpen = useUi((s) => s.calendarOpen);
 
   // 启动：加载设置 → 恢复上次会话（--bench 模式则开 2×5 压测布局）→ 初始化布局/事件/快捷键（§6.9）
   useEffect(() => {
@@ -63,6 +65,7 @@ export default function App() {
     let unsubOle: (() => void) | undefined;
     let unsubSettings: (() => void) | undefined;
     let unsubPastePane: (() => void) | undefined;
+    let unsubCalendar: (() => void) | undefined;
     (async () => {
       try {
         await useSettings.getState().load();
@@ -140,6 +143,10 @@ export default function App() {
         const unSettings = await listen("cliphist-open-settings", () => {
           useUi.getState().openSettings("clip");
         });
+        // 工作日历系统热键（Ctrl+Alt+D 默认）：Rust 已 show+focus 主窗，这里开日历整页
+        const unCalendar = await listen("calendar-open", () => {
+          useUi.getState().openCalendar();
+        });
         // 浮窗文件条目「粘贴到当前窗格」（T1-2）：Rust 已把 CF_HDROP 写回
         // 系统剪贴板，这里走 Ctrl+V 同款路由（活动窗格 FileList.onPaste →
         // doPaste 会先 syncFromSystem 再 transfer）
@@ -152,9 +159,11 @@ export default function App() {
         });
         if (disposed) {
           unSettings();
+          unCalendar();
         } else {
           unsubSettings = unSettings;
           unsubPastePane = unPastePane;
+          unsubCalendar = unCalendar;
         }
         unsubOle = await initOleDnd();
         if (disposed) {
@@ -182,6 +191,7 @@ export default function App() {
                 ui.settingsTab ||
                 ui.menuPage ||
                 ui.globalSearch ||
+                ui.calendarOpen ||
                 ui.aboutOpen
               ) {
                 return; // 有界面占用：只留角标，用户点关于钮仍可见新版提示
@@ -205,6 +215,7 @@ export default function App() {
       unsubOle?.();
       unsubSettings?.();
       unsubPastePane?.();
+      unsubCalendar?.();
       window.removeEventListener("keydown", onGlobalKeyDown);
       window.removeEventListener("wheel", onZoomWheel);
       window.removeEventListener("focus", onFocusSyncClipboard);
@@ -280,6 +291,8 @@ export default function App() {
           <MenuEditorPage />
         ) : gsearchOpen ? (
           <GlobalSearchPage />
+        ) : calendarOpen ? (
+          <CalendarPage />
         ) : (
           <>
             <Sidebar />

@@ -4,7 +4,7 @@
 //! 无法与第二个全局热键共存）。
 
 use serde::Deserialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,6 +42,16 @@ pub fn hotkeys_sync(app: AppHandle, hotkeys: Vec<HotkeySpec>) -> Result<(), Stri
             let _ = app.run_on_main_thread(move || match id2.as_str() {
                 "shot-open" => super::shot::begin_session(&app2),
                 "cliphist-toggle" => crate::cliphist::toggle_clip_window(&app2),
+                // 工作日历（主窗整页）：确保主窗可见/聚焦后发事件，前端监听开页。
+                // 主窗已关闭 = 应用已退出，热键本身不存在，无需建窗路径
+                "calendar-open" => {
+                    if let Some(w) = app2.get_webview_window("main") {
+                        let _ = w.unminimize();
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                    let _ = app2.emit_to("main", "calendar-open", ());
+                }
                 other => log::debug!("未知全局热键 id：{other}"),
             });
         })

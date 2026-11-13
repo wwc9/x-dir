@@ -228,6 +228,15 @@ const BUNDLED_ASSETS = [
     rights: "Copyright (c) 1999-2025 Igor Pavlov",
     licenseFile: join(ROOT, "src-tauri", "binaries", "7-Zip-License.txt"),
   },
+  {
+    // holiday-cn 按年 JSON 数据（MIT）转译为 src/lib/holidays.ts 随前端打包，
+    // 提供法定节假日/调休班休（工作日历，2026-11-13）；MIT 全文见附录
+    name: "holiday-cn 数据（holiday-cn per-year JSON, bundled as src/lib/holidays.ts）",
+    version: "2024-2027 数据集（2026-11-13 抓取）",
+    license: "MIT",
+    repo: "https://github.com/NateScarlet/holiday-cn",
+    rights: "Copyright (c) 2020 NateScarlet",
+  },
 ];
 
 const review = [];
@@ -276,9 +285,10 @@ for (const a of BUNDLED_ASSETS) {
     `· ${a.name} ${a.version} — ${a.license} — ${a.repo}`,
     `  ${a.rights}`,
   );
-  if (existsSync(a.licenseFile)) {
+  // licenseFile 缺省 = 许可证已收录于附录（如 MIT），不强制附带全文文件
+  if (a.licenseFile && existsSync(a.licenseFile)) {
     lines.push(`  [${a.license} 全文]`, ...readFileSync(a.licenseFile, "utf8").trim().split(/\r?\n/).map((l) => `  | ${l}`));
-  } else {
+  } else if (a.licenseFile) {
     lines.push(`  ⚠ 许可证全文缺失（${a.licenseFile}），需人工补全`);
     review.push(`${a.name}: 许可证文件缺失`);
   }

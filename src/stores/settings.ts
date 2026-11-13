@@ -91,6 +91,9 @@ function toPlain(s: SettingsStore): Settings {  return {
     cliphistRichText: s.cliphistRichText,
     cliphistWinW: s.cliphistWinW,
     cliphistWinH: s.cliphistWinH,
+    calendarEnabled: s.calendarEnabled,
+    calendarHotkey: s.calendarHotkey,
+    calendarShowLunar: s.calendarShowLunar,
     shotShadowW: s.shotShadowW,
     shotBorderW: s.shotBorderW,
     shotBorderColor: s.shotBorderColor,
@@ -352,6 +355,11 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     if ((merged.defaultView as string) === "icons") merged.defaultView = "details";
     // 截图十字辅助线（2026-11-11）：脏数据（非布尔，旧档缺键由 DEFAULT 兜底）
     if (typeof merged.shotCrosshair !== "boolean") merged.shotCrosshair = true;
+    // 工作日历（2026-11-13）：布尔/非空热键串/布尔三键脏数据回落默认
+    if (typeof merged.calendarEnabled !== "boolean") merged.calendarEnabled = true;
+    if (typeof merged.calendarShowLunar !== "boolean") merged.calendarShowLunar = true;
+    if (typeof merged.calendarHotkey !== "string" || !merged.calendarHotkey)
+      merged.calendarHotkey = DEFAULT_SETTINGS.calendarHotkey;
     // 右键菜单迁移：旧档缺 menuEntries 字段时生成出厂布局（用户刻意清空的
     // 空数组不被重置）。命令模板功能已下线（2026-10-14）：引用自定义命令的
     // 条目一律剔除——模板数据（customCommands）留档但不再渲染/可编辑

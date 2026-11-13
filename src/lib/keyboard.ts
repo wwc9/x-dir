@@ -94,16 +94,16 @@ export function onGlobalKeyDown(e: KeyboardEvent): void {
     e.preventDefault();
     return;
   }
-  // 独立页（右键菜单编辑页 / 全盘搜索页，占满顶栏以下整区）：Esc 关闭；输入框内
-  // 先失焦（菜单页语义）/ 由页面自带 onKeyDown 关闭（搜索页两处输入框均
-  // stopPropagation，不落到这里）。设置已是浮窗 Dialog，Esc 由 Blueprint 处理。
+  // 独立页（右键菜单编辑页 / 全盘搜索页 / 工作日历页，占满顶栏以下整区）：Esc 关闭；
+  // 输入框内先失焦（菜单页/日历页语义）/ 由页面自带 onKeyDown 关闭（搜索页两处
+  // 输入框均 stopPropagation，不落到这里）。设置已是浮窗 Dialog，Esc 由 Blueprint 处理。
   // 页面上叠着对话框（重置预设确认/设置浮窗）或 Blueprint 弹层（NpSelect 下拉/
   // 条件编辑浮层/预设菜单）时 Esc 只关最上层的它——Blueprint 与此处都会收到
   // 同一事件，若不避开会连页面一起退出
   const pageUi = useUi.getState();
   if (
     e.key === "Escape" &&
-    (pageUi.menuPage || pageUi.globalSearch) &&
+    (pageUi.menuPage || pageUi.globalSearch || pageUi.calendarOpen) &&
     !pageUi.dialog &&
     !document.querySelector(".bp6-popover")
   ) {
@@ -112,6 +112,8 @@ export function onGlobalKeyDown(e: KeyboardEvent): void {
       t.blur();
     } else if (pageUi.menuPage) {
       useUi.getState().closeMenuPage();
+    } else if (pageUi.calendarOpen) {
+      useUi.getState().closeCalendar();
     } else {
       useUi.getState().closeGlobalSearch();
     }
@@ -133,7 +135,7 @@ export function onGlobalKeyDown(e: KeyboardEvent): void {
   // 方向键会移动背后列表。面板内控件自带按键处理（Blueprint canEscapeKeyClose /
   // 面板 onKeyDown）；功能库面板由 CommandPalette 的 window 捕获监听全权处理
   const ui = useUi.getState();
-  if (ui.dialog || ui.globalSearch || ui.menu || ui.menuPage || ui.palette) return;
+  if (ui.dialog || ui.globalSearch || ui.menu || ui.menuPage || ui.palette || ui.calendarOpen) return;
   // Ctrl +/-/0：界面缩放（输入框内同样生效，与浏览器缩放习惯一致）
   if ((e.ctrlKey || e.metaKey) && ["=", "+", "-", "0"].includes(e.key)) {
     const s = useSettings.getState();

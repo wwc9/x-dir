@@ -7429,3 +7429,404 @@ body.np-col-resizing * {
   padding: 0 5px;
   align-items: center;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   工作日历整页（np-cal-*，2026-11-13 新功能，design/calendar-plan.md）
+   壳 = np-menupage 同构；密度/取值全走 token，状态语义色派生自既有
+   token（已完成 = success / 执行中 = accent / 待办 = muted 淡化；
+   班 = accent、休 = danger），不新增色板。
+   ══════════════════════════════════════════════════════════════ */
+.np-cal-hint {
+  margin-left: var(--np-gap);
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.np-cal-nav {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+}
+.np-cal-ym {
+  min-width: 92px;
+  text-align: center;
+  font-size: var(--np-font-ui);
+  font-weight: 600;
+}
+.np-cal-todaybtn {
+  color: var(--np-accent);
+}
+
+/* 主体双栏：左月历卡 + 右详情卡（窄窗折叠为上下） */
+.np-cal-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: var(--np-gutter);
+  height: 100%;
+  min-height: 0;
+}
+.np-cal-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--np-surface);
+  border: 1px solid var(--np-hairline);
+  border-radius: var(--np-radius-pane);
+  overflow: hidden;
+}
+.np-cal-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--np-hairline);
+}
+.np-cal-week span {
+  text-align: center;
+  padding: 5px 0 4px;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-cal-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-auto-rows: 1fr;
+  gap: 1px;
+  background: var(--np-hairline);
+  padding: 0 1px 1px;
+}
+.np-cal-cell {
+  position: relative;
+  min-height: 74px;
+  padding: 5px 7px 4px;
+  background: var(--np-surface);
+  overflow: hidden;
+}
+.np-cal-cell:hover {
+  background: color-mix(in srgb, var(--np-hover) 60%, var(--np-surface));
+}
+.np-cal-cell.is-dim {
+  opacity: 0.35;
+}
+.np-cal-cell.is-sel {
+  background: var(--np-sel);
+  box-shadow: inset 0 0 0 1px var(--np-accent);
+}
+.np-cal-crow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 18px;
+}
+.np-cal-dnum {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--np-radius-pill);
+  font-size: var(--np-font-ui);
+  font-weight: 600;
+}
+.np-cal-cell.is-wkend .np-cal-dnum {
+  color: var(--np-muted);
+  font-weight: 400;
+}
+.np-cal-dnum.is-today {
+  background: var(--np-accent);
+  color: var(--np-accent-fg);
+}
+.np-cal-sub {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.np-cal-sub.is-fest {
+  color: var(--np-danger);
+}
+.np-cal-sub.is-term {
+  color: var(--np-accent);
+}
+.np-cal-sub.is-solarfest {
+  color: var(--np-muted);
+}
+.np-cal-badge {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: var(--np-font-sm);
+  line-height: 1;
+  padding: 2.5px 5px 2px;
+  border-radius: var(--np-radius-pill);
+  color: var(--np-accent-fg);
+}
+.np-cal-badge.is-off {
+  background: var(--np-danger);
+}
+.np-cal-badge.is-on {
+  background: var(--np-accent);
+}
+.np-cal-log {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  height: 16px;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  line-height: 1.5;
+  min-width: 0;
+}
+.np-cal-bar {
+  flex: 0 0 auto;
+  width: 3px;
+  height: 11px;
+  border-radius: var(--np-radius-pill);
+}
+.np-cal-bar.is-done {
+  background: var(--np-success);
+}
+.np-cal-bar.is-doing {
+  background: var(--np-accent);
+}
+.np-cal-bar.is-todo {
+  background: color-mix(in srgb, var(--np-muted) 55%, var(--np-surface));
+}
+.np-cal-log.is-done .np-cal-logtext {
+  opacity: 0.6;
+}
+.np-cal-logtext {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.np-cal-qa {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 18px;
+  height: 18px;
+  display: none;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-sel);
+  color: var(--np-accent);
+  font-size: var(--np-font-ui);
+  line-height: 1;
+}
+.np-cal-cell:hover .np-cal-qa {
+  display: grid;
+}
+.np-cal-qa:hover {
+  background: var(--np-accent);
+  color: var(--np-accent-fg);
+}
+
+/* 详情卡（右栏） */
+.np-cal-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--np-gap);
+  min-height: 0;
+  padding: 12px 14px;
+  background: var(--np-surface);
+  border: 1px solid var(--np-hairline);
+  border-radius: var(--np-radius-pane);
+}
+.np-cal-d1 {
+  font-size: var(--np-font-ui);
+  font-weight: 600;
+}
+.np-cal-d1 small {
+  font-weight: 400;
+  color: var(--np-muted);
+}
+.np-cal-d2 {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-cal-chips {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+  min-height: 20px;
+}
+.np-cal-chip {
+  font-size: var(--np-font-sm);
+  padding: 2.5px 9px;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-surface-2);
+  color: var(--np-muted);
+}
+.np-cal-chip.is-off {
+  background: color-mix(in srgb, var(--np-danger) 14%, var(--np-surface));
+  color: var(--np-danger);
+}
+.np-cal-chip.is-on {
+  background: var(--np-sel);
+  color: var(--np-accent);
+}
+.np-cal-chip.is-small {
+  padding: 1px 7px;
+}
+.np-cal-elist {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--np-gap);
+}
+.np-cal-empty {
+  padding: 4px 2px;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-cal-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px 8px 6px;
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius);
+}
+.np-cal-entry.is-done .np-cal-etext {
+  color: var(--np-muted);
+}
+.np-cal-entry.is-overdue .np-cal-etext {
+  color: var(--np-danger);
+}
+.np-cal-erow {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.np-cal-edel {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  padding: 0 3px;
+  border: 0;
+  background: none;
+  color: var(--np-muted);
+  opacity: 0;
+  cursor: pointer;
+}
+.np-cal-entry:hover .np-cal-edel {
+  opacity: 0.8;
+}
+.np-cal-edel:hover {
+  color: var(--np-danger);
+}
+.np-cal-etext {
+  width: 100%;
+  border: 0;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  background: transparent;
+  color: var(--np-fg);
+  font: inherit;
+  font-size: var(--np-font-ui);
+  line-height: 1.6;
+}
+.np-cal-etext::placeholder {
+  color: var(--np-muted);
+}
+.np-cal-addbtn {
+  flex: 0 0 auto;
+  border: 1px dashed var(--np-border);
+  border-radius: var(--np-radius);
+}
+.np-cal-dfoot {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+
+/* 导出对话框（worklogExport）：统计面板 + 范围控件 */
+.np-cal-expform {
+  margin-bottom: var(--np-gutter);
+}
+.np-cal-expctl {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--np-gap);
+}
+.np-cal-explabel {
+  min-width: 80px;
+  text-align: center;
+  font-size: var(--np-font-ui);
+  font-weight: 600;
+}
+.np-cal-dateinput {
+  width: 118px;
+  height: var(--np-ctl-h);
+  padding: 0 8px;
+  border: 0;
+  outline: none;
+  border-radius: var(--np-radius);
+  background: var(--np-surface-2);
+  color: var(--np-fg);
+  font: inherit;
+  font-size: var(--np-font-ui);
+  text-align: center;
+}
+.np-cal-dateinput:focus {
+  box-shadow: var(--np-ring);
+}
+.np-cal-dateinput::placeholder {
+  color: var(--np-muted);
+}
+.np-cal-tilde {
+  color: var(--np-muted);
+  font-size: var(--np-font-ui);
+}
+.np-cal-expstats {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  padding: 9px 2px;
+  margin-bottom: var(--np-gutter);
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius);
+}
+.np-cal-expstats div {
+  text-align: center;
+}
+.np-cal-expstats b {
+  display: block;
+  font-size: var(--np-font-ui);
+}
+.np-cal-expstats span {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-cal-stat-done {
+  color: var(--np-success);
+}
+.np-cal-stat-doing {
+  color: var(--np-accent);
+}
+
+/* 窄窗：详情卡折到月历下方（视口宽 ≤900px，桌面窗口即视口） */
+@media (max-width: 900px) {
+  .np-cal-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+  .np-cal-elist {
+    max-height: 220px;
+  }
+}

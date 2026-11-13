@@ -28,6 +28,7 @@ vi.mock("../../stores/ui", async () => {
     menu: { items: unknown[]; x: number; y: number } | null;
     globalSearch: boolean;
     menuPage: boolean;
+    calendarOpen: boolean;
     swapFrom: string | null;
     typeAhead: { buf: string; hit: string | null } | null;
     closeMenu(): void;
@@ -35,6 +36,7 @@ vi.mock("../../stores/ui", async () => {
     closeGlobalSearch(): void;
     openMenuPage(): void;
     closeMenuPage(): void;
+    closeCalendar(): void;
     cancelSwap(): void;
     setTypeAhead(t: { buf: string; hit: string | null } | null): void;
     toast(text: string, kind?: "info" | "error"): void;
@@ -44,6 +46,7 @@ vi.mock("../../stores/ui", async () => {
     menu: null,
     globalSearch: false,
     menuPage: false,
+    calendarOpen: false,
     swapFrom: null,
     typeAhead: null,
     closeMenu: () => set({ menu: null }),
@@ -52,6 +55,7 @@ vi.mock("../../stores/ui", async () => {
     exitPages: () => set({ menuPage: false, globalSearch: false }),
     openMenuPage: () => set({ menuPage: true, globalSearch: false }),
     closeMenuPage: () => set({ menuPage: false }),
+    closeCalendar: () => set({ calendarOpen: false }),
     cancelSwap: () => set({ swapFrom: null }),
     setTypeAhead: (t) => set({ typeAhead: t }),
     toast: () => undefined,
@@ -236,6 +240,24 @@ describe("全局守卫", () => {
     fire({ key: "F", ctrl: true, shift: true, target: { tagName: "INPUT" } });
     expect(useUi.getState().globalSearch).toBe(true);
     covered.add("gsearch-open");
+  });
+
+  it("calendar-page-close：工作日历页输入框内先失焦，再按 Esc 关闭", () => {
+    useUi.setState({ calendarOpen: true });
+    const blur = vi.fn();
+    // 输入框聚焦：第一次 Esc 只失焦，页面保持打开
+    expect(fire({ key: "Escape", target: { tagName: "TEXTAREA", blur } }).prevented).toBe(true);
+    expect(blur).toHaveBeenCalled();
+    expect(useUi.getState().calendarOpen).toBe(true);
+    // 页面上叠着对话框：Esc 归对话框，页面保持
+    useUi.setState({ dialog: { type: "confirm", message: "x" } });
+    expect(fire({ key: "Escape" }).prevented).toBe(false);
+    expect(useUi.getState().calendarOpen).toBe(true);
+    useUi.setState({ dialog: null });
+    // 非输入焦点：Esc 关闭日历页
+    expect(fire({ key: "Escape" }).prevented).toBe(true);
+    expect(useUi.getState().calendarOpen).toBe(false);
+    covered.add("calendar-page-close");
   });
 
   it("gsearch-page-close：全盘搜索页非输入焦点 Esc 关闭", () => {

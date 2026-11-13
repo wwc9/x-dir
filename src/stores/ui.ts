@@ -94,7 +94,9 @@ export type DialogSpec =
   /** PDF AES-128 加密（2026-11-11）：口令 + 三权限位，回执给 encryptPdfs */
   | { type: "pdfEncrypt"; entries: FileEntry[] }
   /** PDF 解密（2026-11-11）：权限密码输入，回执给 decryptPdfs */
-  | { type: "pdfDecrypt"; entries: FileEntry[] };
+  | { type: "pdfDecrypt"; entries: FileEntry[] }
+  /** 工作日历导出（2026-11-13）：三档范围（月度/年度/自定义日期区间）导出工作 Markdown */
+  | { type: "worklogExport" };
 
 /** 提示弹窗语义级别：info=主操作、warn=警示、danger=不可逆/错误 */
 export type DialogKind = "info" | "warn" | "danger";
@@ -173,6 +175,8 @@ interface UiStore {
   settingsTab: SettingsTabId | null;
   /** 右键菜单独立页（占满顶栏以下内容区，顶栏指针钮唤起，Esc 返回） */
   menuPage: boolean;
+  /** 工作日历整页（系统热键/顶栏按钮唤起，Esc 返回；2026-11-13 新功能） */
+  calendarOpen: boolean;
   /** 关于浮窗（Dialog）：工具简介/开源地址/作者 + 更新检查（顶栏信息钮与启动检查共用） */
   aboutOpen: boolean;
   /** 更新检查结果：null = 尚未检查过；manifest 为 null = 双源都拉取失败 */
@@ -197,6 +201,8 @@ interface UiStore {
   closeSettings(): void;
   openMenuPage(): void;
   closeMenuPage(): void;
+  openCalendar(): void;
+  closeCalendar(): void;
   openAbout(): void;
   closeAbout(): void;
   setUpdateCheck(c: UpdateCheck): void;
@@ -215,6 +221,7 @@ export const useUi = create<UiStore>()((set, get) => ({
   globalSearch: false,
   settingsTab: null,
   menuPage: false,
+  calendarOpen: false,
   aboutOpen: false,
   updateCheck: null,
   swapFrom: null,
@@ -268,9 +275,9 @@ export const useUi = create<UiStore>()((set, get) => ({
     set({ globalSearch: false });
   },
 
-  /** 退出全部整页（全盘搜索/定制互斥）：顶栏主界面类按钮先回主界面再执行动作 */
+  /** 退出全部整页（全盘搜索/定制/工作日历互斥）：顶栏主界面类按钮先回主界面再执行动作 */
   exitPages() {
-    set({ menuPage: false, globalSearch: false });
+    set({ menuPage: false, globalSearch: false, calendarOpen: false });
   },
 
   openSettings(tab) {
@@ -288,6 +295,15 @@ export const useUi = create<UiStore>()((set, get) => ({
 
   closeMenuPage() {
     set({ menuPage: false });
+  },
+
+  openCalendar() {
+    // 整页互斥：打开工作日历即退出全盘搜索/定制页
+    set({ calendarOpen: true, globalSearch: false, menuPage: false });
+  },
+
+  closeCalendar() {
+    set({ calendarOpen: false });
   },
 
   openAbout() {

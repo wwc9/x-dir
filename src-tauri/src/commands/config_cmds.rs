@@ -296,12 +296,17 @@ pub fn export_config(path: String) -> Result<ExportSummary, String> {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
+    // 工作日历日志（2026-11-13 新功能）随配置包导出：无文件/损坏 → null 不阻断
+    let worklog = std::fs::read_to_string(config_root().join("worklog.json"))
+        .ok()
+        .and_then(|s| serde_json::from_str::<Value>(&s).ok());
     let bundle = serde_json::json!({
         "app": "x-dir",
         "version": 1,
         "exportedAt": exported_at,
         "settings": settings,
         "workspaces": workspaces,
+        "worklog": worklog,
     });
     // 原子写：临时文件 + rename
     let tmp = std::path::Path::new(&path).with_extension("json.tmp");
@@ -366,6 +371,10 @@ pub fn import_config(app: tauri::AppHandle, path: String) -> Result<ImportSummar
             atomic_write_json(&dir.join(format!("{safe}.json")), tree)?;
             ws_count += 1;
         }
+    }
+    // 工作日历日志可选恢复：包内无 worklog 键（旧版导出）时不动现有日志
+    if let Some(wl) = v.get("worklog").filter(|wl| wl.is_object()) {
+        atomic_write_json(&config_root().join("worklog.json"), wl)?;
     }
     let _ = app.emit("config-imported", ());
     Ok(ImportSummary {

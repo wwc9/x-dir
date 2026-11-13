@@ -26,6 +26,7 @@ import {
   Settings,
   Tag,
   X,
+  CalendarDays,
 } from "lucide-react";
 
 import { api, type ColorRule, type SortKey, type TagColor, type ViewMode } from "../lib/ipc";
@@ -69,6 +70,7 @@ const TABS = [
   { id: "search", label: "全盘搜索", icon: Search },
   { id: "shot", label: "截图", icon: Camera },
   { id: "clip", label: "剪贴板", icon: ClipboardList },
+  { id: "calendar", label: "日历", icon: CalendarDays },
   { id: "rules", label: "着色规则", icon: Tag },
   { id: "keys", label: "快捷键", icon: Keyboard },
   { id: "config", label: "配置", icon: Download },
@@ -157,6 +159,22 @@ export function SettingsPanel() {
     s.update({ cliphistHotkey: hotkey });
     api.hotkeysSync(hotkeySpecs(useSettings.getState())).catch((e) =>
       useUi.getState().toast(t("剪贴板热键未生效：{e}", { e: String(e) }), "error"),
+    );
+  };
+
+  /** 工作日历启用开关：落盘并全量重注册（2026-11-13 新功能） */
+  const applyCalendarEnabled = (enabled: boolean) => {
+    s.update({ calendarEnabled: enabled });
+    api.hotkeysSync(hotkeySpecs(useSettings.getState())).catch((e) =>
+      useUi.getState().toast(t("日历热键未生效：{e}", { e: String(e) }), "error"),
+    );
+  };
+
+  /** 工作日历呼出热键变更：落盘并全量重注册 */
+  const applyCalendarHotkey = (hotkey: string) => {
+    s.update({ calendarHotkey: hotkey });
+    api.hotkeysSync(hotkeySpecs(useSettings.getState())).catch((e) =>
+      useUi.getState().toast(t("日历热键未生效：{e}", { e: String(e) }), "error"),
     );
   };
 
@@ -541,7 +559,45 @@ export function SettingsPanel() {
             </div>
           </>
         )}
-        {tab === "rules" && (
+                {tab === "calendar" && (
+          <>
+            <SetRow
+              label={t("启用工作日历")}
+              desc={t("月视图记录每天的工作条目（待办/执行中/已完成），可按月度/年度/自定义范围导出 Markdown；数据存本地 worklog.json")}
+            >
+              <Switch
+                checked={s.calendarEnabled}
+                onChange={(e) => applyCalendarEnabled(e.currentTarget.checked)}
+              />
+            </SetRow>
+            <SetRow
+              label={t("呼出热键（自定义）")}
+              desc={t("系统级全局热键，任意界面可按：聚焦主窗并打开工作日历；点击后直接按下组合键录制，更改即时生效")}
+            >
+              <HotkeyRecorder
+                value={s.calendarHotkey}
+                disabled={!s.calendarEnabled}
+                onApply={(h) => applyCalendarHotkey(h)}
+                notify={(msg) => useUi.getState().toast(msg, "error")}
+              />
+            </SetRow>
+            <SetRow
+              label={t("显示农历与节气")}
+              desc={t("格子里日期旁以小字显示农历；传统节日与节气以彩色文字替代农历显示（法定节假日的班/休角标不受影响）")}
+            >
+              <Switch
+                checked={s.calendarShowLunar}
+                onChange={(e) => s.update({ calendarShowLunar: e.currentTarget.checked })}
+              />
+            </SetRow>
+            <div className="np-set-hint">
+              {t(
+                "工作记录按日保存在程序目录 config/worklog.json（不上传），随「配置 → 导出/导入配置」打包迁移；快捷键清单见设置 → 快捷键「工作日历」组；关闭 X-Dir 后热键失效。",
+              )}
+            </div>
+          </>
+        )}
+{tab === "rules" && (
           <>
             <div className="np-set-hint">
               {t("按规则给文件名着色，自上而下首个命中的规则生效（支持 *.ext 或名称包含）。")}

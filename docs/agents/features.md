@@ -440,6 +440,18 @@
 - **不随导出**：剪贴板历史 = config/clipboard.db（SQLite 单独存储）、全盘索引 = config/index/（可重建缓存）、update-state.json（运行态）。
 - **主窗 save_settings = 合并落盘并保留补丁键**：截图八键 + cliphistWinW/H 由轻量窗直写磁盘，主窗 store 启动后不重读——整对象覆盖会把它们回滚到启动旧值（settings 落盘另有 800ms 防抖 + pagehide 冲刷）。
 
+### 12.7 工作日历
+
+**组件与模块**：`components/CalendarPage.tsx`（整页 `np-menupage` 壳 + `np-cal-*` 类族）+ `components/WorklogExportDialog.tsx`（DialogSpec `worklogExport`）+ `lib/calendar.ts` 纯函数（月矩阵/副标题合并/导出构建/统计，配 vitest）+ `lib/holidays.ts`（班休数据）+ Rust `worklog.rs` + `commands/worklog_cmds.rs` 两命令。
+
+- **定位与交互（2026-11-13 用户定案，design/calendar-plan.md）**：月视图工作日历——格子首行单行收纳 公历日（今日 accent 实心圆）+ 农历/节日副标题（法定与传统节日红 / 节气蓝 / 农历灰，`calendarShowLunar` 可关）+ 班休徽标（休红·班蓝）；其下条目摘要 ≤3 条，每条前置 3×11px 状态竖条（已完成 success 绿 / 执行中 accent 蓝 / 待办 muted 淡灰），已完成条目文字淡化（滴答清单惯例）。单击选中 → 右栏逐条编辑（三态 Seg + 自增高输入 + 悬停删除，输入自动保存 800ms 防抖 + 「已保存 HH:mm」）；**双击格子 / 悬停右下角 ＋ / Enter = 新增一条**；早于今天且未完成的条目右栏标红「已过期」（格子内不变色防泛红）。
+- **状态模型**：一天多条 `{text, status: todo|doing|done}`，新建默认「已完成」；全部清空 = 删日（Rust 端空清单即删键 + status 白名单回落 done）。
+- **数据链路**：`worklog_get_month(year, month)` 按月下发（铁律 3）/ `worklog_set_day(date, entries)` 单日 RMW（进程内互斥锁 + tmp+rename 原子写 + 坏档回落空档）；`config/worklog.json` 随 `export_config`/`import_config` 打包迁移（包内无 worklog 键则不动现有日志）；翻月/关页/卸载前冲刷未落盘修改。
+- **数据源**：班休 = holiday-cn（MIT）2024–2027 打包 `lib/holidays.ts`（唯一事实源；次年安排 11 月发布后随发版刷新，papers 出处入文件头注释）；农历/节气/干支 = solarlunar（ISC，纯算法 1900–2100，ESM 仅默认导出 + 包缺 types 条件 → `src/solarlunar.d.ts` 收窄声明）；传统节日/公历纪念日常量表自算（不消费库节日字段，防双源冲突；闰月不庆、除夕按下一天为正月初一判定、初一显月名）。
+- **导出**：三档范围（月度年月步进 / 年度 Seg / 自定义起止 `yyyy-MM-dd` 内联校验，倒置或非法禁主操作 + 红字）+ 统计面板五格（记录天数/条目数/已完成/执行中/待办，按需逐月拉取聚合）；`buildExport` 生成 Markdown（统计头 + 按日期升序逐日小节带节假日尾注 + 任务清单语法 `- [x]`/`- [ ]` + 状态词，无记录日不占篇幅）；原生保存框（默认名 `工作日志-{y}-{m}.md` 等）+ `save_text_file` 写出。
+- **唤起与快捷键**：系统级热键（默认 Ctrl+Alt+D，`hotkeys_sync` 单点注册，回调 show+focus 主窗后 emit `calendar-open`，App.tsx 监听开页）；顶栏模式组日历钮（CalendarDays，开合态 + 键帽随设置）；设置新增「日历」分页（启用开关 + HotkeyRecorder + 农历开关 + 数据说明）；整页互斥纳入 `openCalendar`/`exitPages`，Esc 关页（输入框先失焦）入 keyboard.ts 页面分支；页内键盘 ↑↓←→ 移格（跨月自动翻页）/ Enter 新增 / T 今天 / PgUp PgDn 翻月；shortcuts.ts「工作日历」组 + keyboard.test 覆盖对齐。
+- **合规**：solarlunar 与 holiday-cn 已入 opensource.md §3.1 台账并随 `tools/gen-third-party-notices.mjs` 进 THIRD-PARTY-NOTICES（generator 的 BUNDLED_ASSETS 支持 licenseFile 缺省 = 许可证已收录附录）。
+
 ## 13. 横切改造记录（跨功能域批量改造，按时间倒序）
 
 ### 13.1 PDF/图片参数界面优化批

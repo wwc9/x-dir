@@ -15,6 +15,7 @@ mod ole_dnd;
 mod pdf;
 mod sheet_fmt;
 mod watch;
+mod worklog;
 
 use fs::cache::SnapshotCache;
 use icons::IconStore;
@@ -256,6 +257,8 @@ pub fn run() {
             commands::text_cmds::xlsx_sheet_info,
             commands::text_cmds::zip_files,
             commands::text_cmds::save_text_file,
+            commands::worklog_cmds::worklog_get_month,
+            commands::worklog_cmds::worklog_set_day,
             commands::text_cmds::export_listing,
             commands::archive_cmds::extract_archives,
             commands::filetools_cmds::hash_files,

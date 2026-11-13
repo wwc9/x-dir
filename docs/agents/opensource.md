@@ -43,6 +43,8 @@
 | pinyin-pro | MIT | 批量重命名转拼音 |
 | @tauri-apps/plugin-updater / plugin-process | MIT OR Apache-2.0 | 应用内覆盖更新与重启 |
 | base64 | MIT OR Apache-2.0 | PNG dataURL 解码（截图位图剪贴板链路） |
+| solarlunar | ISC | 工作日历农历/节气/干支换算（纯算法 1900–2100，2026-11-13 引入；包 exports 缺 types 条件，经 src/solarlunar.d.ts 收窄声明） |
+| holiday-cn 数据（按年 JSON，非 npm 包） | MIT | 法定节假日/调休班休唯一事实源（2024–2027 随应用打包 src/lib/holidays.ts，源 github.com/NateScarlet/holiday-cn；发版周期人工刷新） |
 
 ### 3.2 Rust 后端
 

@@ -9,7 +9,7 @@ X-Dir v0.1.9 · Copyright (c) 2026 wwwwwc · 本软件以 MIT 许可证发布（
 各条目按「名称 版本 — 许可证 — 仓库 — 版权人」列出；标准许可证全文统一收录于附录，
 条目不再逐个内嵌。非标准许可证（或未识别 SPDX）的条目在其下方内嵌原文。
 
-由 tools/gen-third-party-notices.mjs 生成于 2026-11-12；依赖变更后请重新生成。
+由 tools/gen-third-party-notices.mjs 生成于 2026-11-13；依赖变更后请重新生成。
 
 
 RUST CRATES（编译进 x-dir.exe）（472 项）
@@ -910,7 +910,7 @@ RUST CRATES（编译进 x-dir.exe）（472 项）
 · zune-jpeg 0.5.15 — MIT OR Apache-2.0 OR Zlib — https://github.com/etemesi254/zune-image/tree/dev/crates/zune-jpeg
   Copyright caleb <etemesicaleb@gmail.com>
 
-NPM PACKAGES（打包进前端资源）（60 项）
+NPM PACKAGES（打包进前端资源）（61 项）
 ------------------------------------------------------------------------------------------------------------------------
 · @babel/runtime 7.29.10 — MIT — https://github.com/babel/babel.git
   Copyright (c) 2014-present Sebastian McKenzie and other contributors
@@ -1009,6 +1009,8 @@ NPM PACKAGES（打包进前端资源）（60 项）
   Copyright (c) 2014 Blake Embrey (hello@blakeembrey.com)
 · snake-case 3.0.4 — MIT — git://github.com/blakeembrey/change-case.git
   Copyright (c) 2014 Blake Embrey (hello@blakeembrey.com)
+· solarlunar 3.1.0 — ISC — https://github.com/yize/solarlunar.git
+  Copyright (c) 2015, yize
 · tabbable 6.5.0 — MIT — https://github.com/focus-trap/tabbable.git
   Copyright (c) 2015 David Clark
 · tslib 2.6.3 — 0BSD — https://github.com/Microsoft/tslib.git
@@ -1173,6 +1175,8 @@ NPM PACKAGES（打包进前端资源）（60 项）
   |   not be used to develop a RAR (WinRAR) compatible archiver.
   | 
   | --
+· holiday-cn 数据（holiday-cn per-year JSON, bundled as src/lib/holidays.ts） 2024-2027 数据集（2026-11-13 抓取） — MIT — https://github.com/NateScarlet/holiday-cn
+  Copyright (c) 2020 NateScarlet
 
 附录：标准许可证全文
 ========================================================================================================================

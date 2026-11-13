@@ -10,6 +10,7 @@ import {
 
 import { api, THIS_PC } from "../lib/ipc";
 import {
+  CalendarDays,
   Camera,
   ClipboardList,
   Copy,
@@ -85,6 +86,10 @@ export function TitleBar() {
   const shotEnabled = useSettings((s) => s.shotEnabled);
   const shotHotkey = useSettings((s) => s.shotHotkey);
   const cliphistHotkey = useSettings((s) => s.cliphistHotkey);
+  // 工作日历（2026-11-13）：开合态 + 热键键位（tooltip 键帽随设置实时跟随）
+  const calendarOpen = useUi((s) => s.calendarOpen);
+  const calendarEnabled = useSettings((s) => s.calendarEnabled);
+  const calendarHotkey = useSettings((s) => s.calendarHotkey);
   const t = useT();
   // 更新检查结果（启动静默检查 / 关于浮窗写入）：有新版本时关于钮亮角标
   const updateCheck = useUi((s) => s.updateCheck);
@@ -457,6 +462,21 @@ export function TitleBar() {
         data-tip={t("剪贴板历史")} data-kbd={cliphistHotkey}
         onClick={() => {
           void api.cliphistToggle().catch((e) => useUi.getState().toast(String(e), "error"));
+        }}
+      />
+
+      {/* 工作日历（2026-11-13）：与系统热键同入口的开/关整页；按钮不受
+          calendarEnabled 门控（热键可关，手动入口常开），键帽只在热键启用时展示 */}
+      <Button
+        minimal
+        size="small"
+        icon={ic(CalendarDays)}
+        active={calendarOpen}
+        aria-label={t("工作日历")}
+        data-tip={t("工作日历")} data-kbd={calendarEnabled ? calendarHotkey : undefined}
+        onClick={() => {
+          if (calendarOpen) useUi.getState().closeCalendar();
+          else useUi.getState().openCalendar();
         }}
       />
 
