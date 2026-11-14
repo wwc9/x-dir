@@ -1,6 +1,6 @@
 [package]
 name = "x-dir"
-version = "0.1.9"
+version = "0.2.0"
 description = "A multi-pane file manager for Windows with Everything-style full-disk search"
 authors = ["wwwwwc"]
 license = "MIT"

@@ -248,8 +248,17 @@ mod tests {
     use super::*;
 
     fn tmp_worklog(tag: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("xdir_worklog_test_{}_{}", tag, std::process::id()));
+        // 时间戳分量防 PID 复用撞名（同 files.rs tempdir 口径）
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let dir = std::env::temp_dir().join(format!(
+            "xdir_worklog_test_{}_{}_{}",
+            tag,
+            std::process::id(),
+            ts
+        ));
         std::fs::create_dir_all(&dir).ok();
         dir.join("worklog.json")
     }

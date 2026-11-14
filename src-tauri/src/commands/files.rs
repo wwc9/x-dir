@@ -542,9 +542,16 @@ mod tests {
 
     static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     fn tempdir() -> String {
+        // 时间戳分量防 PID 复用撞名：Windows PID 快速回收，跨 cargo test 调用
+        // 复用同 PID 时旧目录未清理会让去重断言全部错位（2026-11-14 发布门禁实测）
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
         let d = std::env::temp_dir().join(format!(
-            "xdir-files-{}-{}",
+            "xdir-files-{}-{}-{}",
             std::process::id(),
+            ts,
             SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
         ));
         std::fs::create_dir_all(&d).unwrap();
