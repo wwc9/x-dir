@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>今天格子样式 · 三方案预览</title>
+<!-- 设计稿（不参与构建）：工作日历「今天」格子样式三方案对照 + 线上现状基线。
+     行为定案（不在本稿范围）：点击「今天」= 滚到当前月份块顶部（已实现）。
+     数据：2026年11月真实农历/节气（solarlunar 实算）；工作条目为虚构样例，
+     用于核对今天样式与状态竖条/摘要的共存效果。右上角切换深浅主题。 -->
+<style>
+  :root {
+    --bg:#e9ecf1; --surface:#ffffff; --surface2:#f0f2f5; --border:#d6dbe2;
+    --hairline:rgba(16,24,40,.06); --fg:#171d26; --muted:#66707e;
+    --accent:#3574f0; --sel:rgba(53,116,240,.12); --hover:rgba(26,33,41,.055);
+    --danger:#d1434b; --success:#46a758; --shadow:0 12px 32px rgba(20,28,40,.14);
+    --r:6px; --pane:10px;
+  }
+  html.dark {
+    --bg:#161616; --surface:#2b2b2b; --surface2:#3a3a3a; --border:#454545;
+    --hairline:rgba(255,255,255,.08); --fg:#d4d4d4; --muted:#8f8f8f;
+    --accent:#5c9dff; --sel:rgba(92,157,255,.16); --hover:rgba(255,255,255,.07);
+    --danger:#f27073; --success:#46bf72; --shadow:0 16px 40px rgba(0,0,0,.5);
+  }
+  * { box-sizing:border-box; margin:0; }
+  body {
+    background:var(--bg); color:var(--fg); font-size:13px; padding:14px;
+    font-family:system-ui,"Segoe UI","Microsoft YaHei",sans-serif; user-select:none;
+  }
+  ::-webkit-scrollbar { width:10px; }
+  ::-webkit-scrollbar-thumb { background:var(--border); border-radius:5px; }
+
+  /* ── 方案标签卡 ── */
+  .case { max-width:1060px; margin:0 auto 26px; }
+  .case-tag {
+    display:flex; align-items:center; gap:8px; margin-bottom:6px;
+    font-size:13px; font-weight:600;
+  }
+  .case-tag .no {
+    width:22px; height:22px; display:grid; place-items:center; border-radius:99px;
+    background:var(--sel); color:var(--accent); font-size:12px;
+  }
+  .case-tag small { font-weight:400; color:var(--muted); font-size:11px; }
+  .case-tag .pick {
+    margin-left:auto; font-size:11px; font-weight:400; color:var(--muted);
+    border:1px dashed var(--border); border-radius:99px; padding:2px 10px;
+  }
+  .case-note { color:var(--muted); font-size:11px; line-height:1.6; margin-bottom:8px; }
+  .case-note b { color:var(--fg); }
+
+  /* ── 月块（与应用连续滚动布局同构：周末窄列 + 单行日期 + 状态竖条）── */
+  .monthblock {
+    background:var(--surface); border:1px solid var(--hairline);
+    border-radius:var(--pane); overflow:visible;
+  }
+  .monthtitle {
+    padding:5px 12px; font-size:13px; font-weight:600;
+    border-bottom:1px solid var(--hairline);
+  }
+  .week, .grid { display:grid; grid-template-columns:repeat(5,1.25fr) repeat(2,0.75fr); }
+  .week { border-bottom:1px solid var(--hairline); }
+  .week span { text-align:center; padding:5px 0 4px; font-size:11px; color:var(--muted); }
+  .week span.wk { color:var(--accent); opacity:.75; }
+  .grid { grid-auto-rows:96px; gap:1px; background:var(--hairline); padding:0 1px 1px; }
+  .cell {
+    position:relative; background:var(--surface); padding:5px 7px 4px;
+    overflow:hidden;
+  }
+  .cell:hover { background:color-mix(in srgb, var(--hover) 60%, var(--surface)); }
+  .cell.dim { opacity:.35; }
+  .cell.wkend { background:color-mix(in srgb, var(--surface2) 40%, var(--surface)); }
+  .cell.wkend .dnum { color:var(--muted); font-weight:400; }
+  .crow { display:flex; align-items:center; gap:5px; height:18px; }
+  .dnum {
+    flex:0 0 auto; width:18px; height:18px; display:grid; place-items:center;
+    border-radius:99px; font-size:13px; font-weight:600;
+  }
+  .dnum.is-today { background:var(--accent); color:#fff; }
+  html.dark .dnum.is-today { color:#101010; }
+  .sub {
+    flex:1; min-width:0; font-size:11px; color:var(--muted);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .sub.fest { color:var(--danger); }
+  .sub.term { color:var(--accent); }
+  .log {
+    position:relative; display:flex; align-items:center; gap:5px;
+    margin-top:3px; height:16px; font-size:11px; color:var(--muted);
+    line-height:1.5; min-width:0;
+  }
+  .log .bar { width:3px; height:11px; border-radius:99px; flex:0 0 auto; }
+  .bar.done { background:var(--success); }
+  .bar.doing { background:var(--accent); }
+  .bar.todo { background:color-mix(in srgb, var(--muted) 55%, var(--surface)); }
+  .log.done .t { opacity:.6; }
+  .log .t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* ═══ 今天格子 · 各方案样式（基线之外仅下列差异） ═══ */
+  /* 方案 A「描边高亮」：整格 accent 2px 描边 + 6% 底染（保留日期实心圆），
+     与应用「激活卡片 = 描边」语言同源，任何滚动位置一眼可见 */
+  .cell.tp-a.is-today {
+    box-shadow:inset 0 0 0 2px var(--accent);
+    background:color-mix(in srgb, var(--accent) 6%, var(--surface));
+  }
+  .cell.tp-a.is-today:hover {
+    background:color-mix(in srgb, var(--accent) 9%, var(--surface));
+  }
+  /* 方案 B「顶部色条」：格顶 3px accent 条 + 日期数字 accent 加粗（不画圆），
+     与状态竖条 / 剪贴板类型条同一条状语言，最克制 */
+  .cell.tp-b.is-today::before {
+    content:""; position:absolute; top:0; left:0; right:0; height:3px;
+    background:var(--accent);
+  }
+  .cell.tp-b.is-today .dnum {
+    background:transparent; color:var(--accent); font-weight:700;
+  }
+  /* 方案 C「今徽标」：日期实心圆保留 + 数字旁 accent「今」字小徽 + 整格 5% 底染，
+     语义最直白（一眼读出「今天」二字） */
+  .cell.tp-c.is-today {
+    background:color-mix(in srgb, var(--accent) 5%, var(--surface));
+  }
+  .todaybadge {
+    flex:0 0 auto; font-size:10px; line-height:1; padding:2.5px 5px 2px;
+    border-radius:99px; background:var(--accent); color:#fff;
+  }
+  html.dark .todaybadge { color:#101010; }
+  /* 与选中态共存演示：今天 + 选中（最后一块演示） */
+  .cell.is-sel { background:var(--sel); box-shadow:inset 0 0 0 1px var(--accent); }
+  .cell.tp-a.is-today.is-sel {
+    box-shadow:inset 0 0 0 2px var(--accent);
+    background:color-mix(in srgb, var(--accent) 10%, var(--surface));
+  }
+
+  /* ── 主题切换 ── */
+  .theme {
+    position:fixed; right:14px; top:12px; z-index:60; border:1px solid var(--hairline);
+    cursor:pointer; display:flex; align-items:center; gap:6px; padding:5px 10px;
+    background:var(--surface); color:var(--fg); font-size:12px;
+    border-radius:99px; box-shadow:var(--shadow);
+  }
+  .theme:hover { background:var(--surface2); }
+</style>
+</head>
+<body>
+
+<div class="theme" id="themeBtn">◐ 深浅主题</div>
+
+<div class="case" id="c-base">
+  <div class="case-tag"><span class="no">0</span>对照：线上现状<span class="pick">现状基线</span></div>
+  <div class="case-note">仅<b>日期数字 accent 实心圆</b>，格子本身无任何特殊样式；滚到别处时「今天」不易找回。</div>
+  <div id="m-base"></div>
+</div>
+
+<div class="case" id="c-a">
+  <div class="case-tag"><span class="no">A</span>方案 A「描边高亮」<span class="pick">推荐</span></div>
+  <div class="case-note">整格 <b>2px accent 描边 + 6% 底染</b>（保留日期实心圆）。与应用「激活卡片 = 描边」语言同源，任何滚动位置一眼可见；与选中态同族但更醒目，两者叠加（见块内演示）不冲突。</div>
+  <div id="m-a"></div>
+</div>
+
+<div class="case" id="c-b">
+  <div class="case-tag"><span class="no">B</span>方案 B「顶部色条」</div>
+  <div class="case-note">格顶 <b>3px accent 色条</b> + 日期数字转 accent 加粗（不再画圆）。与状态竖条 / 剪贴板类型条同一条状语言，最克制；代价是快速滚动时色条易与月块边界线混淆。</div>
+  <div id="m-b"></div>
+</div>
+
+<div class="case" id="c-c">
+  <div class="case-tag"><span class="no">C</span>方案 C「今徽标」</div>
+  <div class="case-note">日期实心圆保留 + 数字旁 <b>accent「今」字小徽</b> + 整格 5% 底染。语义最直白（直接读出「今天」二字）；与班/休徽标同排时会小幅挤占农历小字宽度。</div>
+  <div id="m-c"></div>
+</div>
+
+<div class="case" id="c-sel">
+  <div class="case-tag"><span class="no">+</span>方案 A 与选中态共存演示</div>
+  <div class="case-note">今天 14 格同时处于<b>选中态</b>（点过它）时的叠加效果：描边保持 2px、底染加深到 10%。</div>
+  <div id="m-sel"></div>
+</div>
+
+<script>
+/* ═══ 真实数据：2026-11 农历/节气（solarlunar 实算）；条目为虚构样例 ═══ */
+const LUNAR = {
+  "10-26":"廿一","10-27":"廿二","10-28":"廿三","10-29":"廿四","10-30":"廿五","10-31":"廿六",
+  "11-01":"廿七","11-02":"廿八","11-03":"廿九","11-04":"三十","11-05":"十月","11-06":"初二",
+  "11-07":"立冬~term","11-08":"初四","11-09":"初五","11-10":"初六","11-11":"初七","11-12":"初八",
+  "11-13":"初九","11-14":"初十","11-15":"十一","11-16":"十二","11-17":"十三","11-18":"十四",
+  "11-19":"十五","11-20":"十六","11-21":"十七","11-22":"小雪~term","11-23":"十九","11-24":"二十",
+  "11-25":"廿一","11-26":"廿二","11-27":"廿三","11-28":"廿四","11-29":"廿五","11-30":"廿六",
+  "12-01":"廿七","12-02":"廿八","12-03":"廿九","12-04":"三十","12-05":"冬月","12-06":"初二",
+};
+const NOTES = {
+  "11-12": [{ t:"剪贴板浮窗紧凑重构回归测试", s:"done" }],
+  "11-13": [{ t:"日历功能增强批开发与回归", s:"done" }, { t:"整理用户反馈清单", s:"doing" }],
+  "11-14": [{ t:"上午核对底稿抽样", s:"done" }, { t:"起草工作日历功能方案", s:"doing" }],
+  "11-16": [{ t:"每周例会", s:"todo" }],
+  "11-18": [{ t:"客户对账差异澄清会（长任务截断演示：纪要同步全员并归档）", s:"todo" }],
+};
+const TODAY_D = 14;
+const WD = (d) => (new Date(2026, 10, d).getDay() + 6) % 7; // 0=周一
+
+function renderMonth(containerId, variant, markTodaySel) {
+  const host = document.getElementById(containerId);
+  const lead = (new Date(2026, 10, 1).getDay() + 6) % 6; // 占位，下方重算
+  const lead2 = (new Date(2026, 10, 1).getDay() + 6) % 7; // 11-01 周日 → lead 6
+  void lead;
+  const days = 30;
+  const cells = [];
+  for (let d = 26; d <= 31; d++) cells.push({ d, dim: true, mp: "10-" });
+  for (let d = 1; d <= days; d++) cells.push({ d, dim: false, mp: "11-" });
+  let n = 1;
+  while (cells.length < 42) cells.push({ d: n++, dim: true, mp: "12-" });
+
+  let html = '<div class="monthblock"><div class="monthtitle">2026年11月</div>';
+  html += '<div class="week"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span class="wk">六</span><span class="wk">日</span></div>';
+  html += '<div class="grid">';
+  cells.forEach((c, i) => {
+    const key = c.mp + String(c.d).padStart(2, "0");
+    const raw = LUNAR[key] || "";
+    const [text, tag] = raw.split("~");
+    const isToday = !c.dim && c.d === TODAY_D;
+    const isSel = !!(markTodaySel && isToday);
+    const cls = [
+      "cell",
+      variant !== "base" && isToday ? "tp-" + variant : "",
+      isToday ? "is-today" : "",
+      isSel ? "is-sel" : "",
+      c.dim ? "dim" : "",
+      i % 7 >= 5 ? "wkend" : "",
+    ].filter(Boolean).join(" ");
+    const subCls = { fest: "fest", term: "term", solarfest: "solarfest" }[tag] || "plain";
+    const numCls = "dnum" + (isToday && (variant === "base" || variant === "a" || variant === "c") ? " is-today" : "");
+    const list = NOTES[key] || [];
+    const logs = list.slice(0, 2).map((e) =>
+      `<div class="log${e.s === "done" ? " done" : ""}"><i class="bar ${e.s}"></i><span class="t">${e.t}</span></div>`
+    ).join("");
+    const badge = variant === "c" && isToday ? `<span class="todaybadge">今</span>` : "";
+    html += `<div class="${cls}">
+      <div class="crow">
+        <span class="${numCls}">${c.d}</span>
+        ${badge}
+        <span class="sub ${subCls}">${c.dim ? "" : text}</span>
+      </div>
+      ${logs}
+    </div>`;
+  });
+  html += "</div></div>";
+  host.innerHTML = html;
+}
+
+renderMonth("m-base", "base", false);
+renderMonth("m-a", "a", false);
+renderMonth("m-b", "b", false);
+renderMonth("m-c", "c", false);
+renderMonth("m-sel", "a", true);
+
+document.getElementById("themeBtn").onclick = () => document.documentElement.classList.toggle("dark");
+</script>
+</body>
+</html>

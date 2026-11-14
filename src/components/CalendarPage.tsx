@@ -499,23 +499,34 @@ export function CalendarPage() {
     [addEntry, mutate, t],
   );
 
-  /** 智能跳转（跳转面板/快捷调用）：目标月已在窗内直接落位；否则重置窗口、
-   *  经 pendingScroll 在布局效应中落位 */
+  /** 智能跳转（跳转面板/快捷调用）：目标月在窗且两侧余量足够（头 ≥2 / 尾 ≥3
+   *  块，扩窗触发阈值之外）时直接落位；否则重置窗口为目标月 ±3 居中，
+   *  经 pendingScroll 在布局效应中统一落位——避免落位后生长补偿打架 */
   const jumpTo = useCallback(
     (yy: number, mm: number) => {
       setView("month");
       setY(yy);
       setM(mm);
+      const arr = monthsRef.current;
+      const idx = arr.findIndex(([a, b]) => a === yy && b === mm);
+      const key = `${yy}-${mm}`;
       const el = scrollRef.current;
-      const block = el?.querySelector(`[data-month="${yy}-${mm}"]`) as HTMLElement | null;
-      if (el && block) {
-        el.scrollTop = block.offsetTop - 6;
+      if (idx >= 2 && arr.length - idx >= 3 && el) {
+        pendingScrollRef.current = key;
+        const block = el.querySelector(`[data-month="${key}"]`) as HTMLElement | null;
+        if (block) el.scrollTop = block.offsetTop - 6;
       } else {
-        ensureMonth(yy, mm);
-        pendingScrollRef.current = `${yy}-${mm}`;
+        const arr2: Array<[number, number]> = [];
+        const base = new Date(yy, mm - 4, 1);
+        for (let i = 0; i < 7; i++) {
+          const dt = new Date(base.getFullYear(), base.getMonth() + i, 1);
+          arr2.push([dt.getFullYear(), dt.getMonth() + 1]);
+        }
+        pendingScrollRef.current = key;
+        setMonths(arr2);
       }
     },
-    [ensureMonth],
+    [],
   );
 
   // 跳转面板外点关闭
