@@ -6,7 +6,7 @@
 // 数据在 Rust 端 config/worklog.json（铁律 3：按月下发，前端不囤全量）。
 // 键盘：方向键移格 / Enter 新增 / T 今天 / PgUp PgDn 翻月 / Ctrl-C·V 跨日
 // 复制粘贴 / Delete 删除选中条目。
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Button, InputGroup } from "@blueprintjs/core";
 import {
   ArrowLeft,
@@ -90,6 +90,25 @@ export function CalendarPage() {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<WorklogHit[] | null>(null);
   const [dropKey, setDropKey] = useState<string | null>(null);
+  // 连续滚动式月视图（2026-11-14 用户定案）：月份窗口随滚动双向扩展，
+  // 页头年月为按钮（智能跳转面板：年份网格 + 12 月网格直达任意年月）
+  const [months, setMonths] = useState<Array<[number, number]>>(() => {
+    const arr: Array<[number, number]> = [];
+    const base = new Date(TODAY.getFullYear(), TODAY.getMonth() - 2, 1);
+    for (let i = 0; i < 5; i++) {
+      const dt = new Date(base.getFullYear(), base.getMonth() + i, 1);
+      arr.push([dt.getFullYear(), dt.getMonth() + 1]);
+    }
+    return arr;
+  });
+  const [jumpOpen, setJumpOpen] = useState(false);
+  const [jumpYear, setJumpYear] = useState(TODAY.getFullYear());
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const fetchedRef = useRef<Set<string>>(new Set());
+  const pendingScrollRef = useRef<string | null>(null);
+  const prevFirstRef = useRef<string | null>(null);
+  const headCutRef = useRef(0);
+  const growGuardRef = useRef(0);
   const dragRef = useRef<{ from: string; index: number } | null>(null);
   const dayClipboard = useRef<WorkEntry[] | null>(null);
   const worklogRef = useRef<Worklog>({});
@@ -97,6 +116,8 @@ export function CalendarPage() {
   const saveTimer = useRef<number | undefined>(undefined);
   const lastEntryRef = useRef<HTMLTextAreaElement | null>(null);
   worklogRef.current = worklog;
+  const monthsRef = useRef(months);
+  monthsRef.current = months;
 
   const statusLabel = useMemo(
     () => ({
@@ -118,41 +139,42 @@ export function CalendarPage() {
     }
   }, [t]);
 
-  // 翻月：先冲刷未落盘修改，再拉取数据并入本地态（年视图 = 全年 12 个月）
+  // 数据拉取：月视图 = 滚动窗口内逐月按需拉取（每 (年,月) 一次）；
+  // 年视图 = 全年 12 个月。窗口变化前先冲刷未落盘修改。
   useEffect(() => {
     flushAll();
-    if (view === "month") {
+    if (view !== "month") {
       let alive = true;
+      void Promise.all(
+        Array.from({ length: 12 }, (_, i) => api.worklogGetMonth(y, i + 1).catch(() => [])),
+      ).then((rows) => {
+        if (!alive) return;
+        setWorklog((prev) => {
+          const next = { ...prev };
+          for (const days of rows) for (const d of days) next[d.date] = d.entries;
+          return next;
+        });
+      });
+      return () => {
+        alive = false;
+      };
+    }
+    for (const [yy, mm] of months) {
+      const k = `${yy}-${mm}`;
+      if (fetchedRef.current.has(k)) continue;
+      fetchedRef.current.add(k);
       void api
-        .worklogGetMonth(y, m)
+        .worklogGetMonth(yy, mm)
         .then((days) => {
-          if (!alive) return;
           setWorklog((prev) => {
             const next = { ...prev };
             for (const d of days) next[d.date] = d.entries;
             return next;
           });
         })
-        .catch((e) => useUi.getState().toast(String(e), "error"));
-      return () => {
-        alive = false;
-      };
+        .catch(() => undefined);
     }
-    let alive = true;
-    void Promise.all(
-      Array.from({ length: 12 }, (_, i) => api.worklogGetMonth(y, i + 1).catch(() => [])),
-    ).then((months) => {
-      if (!alive) return;
-      setWorklog((prev) => {
-        const next = { ...prev };
-        for (const days of months) for (const d of days) next[d.date] = d.entries;
-        return next;
-      });
-    });
-    return () => {
-      alive = false;
-    };
-  }, [view, y, m, flushAll]);
+  }, [view, y, months, flushAll]);
 
   // 卸载兜底冲刷
   useEffect(() => () => flushAll(), [flushAll]);
@@ -205,53 +227,169 @@ export function CalendarPage() {
     [t],
   );
 
+  // ── 连续滚动窗口操作 ──
+  const MONTH_CAP = 15;
+  const prevYM = ([a, b]: [number, number]): [number, number] => (b === 1 ? [a - 1, 12] : [a, b - 1]);
+  const nextYM = ([a, b]: [number, number]): [number, number] => (b === 12 ? [a + 1, 1] : [a, b + 1]);
+
+  /** 确保月已入窗；未在窗时重置窗口并以目标月为中心、滚动静待落位 */
+  const ensureMonth = useCallback((yy: number, mm: number) => {
+    setMonths((prev) => {
+      if (prev.some(([a, b]) => a === yy && b === mm)) return prev;
+      const arr: Array<[number, number]> = [];
+      const base = new Date(yy, mm - 3, 1);
+      for (let i = 0; i < 5; i++) {
+        const dt = new Date(base.getFullYear(), base.getMonth() + i, 1);
+        arr.push([dt.getFullYear(), dt.getMonth() + 1]);
+      }
+      pendingScrollRef.current = `${yy}-${mm}`;
+      return arr;
+    });
+  }, []);
+
+  /** 窗口向头部扩展 n 个月（超上限裁尾——尾部裁剪不影响头部滚动位置） */
+  const growHead = useCallback((n: number) => {
+    const arr = [...monthsRef.current];
+    for (let i = 0; i < n; i++) arr.unshift(prevYM(arr[0]));
+    while (arr.length > MONTH_CAP) arr.pop();
+    if (arr[0][0] !== monthsRef.current[0][0] || arr[0][1] !== monthsRef.current[0][1]) {
+      setMonths(arr);
+    }
+  }, []);
+
+  /** 窗口向尾部扩展 n 个月（超上限裁头——裁剪块数记账，布局效应补偿滚动位置） */
+  const growTail = useCallback((n: number) => {
+    const arr = [...monthsRef.current];
+    for (let i = 0; i < n; i++) arr.push(nextYM(arr[arr.length - 1]));
+    const cut = arr.length - MONTH_CAP;
+    if (cut > 0) {
+      arr.splice(0, cut);
+      headCutRef.current += cut;
+    }
+    setMonths(arr);
+  }, []);
+
+  /** 滚动：近两端扩窗 + 焦点月跟踪（视口中心所在月驱动页头标签） */
+  const onScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const now = Date.now();
+    if (now - growGuardRef.current > 120) {
+      if (el.scrollTop < el.clientHeight) {
+        growGuardRef.current = now;
+        growHead(2);
+      } else if (el.scrollHeight - el.scrollTop - el.clientHeight < el.clientHeight) {
+        growGuardRef.current = now;
+        growTail(2);
+      }
+    }
+    const center = el.scrollTop + el.clientHeight / 2;
+    for (const b of Array.from(el.querySelectorAll("[data-month]")) as HTMLElement[]) {
+      if (b.offsetTop <= center && center < b.offsetTop + b.offsetHeight) {
+        const [fy, fm] = (b.dataset.month ?? "").split("-").map(Number);
+        if (fy && fm && (fy !== y || fm !== m)) {
+          setY(fy);
+          setM(fm);
+        }
+        break;
+      }
+    }
+  }, [growHead, growTail, y, m]);
+
+  /** 窗口变化后的滚动锚定：跳转落位 / 头部 prepend 与裁剪补偿 */
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const [fy, fm] = months[0];
+    const firstKey = `${fy}-${fm}`;
+    if (!el) {
+      prevFirstRef.current = firstKey;
+      return;
+    }
+    const target = pendingScrollRef.current;
+    if (target) {
+      pendingScrollRef.current = null;
+      const block = el.querySelector(`[data-month="${target}"]`) as HTMLElement | null;
+      prevFirstRef.current = firstKey;
+      if (block) el.scrollTop = block.offsetTop - 6;
+      return;
+    }
+    if (prevFirstRef.current && prevFirstRef.current !== firstKey) {
+      const idx = months.findIndex(([a, b]) => `${a}-${b}` === prevFirstRef.current);
+      const h = (el.querySelector("[data-month]") as HTMLElement | null)?.offsetHeight ?? 0;
+      const blockH = h > 0 ? h + 8 : 0;
+      if (idx > 0) {
+        el.scrollTop += idx * blockH; // 头部 prepend：内容下移，滚动位置等量补偿
+      } else if (headCutRef.current > 0) {
+        el.scrollTop -= headCutRef.current * blockH; // 头部裁剪：内容上移
+        headCutRef.current = 0;
+      }
+    }
+    prevFirstRef.current = firstKey;
+  }, [months]);
+
+  // 选中日所在月块滚入视野（方向键 / 跳转 / 回到今天共用）。
+  // 依赖只挂 sel/view：窗口扩窗（months 变化）不得把滚动位置拽回选中月。
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || view !== "month") return;
+    const [sy, sm] = sel.split("-").map(Number);
+    const block = el.querySelector(`[data-month="${sy}-${sm}"]`) as HTMLElement | null;
+    if (!block) return;
+    if (
+      block.offsetTop < el.scrollTop ||
+      block.offsetTop + block.offsetHeight > el.scrollTop + el.clientHeight
+    ) {
+      el.scrollTop = block.offsetTop - 6;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sel, view]);
+
   const stepMonth = useCallback(
     (delta: number) => {
       if (view === "year") {
         setY((prev) => prev + delta);
         return;
       }
-      let nm = m + delta;
-      let ny = y;
-      if (nm < 1) {
-        nm = 12;
-        ny--;
-      } else if (nm > 12) {
-        nm = 1;
-        ny++;
-      }
+      const [ny, nm] = delta < 0 ? prevYM([y, m]) : nextYM([y, m]);
       setY(ny);
       setM(nm);
+      ensureMonth(ny, nm);
     },
-    [view, y, m],
+    [view, y, m, ensureMonth],
   );
 
-  const gotoOffset = useCallback((days: number) => {
-    setSel((prev) => {
-      const p = prev.split("-").map(Number);
-      const dt = new Date(p[0], p[1] - 1, p[2] + days);
-      const ny = dt.getFullYear();
-      const nm = dt.getMonth() + 1;
-      const nd = dt.getDate();
-      setY(ny);
-      setM(nm);
-      return dateKey(ny, nm, nd);
-    });
-  }, []);
+  const gotoOffset = useCallback(
+    (days: number) => {
+      setSel((prev) => {
+        const p = prev.split("-").map(Number);
+        const dt = new Date(p[0], p[1] - 1, p[2] + days);
+        const ny = dt.getFullYear();
+        const nm = dt.getMonth() + 1;
+        const nd = dt.getDate();
+        setY(ny);
+        setM(nm);
+        ensureMonth(ny, nm);
+        return dateKey(ny, nm, nd);
+      });
+    },
+    [ensureMonth],
+  );
 
   const gotoToday = useCallback(() => {
     setY(TODAY.getFullYear());
     setM(TODAY.getMonth() + 1);
+    ensureMonth(TODAY.getFullYear(), TODAY.getMonth() + 1);
     setSel(TODAY_KEY);
-  }, []);
+  }, [ensureMonth]);
 
   const jumpToDate = useCallback((key: string) => {
     const p = key.split("-").map(Number);
     setView("month");
     setY(p[0]);
     setM(p[1]);
+    ensureMonth(p[0], p[1]);
     setSel(key);
-  }, []);
+  }, [ensureMonth]);
 
   /** 新增一条（双击格子 / 悬停 ＋ / Enter），并聚焦其输入框 */
   const addEntry = useCallback(
@@ -361,6 +499,36 @@ export function CalendarPage() {
     [addEntry, mutate, t],
   );
 
+  /** 智能跳转（跳转面板/快捷调用）：目标月已在窗内直接落位；否则重置窗口、
+   *  经 pendingScroll 在布局效应中落位 */
+  const jumpTo = useCallback(
+    (yy: number, mm: number) => {
+      setView("month");
+      setY(yy);
+      setM(mm);
+      const el = scrollRef.current;
+      const block = el?.querySelector(`[data-month="${yy}-${mm}"]`) as HTMLElement | null;
+      if (el && block) {
+        el.scrollTop = block.offsetTop - 6;
+      } else {
+        ensureMonth(yy, mm);
+        pendingScrollRef.current = `${yy}-${mm}`;
+      }
+    },
+    [ensureMonth],
+  );
+
+  // 跳转面板外点关闭
+  useEffect(() => {
+    if (!jumpOpen) return;
+    const h = (e: PointerEvent) => {
+      const t = e.target as HTMLElement;
+      if (!t.closest(".np-cal-jump") && !t.closest(".np-cal-ym")) setJumpOpen(false);
+    };
+    document.addEventListener("pointerdown", h);
+    return () => document.removeEventListener("pointerdown", h);
+  }, [jumpOpen]);
+
   // 页内键盘（输入控件聚焦时让位：textarea 内 Enter 是换行、方向键是移光标）
   const onPageKeyDown = (e: React.KeyboardEvent) => {
     if (e.target instanceof HTMLElement && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
@@ -411,12 +579,11 @@ export function CalendarPage() {
     }
   };
 
-  const cells = monthMatrix(y, m);
   const selParts = sel.split("-").map(Number);
   const selDt = new Date(selParts[0], selParts[1] - 1, selParts[2]);
   const selEntries = worklog[sel] ?? [];
   const selOverdue = sel < TODAY_KEY;
-  const monthPrefix = `${y}-${String(m).padStart(2, "0")}`;
+  const monthPrefix = `${selParts[0]}-${String(selParts[1]).padStart(2, "0")}`;
   let monthDays = 0;
   let monthDone = 0;
   for (const [k, list] of Object.entries(worklog)) {
@@ -546,12 +713,70 @@ export function CalendarPage() {
             data-tip={view === "year" ? t("上一年") : t("上一月（PageUp）")}
             onClick={() => stepMonth(-1)}
           />
-          <span className="np-cal-ym">
+          <button
+            className="np-cal-ym"
+            data-tip={t("选择年月跳转")}
+            onClick={() => {
+              setJumpYear(y);
+              setJumpOpen((o) => !o);
+            }}
+          >
             {y}
             {t("年")}
             {view === "month" && m}
             {view === "month" && t("月")}
-          </span>
+          </button>
+          {jumpOpen && view === "month" && (
+            <div className="np-cal-jump" onClick={(e) => e.stopPropagation()}>
+              <div className="np-cal-jumprow">
+                <Button minimal size="small" icon={ic(ChevronLeft)} aria-label={t("上一年")} onClick={() => setJumpYear((v) => v - 1)} />
+                <span className="np-cal-explabel">
+                  {jumpYear}
+                  {t("年")}
+                </span>
+                <Button minimal size="small" icon={ic(ChevronRight)} aria-label={t("下一年")} onClick={() => setJumpYear((v) => v + 1)} />
+                <Button
+                  minimal
+                  size="small"
+                  className="np-cal-todaybtn"
+                  data-tip={t("回到今天所在月份")}
+                  onClick={() => {
+                    jumpTo(TODAY.getFullYear(), TODAY.getMonth() + 1);
+                    setSel(TODAY_KEY);
+                    setJumpOpen(false);
+                  }}
+                >
+                  {t("今天")}
+                </Button>
+              </div>
+              <div className="np-cal-jumpgrid">
+                {Array.from({ length: 9 }, (_, i) => jumpYear - 4 + i).map((yy) => (
+                  <button
+                    key={yy}
+                    className={"np-cal-jumpcell" + (yy === jumpYear ? " is-cur" : "")}
+                    onClick={() => setJumpYear(yy)}
+                  >
+                    {yy}
+                  </button>
+                ))}
+              </div>
+              <div className="np-cal-jumpgrid is-months">
+                {Array.from({ length: 12 }, (_, i) => i + 1).map((mm) => (
+                  <button
+                    key={mm}
+                    className={"np-cal-jumpcell" + (jumpYear === y && mm === m ? " is-cur" : "")}
+                    onClick={() => {
+                      jumpTo(jumpYear, mm);
+                      setJumpOpen(false);
+                    }}
+                  >
+                    {mm}
+                    {t("月")}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <Button
             minimal
             size="small"
@@ -610,14 +835,22 @@ export function CalendarPage() {
             </div>
           ) : (
             <>
-              <div className="np-cal-card">
-                <div className="np-cal-week">
+              <div className="np-cal-scroll" ref={scrollRef} onScroll={onScroll}>
+                {months.map(([my, mm]) => (
+                  <div className="np-cal-monthblock" data-month={`${my}-${mm}`} key={`${my}-${mm}`}>
+                    <div className="np-cal-monthtitle">
+                      {my}
+                      {t("年")}
+                      {mm}
+                      {t("月")}
+                    </div>
+                    <div className="np-cal-week">
                   {["一", "二", "三", "四", "五", "六", "日"].map((w) => (
                     <span key={w}>{w}</span>
                   ))}
                 </div>
                 <div className="np-cal-grid">
-                  {cells.map((cell, i) => {
+                  {monthMatrix(my, mm).map((cell, i) => {
                     const { ry, rm, rd, key } = realDate(cell);
                     const hol = holidayOf(ry, rm, rd);
                     const sub = lunarSubtitle(ry, rm, rd);
@@ -758,6 +991,8 @@ export function CalendarPage() {
                     );
                   })}
                 </div>
+                  </div>
+                ))}
               </div>
 
               <aside className="np-cal-detail">

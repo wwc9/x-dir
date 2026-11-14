@@ -1792,6 +1792,8 @@ export const EN: Record<string, string> = {
   "导出 Markdown": "Export Markdown",
   "已导出 {f}": "Exported {f}",
   "方向键移格 · Enter 新增 · T 今天 · Ctrl-C/V 跨日复制 · 拖拽条目改期": "Arrows move day · Enter add · T today · Ctrl-C/V copy across days · drag entries to reschedule",
+  "选择年月跳转": "Pick year & month to jump",
+  "回到今天所在月份": "Jump to the month containing today",
   "搜索工作记录（拼音首字母亦可）": "Search work entries (pinyin initials work too)",
   "无匹配结果": "No matches",
   "上一年": "Previous year",

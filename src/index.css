@@ -8066,3 +8066,95 @@ button.np-cal-hday:hover {
   color: var(--np-accent);
   font-weight: 600;
 }
+
+/* ── 工作日历连续滚动布局（2026-11-14 用户定案）：月块纵向无限流 +
+     页头年月智能跳转面板；月块等高（栅格固定行高）是滚动补偿的前提 ── */
+.np-cal-nav {
+  position: relative;
+}
+.np-cal-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.np-cal-monthblock {
+  flex: 0 0 auto;
+  background: var(--np-surface);
+  border: 1px solid var(--np-hairline);
+  border-radius: var(--np-radius-pane);
+  /* 不能 overflow:hidden——会破坏月份标题的 sticky 吸顶 */
+}
+.np-cal-monthtitle {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 5px 12px;
+  font-size: var(--np-font-ui);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--np-surface) 90%, transparent);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--np-hairline);
+}
+.np-cal-monthblock .np-cal-grid {
+  grid-auto-rows: 84px;
+}
+button.np-cal-ym {
+  border: 0;
+  background: transparent;
+  color: var(--np-fg);
+  cursor: pointer;
+}
+button.np-cal-ym:hover {
+  background: var(--np-hover);
+}
+.np-cal-jump {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 40;
+  width: 250px;
+  padding: 10px;
+  background: var(--np-surface);
+  border: 1px solid var(--np-hairline);
+  border-radius: var(--np-radius-lg);
+  box-shadow: var(--np-shadow);
+}
+.np-cal-jumprow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.np-cal-jumprow .np-cal-todaybtn {
+  margin-left: auto;
+}
+.np-cal-jumpgrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.np-cal-jumpgrid.is-months {
+  grid-template-columns: repeat(4, 1fr);
+}
+.np-cal-jumpcell {
+  height: 26px;
+  border: 0;
+  border-radius: var(--np-radius);
+  background: transparent;
+  color: var(--np-fg);
+  font: inherit;
+  font-size: var(--np-font-sm);
+  cursor: pointer;
+}
+.np-cal-jumpcell:hover {
+  background: var(--np-hover);
+}
+.np-cal-jumpcell.is-cur {
+  background: var(--np-sel);
+  color: var(--np-accent);
+  font-weight: 600;
+}
