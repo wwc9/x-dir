@@ -81,10 +81,11 @@ export function AboutDialog() {
         setInPlace(null);
         return;
       }
-      // 看门狗（2026-11-12 用户反馈「更新后未自动重开、无提示」）：NSIS /R 自启
-      // 兜底——下载前先拉起分离进程，等安装器退出后确保新版重启（/R 成功时检测
-      // 到实例即静默退出绝不多开）；重启后的「已更新到」回执由 app-updated 事件
-      // （Rust 启动版本比对，App.tsx 监听）承担。失败静默——仅兜底，不阻断更新
+      // 看门狗（2026-11-12 引入兜底；2026-11-15 installer.nsi 修正后正常路径 =
+      // NSIS .onInstSuccess /R 自启，看门狗只兜 /R 也失败的底）：下载前先拉起
+      // 分离进程，等安装器退出后确保新版重启（检测到实例即静默退出绝不多开），
+      // 全程写 config/update-watchdog.log；重启后的「已更新到」回执由 app-updated
+      // 事件（Rust 启动版本比对，App.tsx 监听）承担。失败静默——仅兜底，不阻断更新
       void api.spawnUpdateWatchdog(update.version).catch(() => undefined);
       let total = 0;
       let got = 0;

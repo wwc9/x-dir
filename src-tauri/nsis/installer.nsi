@@ -535,16 +535,32 @@ Function .onInit
     !insertmacro MULTIUSER_INIT
   !endif
 
-  ; 升级静默直通（2026-11-11 定案，本模板第二处改动）：交互双击 + 检测到旧
-  ; 安装 → 自重启为静默模式零界面覆盖安装（运行中的旧版经 RestartManager
-  ; 自动收尾），装完自动启动应用后本实例退出；静默实例（更新器调用）不再
-  ; 二次转派——启动由调用方负责（updater 路径 = 前端 relaunch）。
-  ; ${Silent} = LogicLib 特殊形式（运行时静默态）；勿写 $Silent（NSIS 无此
-  ; 内置变量，makensis warning 6000）
+  ; 升级静默直通（2026-11-11 定案，本模板第二处改动；2026-11-15 第二次修正）：
+  ; 交互双击 + 检测到旧安装 → 自重启为静默模式零界面覆盖安装（运行中的旧版经
+  ; RestartManager 自动收尾），装完自动启动应用后本实例退出。
+  ; 修正一（2026-11-15 排障「更新成功但未自动重开」根因一）：直通只许纯 GUI
+  ; 运行触发——updater 插件以 Passive 模式 /P /UPDATE /R /ARGS 调安装器，
+  ; 旧条件漏判 /P，把 /UPDATE /R /ARGS 全剥掉，装完既不 /R 自启、下方 Exec
+  ; 又因引号路径失败 → 更新成功但应用永不重开。现排除 Passive（$PassiveMode）
+  ; 与 /UPDATE（$UpdateMode），静默（${Silent} = LogicLib 特殊形式，勿写
+  ; $Silent——NSIS 无此内置变量，makensis warning 6000）本就不进。
+  ; 修正二：注册表 InstallLocation 为 ARP 兼容带引号写入（Section 末尾
+  ; WriteRegStr "$\"$INSTDIR$\""），读回含引号直接拼路径 = 不存在的路径，
+  ; Exec 永远跳过（旧版直通的自启从未真正生效）；启动前剥引号。
   ${IfNot} ${Silent}
+  ${AndIf} $PassiveMode != 1
+  ${AndIf} $UpdateMode != 1
     ReadRegStr $0 SHCTX "${UNINSTKEY}" "UninstallString"
     ${If} $0 != ""
       ReadRegStr $1 SHCTX "${UNINSTKEY}" "InstallLocation"
+      StrCpy $2 $1 1
+      ${If} $2 == '"'
+        StrLen $2 $1
+        IntOp $2 $2 - 2
+        ${If} $2 > 0
+          StrCpy $1 $1 $2 1
+        ${EndIf}
+      ${EndIf}
       ExecWait '"$EXEPATH" /S'
       ${If} ${FileExists} "$1\${MAINBINARYNAME}.exe"
         Exec '"$1\${MAINBINARYNAME}.exe"'

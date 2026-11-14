@@ -114,5 +114,9 @@ powershell -ExecutionPolicy Bypass -Command "$env:GITHUB_TOKEN=[Environment]::Ge
 | PS5.1 `Get-Content -Raw` 污染 JSON | 返回值带 PSPath 等注解属性被 `ConvertTo-Json` 序列化 → GitHub 422；必须 `[IO.File]::ReadAllText` |
 | PS5.1 读中文文件 | 一律 `-Encoding UTF8`；写 curl 直读的临时文件用无 BOM UTF-8（BOM 令 updater JSON 解析失败） |
 | updater notes 类型 | latest.json 的 `notes` 必须是字符串（数组会 `invalid type: sequence` 检查即败） |
+| 更新后应用不自动重开（2026-11-15 实战排障 v0.1.9→v0.2.0） | 三因叠加：① updater 插件 Windows 安装 = 拉起安装器后 `std::process::exit(0)`，前端 `relaunch()` 永远执行不到，重启只认 NSIS 模板 `.onInstSuccess` 的 `/R`；② vendor 模板的「双击静默直通」只判 `${Silent}`，把插件 Passive 调用（`/P /UPDATE /R /ARGS`）的 `/R` 剥没了——直通条件必须加 `$PassiveMode != 1`、`$UpdateMode != 1`；③ 看门狗按 build 产物名找安装器进程，而插件落盘临时名 = `X-Dir-{版本}-installer.exe`，口径不符从未命中——通配匹配 + 全程写 `config/update-watchdog.log`（修复回归：`tools/update-selftest.ps1` 全链路自测） |
+| NSIS 直通的自启 Exec 失败 | 注册表 `InstallLocation` 是 ARP 兼容的**带引号写入**，读回直接拼路径 = 不存在的路径；启动前剥引号 |
+| updater 端点必须 https | 插件默认拒绝 http 端点——`PluginInitialization("updater", "...must use a secure protocol")`，**应用启动即崩（0xC0000409，无任何日志）**；本地自测的 127.0.0.1 端点须在测试构建的 `--config` 覆盖里加 `dangerousInsecureTransportProtocol: true`（见 tools/update-selftest.ps1），生产恒 https 不受影响 |
+| PS5.1 跑含中文的 .ps1 工具脚本 | 必须存成 **UTF-8 with BOM**（无 BOM 被按 GBK 解析，中文吃掉闭合引号 → 满屏解析错误） |
 | exe 未签名 | Release 说明提醒 SmartScreen 弹「未知发布者」选「仍要运行」 |
 | 安装版与 dev 版同时运行 | 全局热键（截图/剪贴板）RegisterHotKey 先到先得——热键召唤的是**先启动实例**的浮窗（可能是旧版），表现与最新代码不符时先查是否双实例（`tasklist | findstr x-dir`），开发验证/冒烟前先退出另一实例 |

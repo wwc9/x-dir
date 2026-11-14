@@ -106,6 +106,9 @@ pub fn run() {
             // 静默更新完成感知（2026-11-12 用户反馈「更新后没有提示」）：
             // 启动对比上次运行版本，变化即发 app-updated（前端灵动岛回执「已更新到」）
             commands::update::check_app_updated(_app.handle());
+            // 一键更新全链路自测（--self-update-test 启动参数才触发，
+            // 常规启动零开销；tools/update-selftest.ps1 回归「更新后自动重开」）
+            commands::update::maybe_self_update_test(_app.handle());
             // 截图覆盖窗预热（§3.6 性能，2026-10-27）：常驻隐藏窗在启动
             // 2.5s 后后台建好、页面 idle 待命，热键按下只剩捕获+贴图，首按
             // 即达百毫秒级（PixPin 口径）。预热失败不致命，热键路径会现场补建
