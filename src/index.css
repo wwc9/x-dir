@@ -8109,7 +8109,10 @@ button.np-cal-hday:hover {
   position: sticky;
   top: 0;
   z-index: 5;
-  padding: 5px 12px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
   font-size: var(--np-font-ui);
   font-weight: 600;
   background: color-mix(in srgb, var(--np-surface) 90%, transparent);
@@ -8118,6 +8121,14 @@ button.np-cal-hday:hover {
 }
 .np-cal-monthblock .np-cal-grid {
   grid-auto-rows: 84px;
+}
+/* 星期行吸顶（2026-11-14 用户定案）：紧贴月份标题下方（top = 标题定高 28px），
+   不透明 surface 底盖住滚过的格子；z 低于标题（衔接处标题压边） */
+.np-cal-monthblock .np-cal-week {
+  position: sticky;
+  top: 28px;
+  z-index: 4;
+  background: var(--np-surface);
 }
 button.np-cal-ym {
   border: 0;
