@@ -3,7 +3,7 @@
 // 原生保存框导出 Markdown（任务清单语法，构建与统计在 lib/calendar.ts 纯函数）。
 // 范围数据按需拉取：选中的月份跨度逐月 worklog_get_month 后在本地聚合。
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, DialogFooter } from "@blueprintjs/core";
+import { Button, DialogBody, DialogFooter } from "@blueprintjs/core";
 
 import { useT } from "../lib/i18n";
 import { useUi } from "../stores/ui";
@@ -209,7 +209,8 @@ export function WorklogExportDialog({ onDone }: { onDone: () => void }) {
 
   return (
     <>
-      <div className="np-bren-form is-cols np-cal-expform">
+      <DialogBody>
+      <div className="np-bren-form is-cols">
         <div className="np-bren-field">
           <span className="np-bren-k">{t("范围")}</span>
           <Seg<Mode>
@@ -222,7 +223,8 @@ export function WorklogExportDialog({ onDone }: { onDone: () => void }) {
             onChange={(v) => setMode(v)}
           />
         </div>
-        <div className="frow"><span className="k">{t("格式")}</span>
+        <div className="np-bren-field">
+          <span className="np-bren-k">{t("格式")}</span>
           <Seg<"md" | "xlsx">
             value={fmt}
             options={[
@@ -323,6 +325,7 @@ export function WorklogExportDialog({ onDone }: { onDone: () => void }) {
       <div className="np-dialog-error" hidden={valid}>
         {t("起止日期无效或倒置（格式 yyyy-MM-dd）")}
       </div>
+      </DialogBody>
       <DialogFooter
         actions={
           <>

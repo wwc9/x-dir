@@ -3,7 +3,7 @@
 // 模板生成式：保存即往后生成 90 天实例（gen 溯源防重，实例独立可改可删，
 // 删掉的不再重生）。新增与编辑（templateId）共用本对话框。
 import { useMemo, useState } from "react";
-import { Button, DialogFooter, InputGroup, Switch } from "@blueprintjs/core";
+import { Button, DialogBody, DialogFooter, InputGroup, Switch } from "@blueprintjs/core";
 
 import { useT } from "../lib/i18n";
 import { useUi } from "../stores/ui";
@@ -155,7 +155,8 @@ export function RecurrenceEditDialog({
 
   return (
     <>
-      <div className="np-bren-form is-cols np-cal-expform">
+      <DialogBody>
+        <div className="np-bren-form is-cols">
         <div className="np-bren-field np-wide">
           <span className="np-bren-k">{t("内容")}</span>
           <span className="np-filext">
@@ -283,9 +284,10 @@ export function RecurrenceEditDialog({
           )}
         </span>
       </div>
-      <div className="np-dialog-error" hidden={!!text.trim()}>
-        {t("请填写任务内容")}
-      </div>
+        <div className="np-dialog-error" hidden={!!text.trim()}>
+          {t("请填写任务内容")}
+        </div>
+      </DialogBody>
       <DialogFooter
         actions={
           <>
