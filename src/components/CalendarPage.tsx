@@ -108,7 +108,6 @@ export function CalendarPage() {
   const pendingScrollRef = useRef<string | null>(null);
   const pendingCellRef = useRef<string | null>(null);
   const prevFirstRef = useRef<string | null>(null);
-  const lastMonthRef = useRef<string | null>(null);
   const headCutRef = useRef(0);
   const growGuardRef = useRef(0);
   const dragRef = useRef<{ from: string; index: number } | null>(null);
@@ -312,7 +311,7 @@ export function CalendarPage() {
       pendingScrollRef.current = null;
       const block = el.querySelector(`[data-month="${target}"]`) as HTMLElement | null;
       prevFirstRef.current = firstKey;
-      if (block) el.scrollTop = block.offsetTop - 6;
+      if (block) el.scrollTop += block.getBoundingClientRect().top - el.getBoundingClientRect().top - 6;
       if (pendingCellRef.current) {
         const k = pendingCellRef.current;
         pendingCellRef.current = null;
@@ -339,19 +338,28 @@ export function CalendarPage() {
     prevFirstRef.current = firstKey;
   }, [months]);
 
-  // 跨月移动（方向键越过月界 / 搜索跳转）落位新月块顶部；同月内移动不拽视图。
-  // 依赖只挂 sel/view：窗口扩窗（months 变化）不得把滚动位置拽回选中月。
+  /** 格子级滚入视野：已完整可见（8px 内边距）则不动；不可见才居中滚入。
+   *  返回 false = 格子不在 DOM（窗口重置中，由 pendingCell 机制兜底） */
+  const centerDayCell = useCallback((key: string): boolean => {
+    const el = scrollRef.current;
+    if (!el) return false;
+    const cell = el.querySelector(`[data-cal-key="${key}"]`) as HTMLElement | null;
+    if (!cell) return false;
+    const cr = cell.getBoundingClientRect();
+    const er = el.getBoundingClientRect();
+    if (cr.top >= er.top + 8 && cr.bottom <= er.bottom - 8) return true;
+    el.scrollTop += cr.top - er.top - (er.height - cr.height) / 2;
+    return true;
+  }, []);
+
+  // 选中日格子滚入视野（方向键越过月界 / 翻月 / 窗口重置共用）：
+  // 格子已完整可见则不动（2026-11-14 用户反馈：点击日历底部的格子不得自动跳转置顶）；
+  // 不可见才居中滚入。依赖只挂 sel/view：窗口扩窗（months 变化）不触发重判。
   useEffect(() => {
     if (view !== "month") return;
-    const [sy, sm] = sel.split("-").map(Number);
-    const mk = `${sy}-${sm}`;
-    if (lastMonthRef.current === mk) return;
-    lastMonthRef.current = mk;
-    const el = scrollRef.current;
-    const block = el?.querySelector(`[data-month="${mk}"]`) as HTMLElement | null;
-    if (el && block) el.scrollTop = block.offsetTop - 6;
+    centerDayCell(sel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sel, view]);
+  }, [sel, view, centerDayCell]);
 
   const stepMonth = useCallback(
     (delta: number) => {
@@ -363,12 +371,6 @@ export function CalendarPage() {
       setY(ny);
       setM(nm);
       ensureMonth(ny, nm);
-      const el = scrollRef.current;
-      const block = el?.querySelector(`[data-month="${ny}-${nm}"]`) as HTMLElement | null;
-      if (el && block) {
-        el.scrollTop = block.offsetTop - 6;
-        lastMonthRef.current = `${ny}-${nm}`;
-      }
     },
     [view, y, m, ensureMonth],
   );
@@ -401,10 +403,7 @@ export function CalendarPage() {
     // 直接落位月块顶部；月未在窗时 ensureMonth 已挂 pendingScroll 由布局效应落位
     const el = scrollRef.current;
     const block = el?.querySelector(`[data-month="${ty}-${tm}"]`) as HTMLElement | null;
-    if (el && block) {
-      el.scrollTop = block.offsetTop - 6;
-      lastMonthRef.current = `${ty}-${tm}`;
-    }
+    if (el && block) el.scrollTop += block.getBoundingClientRect().top - el.getBoundingClientRect().top - 6;
   }, [ensureMonth]);
 
   const jumpToDate = useCallback((key: string) => {
@@ -539,7 +538,7 @@ export function CalendarPage() {
       if (idx >= 2 && arr.length - idx >= 3 && el) {
         pendingScrollRef.current = key;
         const block = el.querySelector(`[data-month="${key}"]`) as HTMLElement | null;
-        if (block) el.scrollTop = block.offsetTop - 6;
+        if (block) el.scrollTop += block.getBoundingClientRect().top - el.getBoundingClientRect().top - 6;
       } else {
         const arr2: Array<[number, number]> = [];
         const base = new Date(yy, mm - 4, 1);
