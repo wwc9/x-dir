@@ -872,6 +872,7 @@ export function CalendarPage() {
                       "np-cal-cell",
                       cell.inMonth ? "" : "is-dim",
                       key === sel ? "is-sel" : "",
+                      key === TODAY_KEY ? "is-today" : "",
                       wkend ? "is-wkend" : "",
                       dropKey === key ? "is-drop" : "",
                     ]

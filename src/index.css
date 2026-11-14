@@ -7518,6 +7518,23 @@ body.np-col-resizing * {
   background: var(--np-sel);
   box-shadow: inset 0 0 0 1px var(--np-accent);
 }
+/* 今天格子（2026-11-14 用户定案 = 方案 A「描边高亮」，design/calendar-today-proposal.html）：
+   整格 2px accent 描边 + 6% 底染（日期实心圆保留）——与「激活卡片描边」语言同源；
+   与选中态叠加时描边保持 2px、底染加深一档（today 规则在 sel 之后声明即胜出） */
+.np-cal-cell.is-today {
+  box-shadow: inset 0 0 0 2px var(--np-accent);
+  background: color-mix(in srgb, var(--np-accent) 6%, var(--np-surface));
+}
+.np-cal-cell.is-today:hover {
+  background: color-mix(in srgb, var(--np-accent) 9%, var(--np-surface));
+}
+.np-cal-cell.is-today.is-sel {
+  background: color-mix(in srgb, var(--np-accent) 10%, var(--np-surface));
+}
+.np-cal-cell.is-wkend .np-cal-dnum.is-today {
+  background: var(--np-accent);
+  color: var(--np-accent-fg);
+}
 .np-cal-crow {
   display: flex;
   align-items: center;
