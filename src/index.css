@@ -8207,3 +8207,95 @@ button.np-cal-ym:hover {
     0 0 0 2px var(--np-surface),
     0 0 0 3.5px var(--np-accent);
 }
+
+/* ── 工作日历更新界面改造（2026-11-14 用户定案 方案 B 时间线 + 方案 A 按钮分区）── */
+.np-cal-updhead {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gap);
+}
+.np-about-ver-badge {
+  padding: 2px 10px;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-accent);
+  color: var(--np-accent-fg);
+  font-size: var(--np-font-ui);
+  font-weight: 600;
+}
+.np-about-ver-date {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-cal-updmeta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-cal-updtimeline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-left: 2px solid var(--np-hairline);
+  margin-left: 6px;
+  padding-left: 16px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.np-cal-updsec {
+  position: relative;
+}
+.np-cal-upddot {
+  position: absolute;
+  left: -21px;
+  top: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--np-radius-pill);
+}
+.np-cal-upddot.is-add { background: var(--np-success); }
+.np-cal-upddot.is-imp { background: var(--np-accent); }
+.np-cal-upddot.is-fix { background: var(--np-danger); }
+.np-cal-updsec-head {
+  font-weight: 600;
+  font-size: var(--np-font-sm);
+  margin-bottom: 4px;
+}
+.np-cal-updsec-items {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-cal-updsec-items b {
+  font-weight: 600;
+  color: var(--np-fg);
+}
+
+.np-cal-updsec-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-cal-upditem b,
+.np-cal-updsec-items b {
+  font-weight: 600;
+  color: var(--np-fg);
+}
+
+.np-cal-updsec-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-cal-upditem b,
+.np-cal-updsec-items b {
+  font-weight: 600;
+  color: var(--np-fg);
+}

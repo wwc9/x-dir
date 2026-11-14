@@ -222,38 +222,69 @@ export function AboutDialog() {
             )}
             {!busy && manifest && hasNew && (
               <div className="np-about-update">
-                <div className="np-about-update-title">
-                  {t("发现新版本")} v{manifest.version}
-                  {manifest.pubDate ? t("（{d} 发布）", { d: manifest.pubDate }) : ""}
+                {/* 方案 B「时间线式」notes + 方案 A「分区按钮」（2026-11-14 用户定案） */}
+                <div className="np-cal-updhead">
+                  <span className="np-about-ver-badge">v{manifest.version}</span>
+                  {manifest.pubDate && (
+                    <span className="np-about-ver-date">{manifest.pubDate}</span>
+                  )}
                 </div>
                 {(() => {
-                  // 分类分节（2026-11-12 用户定案「面板与 Release 描述一致」）：
-                  // notes 前缀标签分组 → ✨新增/⚡改进/🐛修复 三段，与发行说明同构；
-                  // 条目「——」前短标题加粗对应 Release 加粗口径
                   const secs = groupNotes(manifest.notes);
                   if (!secs.length) return null;
+                  const cntColor: Record<string, string> = {
+                    "✨ 新增": "var(--np-success)",
+                    "⚡ 改进": "var(--np-accent)",
+                    "🐛 修复": "var(--np-danger)",
+                  };
                   return (
-                    <div className="np-about-notes">
+                    <div className="np-cal-updmeta">
                       {secs.map((sec) => (
-                        <div key={sec.title} className="np-about-note-sec">
-                          <div className="np-about-note-head">{t(sec.title)}</div>
-                          <ul>
-                            {sec.items.map((n, i) => {
-                              const dash = n.indexOf("——");
-                              return (
-                                <li key={i}>
-                                  {dash > 0 ? (
-                                    <>
-                                      <span className="np-about-note-t">{n.slice(0, dash)}</span>
-                                      {n.slice(dash)}
-                                    </>
-                                  ) : (
-                                    n
-                                  )}
-                                </li>
-                              );
-                            })}
-                          </ul>
+                        <span key={sec.title} style={{ color: cntColor[sec.title] ?? "var(--np-muted)" }}>
+                          ● {sec.items.length} {t(sec.title).replace(/^[^ ]+ /, "")}
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })()}
+                {(() => {
+                  const secs = groupNotes(manifest.notes);
+                  if (!secs.length) return null;
+                  const secColor: Record<string, string> = {
+                    "✨ 新增": "var(--np-success)",
+                    "⚡ 改进": "var(--np-accent)",
+                    "🐛 修复": "var(--np-danger)",
+                  };
+                  return (
+                    <div className="np-cal-updtimeline">
+                      {secs.map((sec) => (
+                        <div key={sec.title} className="np-cal-updsec">
+                          <span
+                            className="np-cal-upddot"
+                            style={{ background: secColor[sec.title] ?? "var(--np-muted)" }}
+                          />
+                          <div className="np-cal-updsec-body">
+                            <div className="np-cal-updsec-head" style={{ color: secColor[sec.title] ?? "var(--np-fg)" }}>
+                              {t(sec.title)}
+                            </div>
+                            <div className="np-cal-updsec-items">
+                              {sec.items.map((n, i) => {
+                                const dash = n.indexOf("——");
+                                return (
+                                  <div key={i} className="np-cal-upditem">
+                                    {dash > 0 ? (
+                                      <>
+                                        <b>{n.slice(0, dash)}</b>
+                                        {n.slice(dash)}
+                                      </>
+                                    ) : (
+                                      n
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -278,20 +309,22 @@ export function AboutDialog() {
                           : t("正在检查…")
                       : t("一键更新（自动安装）")}
                   </Button>
-                  <Button
-                    size="small"
-                    icon={ic(Download)}
-                    onClick={() => void openUrl(RELEASE_URLS.gitee)}
-                  >
-                    {t("前往 Gitee 下载")}
-                  </Button>
-                  <Button
-                    size="small"
-                    icon={ic(Link2)}
-                    onClick={() => void openUrl(RELEASE_URLS.github)}
-                  >
-                    {t("前往 GitHub 下载")}
-                  </Button>
+                  <div style={{ display: "flex", gap: "var(--np-gap)" }}>
+                    <Button
+                      size="small"
+                      icon={ic(Download)}
+                      onClick={() => void openUrl(RELEASE_URLS.gitee)}
+                    >
+                      {t("Gitee 下载")}
+                    </Button>
+                    <Button
+                      size="small"
+                      icon={ic(Link2)}
+                      onClick={() => void openUrl(RELEASE_URLS.github)}
+                    >
+                      {t("GitHub 下载")}
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
