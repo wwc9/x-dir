@@ -98,7 +98,10 @@ export type DialogSpec =
   /** 工作日历导出（2026-11-13）：三档范围（月度/年度/自定义日期区间）导出工作 Markdown */
   | { type: "worklogExport" }
   /** 定期任务模板编辑（2026-11-13 增强批）：presetDay = 格子右键带入的日期（预填每月 D 号） */
-  | { type: "recurrenceEdit"; presetDay?: number; templateId?: string };
+  | { type: "recurrenceEdit"; presetDay?: number; templateId?: string }
+  /** 新建任务分类（2026-11-14 用户反馈）：条目卡/定期任务编辑的分类下拉即席创建，
+   *  保存后 resolveDialog(新分类 id) 回传给调用方直接选中 */
+  | { type: "categoryNew" };
 
 /** 提示弹窗语义级别：info=主操作、warn=警示、danger=不可逆/错误 */
 export type DialogKind = "info" | "warn" | "danger";

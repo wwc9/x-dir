@@ -8187,3 +8187,23 @@ button.np-cal-ym:hover {
   color: var(--np-accent);
   font-weight: 600;
 }
+
+/* 新建分类对话框：颜色点选择行（2026-11-14） */
+.np-cal-colordots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.np-cal-colordot {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--np-radius-pill);
+  cursor: pointer;
+}
+.np-cal-colordot.is-on {
+  box-shadow:
+    0 0 0 2px var(--np-surface),
+    0 0 0 3.5px var(--np-accent);
+}

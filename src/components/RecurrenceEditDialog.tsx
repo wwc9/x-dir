@@ -190,8 +190,20 @@ export function RecurrenceEditDialog({
             options={[
               { value: "", label: t("未分类") },
               ...categories.map((c) => ({ value: c.id, label: c.name })),
+              { value: "__new__", label: t("＋ 新建分类…") },
             ]}
-            onChange={(v) => setCategory(v)}
+            onChange={(v) => {
+              if (v === "__new__") {
+                void useUi
+                  .getState()
+                  .openDialog<string>({ type: "categoryNew" })
+                  .then((id) => {
+                    if (id) setCategory(id);
+                  });
+                return;
+              }
+              setCategory(v);
+            }}
           />
         </div>
         <div className="np-bren-field">

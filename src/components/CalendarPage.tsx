@@ -1200,8 +1200,21 @@ function EntryCard({
           options={[
             { value: "", label: t("未分类") },
             ...categories.map((c) => ({ value: c.id, label: c.name })),
+            { value: "__new__", label: t("＋ 新建分类…") },
           ]}
-          onChange={(v) => onChange({ ...entry, category: v || undefined })}
+          onChange={(v) => {
+            if (v === "__new__") {
+              // 即席创建：保存后 resolveDialog 回传新 id，直接选中
+              void useUi
+                .getState()
+                .openDialog<string>({ type: "categoryNew" })
+                .then((id) => {
+                  if (id) onChange({ ...entry, category: id });
+                });
+              return;
+            }
+            onChange({ ...entry, category: v || undefined });
+          }}
         />
       </div>
     </div>
