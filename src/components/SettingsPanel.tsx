@@ -854,6 +854,32 @@ export function SettingsPanel() {
           ))}
         {tab === "config" && (
           <>
+            <SetRow label={t("开机自启")} desc={t("登录 Windows 后自动启动 X-Dir（写入当前程序路径，移动程序后需重新开启一次）")}>
+              <Switch
+                checked={s.autostart}
+                onChange={async (e) => {
+                  const on = e.currentTarget.checked;
+                  s.update({ autostart: on });
+                  try {
+                    await api.autostartSet(on);
+                  } catch (err) {
+                    // 注册表写入失败（权限/杀软拦截）：回滚开关并提示
+                    s.update({ autostart: !on });
+                    useUi
+                      .getState()
+                      .toast(t("开机自启设置失败：{e}", { e: String(err) }), "error");
+                  }
+                }}
+              />
+            </SetRow>
+            <SetRow
+              label={t("打开配置保存位置")}
+              desc={t("settings.json、布局方案与工作日志所在的集中配置文件夹（在资源管理器中定位）")}
+            >
+              <Button minimal size="small" onClick={() => void onOpenConfigFolder()}>
+                {t("打开…")}
+              </Button>
+            </SetRow>
             <SetRow label={t("导出配置文件")} desc={t("打包设置与全部布局方案为单个 JSON")}>
               <Button minimal size="small" onClick={() => void onExportConfig()}>
                 {t("导出…")}
@@ -908,6 +934,16 @@ async function onCliphistImport() {
   }
 }
 
+/** 在资源管理器中定位集中配置文件夹（2026-11-15）：Rust 侧 opener reveal settings.json */
+async function onOpenConfigFolder() {
+  try {
+    await api.openConfigFolder();
+    useUi.getState().toast(t("已在资源管理器中定位配置文件（settings.json）"));
+  } catch (e) {
+    useUi.getState().toast(t("打开失败：{e}", { e: String(e) }), "error");
+  }
+}
+
 /** 导出配置：原生保存对话框选路径 → Rust 打包 settings.json + 全部工作区 */
 async function onExportConfig() {
   const { save } = await import("@tauri-apps/plugin-dialog");
@@ -949,6 +985,10 @@ async function onImportConfig() {
     // 热重载：设置重读（主题/缩放/右键菜单即时生效），布局方案列表经事件刷新
     await useSettings.getState().load();
     window.dispatchEvent(new Event("xdir-workspaces-changed"));
+    // 开机自启重放（2026-11-15）：导入可能换档——注册表按新事实源拉齐
+    void api
+      .autostartSet(useSettings.getState().autostart)
+      .catch(() => undefined);
     useUi
       .getState()
       .toast(t("配置已导入（含 {n} 个布局方案）", { n: r.workspaces }));

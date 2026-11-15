@@ -78,6 +78,7 @@
 | xcap | Apache-2.0 | 截屏引擎（DXGI 失败回落） |
 | tauri-plugin-global-shortcut | MIT OR Apache-2.0 | 系统级截图热键 |
 | tauri-plugin-clipboard-manager | MIT OR Apache-2.0 | 位图剪贴板写入 |
+| tauri-plugin-autostart | MIT OR Apache-2.0 | 开机自启（Windows 写 HKCU Run 键；settings.json 为事实源，2026-11-15 引入） |
 | tauri-plugin-dialog | Apache-2.0 | 配置导出/导入与清单导出的原生保存对话框 |
 | webview2-com | MIT OR Apache-2.0 | 关闭 WebView2 浏览器加速键（快捷键由前端全权路由） |
 | clipboard-rs | MIT | 剪贴板变化监听信号源（Windows 内部走 AddClipboardFormatListener 真事件） |

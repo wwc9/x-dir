@@ -370,6 +370,9 @@ export interface Settings {
   defaultSort: Sort;
   confirmDelete: boolean;
   restoreLastSession: boolean;
+  /** 开机自启（2026-11-15）：单一事实源在 settings.json，注册表 Run 键为派生态
+   *  （Rust 启动回放 apply_autostart_pref；切换经 api.autostartSet 刷注册表） */
+  autostart: boolean;
   favorites: { name: string; path: string }[];
   /** 自定义右键命令模板（设置 → 右键菜单 → 命令模板；由菜单条目引用） */
   customCommands: CustomCommand[];
@@ -550,6 +553,8 @@ export const DEFAULT_SETTINGS: Settings = {
   confirmDelete: false,
   toolbarEntries: [],
   restoreLastSession: true,
+  // 开机自启默认关（2026-11-15）：自启属显式选择，不替用户决定
+  autostart: false,
   favorites: [],
   customCommands: [],
   // 出厂布局由 settings.load 的迁移填充（defaultMenuEntries，含旧命令条目化）
@@ -1033,6 +1038,10 @@ export const api = {
   /** 重命名布局方案（2026-11-11）：同名冲突拒绝（不静默覆盖），文档 name 字段同步改写 */
   renameWorkspace: (oldName: string, newName: string) =>
     cmd<void>("rename_workspace", { old: oldName, new: newName }),
+  /** 开机自启开关（2026-11-15）：刷注册表 Run 键（事实源 settings.json 由前端 update 落盘） */
+  autostartSet: (enabled: boolean) => cmd<void>("autostart_set", { enabled }),
+  /** 在资源管理器中定位集中配置文件（settings.json），返回其完整路径供回执 */
+  openConfigFolder: () => cmd<string>("open_config_folder"),
   /** 快速预览：按编码探测读文本（上限 8MB = 后端 TEXT_READ_CAP；maxBytes 为 u32 勿传更大值） */
   previewReadText: (path: string, maxBytes: number) =>
     cmd<PreviewTextResult>("preview_read_text", { path, maxBytes }),

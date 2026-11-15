@@ -567,6 +567,17 @@ export const EN: Record<string, string> = {
   "名称含非法字符或为 Windows 保留名": "Name contains invalid characters or is a reserved Windows name",
   "后缀": "Suffix",
   "启动时恢复上次会话": "Restore last session on startup",
+  "开机自启": "Launch at startup",
+  "登录 Windows 后自动启动 X-Dir（写入当前程序路径，移动程序后需重新开启一次）":
+    "Start X-Dir automatically after you sign in to Windows (uses the current install path; re-enable after moving the app)",
+  "开机自启设置失败：{e}": "Failed to set launch-at-startup: {e}",
+  "打开配置保存位置": "Open config folder",
+  "settings.json、布局方案与工作日志所在的集中配置文件夹（在资源管理器中定位）":
+    "The centralized config folder holding settings.json, layout schemes and the work log (located in File Explorer)",
+  "打开…": "Open…",
+  "已在资源管理器中定位配置文件（settings.json）":
+    "Located the config file in File Explorer (settings.json)",
+  "打开失败：{e}": "Open failed: {e}",
   "启用时机": "Activation",
   "启用菜单": "Enabled menu",
   "固定": "Pin",

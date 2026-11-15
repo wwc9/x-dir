@@ -112,6 +112,9 @@ tauri-plugin-clipboard-manager = "2"
 # 重启（均 Tauri 官方 MIT/Apache-2.0）
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+# 开机自启（2026-11-15）：注册表 HKCU Run 键写当前 exe 路径（Tauri 官方
+# MIT/Apache-2.0）；单一事实源 = settings.json autostart 字段，注册表为派生态
+tauri-plugin-autostart = "2"
 
 # 剪贴板历史（2026-10-30，§3.7）：clipboard-rs MIT 只作变化信号源（Windows
 # 内部走 AddClipboardFormatListener 真事件，macOS 轮询 changeCount），内容

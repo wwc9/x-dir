@@ -440,6 +440,8 @@
 - **导出** = 设置 →「配置」区：`export_config` 打包两者为单 JSON（version 字段供导入对齐）；**导入** = `import_config` 校验 app/version 后整体覆盖 settings.json 与 workspaces/*.json（前端热重载设置 + 事件刷新方案列表）；成功后广播 `config-imported` 事件——常驻剪贴板浮窗重读设置热同步主题/直接粘贴（浮窗是独立 WebView 不随主窗重载）。
 - **不随导出**：剪贴板历史 = config/clipboard.db（SQLite 单独存储）、全盘索引 = config/index/（可重建缓存）、update-state.json（运行态）。
 - **主窗 save_settings = 合并落盘并保留补丁键**：截图八键 + cliphistWinW/H 由轻量窗直写磁盘，主窗 store 启动后不重读——整对象覆盖会把它们回滚到启动旧值（settings 落盘另有 800ms 防抖 + pagehide 冲刷）。
+- **开机自启（2026-11-15）**：设置 →「配置」页开关，`autostart_set` 命令经 tauri-plugin-autostart（MIT/Apache-2.0）写 Windows HKCU Run 键。**单一事实源 = settings.json `autostart` 字段**（随导出迁移），注册表是派生态：每次启动 `apply_autostart_pref` 幂等回放（手动删键/清理工具漂移自动拉齐），导入配置后前端显式重放；开关写注册表失败回滚 UI 并 toast。
+- **打开配置保存位置（2026-11-15）**：设置 →「配置」页按钮，`open_config_folder` 命令 Rust 侧直调 opener 插件 `reveal_item_in_dir` 在资源管理器定位 settings.json（不经前端 JS 通道，无 ACL/权限面），返回路径供灵动岛回执。
 
 ### 12.7 工作日历
 

@@ -70,6 +70,12 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         // 自动重启（更新安装完成后 relaunch）
         .plugin(tauri_plugin_process::init())
+        // 开机自启（2026-11-15）：Windows 写 HKCU Run 键；偏好以 settings.json
+        // 为单一事实源（setup 内 apply_autostart_pref 回放），注册表为派生态
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         // 截图（§3.6）：全局热键 + 位图剪贴板（注册时机由前端设置驱动，
         // 见 commands/shot.rs 的 shot_register_hotkey）
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -109,6 +115,9 @@ pub fn run() {
             // 一键更新全链路自测（--self-update-test 启动参数才触发，
             // 常规启动零开销；tools/update-selftest.ps1 回归「更新后自动重开」）
             commands::update::maybe_self_update_test(_app.handle());
+            // 开机自启偏好回放（settings.json 单一事实源 → HKCU Run 键；
+            // 幂等，手动删键/清理工具的漂移在每次启动拉齐）
+            commands::config_cmds::apply_autostart_pref(_app.handle());
             // 截图覆盖窗预热（§3.6 性能，2026-10-27）：常驻隐藏窗在启动
             // 2.5s 后后台建好、页面 idle 待命，热键按下只剩捕获+贴图，首按
             // 即达百毫秒级（PixPin 口径）。预热失败不致命，热键路径会现场补建
@@ -292,6 +301,9 @@ pub fn run() {
             commands::config_cmds::rename_workspace,
             commands::config_cmds::export_config,
             commands::config_cmds::import_config,
+            // 开机自启开关 + 在资源管理器定位集中配置（设置 → 配置，2026-11-15）
+            commands::config_cmds::autostart_set,
+            commands::config_cmds::open_config_folder,
             commands::update::fetch_update_manifest,
             commands::update::spawn_update_watchdog,
             commands::terminal::open_terminal,

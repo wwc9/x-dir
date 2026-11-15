@@ -328,6 +328,75 @@ pub struct ImportSummary {
     pub imported_settings: bool,
 }
 
+/// 开机自启开关（2026-11-15）：单一事实源 = settings.json 的 autostart 字段
+/// （随「配置 → 导出/导入」迁移），注册表 HKCU Run 键是派生态——本命令只
+/// 负责把事实源当前值刷进注册表；启动与导入后由 apply_autostart_pref 回放
+#[tauri::command]
+pub fn autostart_set(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let m = app.autolaunch();
+    let r = if enabled { m.enable() } else { m.disable() };
+    r.map_err(|e| format!("开机自启写入失败：{e}"))
+}
+
+/// 读取 settings.json 的 autostart 偏好（纯函数，缺键/损坏回落 false）
+fn autostart_pref(root: &std::path::Path) -> bool {
+    std::fs::read_to_string(root.join("settings.json"))
+        .ok()
+        .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+        .and_then(|v| v.get("autostart").and_then(|x| x.as_bool()))
+        .unwrap_or(false)
+}
+
+/// 启动/导入配置后回放开机自启注册表（幂等：enable 覆写当前 exe 路径，
+/// disable 删不存在的键亦无害）——注册表可能被用户/清理工具手动删键，
+/// 每次启动按事实源拉齐一次
+pub fn apply_autostart_pref(app: &tauri::AppHandle) {
+    let on = autostart_pref(&config_root());
+    use tauri_plugin_autostart::ManagerExt;
+    let m = app.autolaunch();
+    let r = if on { m.enable() } else { m.disable() };
+    if let Err(e) = r {
+        log::warn!("开机自启偏好回放失败：{e}");
+    }
+}
+
+#[cfg(test)]
+mod autostart_tests {
+    use super::autostart_pref;
+
+    #[test]
+    fn autostart_pref_reads_bool_and_tolerates_missing_or_broken() {
+        let dir = std::env::temp_dir().join(format!("xdir_cfgtest_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // 缺文件 → false
+        assert!(!autostart_pref(&dir));
+        // 布尔正常读取
+        std::fs::write(
+            dir.join("settings.json"),
+            r#"{"autostart":true,"theme":"dark"}"#,
+        )
+        .unwrap();
+        assert!(autostart_pref(&dir));
+        // 非布尔值/坏 JSON → false
+        std::fs::write(dir.join("settings.json"), r#"{"autostart":"yes"}"#).unwrap();
+        assert!(!autostart_pref(&dir));
+        std::fs::write(dir.join("settings.json"), "not json").unwrap();
+        assert!(!autostart_pref(&dir));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+/// 在资源管理器中定位集中配置文件（settings.json）：配置域的「打开位置」入口
+/// （设置 → 配置）。Rust 侧直调 opener 插件 API，不经前端 revealItemInDir
+/// 的 ACL/JS 通道；返回完整路径供前端回执
+#[tauri::command]
+pub fn open_config_folder() -> Result<String, String> {
+    let p = config_root().join("settings.json");
+    tauri_plugin_opener::reveal_item_in_dir(&p).map_err(|e| format!("打开失败：{e}"))?;
+    Ok(p.to_string_lossy().into_owned())
+}
+
 /// 原子写 JSON 文件：临时文件 + rename（与 export_config 同款）
 fn atomic_write_json(p: &std::path::Path, v: &Value) -> Result<(), String> {
     let s = serde_json::to_string_pretty(v).map_err(|e| e.to_string())?;

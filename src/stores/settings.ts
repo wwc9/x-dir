@@ -50,6 +50,7 @@ function toPlain(s: SettingsStore): Settings {  return {
     dialogPrefs: s.dialogPrefs,
     workspaceOrder: s.workspaceOrder,
     confirmDelete: s.confirmDelete,
+    autostart: s.autostart,
     toolbarEntries: s.toolbarEntries,
     restoreLastSession: s.restoreLastSession,
     favorites: s.favorites,
