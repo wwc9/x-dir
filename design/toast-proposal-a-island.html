@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>长提示展示 · 方案 A「岛内收缩 · 悬停展笺」</title>
+<!-- 设计稿（不参与构建）：灵动岛回执超长文案的展示方案 A。
+     思路 = 岛胶囊留在顶栏但宽度钳制（永不挤穿工具栏），悬停向下展开全文展笺
+     （锚定岛下方，与任务面板同锚点语义），倒计时悬停暂停。 -->
+<style>
+  :root {
+    --bg:#e9ecf1; --surface:#ffffff; --surface2:#f0f2f5; --border:#d6dbe2;
+    --hairline:rgba(16,24,40,.06); --fg:#171d26; --muted:#66707e;
+    --accent:#3574f0; --hover:rgba(26,33,41,.055);
+    --danger:#d1434b; --danger-soft:rgba(209,67,75,.12);
+    --success:#46a758; --shadow:0 12px 32px rgba(20,28,40,.14);
+    --r:6px; --pane:10px;
+  }
+  html.dark {
+    --bg:#161616; --surface:#2b2b2b; --surface2:#3a3a3a; --border:#454545;
+    --hairline:rgba(255,255,255,.08); --fg:#d4d4d4; --muted:#8f8f8f;
+    --accent:#5c9dff; --hover:rgba(255,255,255,.07);
+    --danger:#f27073; --danger-soft:rgba(242,112,115,.14);
+    --success:#46bf72; --shadow:0 16px 40px rgba(0,0,0,.5);
+  }
+  * { box-sizing:border-box; margin:0; }
+  body {
+    background:var(--bg); color:var(--fg); font-size:13px; padding:20px;
+    font-family:system-ui,"Segoe UI","Microsoft YaHei",sans-serif; user-select:none;
+  }
+  button { font-family:inherit; }
+  .theme {
+    position:fixed; right:14px; top:12px; z-index:99; border:1px solid var(--hairline);
+    cursor:pointer; display:flex; align-items:center; gap:6px; padding:5px 10px;
+    background:var(--surface); color:var(--fg); font-size:12px;
+    border-radius:99px; box-shadow:var(--shadow);
+  }
+  .case { max-width:960px; margin:0 auto 40px; }
+  .case-tag { display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:14px; font-weight:600; }
+  .case-tag .no {
+    width:24px; height:24px; display:grid; place-items:center; border-radius:99px;
+    background:var(--sel,rgba(53,116,240,.12)); color:var(--accent); font-size:13px;
+  }
+  .case-note { color:var(--muted); font-size:11px; line-height:1.7; margin-bottom:14px; }
+  .case-note b { color:var(--fg); }
+  svg.i { width:14px; height:14px; flex:0 0 auto; }
+
+  /* ── 应用窗体模拟 ── */
+  .app {
+    background:var(--bg); border-radius:var(--pane); overflow:hidden;
+    border:1px solid var(--hairline);
+  }
+  .tb {
+    display:flex; align-items:center; gap:6px; padding:5px 10px;
+    background:var(--surface); border-bottom:1px solid var(--hairline);
+    position:relative; z-index:5;
+  }
+  .brand { display:flex; align-items:center; gap:7px; margin-right:6px; }
+  .logo { width:18px; height:18px; border-radius:4px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:1px; }
+  .logo i { background:var(--accent); border-radius:1px; opacity:.9; }
+  .logo i:nth-child(2) { opacity:.6; } .logo i:nth-child(4) { opacity:.6; }
+  .brand b { font-size:13px; }
+  .tbi {
+    width:24px; height:24px; display:grid; place-items:center; border:0;
+    background:none; color:var(--fg); border-radius:var(--r); cursor:pointer;
+  }
+  .tbi:hover { background:var(--hover); }
+  .tb-search {
+    display:flex; align-items:center; gap:6px; width:170px; height:24px;
+    padding:0 10px; border-radius:99px; background:var(--surface2); color:var(--muted);
+    font-size:11px; flex:0 0 auto;
+  }
+  .tb-fill { flex:1 1 0; min-width:0; display:flex; justify-content:center; }
+  .zoom {
+    font-size:11px; color:var(--muted); background:var(--surface2);
+    border-radius:99px; padding:3px 10px; flex:0 0 auto;
+  }
+  .canvas {
+    height:150px; padding:14px; color:var(--muted); font-size:11px;
+    display:flex; align-items:center; justify-content:center;
+    background:
+      repeating-linear-gradient(0deg, var(--hairline) 0 1px, transparent 1px 32px),
+      var(--bg);
+  }
+
+  /* ═══ 方案 A 核心：岛胶囊钳制 + 悬停展笺 ═══ */
+  /* 岛容器在顶栏 flex 链中必须 min-width:0，胶囊宽度按视口钳制 */
+  .island-wrap { position:relative; min-width:0; display:inline-flex; }
+  .island {
+    display:inline-flex; align-items:center; gap:6px;
+    /* 修复点：旧 max-width:100%（随父链失效）→ 显式视口钳制，顶栏永不被挤穿 */
+    max-width:min(46vw, 540px); min-height:24px; padding:3px 14px;
+    border:0; border-radius:99px; background:var(--surface2); color:var(--muted);
+    font-size:11px; cursor:pointer; overflow:hidden; white-space:nowrap;
+  }
+  .island .txt { overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  .island.is-fail { color:var(--danger); }
+  .island:hover { background:var(--hover); }
+  .island.is-fail:hover { background:var(--danger-soft); }
+  .island .chev { opacity:.7; }
+
+  /* 悬停展笺：锚定岛下方（与任务面板同锚），全文 + 动作 + 暂停的倒计时 */
+  .sheet {
+    position:absolute; top:calc(100% + 6px); left:50%; transform:translateX(-50%);
+    width:min(560px, 58vw); z-index:60;
+    background:var(--surface); border-radius:var(--r); box-shadow:var(--shadow);
+    border:1px solid var(--hairline);
+    padding:10px 12px 0;
+    opacity:0; visibility:hidden; transform:translate(-50%, -4px);
+    transition:opacity .12s ease, transform .12s ease, visibility .12s;
+  }
+  .island-wrap:hover .sheet, .sheet.open {
+    opacity:1; visibility:visible; transform:translate(-50%, 0);
+  }
+  .sheet-head { display:flex; align-items:center; gap:7px; margin-bottom:6px; }
+  .sheet-head .t { font-size:13px; font-weight:600; color:var(--danger); }
+  .sheet-head .n { font-size:11px; color:var(--muted); }
+  .sheet-head .x {
+    margin-left:auto; width:22px; height:22px; display:grid; place-items:center;
+    border:0; background:none; color:var(--muted); border-radius:var(--r); cursor:pointer;
+  }
+  .sheet-head .x:hover { background:var(--hover); color:var(--fg); }
+  .sheet-body { font-size:13px; line-height:1.65; word-break:break-all; }
+  .sheet-body b { color:var(--fg); font-weight:600; }
+  .sheet-foot {
+    display:flex; align-items:center; gap:6px; margin-top:9px; padding:8px 0;
+    border-top:1px solid var(--hairline);
+  }
+  .sbtn {
+    display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 10px;
+    border:1px solid var(--hairline); border-radius:var(--r); background:none;
+    color:var(--fg); font-size:11px; cursor:pointer;
+  }
+  .sbtn:hover { background:var(--hover); }
+  .sbtn.pri { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .sbtn.pri:hover { filter:brightness(1.08); }
+  .sheet-timer {
+    position:absolute; left:0; right:0; bottom:0; height:2px; border-radius:99px;
+    background:var(--danger); opacity:.7;
+    animation:drain 6s linear forwards; animation-play-state:running;
+  }
+  .island-wrap:hover .sheet-timer, .sheet.open .sheet-timer { animation-play-state:paused; }
+  @keyframes drain { from { width:100%; } to { width:0; } }
+  .hint { margin-top:8px; color:var(--muted); font-size:11px; }
+  .spec { margin-top:10px; }
+  .spec li { color:var(--muted); font-size:11px; line-height:1.9; }
+  .spec li b { color:var(--fg); }
+</style>
+</head>
+<body>
+
+<div class="theme" id="themeBtn">◐ 深浅主题</div>
+
+<div class="case">
+  <div class="case-tag"><span class="no">A</span>方案 A「岛内收缩 · 悬停展笺」<span style="color:var(--accent);font-size:11px;border:1px solid var(--hairline);border-radius:99px;padding:2px 8px;">最小改动</span></div>
+  <div class="case-note">
+    岛胶囊<b>留在顶栏</b>但宽度显式钳制（<b>min(46vw, 540px)</b>，旧实现 max-width:100% 在 flex 链中失效才挤穿工具栏），单行省略号；
+    <b>悬停胶囊</b>向下展开全文展笺（锚定岛下方，与任务面板同锚点语义），支持换行全文 + 复制详情 + 固定/消去，<b>6s 倒计时悬停暂停</b>。
+    短回执行为与现状完全一致，零新增界面概念。
+  </div>
+
+  <div class="app">
+    <div class="tb">
+      <div class="brand"><span class="logo"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><b>X-Dir</b></div>
+      <button class="tbi" data-tip="历史"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button>
+      <button class="tbi" data-tip="收藏夹"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+      <button class="tbi" data-tip="布局"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></button>
+      <div class="tb-search"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>搜索</div>
+      <div class="tb-fill">
+        <div class="island-wrap">
+          <button class="island is-fail">
+            <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+            <span class="txt">1 项操作失败：2026年10月江西国控债务主要指标审批表.doc（正被其他程序占用…</span>
+            <svg class="i chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div class="sheet">
+            <div class="sheet-head">
+              <svg class="i" style="color:var(--danger)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+              <span class="t">1 项操作失败</span>
+              <span class="n">删除 · 刚刚</span>
+              <button class="x"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+            </div>
+            <div class="sheet-body"><b>2026年10月江西国控债务主要指标审批表.doc</b>（正被其他程序占用（例如已在 Word/WPS 中打开），请关闭后重试）</div>
+            <div class="sheet-foot">
+              <button class="sbtn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>复制详情</button>
+              <button class="sbtn">固定不自动消失</button>
+              <span style="flex:1"></span>
+              <button class="sbtn pri">重试</button>
+            </div>
+            <div class="sheet-timer"></div>
+          </div>
+        </div>
+      </div>
+      <span class="zoom">100%</span>
+      <button class="tbi"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></button>
+    </div>
+    <div class="canvas">窗格内容区（示意）—— 把鼠标悬停到顶栏中央的红色岛胶囊上，查看向下展开的全文展笺与暂停的倒计时</div>
+  </div>
+  <div class="hint">▸ 悬停岛胶囊 = 展开全文展笺（浅色/深色主题均生效）；移开即收回并继续倒计时；点击胶囊 = 立即消去（与现状一致）。</div>
+
+  <div class="app" style="margin-top:16px;">
+    <div class="tb">
+      <div class="brand"><span class="logo"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><b>X-Dir</b></div>
+      <div class="tb-fill">
+        <div class="island-wrap">
+          <button class="island">
+            <svg class="i" style="color:var(--success)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            <span class="txt">已复制 5 项</span>
+          </button>
+        </div>
+      </div>
+      <span class="zoom">100%</span>
+    </div>
+    <div class="canvas">短回执保持现状：单行岛胶囊、4s 自动消去，不展开笺（长度阈值内不做任何变化）</div>
+  </div>
+
+  <ul class="spec">
+    <li><b>钳制口径</b>：岛胶囊 max-width = min(46vw, 540px)，外层 flex 链补 min-width:0——顶栏工具（搜索/缩放/刷新）永不被挤穿。</li>
+    <li><b>展开时机</b>：仅悬停（120ms 淡入），不改变点击消去语义；展笺内提供「固定」防自动消失（排查占用类报错时慢慢看）。</li>
+    <li><b>倒计时</b>：沿用 fail 6s / ok 4s；展笺悬停期间暂停，移开继续（细 2px 进度线示意剩余时间）。</li>
+    <li><b>权衡</b>：全文需要一次悬停交互才能读到；多失败项仍是一行摘要（数量 + 首项文件名），完整清单需任务面板承接。</li>
+  </ul>
+</div>
+
+<script>
+  document.getElementById("themeBtn").onclick = () =>
+    document.documentElement.classList.toggle("dark");
+</script>
+</body>
+</html>

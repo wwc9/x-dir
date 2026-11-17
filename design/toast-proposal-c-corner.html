@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>长提示展示 · 方案 C「右下角通知堆栈」</title>
+<!-- 设计稿（不参与构建）：灵动岛回执超长文案的展示方案 C。
+     思路 = 桌面通知惯例：回执移到右下角堆栈（Windows 11 通知样式），
+     多条并存、每条标题行 + 详情两行钳制 + 展开/复制/关闭，悬停暂停倒计时；
+     岛胶囊回归默认路径态（回执不再占用顶栏）。 -->
+<style>
+  :root {
+    --bg:#e9ecf1; --surface:#ffffff; --surface2:#f0f2f5; --border:#d6dbe2;
+    --hairline:rgba(16,24,40,.06); --fg:#171d26; --muted:#66707e;
+    --accent:#3574f0; --hover:rgba(26,33,41,.055);
+    --danger:#d1434b; --danger-soft:rgba(209,67,75,.12);
+    --success:#46a758; --success-soft:rgba(70,167,88,.12);
+    --shadow:0 12px 32px rgba(20,28,40,.14);
+    --r:6px; --pane:10px;
+  }
+  html.dark {
+    --bg:#161616; --surface:#2b2b2b; --surface2:#3a3a3a; --border:#454545;
+    --hairline:rgba(255,255,255,.08); --fg:#d4d4d4; --muted:#8f8f8f;
+    --accent:#5c9dff; --hover:rgba(255,255,255,.07);
+    --danger:#f27073; --danger-soft:rgba(242,112,115,.14);
+    --success:#46bf72; --success-soft:rgba(70,191,114,.14);
+    --shadow:0 16px 40px rgba(0,0,0,.5);
+  }
+  * { box-sizing:border-box; margin:0; }
+  body {
+    background:var(--bg); color:var(--fg); font-size:13px; padding:20px;
+    font-family:system-ui,"Segoe UI","Microsoft YaHei",sans-serif; user-select:none;
+  }
+  button { font-family:inherit; }
+  .theme {
+    position:fixed; right:14px; top:12px; z-index:99; border:1px solid var(--hairline);
+    cursor:pointer; display:flex; align-items:center; gap:6px; padding:5px 10px;
+    background:var(--surface); color:var(--fg); font-size:12px;
+    border-radius:99px; box-shadow:var(--shadow);
+  }
+  .case { max-width:960px; margin:0 auto 40px; }
+  .case-tag { display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:14px; font-weight:600; }
+  .case-tag .no {
+    width:24px; height:24px; display:grid; place-items:center; border-radius:99px;
+    background:rgba(53,116,240,.12); color:var(--accent); font-size:13px;
+  }
+  .case-note { color:var(--muted); font-size:11px; line-height:1.7; margin-bottom:14px; }
+  .case-note b { color:var(--fg); }
+  svg.i { width:14px; height:14px; flex:0 0 auto; }
+
+  .app { background:var(--bg); border-radius:var(--pane); overflow:hidden; border:1px solid var(--hairline); position:relative; }
+  .tb {
+    display:flex; align-items:center; gap:6px; padding:5px 10px;
+    background:var(--surface); border-bottom:1px solid var(--hairline);
+    position:relative; z-index:5;
+  }
+  .brand { display:flex; align-items:center; gap:7px; margin-right:6px; }
+  .logo { width:18px; height:18px; border-radius:4px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:1px; }
+  .logo i { background:var(--accent); border-radius:1px; opacity:.9; }
+  .logo i:nth-child(2) { opacity:.6; } .logo i:nth-child(4) { opacity:.6; }
+  .brand b { font-size:13px; }
+  .tbi { width:24px; height:24px; display:grid; place-items:center; border:0; background:none; color:var(--fg); border-radius:var(--r); cursor:pointer; }
+  .tb-search {
+    display:flex; align-items:center; gap:6px; width:170px; height:24px;
+    padding:0 10px; border-radius:99px; background:var(--surface2); color:var(--muted);
+    font-size:11px; flex:0 0 auto;
+  }
+  .tb-fill { flex:1 1 0; min-width:0; display:flex; justify-content:center; }
+  .island {
+    display:inline-flex; align-items:center; gap:6px; max-width:min(40vw,480px);
+    min-height:24px; padding:3px 14px; border:0; border-radius:99px;
+    background:var(--surface2); color:var(--muted); font-size:11px;
+    overflow:hidden; white-space:nowrap;
+  }
+  .island .sel { color:var(--muted); }
+  .zoom { font-size:11px; color:var(--muted); background:var(--surface2); border-radius:99px; padding:3px 10px; flex:0 0 auto; }
+  .canvas {
+    position:relative; height:450px;
+    background:
+      repeating-linear-gradient(0deg, var(--hairline) 0 1px, transparent 1px 32px),
+      var(--bg);
+  }
+  .canvas-tag { position:absolute; left:14px; top:12px; color:var(--muted); font-size:11px; }
+
+  /* ═══ 方案 C 核心：右下角通知堆栈 ═══ */
+  .stack {
+    position:absolute; right:12px; bottom:12px; z-index:30;
+    width:min(400px, 60vw); display:flex; flex-direction:column; gap:8px;
+  }
+  .toast {
+    background:var(--surface); border-radius:var(--r); box-shadow:var(--shadow);
+    overflow:hidden;
+  }
+  .t-head { display:flex; align-items:center; gap:8px; padding:9px 10px 0; }
+  .t-ico { width:22px; height:22px; border-radius:99px; display:grid; place-items:center; flex:0 0 auto; }
+  .t-ico.fail { background:var(--danger-soft); color:var(--danger); }
+  .t-ico.ok { background:var(--success-soft); color:var(--success); }
+  .t-title { font-size:13px; font-weight:600; flex:1 1 0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .t-time { font-size:11px; color:var(--muted); flex:0 0 auto; }
+  .t-x {
+    width:20px; height:20px; display:grid; place-items:center; border:0;
+    background:none; color:var(--muted); border-radius:var(--r); cursor:pointer; flex:0 0 auto;
+  }
+  .t-x:hover { background:var(--hover); color:var(--fg); }
+  .t-body {
+    padding:5px 10px 0 40px; font-size:13px; line-height:1.6; color:var(--fg);
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+    overflow:hidden; word-break:break-all;
+  }
+  .toast.open .t-body { -webkit-line-clamp:unset; }
+  .t-body b { font-weight:600; }
+  .t-body .more { color:var(--muted); }
+  .t-foot { display:flex; align-items:center; gap:6px; padding:7px 10px 8px 40px; }
+  .tbtn {
+    display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px;
+    border:1px solid var(--hairline); border-radius:var(--r); background:none;
+    color:var(--fg); font-size:11px; cursor:pointer;
+  }
+  .tbtn:hover { background:var(--hover); }
+  .t-timer { height:2px; background:var(--danger); opacity:.7; animation:drain 6s linear forwards; }
+  .t-timer.ok { background:var(--success); animation-duration:4s; }
+  .toast:hover .t-timer { animation-play-state:paused; }
+  @keyframes drain { from { width:100%; } to { width:0; } }
+  .stack-more {
+    align-self:flex-end; font-size:11px; color:var(--muted); background:var(--surface2);
+    border-radius:99px; padding:3px 10px;
+  }
+
+  .hint { margin-top:8px; color:var(--muted); font-size:11px; }
+  .spec { margin-top:10px; }
+  .spec li { color:var(--muted); font-size:11px; line-height:1.9; }
+  .spec li b { color:var(--fg); }
+</style>
+</head>
+<body>
+
+<div class="theme" id="themeBtn">◐ 深浅主题</div>
+
+<div class="case">
+  <div class="case-tag"><span class="no">C</span>方案 C「右下角通知堆栈」<span style="color:var(--accent);font-size:11px;border:1px solid var(--hairline);border-radius:99px;padding:2px 8px;">桌面惯例</span></div>
+  <div class="case-note">
+    Windows 11 通知惯例：<b>全部回执离开顶栏</b>，改为右下角堆栈——每条通知卡 =
+    图标徽 + 标题行（含相对时间）+ 详情<b>两行钳制</b> + 展开全文/复制/关闭，
+    悬停暂停倒计时；多条操作结果<b>并存成栈</b>（批量失败场景天然可读），
+    岛胶囊彻底回归默认路径态。是最不像「岛」但最像「桌面应用」的方案。
+  </div>
+
+  <div class="app">
+    <div class="tb">
+      <div class="brand"><span class="logo"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><b>X-Dir</b></div>
+      <button class="tbi"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button>
+      <button class="tbi"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+      <div class="tb-search"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>搜索</div>
+      <div class="tb-fill">
+        <div class="island"><span>债务风险主要指标表</span><span class="sel">已选 2 项</span></div>
+      </div>
+      <span class="zoom">100%</span>
+      <button class="tbi"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></button>
+    </div>
+    <div class="canvas">
+      <div class="canvas-tag">窗格内容区（示意）—— 岛只显示活动窗格路径与选中数，回执全部移到右下堆栈</div>
+      <div class="stack">
+        <div class="toast">
+          <div class="t-head">
+            <span class="t-ico fail"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg></span>
+            <span class="t-title">1 项操作失败</span>
+            <span class="t-time">刚刚</span>
+            <button class="t-x"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          </div>
+          <div class="t-body"><b>2026年10月江西国控债务主要指标审批表.doc</b>（正被其他程序占用（例如已在 Word/WPS 中打开），请关闭后重试）</div>
+          <div class="t-foot">
+            <button class="tbtn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>复制详情</button>
+            <button class="tbtn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>详情</button>
+          </div>
+          <div class="t-timer"></div>
+        </div>
+
+        <div class="toast open">
+          <div class="t-head">
+            <span class="t-ico fail"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg></span>
+            <span class="t-title">3 项操作失败</span>
+            <span class="t-time">8 秒前</span>
+            <button class="t-x"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          </div>
+          <div class="t-body">2026年10月江西国控债务主要指标审批表.doc 等 3 项（正被其他程序占用（例如已在 Word/WPS 中打开），请关闭后重试）——完整失败清单：<b>① 2026年10月江西国控债务主要指标审批表.doc</b>（占用）；② <b>2026年10月主要指标情况表工作底稿.xlsx</b>（占用）；③ <b>附件2-填报说明.pdf</b>（占用）</div>
+          <div class="t-foot">
+            <button class="tbtn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15 6-6-6-6"/><path d="m6 9-6 6 6 6"/></svg>复制清单</button>
+          </div>
+          <div class="t-timer"></div>
+        </div>
+
+        <div class="toast">
+          <div class="t-head">
+            <span class="t-ico ok"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+            <span class="t-title">删除完成</span>
+            <span class="t-time">26 秒前</span>
+            <button class="t-x"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          </div>
+          <div class="t-timer ok"></div>
+        </div>
+
+        <div class="stack-more">还有 2 条更早的通知</div>
+      </div>
+    </div>
+  </div>
+  <div class="hint">▸ 悬停任一通知卡 = 暂停其倒计时；点击卡片空白处 = 消去；「详情」展开完整清单（多失败项逐条列出）；堆栈上限 3 条，溢出折叠为「还有 N 条」。</div>
+
+  <ul class="spec">
+    <li><b>堆栈规则</b>：新通知顶部插入（120ms 滑入），同屏最多 3 条 + 折叠计数；错误常驻可固定，成功类 4s 自动退场。</li>
+    <li><b>多失败项</b>：这是三案中唯一能<b>逐条列出完整失败清单</b>的形态（展开后逐行编号 + 原因），「复制清单」一键带走。</li>
+    <li><b>岛的去留</b>：顶栏岛回归默认态（路径 + 已选 N 项）与任务进度；回执类全部退场——岛更安静，但短回执（已复制 N 项）也失去顶栏轻提示的位置感。</li>
+    <li><b>权衡</b>：视觉重心移到右下角，与「灵动岛居中播报」的既有心智冲突最大；需要处理与剪贴板浮窗（右下常驻）的位置避让。</li>
+  </ul>
+</div>
+
+<script>
+  document.getElementById("themeBtn").onclick = () =>
+    document.documentElement.classList.toggle("dark");
+</script>
+</body>
+</html>

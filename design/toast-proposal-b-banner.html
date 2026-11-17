@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>长提示展示 · 方案 B「顶栏下错峰通知条」</title>
+<!-- 设计稿（不参与构建）：灵动岛回执超长文案的展示方案 B。
+     思路 = 错峰分工：岛胶囊只承载短回执与默认态；错误/超长回执脱离顶栏，
+     以居中通知条浮出在标题栏正下方（锚定岛位置语义延续），两行钳制 +
+     「详情」展开全文 + 动作按钮 + 底部倒计时线。 -->
+<style>
+  :root {
+    --bg:#e9ecf1; --surface:#ffffff; --surface2:#f0f2f5; --border:#d6dbe2;
+    --hairline:rgba(16,24,40,.06); --fg:#171d26; --muted:#66707e;
+    --accent:#3574f0; --hover:rgba(26,33,41,.055);
+    --danger:#d1434b; --danger-soft:rgba(209,67,75,.12);
+    --success:#46a758; --shadow:0 12px 32px rgba(20,28,40,.14);
+    --r:6px; --pane:10px;
+  }
+  html.dark {
+    --bg:#161616; --surface:#2b2b2b; --surface2:#3a3a3a; --border:#454545;
+    --hairline:rgba(255,255,255,.08); --fg:#d4d4d4; --muted:#8f8f8f;
+    --accent:#5c9dff; --hover:rgba(255,255,255,.07);
+    --danger:#f27073; --danger-soft:rgba(242,112,115,.14);
+    --success:#46bf72; --shadow:0 16px 40px rgba(0,0,0,.5);
+  }
+  * { box-sizing:border-box; margin:0; }
+  body {
+    background:var(--bg); color:var(--fg); font-size:13px; padding:20px;
+    font-family:system-ui,"Segoe UI","Microsoft YaHei",sans-serif; user-select:none;
+  }
+  button { font-family:inherit; }
+  .theme {
+    position:fixed; right:14px; top:12px; z-index:99; border:1px solid var(--hairline);
+    cursor:pointer; display:flex; align-items:center; gap:6px; padding:5px 10px;
+    background:var(--surface); color:var(--fg); font-size:12px;
+    border-radius:99px; box-shadow:var(--shadow);
+  }
+  .case { max-width:960px; margin:0 auto 40px; }
+  .case-tag { display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:14px; font-weight:600; }
+  .case-tag .no {
+    width:24px; height:24px; display:grid; place-items:center; border-radius:99px;
+    background:rgba(53,116,240,.12); color:var(--accent); font-size:13px;
+  }
+  .case-note { color:var(--muted); font-size:11px; line-height:1.7; margin-bottom:14px; }
+  .case-note b { color:var(--fg); }
+  svg.i { width:14px; height:14px; flex:0 0 auto; }
+
+  .app { background:var(--bg); border-radius:var(--pane); overflow:hidden; border:1px solid var(--hairline); }
+  .tb {
+    display:flex; align-items:center; gap:6px; padding:5px 10px;
+    background:var(--surface); border-bottom:1px solid var(--hairline);
+    position:relative; z-index:5;
+  }
+  .brand { display:flex; align-items:center; gap:7px; margin-right:6px; }
+  .logo { width:18px; height:18px; border-radius:4px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:1px; }
+  .logo i { background:var(--accent); border-radius:1px; opacity:.9; }
+  .logo i:nth-child(2) { opacity:.6; } .logo i:nth-child(4) { opacity:.6; }
+  .brand b { font-size:13px; }
+  .tbi { width:24px; height:24px; display:grid; place-items:center; border:0; background:none; color:var(--fg); border-radius:var(--r); cursor:pointer; }
+  .tb-search {
+    display:flex; align-items:center; gap:6px; width:170px; height:24px;
+    padding:0 10px; border-radius:99px; background:var(--surface2); color:var(--muted);
+    font-size:11px; flex:0 0 auto;
+  }
+  .tb-fill { flex:1 1 0; min-width:0; display:flex; justify-content:center; }
+  .island {
+    display:inline-flex; align-items:center; gap:6px; max-width:min(40vw,480px);
+    min-height:24px; padding:3px 14px; border:0; border-radius:99px;
+    background:var(--surface2); color:var(--muted); font-size:11px; cursor:pointer;
+    overflow:hidden; white-space:nowrap;
+  }
+  .island .txt { overflow:hidden; text-overflow:ellipsis; }
+  .zoom { font-size:11px; color:var(--muted); background:var(--surface2); border-radius:99px; padding:3px 10px; flex:0 0 auto; }
+  .canvas {
+    position:relative; height:210px;
+    background:
+      repeating-linear-gradient(0deg, var(--hairline) 0 1px, transparent 1px 32px),
+      var(--bg);
+  }
+  .canvas-tag { position:absolute; left:14px; bottom:10px; color:var(--muted); font-size:11px; }
+
+  /* ═══ 方案 B 核心：顶栏下居中通知条 ═══ */
+  .banner {
+    position:absolute; top:10px; left:50%; transform:translateX(-50%);
+    width:min(620px, 72vw); z-index:20;
+    background:var(--surface); border-radius:var(--r); box-shadow:var(--shadow);
+    overflow:hidden;
+  }
+  .bn-main { display:flex; gap:10px; padding:10px 12px 9px; }
+  .bn-ico {
+    width:28px; height:28px; border-radius:99px; flex:0 0 auto;
+    display:grid; place-items:center; background:var(--danger-soft); color:var(--danger);
+  }
+  .bn-body { flex:1 1 0; min-width:0; }
+  .bn-title { display:flex; align-items:center; gap:6px; margin-bottom:2px; }
+  .bn-title .t { font-size:13px; font-weight:600; }
+  .bn-title .n { font-size:11px; color:var(--muted); }
+  .bn-detail {
+    font-size:13px; line-height:1.6; color:var(--fg);
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+    overflow:hidden; word-break:break-all;
+  }
+  .banner.open .bn-detail { -webkit-line-clamp:unset; }
+  .bn-detail b { font-weight:600; }
+  .bn-detail .more { color:var(--muted); }
+  .bn-acts { display:flex; align-items:center; gap:6px; margin-top:8px; }
+  .bn-acts .sp { flex:1; }
+  .bn-x { margin-left:auto; }
+  .bbtn {
+    display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 10px;
+    border:1px solid var(--hairline); border-radius:var(--r); background:none;
+    color:var(--fg); font-size:11px; cursor:pointer;
+  }
+  .bbtn:hover { background:var(--hover); }
+  .bbtn.pri { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .bbtn.pri:hover { filter:brightness(1.08); }
+  .bicon {
+    width:24px; height:24px; display:grid; place-items:center; border:0;
+    background:none; color:var(--muted); border-radius:var(--r); cursor:pointer;
+  }
+  .bicon:hover { background:var(--hover); color:var(--fg); }
+  .bn-timer { height:2px; background:var(--danger); opacity:.7; animation:drain 6s linear forwards; }
+  .banner:hover .bn-timer { animation-play-state:paused; }
+  .banner:not(.open) .bn-timer { margin-top:0; }
+  .bn-timer.donetimer { background:var(--success); }
+  @keyframes drain { from { width:100%; } to { width:0; } }
+
+  .hint { margin-top:8px; color:var(--muted); font-size:11px; }
+  .spec { margin-top:10px; }
+  .spec li { color:var(--muted); font-size:11px; line-height:1.9; }
+  .spec li b { color:var(--fg); }
+  .lbl { display:inline-flex; align-items:center; gap:6px; margin:0 0 6px 14px; font-size:11px; color:var(--muted); position:relative; z-index:21; }
+  .lbl i { width:6px; height:6px; border-radius:99px; background:var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="theme" id="themeBtn">◐ 深浅主题</div>
+
+<div class="case">
+  <div class="case-tag"><span class="no">B</span>方案 B「顶栏下错峰通知条」<span style="color:var(--accent);font-size:11px;border:1px solid var(--hairline);border-radius:99px;padding:2px 8px;">推荐</span></div>
+  <div class="case-note">
+    <b>错峰分工</b>：岛胶囊回归本职（默认路径态 + 短回执），错误/超长回执<b>脱离顶栏</b>，
+    以居中通知条浮出在标题栏正下方（延续岛的视觉锚点）。通知条 = 图标徽 + 标题行
+    （<b>1 项操作失败</b> + 通道/时间）+ 详情两行钳制 + <b>「详情」展开全文</b> +
+    动作按钮组 + 底部 6s 倒计时线（悬停暂停）。顶栏任何情况下不被挤穿，长文案天然多行可读。
+  </div>
+
+  <!-- 展开态 -->
+  <div class="app">
+    <div class="tb">
+      <div class="brand"><span class="logo"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><b>X-Dir</b></div>
+      <button class="tbi"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button>
+      <button class="tbi"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+      <div class="tb-search"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>搜索</div>
+      <div class="tb-fill">
+        <div class="island"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg><span class="txt">债务风险主要指标表</span><span style="color:var(--muted)">已选 2 项</span></div>
+      </div>
+      <span class="zoom">100%</span>
+      <button class="tbi"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></button>
+    </div>
+    <div class="canvas">
+      <span class="lbl" style="position:absolute; top:8px; left:50%; transform:translateX(-50%);"><i></i>展开态（点过「详情」）</span>
+      <div class="banner open" style="top:32px;">
+        <div class="bn-main">
+          <div class="bn-ico"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg></div>
+          <div class="bn-body">
+            <div class="bn-title"><span class="t">1 项操作失败</span><span class="n">删除 · 刚刚</span></div>
+            <div class="bn-detail"><b>2026年10月江西国控债务主要指标审批表.doc</b>（正被其他程序占用（例如已在 Word/WPS 中打开），请关闭后重试）</div>
+            <div class="bn-acts">
+              <button class="bbtn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>复制详情</button>
+              <button class="bbtn pri">重试</button>
+              <span class="sp"></span>
+              <button class="bicon bn-x"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+            </div>
+          </div>
+        </div>
+        <div class="bn-timer"></div>
+      </div>
+      <div class="canvas-tag">窗格内容区（示意）—— 通知条悬停时倒计时暂停；岛回归默认路径态，不再承载长文案</div>
+    </div>
+  </div>
+
+  <!-- 收起态 -->
+  <div class="app" style="margin-top:16px;">
+    <div class="canvas" style="height:200px;">
+      <span class="lbl" style="position:absolute; top:10px; left:50%; transform:translateX(-50%);"><i></i>收起态（弹出的默认形态，两行钳制）</span>
+      <div class="banner" style="top:34px;">
+        <div class="bn-main">
+          <div class="bn-ico"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg></div>
+          <div class="bn-body">
+            <div class="bn-title"><span class="t">3 项操作失败</span><span class="n">删除 · 刚刚</span></div>
+            <div class="bn-detail">2026年10月江西国控债务主要指标审批表.doc 等 3 项（正被其他程序占用（例如已在 Word/WPS 中打开），请关闭后重试）<span class="more">…</span></div>
+            <div class="bn-acts">
+              <button class="bbtn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>详情</button>
+              <span class="sp"></span>
+              <button class="bicon bn-x"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+            </div>
+          </div>
+        </div>
+        <div class="bn-timer"></div>
+      </div>
+      <div class="canvas-tag" style="bottom:14px;">多失败项：标题行带总数，详情展示「首项 + 等 N 项」，完整清单点「详情」展开</div>
+    </div>
+  </div>
+
+  <div class="hint">▸ 短回执（如「已复制 5 项」「删除完成」）仍在岛胶囊内 4s 消去，不变；只有错误/超长回执升级为通知条。</div>
+
+  <ul class="spec">
+    <li><b>分工阈值</b>：文本 ≤ 约 24 字符（单行岛内放得下且非错误）走岛胶囊；其余（错误一律 / 超长一律）走通知条，规则可单测。</li>
+    <li><b>形态</b>：宽 min(620px, 72vw) 居中，浮层规范（surface + radius-lg + shadow，§4.7）；两行钳制 + 「详情」展开，主操作（重试）与次操作（复制详情）分层。</li>
+    <li><b>倒计时</b>：底部 2px 色线（错误 danger / 成功 success），悬停暂停；点关闭或点通知条主体即消去。</li>
+    <li><b>权衡</b>：新增一种界面形态（通知条）；视觉重心从顶栏转移到内容区上方，需要接受一次浮层出现的打扰感。</li>
+  </ul>
+</div>
+
+<script>
+  document.getElementById("themeBtn").onclick = () =>
+    document.documentElement.classList.toggle("dark");
+</script>
+</body>
+</html>
