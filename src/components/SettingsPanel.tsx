@@ -124,19 +124,27 @@ function PerfDeviceRow() {
       </div>
     );
   }
+  // 设备摘要：CPU 主名（cpu 字符串自带「· N 线程」后缀，与独立线程数重复，裁掉）
+  const cpuName = detected.info.cpu.split(" · ")[0];
+  const specs = [
+    `${detected.info.cpuThreads} ${t("线程")}`,
+    `${Math.round(detected.info.memoryGb)}GB ${t("内存")}`,
+    detected.info.gpus[0] ?? t("未检出独立显卡"),
+    ...(detected.remote ? [t("远程会话")] : []),
+  ].join(" · ");
+  const tierText = detected.remote
+    ? t("低性能档 · 远程会话")
+    : detected.tier === "low"
+      ? t("低性能档")
+      : t("高性能档");
   return (
     <div className="np-set-row np-perf-device">
-      <span className="np-set-label">
-        {t("设备判定：{tier}（{cpu} · {mem}GB 内存 · {gpu}）", {
-          tier: detected.remote
-            ? t("远程会话，按低性能处理")
-            : detected.tier === "low"
-              ? t("低性能")
-              : t("高性能"),
-          cpu: `${detected.info.cpu}（${detected.info.cpuThreads} ${t("线程")}）`,
-          mem: String(Math.round(detected.info.memoryGb)),
-          gpu: detected.info.gpus[0] ?? t("未检出独立显卡"),
-        })}
+      <span className={`np-perf-tier is-${detected.remote ? "low" : detected.tier}`}>
+        {tierText}
+      </span>
+      <span className="np-perf-specs">{specs}</span>
+      <span className="np-perf-cpu" title={cpuName}>
+        {cpuName}
       </span>
     </div>
   );
@@ -372,7 +380,7 @@ export function SettingsPanel() {
                   s.applyPerfMode(mode === "auto" ? s.perfTier : mode);
                 }}
                 options={[
-                  { value: "auto", label: t("自动（按设备判定）") },
+                  { value: "auto", label: t("自动") },
                   { value: "high", label: t("高性能") },
                   { value: "low", label: t("低性能") },
                 ]}

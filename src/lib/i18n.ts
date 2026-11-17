@@ -565,13 +565,14 @@ export const EN: Record<string, string> = {
   "性能模式": "Performance mode",
   "「自动」按设备判定（远程会话/CPU 线程/内存/显卡）；切换即真实应用下表全部差异，可随时改回":
     "“Auto” picks a tier from your device (remote session, CPU threads, memory, GPU). Switching applies every difference in the table below immediately — you can change it back anytime",
-  "自动（按设备判定）": "Auto (by device)",
+  "自动": "Auto",
   "高性能": "High performance",
   "低性能": "Low resources",
   "设置项": "Setting",
-  "设备判定：{tier}（{cpu} · {mem}GB 内存 · {gpu}）":
-    "Device tier: {tier} ({cpu} · {mem} GB RAM · {gpu})",
-  "远程会话，按低性能处理": "Remote session — treated as low resources",
+  "高性能档": "High tier",
+  "低性能档": "Low tier",
+  "低性能档 · 远程会话": "Low tier · remote session",
+  "远程会话": "Remote session",
   "线程": "threads",
   "未检出独立显卡": "no discrete GPU detected",
   "正在读取设备信息…": "Reading device info…",
