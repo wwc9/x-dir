@@ -125,6 +125,10 @@
 - **标签当前路径的唯一事实源 = layout 树的 `tab.path`**，`panes.currentPathOf` 改为从树解析（此前只读 panes store 的 `history[historyIndex]`）。两份事实源失配的两个真实场景：① 会话恢复/方案应用重建标签后 history **从未播种**（只在用户导航时生长）——up 对空栈直接失灵，`bumpAffected` 也匹配不到恢复标签（外部变更不自动刷新，前节缓存事故的加重因子）；② 同 id 档被方案二次应用时 history **整体漂移**——up 以陈旧历史头为基点，「返回上一级」不指向当前窗格文件夹的父级。
 - **`panes.up` 定案**：以显示路径为基点；history 头 ≠ 当前路径（空缺/漂移）时先把当前路径补入栈再上行——补种同时保住「后退回到子目录」的历史链（navigate 幂等早退使已同步场景零开销）。`bumpAffected` 同步改读 `currentPathOf`。回归测试见 `stores/__tests__/panes.test.ts`（恢复态 up/漂移态 up/盘符根与伪路径不误导航）。
 
+### 2.7 主动动作刷新提速（2026-11-17 用户定案「刷新再快一点」）
+
+`bumpAffected` 分双通道定案：**主动动作收尾（任务完成/重命名/撤销/批量改名）一律 `immediate` 同步刷新命中标签（零延迟）**，不再等 250ms 合并窗；外部 watcher 事件维持 250ms 合并窗（防 notify 连发+job-done 补轮导致反复重拉，跨窗格拖放闪烁的既有护栏）。防双拉去重窗：immediate 刷过的目录记 500ms 账，同目录 watcher 批撞上时**一次性跳过**（X-Dir 内部动作自身也会触发 watcher，否则同一次变更双拉列表）；去重窗外（或过期后）的真实变更照常入窗。调用点分工：jobs.ts `bumpAffectedOf`（任务收尾）/FileList 重命名跨窗格同步/operations 批量重命名/undo 恢复 = immediate；jobs.ts 的 dir-changed 监听 = 合并窗。回归测试见 panes.test.ts（immediate 零延迟/去重窗吞 watcher 回声/窗外真变更入窗）。
+
 ## 3. 右键菜单与定制
 
 ### 3.1 右键菜单（数据驱动）

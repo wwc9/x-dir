@@ -954,7 +954,7 @@ export async function applyRenames(
     const dirs = [
       ...new Set(items.map((it) => parentPath(it.path)).filter((d): d is string => !!d)),
     ];
-    if (dirs.length) usePanes.getState().bumpAffected(dirs);
+    if (dirs.length) usePanes.getState().bumpAffected(dirs, { immediate: true });
     onDone();
   } else if (failed.length) {
     useUi.getState().toast(

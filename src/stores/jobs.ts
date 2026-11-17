@@ -433,5 +433,5 @@ function bumpAffectedOf(info: JobInfo) {
     ...(info.destDir ? [info.destDir] : []),
     ...(info.sourceParents ?? []),
   ];
-  if (dirs.length) usePanes.getState().bumpAffected(dirs);
+  if (dirs.length) usePanes.getState().bumpAffected(dirs, { immediate: true });
 }

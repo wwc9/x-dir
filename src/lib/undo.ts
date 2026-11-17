@@ -247,5 +247,5 @@ export const useUndo = create<UndoStore>()((set, get) => ({
 /** 撤销涉及的目录：让对应窗格立即重拉 */
 function bump(dirs: (string | null)[]): void {
   const live = dirs.filter((d): d is string => !!d);
-  if (live.length) usePanes.getState().bumpAffected(live);
+  if (live.length) usePanes.getState().bumpAffected(live, { immediate: true });
 }

@@ -1631,7 +1631,7 @@ export function FileList({
       // 同目录他窗格零防抖同步：仅本窗格刷新会让他窗格等 watcher 全链路
       // （防抖 + 合并窗 + 重扫），主动 bump 250ms 合并窗直达
       const dir = parentPath(entry.path);
-      if (dir) usePanes.getState().bumpAffected([dir]);
+      if (dir) usePanes.getState().bumpAffected([dir], { immediate: true });
     } catch (e) {
       useUi.getState().toast(t("重命名失败：{e}", { e: String(e) }), "error");
     }

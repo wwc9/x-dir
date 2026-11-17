@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LayoutNode } from "../../lib/layoutTree";
 import { useLayout } from "../layout";
@@ -191,5 +191,45 @@ describe("返回上一级与当前路径事实源（2026-11-17 用户反馈）",
     useLayout.getState().init(paneWith("t1", "::{ThisPC}"));
     usePanes.getState().up("t1");
     expect(useLayout.getState().tree).toMatchObject({ tabs: [{ path: "::{ThisPC}" }] });
+  });
+});
+
+describe("主动刷新 immediate 与去重窗（2026-11-17 提速定案）", () => {
+  function paneWith(tabId: string, path: string): LayoutNode {
+    return { type: "pane", id: "p", tabs: [{ id: tabId, path }], activeTab: 0 };
+  }
+  beforeEach(() => {
+    vi.stubGlobal("window", globalThis); // 合并窗走 window.setTimeout
+    useLayout.getState().init(paneWith("t1", "E:\\data"));
+    usePanes.setState({ tabs: {} });
+    usePanes.getState().ensure("t1", { viewMode: "details", sort: { key: "name", dir: "asc" } });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("immediate 同步刷新命中标签（零延迟，不等合并窗）", () => {
+    expect(usePanes.getState().tabs["t1"].refreshTick).toBe(0);
+    usePanes.getState().bumpAffected(["E:\\data"], { immediate: true });
+    expect(usePanes.getState().tabs["t1"].refreshTick).toBe(1);
+    // 未命中目录不动
+    usePanes.getState().bumpAffected(["D:\\other"], { immediate: true });
+    expect(usePanes.getState().tabs["t1"].refreshTick).toBe(1);
+  });
+
+  it("主动刷新后 500ms 内同目录 watcher 批跳过（防双拉），真变更照常入窗", () => {
+    vi.useFakeTimers();
+    usePanes.getState().bumpAffected(["E:\\data"], { immediate: true });
+    expect(usePanes.getState().tabs["t1"].refreshTick).toBe(1);
+    // 内部动作的 watcher 回声：同目录在去重窗内，吞掉一次
+    usePanes.getState().bumpAffected(["E:\\data"]);
+    vi.advanceTimersByTime(400);
+    expect(usePanes.getState().tabs["t1"].refreshTick).toBe(1);
+    // 去重窗过期后的真实变更：照常入合并窗并刷新
+    vi.advanceTimersByTime(300);
+    usePanes.getState().bumpAffected(["E:\\data"]);
+    vi.advanceTimersByTime(300);
+    expect(usePanes.getState().tabs["t1"].refreshTick).toBe(2);
   });
 });

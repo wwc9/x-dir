@@ -102,7 +102,10 @@ interface PanesStore {
   /** 视图内过滤（Ctrl+E）：null = 关闭；空串 = 过滤条开着待输入 */
   setFilter(tabId: string, query: string | null): void;
   bumpRefresh(tabId: string): void;
-  bumpAffected(dirs: string[]): void;
+  /** dirs 内目录有变更：immediate = 主动动作收尾同步刷新（零延迟）；缺省走
+   *  250ms 合并窗（外部 watcher 批量事件防抖，§6.8）。命中判定 = 标签当前
+   *  路径（layout 事实源）∈ dirs */
+  bumpAffected(dirs: string[], opts?: { immediate?: boolean }): void;
   currentPathOf(tabId: string): string | null;
 }
 
@@ -123,6 +126,25 @@ function patch(
 const BUMP_AFFECTED_WINDOW_MS = 250;
 let pendingDirs = new Set<string>();
 let pendingTimer: number | null = null;
+// 主动刷新去重窗（2026-11-17 用户定案提速）：immediate 刷过的目录短暂记账，
+// watcher 合并窗撞上同目录时跳过一次（X-Dir 内部动作同样触发 watcher，
+// 防同一次变更双拉列表）；跳过一次性消费，后续真变更照常入窗
+const RECENT_FLUSH_MS = 500;
+const recentFlush = new Map<string, number>();
+
+/** 刷新当前路径命中 dirs 的全部标签（immediate 与合并窗 flush 共用） */
+function flushAffected(dirs: Set<string>) {
+  for (const tabId of Object.keys(usePanes.getState().tabs)) {
+    const cur = usePanes.getState().currentPathOf(tabId);
+    if (cur && dirs.has(cur.replace(/\\+$/, ""))) {
+      usePanes.getState().bumpRefresh(tabId);
+    }
+  }
+  const now = Date.now();
+  for (const [d, exp] of recentFlush) {
+    if (exp <= now) recentFlush.delete(d);
+  }
+}
 
 export const usePanes = create<PanesStore>()((set, get) => ({
   tabs: {},
@@ -279,19 +301,34 @@ export const usePanes = create<PanesStore>()((set, get) => ({
     set((s) => ({ tabs: patch(s.tabs, tabId, { refreshTick: ui.refreshTick + 1 }) }));
   },
 
-  bumpAffected(dirs) {
-    for (const d of dirs) pendingDirs.add(d.replace(/\\+$/, ""));
-    if (pendingTimer !== null) return;
+  bumpAffected(dirs, opts) {
+    // 主动动作收尾立即刷新（2026-11-17 用户定案提速）：不再等 250ms 合并窗；
+    // 同批 watcher 待刷项一并清除并在去重窗记账（内部动作稍后必触发 watcher）
+    if (opts?.immediate) {
+      const hit = new Set(dirs.map((d) => d.replace(/\\+$/, "")));
+      for (const d of hit) {
+        pendingDirs.delete(d);
+        recentFlush.set(d, Date.now() + RECENT_FLUSH_MS);
+      }
+      flushAffected(hit);
+      return;
+    }
+    // 外部 watcher 通道保持合并窗：刚被主动刷新过的目录跳过一次
+    for (const d of dirs) {
+      const nd = d.replace(/\\+$/, "");
+      const exp = recentFlush.get(nd);
+      if (exp !== undefined && exp > Date.now()) {
+        recentFlush.delete(nd);
+        continue;
+      }
+      pendingDirs.add(nd);
+    }
+    if (!pendingDirs.size || pendingTimer !== null) return;
     pendingTimer = window.setTimeout(() => {
       pendingTimer = null;
       const hit = pendingDirs;
       pendingDirs = new Set<string>();
-      for (const tabId of Object.keys(get().tabs)) {
-        const cur = get().currentPathOf(tabId);
-        if (cur && hit.has(cur.replace(/\\+$/, ""))) {
-          get().bumpRefresh(tabId);
-        }
-      }
+      flushAffected(hit);
     }, BUMP_AFFECTED_WINDOW_MS);
   },
 
