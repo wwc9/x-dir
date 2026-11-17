@@ -2049,7 +2049,7 @@ export function FileList({
                         className={`np-row ${sel ? "is-sel" : ""} ${
                           entry.path === dropRowPath ? "is-drop" : ""
                         }`}
-                        style={{ width: "100%" }}
+                        style={{ width: "fit-content" }}
                         onMouseDown={(e) => rowMouseDown(e, entry)}
                         onDoubleClick={(e) => {
                           // 框内双击 = 选词，不冒泡成「打开该项」

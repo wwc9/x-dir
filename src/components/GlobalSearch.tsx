@@ -812,6 +812,7 @@ export function GlobalSearchPage() {
                         style={{
                           position: "absolute",
                           insetInline: 0,
+                          width: "fit-content",
                           height: row.size,
                           transform: `translateY(${row.start}px)`,
                         }}
