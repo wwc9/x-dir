@@ -1099,7 +1099,7 @@ fn delete_one(p: &str, permanent: bool) -> Result<(), DeleteFailure> {
         } else {
             std::fs::remove_file(ext)
         };
-        r.map_err(explain_permanent_failure)
+        r.map_err(|e| explain_permanent_failure(p, e))
     } else {
         trash::delete(ext).map_err(|e| explain_trash_failure(p, &e))
     }
@@ -1158,7 +1158,9 @@ fn explain_trash_variant(e: &trash::Error) -> Option<DeleteFailure> {
     }
 }
 
-/// Win32 码 → 删除失败原因（DELETE 探测与永久删除的 io 错误共用）
+/// Win32 码 → 删除失败原因（DELETE 探测与永久删除的 io 错误共用）。
+/// 文案不带主语（「该项」等）：顶层失败时 toast 前缀已带文件名，树内失败时
+/// 由 explain_* 包装「文件夹内的「子项」」前缀
 #[cfg(windows)]
 fn explain_win32_code(code: u32) -> Option<(&'static str, FailReason)> {
     match code {
@@ -1167,19 +1169,19 @@ fn explain_win32_code(code: u32) -> Option<(&'static str, FailReason)> {
             FailReason::InUse,
         )),
         5 => Some((
-            "没有删除权限（拒绝访问），请检查权限或以管理员身份重试",
+            "需要管理员权限才能删除（拒绝访问），请以管理员身份重试或修改该项的安全权限",
             FailReason::AccessDenied,
         )),
-        2 | 3 => Some(("该项已被移动或删除，请刷新列表", FailReason::Missing)),
+        2 | 3 => Some(("已被移动或删除，请刷新列表", FailReason::Missing)),
         _ => None,
     }
 }
 
-/// 以 DELETE 权限开句柄探测删除失败的真实原因（只读探测，不改文件）。
-/// 文件/目录通用（目录需 FILE_FLAG_BACKUP_SEMANTICS）；返回 None = 探测不出，
-/// 交由调用方回退原始错误
+/// 以 DELETE 权限开句柄探测（只读探测，不改文件）。文件/目录通用（目录需
+/// FILE_FLAG_BACKUP_SEMANTICS）；返回 None = 句柄能开（系统允许删，堵点不在此项），
+/// Some(code) = 被拒绝的 Win32 错误码
 #[cfg(windows)]
-fn probe_delete_reason(raw_path: &str) -> Option<(&'static str, FailReason)> {
+fn probe_delete_open(raw_path: &str) -> Option<u32> {
     use std::os::windows::ffi::OsStrExt;
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::Storage::FileSystem::{
@@ -1210,29 +1212,104 @@ fn probe_delete_reason(raw_path: &str) -> Option<(&'static str, FailReason)> {
         Err(e) => {
             // CreateFileW 的错误 HRESULT 形如 0x8007XXXX（FACILITY_WIN32），
             // 低 16 位即真实 Win32 错误码
-            let code = (e.code().0 as u32) & 0xFFFF;
-            explain_win32_code(code)
+            Some((e.code().0 as u32) & 0xFFFF)
         }
     }
 }
 
-/// 移入回收站失败 → 用户可读原因：变体语义 → DELETE 探测 → 原始错误兜底
+/// 以 DELETE 权限开句柄探测删除失败的真实原因；返回 None = 探测不出，
+/// 交由调用方回退原始错误
+#[cfg(windows)]
+fn probe_delete_reason(raw_path: &str) -> Option<(&'static str, FailReason)> {
+    explain_win32_code(probe_delete_open(raw_path)?)
+}
+
+/// 树内归因探测预算：失败回执路径上最多探测这么多个条目，
+/// 防超大树（数十万文件）把归因拖成秒级；超出即放弃深探测回退原始错误
+#[cfg(windows)]
+const DENIAL_PROBE_BUDGET: usize = 500;
+
+/// 顶层 DELETE 探测通过但整树删除仍失败时：逐项 DELETE 探测，定位第一个
+/// 被拒的子项。返回 (子项相对路径, 用户可读原因, 结构化原因)；全树都能删 =
+/// None（堵点不在 ACL/占用层，调用方回退原始错误）。深度优先 + 预算上限，
+/// 跳过 reparse 目录（联接内容不属本树且会引出环）
+///（2026-11-17：IFileOperation 对嵌套拒绝只回无语义 aborted，此前用户看到
+/// 的是英文调试串；深探测把堵点定位到具体子项并以人话回执）
+#[cfg(windows)]
+fn probe_tree_denial(root: &str) -> Option<(String, &'static str, FailReason)> {
+    fn walk(dir_display: &str, budget: &mut usize) -> Option<(String, &'static str, FailReason)> {
+        let rd = std::fs::read_dir(to_extended(dir_display)).ok()?;
+        for entry in rd.flatten() {
+            if *budget == 0 {
+                return None;
+            }
+            *budget -= 1;
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let child = join_name(dir_display, &name);
+            if let Some(code) = probe_delete_open(&child) {
+                return explain_win32_code(code).map(|(m, r)| (child, m, r));
+            }
+            // 目录（联接除外）递归深入；file_name_of 供相对化
+            let child_is_dir =
+                entry.file_type().map(|t| t.is_dir()).unwrap_or(false) && !is_reparse_dir(&child);
+            if child_is_dir && let Some(hit) = walk(&child, budget) {
+                return Some(hit);
+            }
+        }
+        None
+    }
+    let mut budget = DENIAL_PROBE_BUDGET;
+    let hit = walk(root, &mut budget)?;
+    // 相对根目录的显示路径（"sub\deeper\f.txt"），比绝对路径短且指向明确
+    let rel = hit
+        .0
+        .strip_prefix(root)
+        .map(|s| s.trim_start_matches('\\'))
+        .unwrap_or(&hit.0)
+        .to_string();
+    Some((rel, hit.1, hit.2))
+}
+
+/// 移入回收站失败 → 用户可读原因：变体语义 → 顶层 DELETE 探测 → 树内深探测
+/// → 原始错误兜底。顶层探测通过（句柄能开）而整树删除仍失败 = 堵点在树内
+/// 子项（IFileOperation 只回无语义 aborted），深探测定位具体子项归因
 fn explain_trash_failure(raw_path: &str, e: &trash::Error) -> DeleteFailure {
     if let Some(d) = explain_trash_variant(e) {
         return d;
     }
     #[cfg(windows)]
-    if let Some((msg, reason)) = probe_delete_reason(raw_path) {
-        return DeleteFailure::new(msg, Some(reason));
+    {
+        if let Some((msg, reason)) = probe_delete_reason(raw_path) {
+            return DeleteFailure::new(msg, Some(reason));
+        }
+        if Path::new(&to_extended(raw_path)).is_dir()
+            && let Some((rel, msg, reason)) = probe_tree_denial(raw_path)
+        {
+            return DeleteFailure::new(format!("文件夹内的「{rel}」{msg}"), Some(reason));
+        }
     }
     DeleteFailure::new(format!("无法移入回收站：{e}"), None)
 }
 
-/// 永久删除失败 → 同源归因（io 错误自带 Win32 码，无需再探测）
-fn explain_permanent_failure(e: io::Error) -> DeleteFailure {
+/// 永久删除失败 → 同源归因（io 错误自带 Win32 码，无需再探顶层）；
+/// 目录且为权限/占用类失败时深探测定位具体被堵的子项——remove_dir_all
+/// 只回错误码，用户无从知道是树内哪一项不让删（2026-11-17）
+fn explain_permanent_failure(raw_path: &str, e: io::Error) -> DeleteFailure {
     #[cfg(windows)]
-    if let Some((msg, reason)) = e.raw_os_error().and_then(|c| explain_win32_code(c as u32)) {
-        return DeleteFailure::new(msg, Some(reason));
+    {
+        if let Some((msg, reason)) = e.raw_os_error().and_then(|c| explain_win32_code(c as u32)) {
+            let code = e.raw_os_error().unwrap_or(0) as u32;
+            if matches!(code, 5 | 32 | 33)
+                && Path::new(&to_extended(raw_path)).is_dir()
+                && let Some((rel, nested_msg, nested_reason)) = probe_tree_denial(raw_path)
+            {
+                return DeleteFailure::new(
+                    format!("文件夹内的「{rel}」{nested_msg}"),
+                    Some(nested_reason),
+                );
+            }
+            return DeleteFailure::new(msg, Some(reason));
+        }
     }
     DeleteFailure::new(format!("无法删除：{e}"), None)
 }
@@ -1701,20 +1778,108 @@ mod tests {
 
     #[test]
     fn permanent_failure_maps_access_denied_and_keeps_raw_fallback() {
-        let denied = explain_permanent_failure(io::Error::from_raw_os_error(5));
+        // 路径不存在：is_dir 探测短路，直接落通用 Win32 文案（不深探测）
+        let denied = explain_permanent_failure(
+            "Z:\\nonexistent\\x-dir-test",
+            io::Error::from_raw_os_error(5),
+        );
         assert_eq!(denied.reason, Some(FailReason::AccessDenied));
         assert!(
-            denied.message.contains("权限"),
+            denied.message.contains("管理员"),
             "actual: {}",
             denied.message
         );
-        let fallback = explain_permanent_failure(io::Error::other("boom"));
+        let fallback =
+            explain_permanent_failure("Z:\\nonexistent\\x-dir-test", io::Error::other("boom"));
         assert_eq!(fallback.reason, None);
         assert!(
             fallback.message.contains("boom"),
             "actual: {}",
             fallback.message
         );
+    }
+
+    /// icacls 给 Everyone（*S-1-1-0）加拒绝删除 ACE：deny ACE 对含管理员的
+    /// 一切令牌生效，等于模拟「需要管理员权限」的 ACL（allow-only 型目录
+    /// 如 Program Files 子目录走同一 Win32 5 错误码）。返回 true = 加拒成功
+    #[cfg(windows)]
+    fn deny_delete(p: &std::path::Path) -> bool {
+        std::process::Command::new("icacls")
+            .arg(p)
+            .args(["/deny", "*S-1-1-0:(D)"])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+
+    /// icacls /deny 加拒 + assert!(deny_delete(...))；返回防误删目录
+    #[cfg(windows)]
+    fn make_denied_dir(root: &std::path::Path, name: &str, nested: &[&str]) -> std::path::PathBuf {
+        let top = root.join(name);
+        let mut dir = top.clone();
+        for seg in nested {
+            dir = dir.join(seg);
+        }
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("f.txt"), "x").unwrap();
+        let blocked = if nested.is_empty() { top.clone() } else { dir };
+        assert!(deny_delete(&blocked), "icacls deny failed");
+        top
+    }
+
+    /// 回收站删除对树内嵌套被拒子目录：顶层探测通过，必须深探测归因到
+    /// 具体子项并以「需要管理员权限」人话回执（2026-11-17 用户反馈：
+    /// 此前只见 trash 的英文调试串 "Some operations were aborted"）
+    #[cfg(windows)]
+    #[test]
+    fn trash_failure_on_deep_denied_dir_names_child() {
+        let tmp = std::env::temp_dir().join(format!("xdir-denied-{}", std::process::id()));
+        let top = make_denied_dir(&tmp, "t1", &["sub"]);
+        let r = delete_one(top.to_str().unwrap(), false);
+        let err = r.unwrap_err();
+        assert_eq!(err.reason, Some(FailReason::AccessDenied));
+        assert!(err.message.contains("管理员"), "actual: {}", err.message);
+        assert!(err.message.contains("sub"), "actual: {}", err.message);
+        assert!(
+            err.message.contains("文件夹内的"),
+            "actual: {}",
+            err.message
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// 永久删除对树内嵌套被拒子目录：remove_dir_all 只回顶层错误码，
+    /// 深探测必须把堵点定位到「sub」而不是让用户对着顶层文件夹猜
+    #[cfg(windows)]
+    #[test]
+    fn permanent_failure_on_deep_denied_dir_names_child() {
+        let tmp = std::env::temp_dir().join(format!("xdir-deniedp-{}", std::process::id()));
+        let top = make_denied_dir(&tmp, "t2", &["sub", "deeper"]);
+        let r = delete_one(top.to_str().unwrap(), true);
+        let err = r.unwrap_err();
+        assert_eq!(err.reason, Some(FailReason::AccessDenied));
+        assert!(err.message.contains("管理员"), "actual: {}", err.message);
+        assert!(err.message.contains("sub"), "actual: {}", err.message);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// 顶层目录整体被拒（类 Program Files 子目录）：顶层探测直接命中，
+    /// 回执为「需要管理员权限」口径（不带子项前缀）
+    #[cfg(windows)]
+    #[test]
+    fn trash_failure_on_top_denied_dir_is_admin_wording() {
+        let tmp = std::env::temp_dir().join(format!("xdir-deniedt-{}", std::process::id()));
+        let top = make_denied_dir(&tmp, "t3", &[]);
+        let r = delete_one(top.to_str().unwrap(), false);
+        let err = r.unwrap_err();
+        assert_eq!(err.reason, Some(FailReason::AccessDenied));
+        assert!(err.message.contains("管理员"), "actual: {}", err.message);
+        assert!(
+            !err.message.contains("文件夹内的"),
+            "actual: {}",
+            err.message
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     /// IFileOperation 对占用只回无信息的 aborted（2026-11-01 复现），

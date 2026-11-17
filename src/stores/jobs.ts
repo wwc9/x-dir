@@ -185,6 +185,12 @@ export const useJobs = create<JobsStore>()((set, get) => ({
               "error",
             );
           });
+          // 删除任务失败含占用项 → 弹「解除占用」跟进（主路径：done 晚于
+          // register 到达；此前只在 register 的 done 先到补漏路径弹过，
+          // 慢于 invoke 往返的删除（大文件夹）永远等不到弹窗）
+          if (info?.mode === "delete") {
+            offerUnlock(d.failed, info.deletePermanent);
+          }
         } else {
           useIsland.getState().pushReceipt("info", "任务已取消");
         }

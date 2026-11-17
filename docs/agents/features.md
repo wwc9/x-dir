@@ -481,7 +481,9 @@
 **组件与模块**：Rust `locks.rs`（NtQuerySystemInformation 枚举全系统句柄表 + DuplicateHandle 远程关闭）+ `commands/locks_cmds.rs`（find/release async + spawn_blocking）+ `jobs/mod.rs` FailItem 增 `reason`（inUse/accessDenied/missing）+ 前端 `stores/jobs.ts` offerUnlock 收尾钩子 + UnlockDialog。
 
 - 删除撞上占用：job-done 收尾发现 failed[].reason=inUse → 弹「解除占用」列出占用进程（Win32 无官方"谁开着这个文件"API，handle.exe 同款：句柄表枚举 + 按文件索引比对）；确认后远程关闭并按原语义（回收站/Shift+Del）重删。
+- **弹窗覆盖主路径（2026-11-17 修复）**：offerUnlock 此前只挂在 register 的「done 先于 register 到达」补漏分支——小文件删除快于 invoke 往返才弹得出，大文件夹删除（done 晚到的主路径）永远不弹；job-done 监听器失败分支补挂 offerUnlock（info.mode=delete 时）。
 - **实现坑**：探针句柄必须先于表快照开（借其在快照内自身条目取「文件」类型索引）；只碰 GetFileType=DISK 的句柄（"File" 类型涵盖命名管道/设备，挂未决读会永久阻塞）；病态句柄单次查询实测卡 33s——按 pid 分桶 + 并行 worker（≤8）+ 5s 预算截断，truncated 标记随结果下发、卡死线程不 join（有界泄漏，handle.exe 同款取舍）；本应用自身句柄排除；AppError 新运行时码 E_LOCKS。
+- **权限类失败的人话归因 + 树内深探测（2026-11-17 用户反馈「需管理员权限才能删的文件夹提示不清晰」）**：① trash（IFileOperation + FOF_NO_UI）对顶层被拒回 Os 码可归因，但对**树内嵌套被拒**只回无语义 `Unknown{"Some operations were aborted"}`，顶层 DELETE 探测（句柄能开）随即失灵 → 用户直接看到英文调试串；永久删除 remove_dir_all 同场景虽归因正确却不知堵在哪个子项。② 定案 = `probe_delete_open`（探测泛化为返回原始 Win32 码）+ `probe_tree_denial` 树内深探测：顶层探测不出时逐项 DELETE 探测定位第一个被拒子项（深度优先、预算 500 条防超大树拖慢回执、跳过 reparse 防联接环），explain_trash/explain_permanent 双链路接入，回执形如「文件夹内的「sub\deeper\f.txt」需要管理员权限才能删除（拒绝访问），请以管理员身份重试或修改该项的安全权限」。③ 文案口径定案：Win32 5 = 「需要管理员权限才能删除」（不再说「没有删除权限」），32/33 = 占用、2/3 = 已消失保持不变；文案不带主语——顶层失败 toast 前缀自带文件名，树内失败由 explain_* 加「文件夹内的「子项」」前缀。④ 测试用 icacls `*S-1-1-0:(D)`（Everyone 拒绝删除，deny ACE 对含管理员的一切令牌生效 = allow-only 型 ACL 的同码模拟）真实落 ACL 锁行为：回收站嵌套被拒归因子项、永久删除归因子项、顶层被拒走无前缀管理员文案。
 
 ### 13.4 本体整体审查修复批（数据安全 / 性能 / 安全加固）
 
