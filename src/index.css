@@ -394,12 +394,12 @@ html.glasswin.bp6-dark {
 html.glasswin.bp6-dark {
   --np-bg: radial-gradient(
       120% 90% at 85% 6%,
-      rgba(92, 157, 255, 0.22),
-      transparent 62%
+      rgba(92, 157, 255, 0.34),
+      transparent 60%
     ),
-    radial-gradient(110% 85% at 8% 94%, rgba(70, 191, 178, 0.16), transparent 64%),
-    radial-gradient(90% 70% at 42% 42%, rgba(140, 110, 235, 0.15), transparent 66%),
-    linear-gradient(168deg, #181d26, #161b24 52%, #131820);
+    radial-gradient(110% 85% at 8% 94%, rgba(70, 191, 178, 0.26), transparent 62%),
+    radial-gradient(90% 70% at 42% 42%, rgba(140, 110, 235, 0.3), transparent 64%),
+    linear-gradient(168deg, #1b2334, #172231 52%, #121a28);
 }
 /* 渐变底上的实时模糊家族：主卡片（顶栏/窗格/边栏三卡）+ Dialog + 全部菜单
    浮层；右键菜单「霜」自带同款 blur 不受影响。虚拟列表行在卡片内部，模糊

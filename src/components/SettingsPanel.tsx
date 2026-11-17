@@ -41,7 +41,7 @@ import { confirmDialog, useUi } from "../stores/ui";
 import { AppIcon, ic } from "./AppIcon";
 import { HotkeyRecorder } from "./HotkeyRecorder";
 import { Seg } from "./ImgDialogs";
-import { PERF_TABLE, detectTier, type PerfTier } from "../lib/perf";
+import { PERF_TABLE, detectTier, resolvePerf, type PerfTier } from "../lib/perf";
 import { recurrenceSummary } from "./RecurrenceEditDialog";
 import { NpSelect } from "./NpSelect";
 
@@ -85,13 +85,13 @@ type TabId = (typeof TABS)[number]["id"];
 /** 顶栏按钮直达某分类（如"自定义右键命令"钮 → commands） */
 export type SettingsTabId = TabId;
 
-/** 设备判定信息行（性能 tab）：展示硬件信号与自动判定结果（一次性拉取缓存） */
+/** 设备判定一次性拉取（模块级缓存）：外观页毛玻璃行与性能 tab 共用，每会话只拉一次 */
 let perfInfoCache: { info: SystemInfo; remote: boolean } | null = null;
-function PerfDeviceRow() {
-  const t = useT();
-  const [detected, setDetected] = useState<
-    { tier: PerfTier; info: SystemInfo; remote: boolean } | null
-  >(null);
+type PerfDetected = { tier: PerfTier; info: SystemInfo; remote: boolean };
+
+/** 档位探测 hook：system_info + 远程会话一票判定（resolvePerf 的输入） */
+function usePerfDetect(): PerfDetected | null {
+  const [detected, setDetected] = useState<PerfDetected | null>(null);
   useEffect(() => {
     let alive = true;
     void (async () => {
@@ -117,6 +117,13 @@ function PerfDeviceRow() {
       alive = false;
     };
   }, []);
+  return detected;
+}
+
+/** 设备判定信息行（性能 tab）：展示硬件信号与自动判定结果 */
+function PerfDeviceRow() {
+  const t = useT();
+  const detected = usePerfDetect();
   if (!detected) {
     return (
       <div className="np-set-row np-perf-device">
@@ -165,6 +172,10 @@ function SetRow({ label, desc, children, className }: { label: string; desc?: st
 export function SettingsPanel() {
   const t = useT();
   const s = useSettings();
+  const detected = usePerfDetect();
+  // 窗口毛玻璃门禁：仅高性能档（解析档）可用；低配档 desc 提示 + 开钮禁用
+  const glassLocked =
+    !!detected && resolvePerf(s.perfMode, detected.tier) === "low";
   /** 浮窗开合与直达分类状态在 useUi；打开时同步当前 tab（顶栏/其余入口只 set 状态） */
   const settingsTab = useUi((st) => st.settingsTab);
   const [tab, setTab] = useState<TabId>(settingsTab ?? "appearance");
@@ -366,13 +377,18 @@ export function SettingsPanel() {
             </SetRow>
             <SetRow
               label={t("窗口毛玻璃")}
-              desc={t("画布铺柔和渐变，窗格与浮层实时模糊透出底色；低性能档自动关")}
+              desc={
+                glassLocked
+                  ? t("仅高性能模式可用；当前为低性能档，已自动关闭")
+                  : t("画布铺柔和渐变，窗格与浮层实时模糊透出底色；低性能档自动关")
+              }
             >
               <ButtonGroup className="np-seg" size="small" variant="minimal">
                 {(["off", "on"] as const).map((m) => (
                   <Button
                     key={m}
                     active={s.windowGlass === m}
+                    disabled={m === "on" && glassLocked}
                     onClick={() => {
                       s.update({ windowGlass: m });
                       useUi
