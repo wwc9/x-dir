@@ -448,6 +448,12 @@ html.glasswin .bp6-popover:not(.np-ctx-pop) .bp6-popover-content,
 html.glasswin .np-tip {
   background: var(--np-surface-glass-strong);
   border-color: var(--np-glass-ring);
+}
+/* ⚠ Dialog 的 blur 必须挂 body 滚动容器而非根节点：Chromium 下「根节点
+   backdrop-filter + 内嵌滚动容器」采样失效返回白色（2026-11-17 实测白板
+   穿透，CDP 截图定位），滚动容器自身挂 blur 采样正常（右键菜单同模式已
+   验证）；根节点保持无 blur + 0.7 强霜色 */
+html.glasswin .np-dialog .bp6-dialog-body-scroll-container {
   -webkit-backdrop-filter: blur(22px) saturate(1.4);
   backdrop-filter: blur(22px) saturate(1.4);
 }
