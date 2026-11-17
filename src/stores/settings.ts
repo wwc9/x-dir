@@ -239,33 +239,12 @@ export function applyPerfFx(fxGlass: boolean, fxAnim: boolean) {
   document.documentElement.classList.toggle("nofx-anim", !fxAnim);
 }
 
-/** 窗口毛玻璃当前模式：applyTheme 据此决定原生底色写画布色（实底）还是透明 */
-let glassWin: Settings["windowGlass"] = "off";
-
-/** 窗口毛玻璃（2026-11-17 外观 tab 定案）：模糊由 Windows 合成器（DWM）完成，
- *  桌面/背后窗口实时高斯模糊透出窗口；WebView 内只做 alpha 透明（根类
- *  glasswin 把画布/卡片换半透明 token，见 index.css）。效果走 Rust 命令
- *  set_window_glass（tauri::vibrancy 直连 + 真实错误返回；JS Window.setEffects
- *  的调度层 `let _ =` 丢弃错误且被能力权限门禁，弃用）。WebView2 底色规则
- *  （wry）：alpha=0 = 透明，其余强制不透明——毛玻璃态写 [0,0,0,0] 立即生效
- *  （Rust 命令内同做兜底），关闭写回画布色。?. 防御：guard 测试桩无此方法 */
+/** 窗口毛玻璃（2026-11-17 外观 tab 定案 = 渐变底 + 窗格霜玻璃，纯 CSS）：
+ *  根类 glasswin 下画布换柔和渐变、面板卡片换「霜」玻璃半透明底并挂
+ *  backdrop-filter 实时模糊渐变底——模糊在 WebView 内完成（backdrop-filter
+ *  只采样页内内容，渐变在页内所以有效），不依赖 OS 合成器、远程会话友好 */
 export function applyWindowGlass(mode: Settings["windowGlass"]) {
-  glassWin = mode;
   document.documentElement.classList.toggle("glasswin", mode !== "off");
-  api.setWindowGlass(mode).catch((e) => console.error("[windowGlass]", e));
-  const win = getCurrentWindow();
-  if (mode === "off") {
-    win
-      .setBackgroundColor?.(
-        document.documentElement.classList.contains("dark") ? "#161616" : "#e9ecf1",
-      )
-      .catch((e) => console.error("[windowGlass] setBackgroundColor", e));
-    syncBorderColor();
-  } else {
-    win
-      .setBackgroundColor?.([0, 0, 0, 0])
-      .catch((e) => console.error("[windowGlass] setBackgroundColor", e));
-  }
 }
 
 export function applyTheme(theme: Settings["theme"]) {
@@ -285,12 +264,9 @@ export function applyTheme(theme: Settings["theme"]) {
   // 窗口原生底色随主题 = 画布色（2026-11-06）：拖拽调宽等高频重排的长帧里
   // WebView 合成器来不及绘制的新区域会露出窗口底色（默认黑——用户实测
   // 侧栏拖宽时右缘黑条）；钉成画布色后即使露底也与界面同色不可见。
-  // 窗口毛玻璃开启时改写透明（2026-11-17）：不透明底盖住系统毛玻璃。
   // ?. 防御：guard 测试桩的 getCurrentWindow 不含本方法
   getCurrentWindow()
-    .setBackgroundColor?.(
-      glassWin === "off" ? (dark ? "#161616" : "#e9ecf1") : [0, 0, 0, 0],
-    )
+    .setBackgroundColor?.(dark ? "#161616" : "#e9ecf1")
     .catch(() => undefined);
   if (!themeFxInFlight) syncBorderColor();
 }
@@ -409,12 +385,8 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
         : dflt;
     merged.uiRadius = clampMetric(merged.uiRadius, 0, 24, DEFAULT_SETTINGS.uiRadius);
     merged.uiGap = clampMetric(merged.uiGap, 4, 24, DEFAULT_SETTINGS.uiGap);
-    // 窗口毛玻璃档位脏值回落关（旧档/手改档未知串）
-    if (
-      merged.windowGlass !== "off" &&
-      merged.windowGlass !== "mica" &&
-      merged.windowGlass !== "acrylic"
-    )
+    // 窗口毛玻璃档位脏值回落关（旧档未知串/OS 方案旧枚举 mica/acrylic 同回落）
+    if (merged.windowGlass !== "off" && merged.windowGlass !== "on")
       merged.windowGlass = "off";
     // 图标视图已删除（2026-10-13）：旧档存过 icons 时回落详细信息
     if ((merged.defaultView as string) === "icons") merged.defaultView = "details";

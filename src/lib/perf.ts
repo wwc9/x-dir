@@ -38,7 +38,7 @@ export function resolvePerf(mode: PerfMode, tier: PerfTier): PerfTier {
 
 /** 两档预设（写入对应设置项；高性能 = 出厂默认值）。
  *  剪贴板历史常驻浮窗是第二个 WebView 进程，弱机内存开销显著；
- *  窗口毛玻璃属系统合成器开销，低配强制关；高性能档不含此键 = 不重置
+ *  窗口毛玻璃属全窗模糊合成开销，低配强制关；高性能档不含此键 = 不重置
  *  用户显式开启的选择 */
 export const PERF_PRESET: Record<PerfTier, Partial<Settings>> = {
   high: {
@@ -95,6 +95,6 @@ export const PERF_TABLE: { label: string; high: string; low: string }[] = [
   {
     label: "窗口毛玻璃",
     high: "可选（设置 → 外观）",
-    low: "关（系统合成器开销）",
+    low: "关（省一层模糊合成）",
   },
 ];

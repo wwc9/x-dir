@@ -373,16 +373,53 @@ body {
   backdrop-filter: none;
   background: var(--np-surface);
 }
-/* 窗口毛玻璃（2026-11-17 外观 tab 定案）：tauri windowEffects（mica/acrylic）
-   开启时挂根类 glasswin。模糊由 Windows 合成器（DWM）完成——桌面与背后窗口
-   实时高斯模糊透出窗口，WebView 内只做 alpha 透明：画布全透（沟槽/留白直接
-   看到模糊桌面），面板卡片换「霜」玻璃半透明底（token 深浅主题各一套自动
-   跟随）；填充输入面 --np-surface-2 保持实底保证可读。须压过 :root 与 .dark
-   两段 token：html 前缀同特异性置于其后即胜 */
+/* 窗口毛玻璃（2026-11-17 外观 tab 定案 = 渐变底 + 窗格霜玻璃，纯 CSS）：
+   根类 glasswin 下画布 --np-bg 换极光渐变（深浅主题各一套：径向色斑 + 线性
+   基底），面板卡片换「霜」玻璃半透明底并挂 backdrop-filter 实时模糊渐变底
+   ——模糊在 WebView 内完成（backdrop-filter 只采样页内内容，渐变在页内所以
+   有效），不依赖 OS 合成器、远程会话友好；填充输入面 --np-surface-2 保持
+   实底保证可读。须压过 :root 与 .dark 两段 token：html 前缀同特异性置于其后 */
 html.glasswin,
 html.glasswin.bp6-dark {
-  --np-bg: transparent;
+  --np-bg: radial-gradient(
+      120% 90% at 85% 6%,
+      rgba(96, 158, 255, 0.3),
+      transparent 62%
+    ),
+    radial-gradient(110% 85% at 8% 94%, rgba(64, 196, 182, 0.26), transparent 64%),
+    radial-gradient(90% 70% at 42% 42%, rgba(158, 128, 240, 0.18), transparent 66%),
+    linear-gradient(168deg, #eef2f8, #e3eaf4 52%, #dde7ee);
   --np-surface: var(--np-glass);
+}
+html.glasswin.bp6-dark {
+  --np-bg: radial-gradient(
+      120% 90% at 85% 6%,
+      rgba(92, 157, 255, 0.22),
+      transparent 62%
+    ),
+    radial-gradient(110% 85% at 8% 94%, rgba(70, 191, 178, 0.16), transparent 64%),
+    radial-gradient(90% 70% at 42% 42%, rgba(140, 110, 235, 0.15), transparent 66%),
+    linear-gradient(168deg, #181d26, #161b24 52%, #131820);
+}
+/* 渐变底上的实时模糊家族：主卡片（顶栏/窗格/边栏三卡）+ Dialog + 全部菜单
+   浮层；右键菜单「霜」自带同款 blur 不受影响。虚拟列表行在卡片内部，模糊
+   对象是卡片背后的静态渐变，滚动不触发重模糊（合成层缓存，开销一次性） */
+html.glasswin .np-titlebar,
+html.glasswin .np-pane,
+html.glasswin .np-side-card,
+html.glasswin .np-navtree,
+html.glasswin .np-shelf,
+html.glasswin .np-dialog,
+html.glasswin .bp6-menu {
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  backdrop-filter: blur(22px) saturate(1.4);
+}
+/* 窗缘盖板原样引用 --np-bg（渐变值不能作 color 停靠点），改涂渐变边缘近似实色 */
+html.glasswin .np-winedge {
+  background: #e8edf5;
+}
+html.glasswin.bp6-dark .np-winedge {
+  background: #14181f;
 }
 .nofx-anim .bp6-popover,
 .nofx-anim .bp6-transition-container {

@@ -329,7 +329,6 @@ pub fn run() {
             commands::native::show_context_menu,
             commands::native::start_drag,
             commands::native::set_border_color,
-            commands::native::set_window_glass,
             commands::shot::shot_begin,
             commands::shot::shot_close,
             commands::shot::shot_copy,

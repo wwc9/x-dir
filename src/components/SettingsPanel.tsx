@@ -366,10 +366,10 @@ export function SettingsPanel() {
             </SetRow>
             <SetRow
               label={t("窗口毛玻璃")}
-              desc={t("整个窗口透出系统毛玻璃；Mica 仅 Win11、亚克力帧耗更高，低性能档自动关")}
+              desc={t("画布铺柔和渐变，窗格与浮层实时模糊透出底色；低性能档自动关")}
             >
               <ButtonGroup className="np-seg" size="small" variant="minimal">
-                {(["off", "mica", "acrylic"] as const).map((m) => (
+                {(["off", "on"] as const).map((m) => (
                   <Button
                     key={m}
                     active={s.windowGlass === m}
@@ -377,12 +377,10 @@ export function SettingsPanel() {
                       s.update({ windowGlass: m });
                       useUi
                         .getState()
-                        .toast(
-                          `${t("窗口毛玻璃")}：${m === "off" ? t("关") : m === "mica" ? "Mica" : t("亚克力")}`,
-                        );
+                        .toast(`${t("窗口毛玻璃")}：${m === "off" ? t("关") : t("开")}`);
                     }}
                   >
-                    {m === "off" ? t("关") : m === "mica" ? t("Mica") : t("亚克力")}
+                    {m === "off" ? t("关") : t("开")}
                   </Button>
                 ))}
               </ButtonGroup>

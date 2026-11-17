@@ -1366,13 +1366,12 @@ export const EN: Record<string, string> = {
   "浅色": "Light",
   "深色": "Dark",
   "关": "Off",
-  "Mica": "Mica",
-  "亚克力": "Acrylic",
+  "开": "On",
   "窗口毛玻璃": "Window frosted glass",
-  "整个窗口透出系统毛玻璃；Mica 仅 Win11、亚克力帧耗更高，低性能档自动关":
-    "Frost the whole window with the system backdrop. Mica: Win11 only; Acrylic costs more GPU. Auto-off in low-performance mode.",
+  "画布铺柔和渐变，窗格与浮层实时模糊透出底色；低性能档自动关":
+    "A soft gradient fills the canvas; panes and overlays frost-blur over it. Auto-off in low-performance mode.",
   "可选（设置 → 外观）": "Optional (Settings → Appearance)",
-  "关（系统合成器开销）": "Off (system compositor cost)",
+  "关（省一层模糊合成）": "Off (saves one blur-compositing layer)",
   "清单已导出：{name}（{n} 项）": "List exported: {name} ({n} items)",
   "清理历史条目": "Clear history entries",
   "清理失败：{e}": "Clear failed: {e}",

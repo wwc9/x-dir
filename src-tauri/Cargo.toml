@@ -130,9 +130,6 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 # 编辑类按键（Ctrl+C/V/X/A/Z 等）不受影响；与 wry 同版本保证类型统一
 [target.'cfg(target_os = "windows")'.dependencies]
 webview2-com = "0.39"
-# 窗口毛玻璃（2026-11-17 外观 tab）：直连 DWM 系统 backdrop（mica/acrylic），
-# 真实错误返回前端（tauri 内部亦依赖本 crate，MIT / Apache-2.0 双协议）
-window-vibrancy = "0.8"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

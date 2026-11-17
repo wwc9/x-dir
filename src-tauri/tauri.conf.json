@@ -18,7 +18,6 @@
         "minWidth": 800,
         "minHeight": 500,
         "decorations": false,
-        "transparent": true,
         "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion"
       }
     ],
