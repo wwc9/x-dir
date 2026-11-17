@@ -49,6 +49,7 @@ function toPlain(s: SettingsStore): Settings {  return {
     stagingMode: s.stagingMode,
     dialogPrefs: s.dialogPrefs,
     workspaceOrder: s.workspaceOrder,
+    activeScheme: s.activeScheme,
     confirmDelete: s.confirmDelete,
     autostart: s.autostart,
     toolbarEntries: s.toolbarEntries,

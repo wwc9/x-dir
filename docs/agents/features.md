@@ -451,6 +451,7 @@
 - **主窗 save_settings = 合并落盘并保留补丁键**：截图八键 + cliphistWinW/H 由轻量窗直写磁盘，主窗 store 启动后不重读——整对象覆盖会把它们回滚到启动旧值（settings 落盘另有 800ms 防抖 + pagehide 冲刷）。
 - **开机自启（2026-11-15）**：设置 →「配置」页开关，`autostart_set` 命令经 tauri-plugin-autostart（MIT/Apache-2.0）写 Windows HKCU Run 键。**单一事实源 = settings.json `autostart` 字段**（随导出迁移），注册表是派生态：每次启动 `apply_autostart_pref` 幂等回放（手动删键/清理工具漂移自动拉齐），导入配置后前端显式重放；开关写注册表失败回滚 UI 并 toast。
 - **打开配置保存位置（2026-11-15）**：设置 →「配置」页按钮，`open_config_folder` 命令 Rust 侧直调 opener 插件 `reveal_item_in_dir` 在资源管理器定位 settings.json（不经前端 JS 通道，无 ACL/权限面），返回路径供灵动岛回执。
+- **选中布局方案持久化（2026-11-17 用户反馈「重启回到默认方案」定案）**：`settings.activeScheme`（string | null，null = 未选/显示回落内置默认方案）= 侧栏高亮与启动回退的单一事实源，Sidebar 不再有本地 `current` state（旧实现初始硬编码默认方案，重启永远高亮默认；且选中名悬空时「保存到当前方案」会把会话树误写进默认方案）。启动回退链定案：上次会话（restoreLastSession 开）→ 选中方案档 → 默认方案档 → 出厂 2×2——关闭「恢复上次会话」后重启回到用户选中的方案而非默认方案。方案列表刷新（含导入事件）时发现 activeScheme 指向的档已不存在即回落 null 防高亮悬空；Rust 侧 settings 为 Value 直通，新字段零后端改动。
 
 ### 12.7 工作日历
 

@@ -494,7 +494,13 @@ export function Sidebar() {  const t = useT();
     const m = new Map(items.map((i) => [i.name, i]));
     return (n: string) => m.get(n);
   }, [items]);
-  const [current, setCurrent] = useState<string | null>(DEFAULT_SCHEME);
+  // 当前选中方案（2026-11-17 用户反馈「重启回到默认方案」定案）：单一事实源
+  // = settings.activeScheme（随 settings.json 持久化，重启记住选中）；
+  // null = 未选，显示回落内置默认方案（与既有首屏高亮口径一致）
+  const savedScheme = useSettings((s) => s.activeScheme);
+  const current = savedScheme ?? DEFAULT_SCHEME;
+  const setCurrent = (name: string | null) =>
+    useSettings.getState().update({ activeScheme: name });
   /** 已保存的默认方案树；null = 未保存过（应用/显示出厂 2×2） */
   const [defaultTree, setDefaultTree] = useState<LayoutNode | null>(null);
   // 宽度/折叠/上下分割集中存 settings（2026-10-12 配置集中化）；拖动经本地态实时反馈、松手提交
@@ -517,8 +523,13 @@ export function Sidebar() {  const t = useT();
       .catch(() => setDefaultTree(null));
     api
       .listWorkspaces()
-      .then((names) =>
-        Promise.all(
+      .then((names) => {
+        // 选中方案已被删除（导入覆盖同名档缺失/外部删档）时回落未选，防高亮悬空
+        const saved = useSettings.getState().activeScheme;
+        if (saved && saved !== DEFAULT_SCHEME && !names.includes(saved)) {
+          setCurrent(null);
+        }
+        return Promise.all(
           names
             .filter((n) => n !== LAST_SESSION && n !== DEFAULT_SCHEME)
             .map(async (name) => {
@@ -529,8 +540,8 @@ export function Sidebar() {  const t = useT();
                 return { name, tree: null };
               }
             }),
-        ),
-      )
+        );
+      })
       .then(setItems)
       .catch(() => undefined);
   }, []);

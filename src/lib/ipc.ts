@@ -430,6 +430,11 @@ export interface Settings {
   /** 布局方案显示顺序（2026-11-06 拖动排序）：方案名列表；不在表中的新方案
    *  按文件名字典序追加尾部，表中的已删方案自然失效（读取时过滤） */
   workspaceOrder: string[];
+  /** 当前选中的布局方案（2026-11-17 用户反馈「重启回到默认方案」定案）：
+   *  侧栏高亮与启动回退（上次会话不可用时回到该方案）的单一事实源；
+   *  null = 未选（显示与回落均为内置默认方案）。Rust 侧 settings 为 Value
+   *  直通，本字段随 save_settings 原样落盘 */
+  activeScheme: string | null;
   /** 暂存区拖出语义（暂存区标题切换钮）：move = 落窗格即移动并移出暂存；
    *  copy = 复制到目标窗格、条目保留 */
   stagingMode: "move" | "copy";
@@ -587,6 +592,7 @@ export const DEFAULT_SETTINGS: Settings = {
   rememberSelection: true,
   staging: [],
   workspaceOrder: [],
+  activeScheme: null,
   stagingMode: "move",
   nameIndex: { enabled: false },
   shotEnabled: true,

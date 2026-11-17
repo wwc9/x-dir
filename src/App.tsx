@@ -115,6 +115,17 @@ export default function App() {
             // 无上次会话文件
           }
         }
+        // 选中布局方案回退（2026-11-17 用户反馈「重启回到默认方案」）：上次会话
+        // 不可用（关闭恢复开关/无会话档）时回到用户选中过的方案，而不是永远
+        // 默认方案；选中名持久化在 settings.activeScheme（Sidebar 读写同一事实源）
+        if (!restored && st.activeScheme && st.activeScheme !== "默认方案") {
+          try {
+            const ws = await api.loadWorkspace(st.activeScheme);
+            restored = (ws.tree as LayoutNode) ?? null;
+          } catch {
+            // 方案档已被删除/损坏
+          }
+        }
         // 无会话可恢复时回落到"默认方案"：已保存过则用保存的布局，否则出厂 2×2
         if (!restored) {
           try {
