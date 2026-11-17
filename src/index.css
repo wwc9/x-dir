@@ -390,18 +390,27 @@ html.glasswin {
     linear-gradient(168deg, #eef2f8, #e3eaf4 52%, #dde7ee);
   --np-surface: var(--np-glass);
 }
-/* 深色霜 = macOS 深色 vibrancy 口径：面板 tint 比背后亮且偏蓝灰（暗色叠暗色
-   不可感知），alpha 压低让渐变色相穿透；渐变色斑同步加强到深色下可辨 */
+/* 深色霜 = macOS 深色 vibrancy 口径：高饱和极光画布（亮蓝/青/紫大色斑、
+   蓝调基底，肉眼直接可辨）+ 面板 tint 提亮偏蓝灰且压低 alpha（比背后模糊底
+   更沉稳，色相穿透，即「鲜艳壁纸 + 冷静玻璃板」的层次对比） */
 html.glasswin.bp6-dark {
   --np-bg: radial-gradient(
       120% 90% at 85% 6%,
-      rgba(92, 157, 255, 0.5),
+      rgba(92, 157, 255, 0.55),
       transparent 60%
     ),
-    radial-gradient(110% 85% at 8% 94%, rgba(64, 200, 190, 0.42), transparent 62%),
-    radial-gradient(90% 70% at 42% 42%, rgba(150, 115, 240, 0.45), transparent 64%),
-    linear-gradient(168deg, #1d2839, #192236 52%, #141e2c);
-  --np-surface: rgba(56, 66, 88, 0.52);
+    radial-gradient(110% 85% at 8% 94%, rgba(64, 200, 190, 0.45), transparent 62%),
+    radial-gradient(90% 70% at 42% 42%, rgba(150, 115, 240, 0.5), transparent 64%),
+    linear-gradient(168deg, #253352, #1f2c48 52%, #182343);
+  --np-surface: rgba(52, 64, 92, 0.58);
+}
+/* 玻璃卡顶缘高光：深色下勾勒「玻璃板」受光边，强化玻璃体感 */
+html.glasswin.bp6-dark .np-titlebar,
+html.glasswin.bp6-dark .np-pane,
+html.glasswin.bp6-dark .np-side-card,
+html.glasswin.bp6-dark .np-navtree,
+html.glasswin.bp6-dark .np-shelf {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 /* 渐变底上的实时模糊家族：主卡片（顶栏/窗格/边栏三卡）+ Dialog + 全部菜单
    浮层；右键菜单「霜」自带同款 blur 不受影响。虚拟列表行在卡片内部，模糊
@@ -421,7 +430,7 @@ html.glasswin .np-winedge {
   background: #e8edf5;
 }
 html.glasswin.bp6-dark .np-winedge {
-  background: #141e2c;
+  background: #182343;
 }
 .nofx-anim .bp6-popover,
 .nofx-anim .bp6-transition-container {
