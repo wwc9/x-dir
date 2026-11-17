@@ -394,6 +394,9 @@ html.glasswin > body {
     radial-gradient(130% 100% at 8% 96%, rgba(244, 78, 128, 0.42), transparent 64%),
     linear-gradient(160deg, #f7f1f4, #f2eaef 50%, #e7ecf5);
   --np-surface: var(--np-glass);
+  /* 玻璃子面（地址 pill/缩放钮/chip/空态徽标等 surface-2 消费方）：半透明白，
+     叠在已模糊的卡片面上透出柔化色——子面无文字穿透风险（背后是霜面非裸列表） */
+  --np-surface-2: rgba(255, 255, 255, 0.45);
   /* 强霜面（Dialog 可读性优先，比卡片 0.55 霜更实） */
   --np-surface-glass-strong: rgba(255, 255, 255, 0.7);
 }
@@ -410,6 +413,7 @@ html.glasswin.bp6-dark > body {
     radial-gradient(130% 100% at 6% 92%, rgba(196, 60, 92, 0.5), transparent 64%),
     linear-gradient(160deg, #1e2436, #241d31 45%, #33141f);
   --np-surface: rgba(36, 41, 55, 0.55);
+  --np-surface-2: rgba(255, 255, 255, 0.07);
   --np-surface-glass-strong: rgba(30, 35, 50, 0.7);
 }
 /* 常驻主卡片玻璃：霜面 + 实时模糊 + glass-ring 边 + glass-shadow 光晕；深色加
@@ -446,6 +450,11 @@ html.glasswin .np-tip {
   border-color: var(--np-glass-ring);
   -webkit-backdrop-filter: blur(22px) saturate(1.4);
   backdrop-filter: blur(22px) saturate(1.4);
+}
+/* 窗格导航栏（地址行）：glasswin 下铺 surface-2 玻璃子面条（默认透明裸条
+   在渐变画布上显得未处理），底发丝线保留 */
+html.glasswin .np-nav {
+  background: var(--np-surface-2);
 }
 /* 窗缘盖板原样引用 --np-bg（渐变值不能作 color 停靠点），改涂渐变边缘近似实色 */
 html.glasswin .np-winedge {

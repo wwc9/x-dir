@@ -244,6 +244,6 @@
 - **画布**：`--np-bg` 换 Big Sur 风渐变（浅色 = 白云带/天空蓝/橙浪/珊瑚粉；深色 = navy 顶/青蓝板岩/紫晕/绯红底，对照用户提供的壁纸亮暗对应取色），body 直接铺。
 - **卡片玻璃配方（单源）**：面板主卡片（.np-titlebar/.np-pane/.np-side-card/.np-navtree/.np-shelf）+ .np-dialog + .bp6-menu——`--np-surface` 换霜玻璃半透明底（浅 = --np-glass 白 0.55；深 = rgba(36,41,55,0.55) 蓝灰）+ `backdrop-filter: blur(22px) saturate(1.4)` + 边框换 `--np-glass-ring` + 外投影 `--np-glass-shadow`；深色另加顶缘 inset 白 8% 受光高光。
 - **强霜层**：.np-dialog 用 `--np-surface-glass-strong`（0.7）——浮层可读性优先于通透；菜单保持 0.55 霜（右键菜单「霜」定稿口径）。
-- **实底保持**：`--np-surface-2` 填充控件（输入/触发钮）、虚拟列表行、`.np-winedge` 窗缘盖板（渐变不能作 color 停靠点，涂边缘近似实色：浅 #f0e9ee / 深 #1e2233）。
+- **子面玻璃化**：`--np-surface-2` 填充面（输入框/地址 pill/缩放钮/chip/空态徽标等）在 glasswin 下换半透明白（浅 rgba(255,255,255,0.45) / 深 rgba(255,255,255,0.07)）呈现玻璃子面——子面都叠在已模糊的卡片面上，透出柔化色无文字穿透风险；窗格导航栏 `.np-nav` 默认透明裸条，glasswin 下铺 surface-2 玻璃条；虚拟列表行不挂模糊；`.np-winedge` 窗缘盖板（渐变不能作 color 停靠点，涂边缘近似实色：浅 #f0e9ee / 深 #1e2233）。
 - **⚠ dark 类挂 html+body 两处陷阱**：`.dark` token 块在 body 直接声明 --np-bg/--np-surface，直接声明恒压过 html 继承——glasswin 覆写必须含 `html.glasswin > body` 直接声明体，漏写则浅色正常、深色整段失效回实底。
 - **性能**：模糊对象 = 卡片背后静态渐变，列表滚动不触发重模糊（合成层缓存）；常驻卡片挂 blur 为用户定案接受的成本，低性能档整段自动关对冲。

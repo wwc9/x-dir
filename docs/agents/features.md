@@ -497,7 +497,7 @@
 - **机制**：glasswin 根类下画布 `--np-bg` 换极光渐变（径向色斑 + 线性基底，深浅主题各一套），主卡片（顶栏 .np-titlebar / 窗格 .np-pane / 边栏三卡 .np-side-card·.np-navtree·.np-shelf）+ Dialog + 全部菜单（.bp6-menu）经 token 换 `--np-glass` 半透明底并挂 `backdrop-filter: blur(22px) saturate(1.4)` 实时模糊渐变底——backdrop-filter 只采样页内内容，渐变在页内所以有效，不依赖 OS 合成器；填充输入面 `--np-surface-2` 保持实底保证可读。
 - **成本与兜底**：模糊对象 = 卡片背后的静态渐变，列表滚动不触发重模糊（合成层缓存，开销一次性）；性能 tab 低配预设强制 `windowGlass: "off"`（PERF_TABLE「窗口毛玻璃」行），高性能档不含此键 = 不重置用户显式选择——用户定案以低配自动关对冲性能铁律。
 - **细节坑**：`.np-winedge` 窗缘盖板原写法 `linear-gradient(var(--np-bg), var(--np-bg))` 在渐变值下非法（渐变不能作 color 停靠点），glasswin 下改涂渐变边缘近似实色（浅 #e8edf5 / 深 #14181f）。
-- **二轮深度打磨（2026-11-17）**：画布换 Big Sur 风色板（浅：白云带/天空蓝/橙浪/珊瑚粉；深：navy/青蓝板岩/紫晕/绯红底，对照用户壁纸亮暗对应取色）；卡片玻璃配方升级（glass-ring 边 + glass-shadow 光晕投影、深色顶缘受光高光）；强霜层 Dialog 0.7（可读性优先）；门禁 = 仅高性能档可用（外观页低配档「开」钮禁用 + desc 提示，探测提为共享 usePerfDetect hook）；规范成文 ui-standards §4.10；窗缘盖板随新画布改 #f0e9ee/#1e2233。
+- **二轮深度打磨（2026-11-17）**：画布换 Big Sur 风色板（浅：白云带/天空蓝/橙浪/珊瑚粉；深：navy/青蓝板岩/紫晕/绯红底，对照用户壁纸亮暗对应取色）；卡片玻璃配方升级（glass-ring 边 + glass-shadow 光晕投影、深色顶缘受光高光）；强霜层 Dialog 0.7（可读性优先）；门禁 = 仅高性能档可用（外观页低配档「开」钮禁用 + desc 提示，探测提为共享 usePerfDetect hook）；规范成文 ui-standards §4.10；窗缘盖板随新画布改 #f0e9ee/#1e2233。三轮（同日）：surface-2 玻璃子面化（地址 pill/缩放钮/chip/空态徽标，浅白 0.45/深白 0.07）+ .np-nav 玻璃条 + Popover 内容面/np-tip 入浮层强霜（修复自定义内容弹层半透明无模糊的文字穿透重叠）。
 
 ## 13. 横切改造记录（跨功能域批量改造，按时间倒序）
 
