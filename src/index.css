@@ -462,6 +462,14 @@ html.glasswin .np-dialog .bp6-dialog-body-scroll-container {
 html.glasswin .np-nav {
   background: var(--np-surface-2);
 }
+/* ⚠ 地址双层面（crumbs 绝对定位覆盖在 input 上，靠不透明 surface-2 互相遮盖）：
+   glasswin 下 surface-2 变半透明后遮盖失效 → 两层文字透叠。未聚焦时输入文字
+   转透明（crumbs 在场显示面包屑）；聚焦即编辑（:focus-within 已隐藏 crumbs），
+   输入文字恢复原色正常打字 */
+html.glasswin .np-addrwrap:not(:focus-within) .np-addr .bp6-input {
+  color: transparent;
+  caret-color: transparent;
+}
 /* 窗缘盖板原样引用 --np-bg（渐变值不能作 color 停靠点），改涂渐变边缘近似实色 */
 html.glasswin .np-winedge {
   background: #f0e9ee;
