@@ -379,8 +379,7 @@ body {
    ——模糊在 WebView 内完成（backdrop-filter 只采样页内内容，渐变在页内所以
    有效），不依赖 OS 合成器、远程会话友好；填充输入面 --np-surface-2 保持
    实底保证可读。须压过 :root 与 .dark 两段 token：html 前缀同特异性置于其后 */
-html.glasswin,
-html.glasswin.bp6-dark {
+html.glasswin {
   --np-bg: radial-gradient(
       120% 90% at 85% 6%,
       rgba(96, 158, 255, 0.3),
@@ -391,15 +390,18 @@ html.glasswin.bp6-dark {
     linear-gradient(168deg, #eef2f8, #e3eaf4 52%, #dde7ee);
   --np-surface: var(--np-glass);
 }
+/* 深色霜 = macOS 深色 vibrancy 口径：面板 tint 比背后亮且偏蓝灰（暗色叠暗色
+   不可感知），alpha 压低让渐变色相穿透；渐变色斑同步加强到深色下可辨 */
 html.glasswin.bp6-dark {
   --np-bg: radial-gradient(
       120% 90% at 85% 6%,
-      rgba(92, 157, 255, 0.34),
+      rgba(92, 157, 255, 0.5),
       transparent 60%
     ),
-    radial-gradient(110% 85% at 8% 94%, rgba(70, 191, 178, 0.26), transparent 62%),
-    radial-gradient(90% 70% at 42% 42%, rgba(140, 110, 235, 0.3), transparent 64%),
-    linear-gradient(168deg, #1b2334, #172231 52%, #121a28);
+    radial-gradient(110% 85% at 8% 94%, rgba(64, 200, 190, 0.42), transparent 62%),
+    radial-gradient(90% 70% at 42% 42%, rgba(150, 115, 240, 0.45), transparent 64%),
+    linear-gradient(168deg, #1d2839, #192236 52%, #141e2c);
+  --np-surface: rgba(56, 66, 88, 0.52);
 }
 /* 渐变底上的实时模糊家族：主卡片（顶栏/窗格/边栏三卡）+ Dialog + 全部菜单
    浮层；右键菜单「霜」自带同款 blur 不受影响。虚拟列表行在卡片内部，模糊
@@ -419,7 +421,7 @@ html.glasswin .np-winedge {
   background: #e8edf5;
 }
 html.glasswin.bp6-dark .np-winedge {
-  background: #14181f;
+  background: #141e2c;
 }
 .nofx-anim .bp6-popover,
 .nofx-anim .bp6-transition-container {
