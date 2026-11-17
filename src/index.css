@@ -416,9 +416,10 @@ html.glasswin.bp6-dark > body {
   --np-surface-2: rgba(255, 255, 255, 0.07);
   --np-surface-glass-strong: rgba(30, 35, 50, 0.7);
 }
-/* 常驻主卡片玻璃：霜面 + 实时模糊 + glass-ring 边 + glass-shadow 光晕；深色加
-   顶缘受光高光。虚拟列表行在卡片内部，模糊对象是卡片背后静态渐变，滚动不
-   触发重模糊（合成层缓存，开销一次性） */
+/* 常驻主卡片玻璃：霜面 + 实时模糊 + glass-ring 边——贴面便签语言，不挂外
+   阴影（大卡片光晕在窄沟槽里积灰，沟槽靠画布渐变提层次）；深色加顶缘受光
+   高光。虚拟列表行在卡片内部，模糊对象是卡片背后静态渐变，滚动不触发重
+   模糊（合成层缓存，开销一次性） */
 html.glasswin .np-titlebar,
 html.glasswin .np-pane,
 html.glasswin .np-side-card,
@@ -428,26 +429,25 @@ html.glasswin .np-shelf {
   border-color: var(--np-glass-ring);
   -webkit-backdrop-filter: blur(22px) saturate(1.4);
   backdrop-filter: blur(22px) saturate(1.4);
-  box-shadow: var(--np-glass-shadow);
 }
 html.glasswin.bp6-dark .np-titlebar,
 html.glasswin.bp6-dark .np-pane,
 html.glasswin.bp6-dark .np-side-card,
 html.glasswin.bp6-dark .np-navtree,
 html.glasswin.bp6-dark .np-shelf {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    var(--np-glass-shadow);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
-/* 浮层强霜（0.7，浮层可读性优先）：Dialog / 菜单 / Popover 内容面（布局预设
-   等自定义内容弹层——半透明无模糊会背景文字穿透）/ 悬浮提示；ctx 子菜单弹层
-   外壳按定稿保持透明（菜单自带霜面），:not 排除防双重霜 */
+/* 浮层强霜（0.7，浮层可读性优先）+ glass-shadow 光晕（浮离于画布之上才有
+   「浮」的资格）：Dialog / 菜单 / Popover 内容面（布局预设等自定义内容弹层
+   ——半透明无模糊会背景文字穿透）/ 悬浮提示；ctx 子菜单弹层外壳按定稿保持
+   透明（菜单自带霜面），:not 排除防双重霜 */
 html.glasswin .np-dialog,
 html.glasswin .bp6-menu,
 html.glasswin .bp6-popover:not(.np-ctx-pop) .bp6-popover-content,
 html.glasswin .np-tip {
   background: var(--np-surface-glass-strong);
   border-color: var(--np-glass-ring);
+  box-shadow: var(--np-glass-shadow);
 }
 /* ⚠ Dialog 的 blur 必须挂 body 滚动容器而非根节点：Chromium 下「根节点
    backdrop-filter + 内嵌滚动容器」采样失效返回白色（2026-11-17 实测白板
@@ -470,12 +470,13 @@ html.glasswin .np-addrwrap:not(:focus-within) .np-addr .bp6-input {
   color: transparent;
   caret-color: transparent;
 }
-/* 窗缘盖板原样引用 --np-bg（渐变值不能作 color 停靠点），改涂渐变边缘近似实色 */
+/* 窗缘盖板：glasswin 下改磨砂玻璃边框——强霜半透明 + backdrop blur 采样
+   渐变边缘（实色条与渐变色相错位的旧问题消除），四缘统一「玻璃框」语言，
+   仍覆盖 WebView2 缘合线 */
 html.glasswin .np-winedge {
-  background: #f0e9ee;
-}
-html.glasswin.bp6-dark .np-winedge {
-  background: #1e2233;
+  background: var(--np-surface-glass-strong);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  backdrop-filter: blur(22px) saturate(1.4);
 }
 .nofx-anim .bp6-popover,
 .nofx-anim .bp6-transition-container {

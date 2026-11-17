@@ -242,9 +242,9 @@
 设置 → 外观 →「窗口毛玻璃」开；**仅高性能档可用**（外观页按解析档门禁：低配档「开」钮禁用 + desc 提示；低配预设强制 off、高性能预设不重置用户选择）。纯 CSS 实现（backdrop-filter 采样页内渐变，不依赖 OS 合成器），根类 `glasswin` 挂 html，样式单源 index.css「窗口毛玻璃 glasswin」段。
 
 - **画布**：`--np-bg` 换 Big Sur 风渐变（浅色 = 白云带/天空蓝/橙浪/珊瑚粉；深色 = navy 顶/青蓝板岩/紫晕/绯红底，对照用户提供的壁纸亮暗对应取色），body 直接铺。
-- **卡片玻璃配方（单源）**：面板主卡片（.np-titlebar/.np-pane/.np-side-card/.np-navtree/.np-shelf）+ .np-dialog + .bp6-menu——`--np-surface` 换霜玻璃半透明底（浅 = --np-glass 白 0.55；深 = rgba(36,41,55,0.55) 蓝灰）+ `backdrop-filter: blur(22px) saturate(1.4)` + 边框换 `--np-glass-ring` + 外投影 `--np-glass-shadow`；深色另加顶缘 inset 白 8% 受光高光。
+- **卡片玻璃配方（分层单源）**：**常驻主卡片**（.np-titlebar/.np-pane/.np-side-card/.np-navtree/.np-shelf）= `--np-surface` 换霜玻璃半透明底（浅 = --np-glass 白 0.55；深 = rgba(36,41,55,0.55) 蓝灰）+ `backdrop-filter: blur(22px) saturate(1.4)` + 边框换 `--np-glass-ring`，**不挂外阴影**（大卡片光晕在窄沟槽积灰；贴面便签语言靠 ring 边 + 画布渐变提层次；深色加顶缘 inset 白 8% 受光高光）；**浮层强霜**（.np-dialog/.bp6-menu/.bp6-popover-content/.np-tip）= `--np-surface-glass-strong` 0.7 强霜面 + `--np-glass-shadow` 光晕（浮离画布之上才有「浮」的资格）+ blur（Dialog 的 blur 挂 body 滚动容器，见下条陷阱）。
 - **强霜层**：.np-dialog 用 `--np-surface-glass-strong`（0.7）——浮层可读性优先于通透；菜单保持 0.55 霜（右键菜单「霜」定稿口径）。
-- **子面玻璃化**：`--np-surface-2` 填充面（输入框/地址 pill/缩放钮/chip/空态徽标等）在 glasswin 下换半透明白（浅 rgba(255,255,255,0.45) / 深 rgba(255,255,255,0.07)）呈现玻璃子面——子面都叠在已模糊的卡片面上，透出柔化色无文字穿透风险；窗格导航栏 `.np-nav` 默认透明裸条，glasswin 下铺 surface-2 玻璃条；虚拟列表行不挂模糊；`.np-winedge` 窗缘盖板（渐变不能作 color 停靠点，涂边缘近似实色：浅 #f0e9ee / 深 #1e2233）。
+- **子面玻璃化**：`--np-surface-2` 填充面（输入框/地址 pill/缩放钮/chip/空态徽标等）在 glasswin 下换半透明白（浅 rgba(255,255,255,0.45) / 深 rgba(255,255,255,0.07)）呈现玻璃子面——子面都叠在已模糊的卡片面上，透出柔化色无文字穿透风险；窗格导航栏 `.np-nav` 默认透明裸条，glasswin 下铺 surface-2 玻璃条；虚拟列表行不挂模糊；`.np-winedge` 窗缘盖板改磨砂玻璃边框（强霜半透明 + blur 采样渐变边缘，消除实色条与渐变色相错位，四缘统一玻璃框语言，仍覆盖 WebView2 缘合线）。
 - **⚠ 地址双层面遮盖依赖**：`.np-addr-crumbs`（absolute inset-0）覆盖在地址输入上方，靠**不透明 surface-2 底**遮住下层输入文字——surface-2 半透明化后该遮盖失效（两层文字透叠，2026-11-17 实测）。修复 = glasswin 下未聚焦时输入文字转透明：`html.glasswin .np-addrwrap:not(:focus-within) .np-addr .bp6-input { color/caret: transparent }`（聚焦即编辑态，crumbs 已移除、输入恢复原色）。**凡叠加遮盖类子面改半透明前，先排查其是否依赖不透明底遮盖下层内容**。
 - **⚠ dark 类挂 html+body 两处陷阱**：`.dark` token 块在 body 直接声明 --np-bg/--np-surface，直接声明恒压过 html 继承——glasswin 覆写必须含 `html.glasswin > body` 直接声明体，漏写则浅色正常、深色整段失效回实底。
 - **性能**：模糊对象 = 卡片背后静态渐变，列表滚动不触发重模糊（合成层缓存）；常驻卡片挂 blur 为用户定案接受的成本，低性能档整段自动关对冲。
