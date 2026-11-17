@@ -560,6 +560,43 @@ export const EN: Record<string, string> = {
   "删除前确认": "Confirm before delete",
   // 是否展示文件夹的大小（2026-11-17 用户定案措辞；关闭后文件夹大小列留空）
   "是否展示文件夹的大小": "Show folder sizes",
+  // 性能 tab（2026-11-17 性能模式定案）
+  "性能": "Performance",
+  "性能模式": "Performance mode",
+  "「自动」按设备判定（远程会话/CPU 线程/内存/显卡）；切换即真实应用下表全部差异，可随时改回":
+    "“Auto” picks a tier from your device (remote session, CPU threads, memory, GPU). Switching applies every difference in the table below immediately — you can change it back anytime",
+  "自动（按设备判定）": "Auto (by device)",
+  "高性能": "High performance",
+  "低性能": "Low resources",
+  "设置项": "Setting",
+  "设备判定：{tier}（{cpu} · {mem}GB 内存 · {gpu}）":
+    "Device tier: {tier} ({cpu} · {mem} GB RAM · {gpu})",
+  "远程会话，按低性能处理": "Remote session — treated as low resources",
+  "线程": "threads",
+  "未检出独立显卡": "no discrete GPU detected",
+  "正在读取设备信息…": "Reading device info…",
+  "切换模式会立即应用上表全部差异；自动档只按设备决定默认，之后各项仍可在对应设置页手动调整。":
+    "Switching modes applies every difference above immediately; Auto only sets defaults from your device — each item stays adjustable in its own settings page",
+  "真实图标": "Real file icons",
+  "显示文件类型的系统真实图标": "Show real system icons for file types",
+  "关，回退线条图标": "Off — fall back to line icons",
+  "文件夹大小": "Folder sizes",
+  "显示（后台递归计算，异步补齐）": "On (computed in the background, filled in async)",
+  "关（大小列留空，省 IO）": "Off (size column blank, saves IO)",
+  "截图十字辅助线": "Screenshot crosshair",
+  "开（截图选取时显示）": "On (shown while selecting a region)",
+  "关（少一层全屏覆盖层重绘）": "Off (one fewer fullscreen overlay repaint)",
+  "开（后台监听 + 常驻浮窗）": "On (background watcher + resident panel)",
+  "关（省内存与后台开销）": "Off (saves memory and background cost)",
+  "右键菜单毛玻璃": "Context menu frosted glass",
+  "开（「霜」玻璃质感）": "On (frosted-glass look)",
+  "关（实底，弱 GPU / 远程更流畅）": "Off (solid — smoother on weak GPUs / remote)",
+  "主题与浮层动画": "Theme & overlay animations",
+  "开（圆形揭示 / 进场过渡）": "On (circular reveal / entrance transitions)",
+  "关（直切，不重绘）": "Off (instant switch, no repaint)",
+  "已按低配置优化视觉效果（可在设置 → 性能中调整）":
+    "Visuals optimized for lower-end hardware (adjust in Settings → Performance)",
+
   "开启后文件夹行异步计算并显示递归体积（大文件夹稍后补齐，单文件夹上限 20 万文件）；关闭后大小列留空":
     "When on, folder rows show asynchronously computed recursive sizes (large folders fill in later, capped at 200k files per folder); off leaves the size column blank",
   // 关闭窗格确认（2026-11-17 用户定案：与删除确认同模式的「以后不再确认」）

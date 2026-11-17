@@ -356,6 +356,55 @@ body {
       var(--np-shadow);
   }
 }
+/* 性能模式视觉降级（2026-11-17 性能 tab 定案）：根类 nofx-glass / nofx-anim
+   由 settings.applyPerfFx 按开关挂载。nofx-glass = 毛玻璃实底（backdrop-filter
+   是弱 GPU/远程会话最大帧耗源，实底脸与上方 @supports 兜底同款）；
+   nofx-anim = 装饰性过渡直切（功能性指示如进度条扫动保留） */
+.nofx-glass .np-ctx .bp6-menu,
+.nofx-glass .np-ctx-pop .bp6-menu {
+  background: var(--np-surface);
+  backdrop-filter: none;
+  border: none;
+  box-shadow:
+    0 0 0 1px var(--np-border),
+    var(--np-shadow);
+}
+.nofx-glass .np-cal-monthtitle {
+  backdrop-filter: none;
+  background: var(--np-surface);
+}
+.nofx-anim .bp6-popover,
+.nofx-anim .bp6-transition-container {
+  transition: none !important;
+}
+/* 性能页两模式差异对比表（§4.7 二级页面：13px 正文 + hairline 分行） */
+.np-perf-table {
+  margin-top: 10px;
+  border: 1px solid var(--np-hairline);
+  border-radius: var(--np-radius-lg);
+  overflow: hidden;
+  font-size: var(--np-font-ui);
+}
+.np-perf-tr {
+  display: grid;
+  grid-template-columns: 132px 1fr 1fr;
+}
+.np-perf-tr + .np-perf-tr {
+  border-top: 1px solid var(--np-hairline);
+}
+.np-perf-tr > span {
+  padding: 6px 10px;
+}
+.np-perf-th {
+  background: var(--np-surface-2);
+  font-weight: 600;
+}
+.np-perf-k {
+  color: var(--np-muted);
+}
+.np-perf-device {
+  font-size: var(--np-font-ui);
+}
 /* 分段选择（§4.3：Blueprint ButtonGroup 现成件）。2026-10-24 定案 = 方案 A
    描边勾选 chip（design/wm-seg-proposals.html），替代 surface-2 轨道 + accent
    实心填充——纯文字多段时唯一选中信号太弱，且 accent 整块填充会吞掉语义色

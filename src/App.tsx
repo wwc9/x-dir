@@ -13,7 +13,7 @@ import {
   checkForUpdate,
   isUpdateAvailable,
 } from "./lib/update";
-import { api, THIS_PC, type Settings } from "./lib/ipc";
+import { api, THIS_PC, type Settings, type SystemInfo } from "./lib/ipc";
 import {
   applyPreset,
   dfsPanes,
@@ -32,6 +32,7 @@ import { useIsland } from "./stores/island";
 import { applyTheme, useSettings } from "./stores/settings";
 import { initTooltip } from "./lib/tooltip";
 import { t } from "./lib/i18n";
+import { detectTier, resolvePerf } from "./lib/perf";
 import { AboutDialog } from "./components/AboutDialog";
 import { ContextMenu } from "./components/ContextMenu";
 import { CommandPalette } from "./components/CommandPalette";
@@ -69,6 +70,34 @@ export default function App() {
     (async () => {
       try {
         await useSettings.getState().load();
+        // 性能模式（2026-11-17 性能 tab 定案）：首启硬件判定（结果缓存
+        // perfTier）→ 解析生效档 → 与 perfApplied 不同才应用预设（幂等）。
+        // 必须先于 hotkeys/cliphistConfigure，保证按应用后的偏好配置服务
+        let info: SystemInfo | null = null;
+        let remote = false;
+        try {
+          [info, remote] = await Promise.all([
+            api.systemInfo(),
+            api.isRemoteSession(),
+          ]);
+        } catch {
+          // 检测失败保守按高性能档（默认值即高性能预设）
+        }
+        {
+          const st0: Settings = useSettings.getState();
+          const tier = info !== null ? detectTier(info, remote) : st0.perfTier;
+          if (st0.perfMode === "auto" && st0.perfTier !== tier) {
+            useSettings.getState().update({ perfTier: tier });
+          }
+          const resolved = resolvePerf(st0.perfMode, tier);
+          const firstLow = resolved === "low" && st0.perfApplied !== "low";
+          useSettings.getState().applyPerfMode(resolved);
+          if (firstLow) {
+            useIsland
+              .getState()
+              .pushReceipt("info", t("已按低配置优化视觉效果（可在设置 → 性能中调整）"));
+          }
+        }
         const st: Settings = useSettings.getState();
 
         // 系统级全局热键（§3.7）：全部热键单点全量注册（截图 + 剪贴板历史），

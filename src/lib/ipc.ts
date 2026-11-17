@@ -316,6 +316,8 @@ export interface SystemInfo {
   os: string;
   /** "12th Gen Intel Core i7-12700 · 20 线程" */
   cpu: string;
+  /** 逻辑处理器数（性能模式判定用；0 = 不可得） */
+  cpuThreads: number;
   /** 物理内存总量 GB（1 位小数） */
   memoryGb: number;
   /** 显卡型号（硬件适配器，主卡在前，软件渲染器已滤除） */
@@ -375,6 +377,16 @@ export interface Settings {
   /** 是否展示文件夹的大小（2026-11-17 用户定案）：开启 = 窗格列表异步计算并
    *  显示递归体积；关闭 = 大小列留空。旧档 folderSizePlaceholder 由 load 迁移 */
   showFolderSize: boolean;
+  /** 性能模式（2026-11-17 性能 tab）：auto = 按设备判定档；显式档直通 */
+  perfMode: "auto" | "high" | "low";
+  /** 首启硬件判定档（auto 模式的生效依据，判定一次缓存） */
+  perfTier: "high" | "low";
+  /** 最近一次实际应用的档位（防重复应用预设） */
+  perfApplied: "high" | "low" | null;
+  /** 浮层毛玻璃（右键菜单「霜」/日历吸顶）：弱 GPU/远程会话关 = 实底 */
+  fxGlass: boolean;
+  /** 界面动效（主题圆形揭示/浮层进场过渡）：关 = 直切 */
+  fxAnim: boolean;
   restoreLastSession: boolean;
   /** 开机自启（2026-11-15）：单一事实源在 settings.json，注册表 Run 键为派生态
    *  （Rust 启动回放 apply_autostart_pref；切换经 api.autostartSet 刷注册表） */
@@ -566,6 +578,12 @@ export const DEFAULT_SETTINGS: Settings = {
   confirmClosePane: true,
   // 默认开（展示真实体积；旧档占位开关按同布尔折算）
   showFolderSize: true,
+  // 性能模式默认自动（首启按设备判定档）；毛玻璃/动效默认开
+  perfMode: "auto",
+  perfTier: "high",
+  perfApplied: null,
+  fxGlass: true,
+  fxAnim: true,
   toolbarEntries: [],
   restoreLastSession: true,
   // 开机自启默认关（2026-11-15）：自启属显式选择，不替用户决定
@@ -1407,6 +1425,8 @@ export const api = {
   /** 设备与运行环境信息（关于弹窗，2026-11-06）：OS/CPU/内存/GPU 静态配置 */
   systemInfo: () =>
     cmd<SystemInfo>("system_info"),
+  /** 远程会话检测（RDP/远程桌面，性能模式判定） */
+  isRemoteSession: () => cmd<boolean>("is_remote_session"),
   cliphistToggle: () => cmd<void>("cliphist_toggle"),
   /** 工作日历：读某月全部有条目日期（2026-11-13 新功能） */
   worklogGetMonth: (year: number, month: number) =>

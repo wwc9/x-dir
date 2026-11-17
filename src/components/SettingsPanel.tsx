@@ -18,6 +18,7 @@ import {
   ClipboardList,
   Download,
   Files,
+  Gauge,
   FolderOpen,
   Keyboard,
   Palette,
@@ -30,7 +31,7 @@ import {
   CalendarDays,
 } from "lucide-react";
 
-import { api, type ColorRule, type SortKey, type TagColor, type ViewMode } from "../lib/ipc";
+import { api, type ColorRule, type SortKey, type SystemInfo, type TagColor, type ViewMode } from "../lib/ipc";
 import { ZOOM_STEPS } from "../lib/zoom";
 import { DENSITY } from "../lib/tokens";
 import { SHORTCUT_GROUPS } from "../lib/shortcuts";
@@ -40,6 +41,7 @@ import { confirmDialog, useUi } from "../stores/ui";
 import { AppIcon, ic } from "./AppIcon";
 import { HotkeyRecorder } from "./HotkeyRecorder";
 import { Seg } from "./ImgDialogs";
+import { PERF_TABLE, detectTier, type PerfTier } from "../lib/perf";
 import { recurrenceSummary } from "./RecurrenceEditDialog";
 import { NpSelect } from "./NpSelect";
 
@@ -68,6 +70,7 @@ const SORT_LABELS: Record<SortKey, string> = {
 
 const TABS = [
   { id: "appearance", label: "外观", icon: Palette },
+  { id: "perf", label: "性能", icon: Gauge },
   { id: "browse", label: "浏览", icon: FolderOpen },
   { id: "ops", label: "文件操作", icon: Files },
   { id: "search", label: "全盘搜索", icon: Search },
@@ -81,6 +84,63 @@ const TABS = [
 type TabId = (typeof TABS)[number]["id"];
 /** 顶栏按钮直达某分类（如"自定义右键命令"钮 → commands） */
 export type SettingsTabId = TabId;
+
+/** 设备判定信息行（性能 tab）：展示硬件信号与自动判定结果（一次性拉取缓存） */
+let perfInfoCache: { info: SystemInfo; remote: boolean } | null = null;
+function PerfDeviceRow() {
+  const t = useT();
+  const [detected, setDetected] = useState<
+    { tier: PerfTier; info: SystemInfo; remote: boolean } | null
+  >(null);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      if (!perfInfoCache) {
+        try {
+          const [info, remote] = await Promise.all([
+            api.systemInfo(),
+            api.isRemoteSession(),
+          ]);
+          perfInfoCache = { info, remote };
+        } catch {
+          return;
+        }
+      }
+      if (!alive || !perfInfoCache) return;
+      setDetected({
+        tier: detectTier(perfInfoCache.info, perfInfoCache.remote),
+        info: perfInfoCache.info,
+        remote: perfInfoCache.remote,
+      });
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+  if (!detected) {
+    return (
+      <div className="np-set-row np-perf-device">
+        <span className="np-set-label">{t("正在读取设备信息…")}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="np-set-row np-perf-device">
+      <span className="np-set-label">
+        {t("设备判定：{tier}（{cpu} · {mem}GB 内存 · {gpu}）", {
+          tier: detected.remote
+            ? t("远程会话，按低性能处理")
+            : detected.tier === "low"
+              ? t("低性能")
+              : t("高性能"),
+          cpu: `${detected.info.cpu}（${detected.info.cpuThreads} ${t("线程")}）`,
+          mem: String(Math.round(detected.info.memoryGb)),
+          gpu: detected.info.gpus[0] ?? t("未检出独立显卡"),
+        })}
+      </span>
+    </div>
+  );
+}
 
 /** 统一行：左侧 标题+说明、右侧控件（分隔线由 .np-set-row 相邻规则绘制） */
 function SetRow({ label, desc, children }: { label: string; desc?: string; children: ReactNode }) {
@@ -297,6 +357,45 @@ export function SettingsPanel() {
                 <span className="np-set-slider-val">{s.uiGap} px</span>
               </div>
             </SetRow>
+          </>
+        )}
+        {tab === "perf" && (
+          <>
+            <SetRow
+              label={t("性能模式")}
+              desc={t("「自动」按设备判定（远程会话/CPU 线程/内存/显卡）；切换即真实应用下表全部差异，可随时改回")}
+            >
+              <Seg<"auto" | "high" | "low">
+                value={s.perfMode}
+                onChange={(mode) => {
+                  s.update({ perfMode: mode });
+                  s.applyPerfMode(mode === "auto" ? s.perfTier : mode);
+                }}
+                options={[
+                  { value: "auto", label: t("自动（按设备判定）") },
+                  { value: "high", label: t("高性能") },
+                  { value: "low", label: t("低性能") },
+                ]}
+              />
+            </SetRow>
+            <PerfDeviceRow />
+            <div className="np-perf-table" role="table">
+              <div className="np-perf-tr np-perf-th" role="row">
+                <span>{t("设置项")}</span>
+                <span>{t("高性能")}</span>
+                <span>{t("低性能")}</span>
+              </div>
+              {PERF_TABLE.map((row) => (
+                <div className="np-perf-tr" role="row" key={row.label}>
+                  <span className="np-perf-k">{t(row.label)}</span>
+                  <span>{t(row.high)}</span>
+                  <span>{t(row.low)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="np-dialog-muted" style={{ marginTop: 10 }}>
+              {t("切换模式会立即应用上表全部差异；自动档只按设备决定默认，之后各项仍可在对应设置页手动调整。")}
+            </div>
           </>
         )}
         {tab === "browse" && (

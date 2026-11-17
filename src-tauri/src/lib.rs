@@ -292,6 +292,7 @@ pub fn run() {
             commands::config_cmds::save_settings,
             commands::config_cmds::shot_save_prefs,
             commands::system_info::system_info,
+            commands::system_info::is_remote_session,
             commands::config_cmds::cliphist_save_size,
             commands::config_cmds::get_launch_args,
             commands::config_cmds::list_workspaces,

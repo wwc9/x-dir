@@ -481,6 +481,15 @@
 「今天」行为定案（2026-11-14，两次反馈收敛）：点击 = 滚到当前月块顶部（不做格子居中）；落位不依赖 sel 效应（sel 已是今天时 setSel 不变、效应不重跑 = 用户实测「点了没反应」），gotoToday/stepMonth 直接落位月块顶部；今天格子特殊样式已定案 = 方案 A「描边高亮」（整格 2px accent 描边 + 6% 底染，与选中态叠加时底染加深到 10%、描边保持 2px；周末 today 圆标白字显式规则；三方案对照预览 design/calendar-today-proposal.html 留档）。jumpTo 落位加固：目标月两侧余量不足（头 <2 / 尾 <3 块）时重置窗口 ±3 居中经 pendingScroll 落位，防落位后扩窗补偿打架。星期行吸顶（2026-11-14 用户定案）：紧贴月份标题下方（标题定高 28px、星期行 sticky top 28px 不透明底），滚动中星期对位始终可见。「月/年」Seg 保留：年 = 全年热力图。
 - **增强批回归**：`verify-out/_e2e_calendar_enh.mjs`（本地件）——右键开定期对话框→保存→磁盘 gen 实例验证（每周一 90 天 13 天落位）、搜索命中跳月、右键迁移改期磁盘挪动，全通过；E2E 注意事项：React 受控输入须原型 setter 先清后设（value tracker 去重），ContextMenu 条目为 .np-ctx 叶子节点（非 button），外部改盘后须关-开页面强制重拉。
 
+### 12.8 性能模式（设置 → 性能，2026-11-17 用户定案）
+
+**组件与模块**：`lib/perf.ts`（detectTier/integratedOnly/resolvePerf 纯函数 + PERF_PRESET/PERF_TABLE 配 vitest）+ `stores/settings.ts`（perfMode/perfTier/perfApplied/fxGlass/fxAnim 五字段 + applyPerfMode 预设应用 + applyPerfFx 根类切换）+ Rust `system_info.rs`（SystemInfo 增 cpu_threads + 新命令 is_remote_session）+ 设置新 tab「性能」。
+
+- **低配置界定**：远程会话（`GetSystemMetrics(SM_REMOTESESSION)`）一票低配；否则硬件信号命中 ≥2 = 低配——CPU 逻辑线程 <4 / 物理内存 ≤8GB / 仅核显（独显关键词 NVIDIA·GeForce·RTX·GTX·Radeon RX·Pro·Arc 命中即非；空表 = 软件渲染已滤，保守按核显）。**判定只在首启做一次**（结果缓存 `perfTier`），模式解析 = perfMode 为 auto 取判定档否则显式档（`resolvePerf`）。
+- **联动预设（切换模式真实写盘，高性能 = 出厂默认）**：真实图标 / 文件夹大小（递归计算 IO）/ 截图十字辅助线（全屏覆盖层）/ 剪贴板历史（常驻浮窗第二个 WebView 进程）/ 右键菜单毛玻璃 / 主题与浮层动画，六项低配全关。对比表在 性能 tab 以三列（设置项/高性能/低性能）呈现，表数据 = `PERF_TABLE` 单源。
+- **应用机制**：App 启动检测（先于 hotkeys/cliphistConfigure，保证按应用后偏好配置服务）→ `applyPerfMode(resolved)` 与 `perfApplied` 不同才写预设（幂等，用户改回的项不会被启动循环改回去）；首次落低配发灵动岛回执提示可调整。毛玻璃/动效经 `applyPerfFx` 挂根类 `nofx-glass`/`nofx-anim`：玻璃实底脸与 @supports 兜底同款、主题揭示在 setThemeWithFx 直切（fxAnim 与 prefers-reduced-motion 同口径），功能性指示（进度扫动）保留。
+- **检测失败的兜底**：system_info/is_remote_session 任一失败 = 保守按高性能档（默认值即高性能预设，不误降级）。
+
 ## 13. 横切改造记录（跨功能域批量改造，按时间倒序）
 
 ### 13.1 PDF/图片参数界面优化批

@@ -21,11 +21,15 @@ import {
   stripCustomEntries,
 } from "../lib/menuCommands";
 import { zoomClamp } from "../lib/zoom";
+import { PERF_PRESET, type PerfTier } from "../lib/perf";
 
 interface SettingsStore extends Settings {
   loaded: boolean;
   load(): Promise<void>;
   update(p: Partial<Settings>): void;
+  /** 性能模式定案应用（2026-11-17 性能 tab）：按解析出的档位写入联动设置项
+   *  （与 perfApplied 不同才写，幂等）；组件层只传解析结果 */
+  applyPerfMode(resolved: PerfTier): void;
   addFavorite(path: string, name?: string): void;
   removeFavorite(path: string): void;
   setTagged(path: string, color: Settings["colorTags"][string] | null): void;
@@ -53,6 +57,11 @@ function toPlain(s: SettingsStore): Settings {  return {
     confirmDelete: s.confirmDelete,
     confirmClosePane: s.confirmClosePane,
     showFolderSize: s.showFolderSize,
+    perfMode: s.perfMode,
+    perfTier: s.perfTier,
+    perfApplied: s.perfApplied,
+    fxGlass: s.fxGlass,
+    fxAnim: s.fxAnim,
     autostart: s.autostart,
     toolbarEntries: s.toolbarEntries,
     restoreLastSession: s.restoreLastSession,
@@ -221,6 +230,14 @@ function fadeBorderColor(target: number, duration: number) {
  *  不置位，仍走 syncBorderColor 瞬切 */
 let themeFxInFlight = false;
 
+/** 性能模式视觉降级根类（2026-11-17 性能 tab）：nofx-glass = 浮层毛玻璃实底
+ *  （backdrop-filter 是弱 GPU/远程会话最大帧耗源）；nofx-anim = 装饰性进场
+ *  过渡直切。功能性指示（进度条扫动等）不受影响 */
+export function applyPerfFx(fxGlass: boolean, fxAnim: boolean) {
+  document.documentElement.classList.toggle("nofx-glass", !fxGlass);
+  document.documentElement.classList.toggle("nofx-anim", !fxAnim);
+}
+
 export function applyTheme(theme: Settings["theme"]) {
   const dark =
     theme === "dark" ||
@@ -282,7 +299,8 @@ export function setThemeWithFx(
     typeof matchMedia === "function" &&
     matchMedia("(prefers-reduced-motion: reduce)").matches;
   const apply = () => useSettings.getState().update({ theme });
-  if (!doc.startViewTransition || reduce) {
+  // 性能模式关动效（fxAnim=false）与系统减弱动效同口径：直切
+  if (!doc.startViewTransition || reduce || !useSettings.getState().fxAnim) {
     apply();
     return;
   }
@@ -451,6 +469,7 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     applyTheme(get().theme);
     applyZoom(get().uiZoom);
     applyMetrics(get().uiRadius, get().uiGap);
+    applyPerfFx(get().fxGlass, get().fxAnim);
   },
 
   update(p) {
@@ -464,6 +483,8 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     if (p.uiZoom !== undefined) applyZoom(p.uiZoom);
     if (p.uiRadius !== undefined || p.uiGap !== undefined)
       applyMetrics(get().uiRadius, get().uiGap);
+    if (p.fxGlass !== undefined || p.fxAnim !== undefined)
+      applyPerfFx(get().fxGlass, get().fxAnim);
     // 落盘合并 800ms 防抖（2026-11-01 审查修复）：recentFolders 随每次目录
     // 导航 update——旧实现逐次全量序列化 settings.json（含菜单/工具栏布局
     // 可达上百 KB）+ 整店订阅组件（SettingsPanel）逐次重渲染；UI 态仍即时
@@ -507,6 +528,13 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
 
   clearShelf() {
     get().update({ staging: [] });
+  },
+
+  applyPerfMode(resolved) {
+    if (get().perfApplied === resolved) return;
+    const preset = PERF_PRESET[resolved];
+    // 预设写盘（update 走防抖合并）；perfApplied 记账防重复应用
+    get().update({ ...(preset as Partial<Settings>), perfApplied: resolved });
   },
 }));
 

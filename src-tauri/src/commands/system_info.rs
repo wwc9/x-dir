@@ -24,6 +24,8 @@ pub struct SystemInfo {
     pub os: String,
     /// "12th Gen Intel Core i7-12700 · 20 线程"
     pub cpu: String,
+    /// 逻辑处理器数（性能模式判定用；0 = 不可得）
+    pub cpu_threads: u32,
     /// 物理内存总量 GB（整数标称容量——48/16 等装机口径）
     pub memory_gb: f64,
     /// 显卡型号列表（DXGI 硬件适配器，过滤软件渲染器；主卡在前）
@@ -35,9 +37,20 @@ pub fn system_info() -> Result<SystemInfo, String> {
     Ok(SystemInfo {
         os: os_version(),
         cpu: cpu_info(),
+        cpu_threads: std::thread::available_parallelism()
+            .map(|n| n.get() as u32)
+            .unwrap_or(0),
         memory_gb: memory_total_gb(),
         gpus: gpu_names(),
     })
+}
+
+/// 远程会话检测（2026-11-17 性能模式定案）：RDP/远程桌面下毛玻璃与动画的
+/// 帧耗急剧放大，直接判定低配档。SM_REMOTESESSION = 0x1000
+#[tauri::command]
+pub fn is_remote_session() -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_REMOTESESSION};
+    unsafe { GetSystemMetrics(SM_REMOTESESSION) != 0 }
 }
 
 /// OS 版本：RtlGetVersion 不受兼容性清单欺骗（应用未声明 Win11 支持时
