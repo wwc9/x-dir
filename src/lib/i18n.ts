@@ -563,8 +563,8 @@ export const EN: Record<string, string> = {
   // 性能 tab（2026-11-17 性能模式定案）
   "性能": "Performance",
   "性能模式": "Performance mode",
-  "「自动」按设备判定（远程会话/CPU 线程/内存/显卡）；切换即真实应用下表全部差异，可随时改回":
-    "“Auto” picks a tier from your device (remote session, CPU threads, memory, GPU). Switching applies every difference in the table below immediately — you can change it back anytime",
+  "「自动」按设备判定（远程会话/CPU/内存/显卡），切换即应用下表差异，可随时改回":
+    "“Auto” picks a tier from your device (remote session / CPU / memory / GPU); switching applies the differences below, change back anytime",
   "自动": "Auto",
   "高性能": "High performance",
   "低性能": "Low resources",

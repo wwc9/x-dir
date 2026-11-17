@@ -151,9 +151,9 @@ function PerfDeviceRow() {
 }
 
 /** 统一行：左侧 标题+说明、右侧控件（分隔线由 .np-set-row 相邻规则绘制） */
-function SetRow({ label, desc, children }: { label: string; desc?: string; children: ReactNode }) {
+function SetRow({ label, desc, children, className }: { label: string; desc?: string; children: ReactNode; className?: string }) {
   return (
-    <div className="np-set-row">
+    <div className={className ? `np-set-row ${className}` : "np-set-row"}>
       <div className="np-set-info">
         <span className="np-set-label">{label}</span>
         {desc && <span className="np-set-desc">{desc}</span>}
@@ -370,8 +370,9 @@ export function SettingsPanel() {
         {tab === "perf" && (
           <>
             <SetRow
+              className="np-set-wrap"
               label={t("性能模式")}
-              desc={t("「自动」按设备判定（远程会话/CPU 线程/内存/显卡）；切换即真实应用下表全部差异，可随时改回")}
+              desc={t("「自动」按设备判定（远程会话/CPU/内存/显卡），切换即应用下表差异，可随时改回")}
             >
               <Seg<"auto" | "high" | "low">
                 value={s.perfMode}

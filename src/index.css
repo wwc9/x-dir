@@ -432,6 +432,17 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.np-perf-specs {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+/* 窄宽度下控件换行到标题下方（性能模式 Seg 三钮宽，防横向溢出） */
+.np-set-wrap {
+  flex-wrap: wrap;
+}
+.np-set-wrap .np-set-info {
+  flex: 1 1 320px;
+}
 .np-perf-cpu {
   flex: 1 1 0;
   min-width: 0;
@@ -1890,6 +1901,8 @@ body.np-col-resizing .np-menued-grip::after {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  /* 兜底禁横向滚动（2026-11-17 用户定案）：行内容超宽时截断而非撑出横滚条 */
+  overflow-x: hidden;
   padding: 2px 2px 2px 14px;
 }
 
