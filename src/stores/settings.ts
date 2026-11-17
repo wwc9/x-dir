@@ -253,18 +253,20 @@ export function applyWindowGlass(mode: Settings["windowGlass"]) {
   document.documentElement.classList.toggle("glasswin", mode !== "off");
   const win = getCurrentWindow();
   if (mode === "off") {
-    win.clearEffects?.().catch(() => undefined);
+    win.clearEffects?.().catch((e) => console.error("[windowGlass] clearEffects", e));
     win
       .setBackgroundColor?.(
         document.documentElement.classList.contains("dark") ? "#161616" : "#e9ecf1",
       )
-      .catch(() => undefined);
+      .catch((e) => console.error("[windowGlass] setBackgroundColor", e));
     syncBorderColor();
   } else {
     win
       .setEffects?.({ effects: [mode === "mica" ? Effect.Mica : Effect.Acrylic] })
-      .catch(() => undefined);
-    win.setBackgroundColor?.([0, 0, 0, 0]).catch(() => undefined);
+      .catch((e) => console.error("[windowGlass] setEffects", e));
+    win
+      .setBackgroundColor?.([0, 0, 0, 0])
+      .catch((e) => console.error("[windowGlass] setBackgroundColor", e));
   }
 }
 
