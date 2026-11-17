@@ -251,6 +251,7 @@ export function FileList({
   const showHidden = useSettings((s) => s.showHidden);
   const confirmDelete = useSettings((s) => s.confirmDelete);
   const realIcons = useSettings((s) => s.realIcons);
+  const folderSizePlaceholder = useSettings((s) => s.folderSizePlaceholder);
   const iconMap = useIcons((s) => s.icons);
   const extMap = useIcons((s) => s.exts);
   const ui = usePanes((s) => s.tabs[tabId]);
@@ -2061,7 +2062,7 @@ export function FileList({
                               })}
                             </span>
                             <span className="np-cell-muted np-col-size">
-                              {formatSize(entry)}
+                              {formatSize(entry, folderSizePlaceholder)}
                             </span>
                           </>
                         ) : !isThisPc ? (
@@ -2075,14 +2076,14 @@ export function FileList({
                               })}
                             </span>
                             <span className="np-cell-muted np-col-size">
-                              {formatSize(entry)}
+                              {formatSize(entry, folderSizePlaceholder)}
                             </span>
                           </>
                         ) : (
                           <>
                             <span className="np-cell-muted np-col-type">{t("本地磁盘")}</span>
                             <span className="np-cell-muted np-col-size">
-                              {formatSize(entry)}
+                              {formatSize(entry, folderSizePlaceholder)}
                             </span>
                             <span className="np-cell-muted np-col-size">
                               {formatSize({

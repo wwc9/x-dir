@@ -52,6 +52,7 @@ function toPlain(s: SettingsStore): Settings {  return {
     activeScheme: s.activeScheme,
     confirmDelete: s.confirmDelete,
     confirmClosePane: s.confirmClosePane,
+    folderSizePlaceholder: s.folderSizePlaceholder,
     autostart: s.autostart,
     toolbarEntries: s.toolbarEntries,
     restoreLastSession: s.restoreLastSession,

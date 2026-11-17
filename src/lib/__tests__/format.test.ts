@@ -39,6 +39,7 @@ import { fileNameOf, isValidName, parentPath } from "../path";
 describe("formatSize", () => {
   it("目录恒为 —", () => {
     expect(formatSize({ isDir: true, size: 0 })).toBe("—");
+    expect(formatSize({ isDir: true, size: 0 }, false)).toBe("");
   });
   it("1024 进制与单位", () => {
     expect(formatSize({ isDir: false, size: 0 })).toBe("0 B");

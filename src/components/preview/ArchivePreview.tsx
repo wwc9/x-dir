@@ -10,6 +10,7 @@ import { ArchiveRestore, Folder, FolderInput } from "lucide-react";
 import { api, type ArchiveEntry } from "../../lib/ipc";
 import { fileIcon } from "../../lib/fileIcons";
 import { formatSize } from "../../lib/format";
+import { useSettings } from "../../stores/settings";
 import { extractArchives, extractArchivesTo, pickExtractDestDir } from "../../lib/operations";
 import { DENSITY } from "../../lib/tokens";
 import { AppIcon } from "../AppIcon";
@@ -27,6 +28,7 @@ export function ArchivePreview({
   const [entries, setEntries] = useState<ArchiveEntry[] | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const reqRef = useRef(0);
+  const folderSizePlaceholder = useSettings((s) => s.folderSizePlaceholder);
 
   useEffect(() => {
     const req = ++reqRef.current;
@@ -106,7 +108,7 @@ export function ArchivePreview({
                 >
                   <RowIcon e={e} />
                   <span className="np-ellipsis">{e.name}</span>
-                  <span className="np-pv-ar-size">{e.isDir ? "—" : formatSize(e)}</span>
+                  <span className="np-pv-ar-size">{e.isDir ? folderSizePlaceholder ? "—" : "" : formatSize(e)}</span>
                 </div>
               );
             })}

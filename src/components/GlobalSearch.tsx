@@ -141,6 +141,7 @@ function SearchRowIcon({
  *  否则 Rust 端并行遍历（流式回吐命中批次，边扫边看）。 */
 export function GlobalSearchPage() {
   const t = useT();
+  const folderSizePlaceholder = useSettings((s) => s.folderSizePlaceholder);
   const open = useUi((s) => s.globalSearch);
   const close = useUi((s) => s.closeGlobalSearch);
   const [query, setQuery] = useState("");
@@ -849,7 +850,7 @@ export function GlobalSearchPage() {
                         >
                           {parentPath(e.path) ?? e.path}
                         </span>
-                        <span className="np-cell-muted np-col-size">{formatSize(e)}</span>
+                        <span className="np-cell-muted np-col-size">{formatSize(e, folderSizePlaceholder)}</span>
                         <span className="np-cell-muted np-col-type np-ellipsis">
                           {t(typeName(e.name, e.isDir), {
                             ext: extOf(e.name).toUpperCase(),

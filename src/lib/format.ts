@@ -1,5 +1,10 @@
-export function formatSize(entry: { isDir: boolean; size: number }): string {
-  if (entry.isDir) return "—";
+export function formatSize(
+  entry: { isDir: boolean; size: number },
+  folderSizePlaceholder = true,
+): string {
+  // 文件夹不计算体积：占位符「—」（settings.folderSizePlaceholder，默认开），
+  // 关闭后留空（2026-11-17 用户定案）
+  if (entry.isDir) return folderSizePlaceholder ? "—" : "";
   return formatBytes(entry.size);
 }
 

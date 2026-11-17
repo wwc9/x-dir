@@ -348,6 +348,15 @@ export function SettingsPanel() {
               />
             </SetRow>
             <SetRow
+              label={t("文件夹大小占位")}
+              desc={t("文件夹行的大小列显示「—」占位（关闭后文件夹留空）")}
+            >
+              <Switch
+                checked={s.folderSizePlaceholder}
+                onChange={(e) => s.update({ folderSizePlaceholder: e.currentTarget.checked })}
+              />
+            </SetRow>
+            <SetRow
               label={t("记忆目录选中集")}
               desc={t("离开目录时快照勾选，回到该目录自动恢复（Ctrl+A / Esc 等显式操作不受影响）")}
             >
