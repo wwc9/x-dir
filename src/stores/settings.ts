@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { Effect, getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 
 import { api, DEFAULT_SETTINGS, THIS_PC, type MenuEntry, type Settings } from "../lib/ipc";
@@ -242,18 +242,19 @@ export function applyPerfFx(fxGlass: boolean, fxAnim: boolean) {
 /** 窗口毛玻璃当前模式：applyTheme 据此决定原生底色写画布色（实底）还是透明 */
 let glassWin: Settings["windowGlass"] = "off";
 
-/** 窗口毛玻璃（2026-11-17 外观 tab 定案）：tauri windowEffects 系统级毛玻璃——
- *  模糊由 Windows 合成器（DWM）完成，桌面/背后窗口实时高斯模糊透出窗口；
- *  WebView 内只做 alpha 透明（根类 glasswin 把画布/卡片换半透明 token，
- *  见 index.css）。WebView2 底色规则（wry）：alpha=0 = 透明，其余强制不
- *  透明——切到毛玻璃写 [0,0,0,0] 恢复透明底立即生效，关闭写回画布色。
- *  ?. 防御：guard 测试桩的 getCurrentWindow 不含 setEffects 等方法 */
+/** 窗口毛玻璃（2026-11-17 外观 tab 定案）：模糊由 Windows 合成器（DWM）完成，
+ *  桌面/背后窗口实时高斯模糊透出窗口；WebView 内只做 alpha 透明（根类
+ *  glasswin 把画布/卡片换半透明 token，见 index.css）。效果走 Rust 命令
+ *  set_window_glass（tauri::vibrancy 直连 + 真实错误返回；JS Window.setEffects
+ *  的调度层 `let _ =` 丢弃错误且被能力权限门禁，弃用）。WebView2 底色规则
+ *  （wry）：alpha=0 = 透明，其余强制不透明——毛玻璃态写 [0,0,0,0] 立即生效
+ *  （Rust 命令内同做兜底），关闭写回画布色。?. 防御：guard 测试桩无此方法 */
 export function applyWindowGlass(mode: Settings["windowGlass"]) {
   glassWin = mode;
   document.documentElement.classList.toggle("glasswin", mode !== "off");
+  api.setWindowGlass(mode).catch((e) => console.error("[windowGlass]", e));
   const win = getCurrentWindow();
   if (mode === "off") {
-    win.clearEffects?.().catch((e) => console.error("[windowGlass] clearEffects", e));
     win
       .setBackgroundColor?.(
         document.documentElement.classList.contains("dark") ? "#161616" : "#e9ecf1",
@@ -261,9 +262,6 @@ export function applyWindowGlass(mode: Settings["windowGlass"]) {
       .catch((e) => console.error("[windowGlass] setBackgroundColor", e));
     syncBorderColor();
   } else {
-    win
-      .setEffects?.({ effects: [mode === "mica" ? Effect.Mica : Effect.Acrylic] })
-      .catch((e) => console.error("[windowGlass] setEffects", e));
     win
       .setBackgroundColor?.([0, 0, 0, 0])
       .catch((e) => console.error("[windowGlass] setBackgroundColor", e));

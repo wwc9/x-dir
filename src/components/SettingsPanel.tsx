@@ -370,7 +370,18 @@ export function SettingsPanel() {
             >
               <ButtonGroup className="np-seg" size="small" variant="minimal">
                 {(["off", "mica", "acrylic"] as const).map((m) => (
-                  <Button key={m} active={s.windowGlass === m} onClick={() => s.update({ windowGlass: m })}>
+                  <Button
+                    key={m}
+                    active={s.windowGlass === m}
+                    onClick={() => {
+                      s.update({ windowGlass: m });
+                      useUi
+                        .getState()
+                        .toast(
+                          `${t("窗口毛玻璃")}：${m === "off" ? t("关") : m === "mica" ? "Mica" : t("亚克力")}`,
+                        );
+                    }}
+                  >
                     {m === "off" ? t("关") : m === "mica" ? t("Mica") : t("亚克力")}
                   </Button>
                 ))}

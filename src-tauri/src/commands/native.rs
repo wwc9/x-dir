@@ -40,6 +40,42 @@ pub fn set_border_color(app: AppHandle, color: u32) {
     let _ = (color, app);
 }
 
+/// 窗口毛玻璃（2026-11-17 外观 tab）：直连 window-vibrancy（DWM 系统 backdrop）
+/// 并把真实错误返回前端——Window::set_effects 的调度层用 `let _ =` 丢弃错误且
+/// 被能力权限门禁，JS 侧拿不到失败原因（平台版本不支持不可诊断）。
+/// 底色随档位：毛玻璃态透明（wry：alpha=0 才透明，其余强制不透明）；实底态
+/// 由前端 applyTheme 写画布色（Rust 不知当前主题，off 分支不动底色）
+#[tauri::command]
+pub fn set_window_glass(app: AppHandle, mode: String) -> Result<String, String> {
+    #[cfg(windows)]
+    {
+        use tauri::utils::config::Color;
+        use window_vibrancy::{apply_acrylic, apply_mica, clear_acrylic, clear_mica};
+        let w = app
+            .get_webview_window("main")
+            .ok_or_else(|| "主窗口不存在".to_string())?;
+        match mode.as_str() {
+            "mica" => apply_mica(&w, None).map_err(|e| e.to_string())?,
+            "acrylic" => apply_acrylic(&w, None).map_err(|e| e.to_string())?,
+            "off" => {
+                let _ = clear_mica(&w);
+                let _ = clear_acrylic(&w);
+            }
+            other => return Err(format!("未知档位：{other}")),
+        }
+        if mode != "off" {
+            w.set_background_color(Some(Color(0, 0, 0, 0)))
+                .map_err(|e| format!("底色透明失败：{e}"))?;
+        }
+        Ok(mode)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (app, mode);
+        Err("窗口毛玻璃仅 Windows 支持".to_string())
+    }
+}
+
 /// 弹出系统原生右键菜单（Shift+右键 / “显示更多选项”入口）。
 /// 模态阻塞直至菜单关闭；坐标取实时光标位置。
 #[tauri::command]

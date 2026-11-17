@@ -1062,6 +1062,9 @@ export const api = {
   /** 主题切换时同步无边框窗口顶部 1px 非客户区颜色（COLORREF 0x00BBGGRR），
    *  填成画布色融入背景，防系统强调色/窗口背景亮条浮出（实测 2026-10-17） */
   setBorderColor: (color: number) => cmd<void>("set_border_color", { color }),
+  /** 窗口毛玻璃（tauri::vibrancy 直连）：平台/权限类失败以 reject 返回真实错误 */
+  setWindowGlass: (mode: "off" | "mica" | "acrylic") =>
+    cmd<string>("set_window_glass", { mode }),
   /** 返回落点效果："copy"/"move"；"drop" = 已放置但落点未回写 effect（WebView2 网页落点）；
    *  "none" = 未放置（拖拽取消/落在无效目标） */
   startDrag: (paths: string[]) =>
