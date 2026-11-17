@@ -379,7 +379,12 @@ body {
    ——模糊在 WebView 内完成（backdrop-filter 只采样页内内容，渐变在页内所以
    有效），不依赖 OS 合成器、远程会话友好；填充输入面 --np-surface-2 保持
    实底保证可读。须压过 :root 与 .dark 两段 token：html 前缀同特异性置于其后 */
-html.glasswin {
+/* ⚠ 深色下必须同时覆写 body：applyTheme 把 dark 类挂 html 和 body 两处，
+   `.dark` token 块会在 body 上直接声明 --np-bg/--np-surface（直接声明恒压过
+   html 的继承值）——只写 html 时浅色正常（body 无类走继承）、深色整段被
+   body.dark 短路回实底（2026-11-17 深色「看不出效果」的真正根因） */
+html.glasswin,
+html.glasswin > body {
   --np-bg: radial-gradient(
       120% 90% at 85% 6%,
       rgba(96, 158, 255, 0.3),
@@ -393,7 +398,8 @@ html.glasswin {
 /* 深色霜 = macOS 深色 vibrancy 口径：高饱和极光画布（亮蓝/青/紫大色斑、
    蓝调基底，肉眼直接可辨）+ 面板 tint 提亮偏蓝灰且压低 alpha（比背后模糊底
    更沉稳，色相穿透，即「鲜艳壁纸 + 冷静玻璃板」的层次对比） */
-html.glasswin.bp6-dark {
+html.glasswin.bp6-dark,
+html.glasswin.bp6-dark > body {
   --np-bg: radial-gradient(
       120% 90% at 85% 6%,
       rgba(92, 157, 255, 0.55),
