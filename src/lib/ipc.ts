@@ -387,6 +387,10 @@ export interface Settings {
   fxGlass: boolean;
   /** 界面动效（主题圆形揭示/浮层进场过渡）：关 = 直切 */
   fxAnim: boolean;
+  /** 窗口毛玻璃（2026-11-17 外观 tab）：tauri windowEffects 系统级毛玻璃——
+   *  mica（仅 Win11，只采样壁纸，帧耗低）/ acrylic（实时模糊背后一切内容，
+   *  最像苹果，弱 GPU/远程帧耗高）；off = 现状实底。低性能预设强制 off */
+  windowGlass: "off" | "mica" | "acrylic";
   restoreLastSession: boolean;
   /** 开机自启（2026-11-15）：单一事实源在 settings.json，注册表 Run 键为派生态
    *  （Rust 启动回放 apply_autostart_pref；切换经 api.autostartSet 刷注册表） */
@@ -584,6 +588,8 @@ export const DEFAULT_SETTINGS: Settings = {
   perfApplied: null,
   fxGlass: true,
   fxAnim: true,
+  // 窗口毛玻璃默认关（显式选择不替用户决定；低性能档自动回退实底）
+  windowGlass: "off",
   toolbarEntries: [],
   restoreLastSession: true,
   // 开机自启默认关（2026-11-15）：自启属显式选择，不替用户决定

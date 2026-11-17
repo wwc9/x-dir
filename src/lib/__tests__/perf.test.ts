@@ -71,12 +71,15 @@ describe("resolvePerf 与两档预设", () => {
     expect(resolvePerf("high", "low")).toBe("high");
     expect(resolvePerf("low", "high")).toBe("low");
   });
-  it("预设覆盖 6 个联动项，低配全部关、高性能全部开", () => {
-    const keys = Object.keys(PERF_PRESET.high);
-    expect(keys).toEqual(Object.keys(PERF_PRESET.low));
-    for (const k of keys) {
-      expect(PERF_PRESET.high[k]).toBe(true);
-      expect(PERF_PRESET.low[k]).toBe(false);
+  it("预设联动项：高性能全开，低配全关；窗口毛玻璃仅低配强制关", () => {
+    const highKeys = Object.keys(PERF_PRESET.high);
+    for (const k of highKeys) {
+      const key = k as keyof typeof PERF_PRESET.high;
+      expect(PERF_PRESET.high[key]).toBe(true);
+      expect(PERF_PRESET.low[key]).toBe(false);
     }
+    // 窗口毛玻璃：低配强制关（系统合成器开销）；高性能不含此键 = 不重置用户显式选择
+    expect(PERF_PRESET.low.windowGlass).toBe("off");
+    expect(highKeys).not.toContain("windowGlass");
   });
 });

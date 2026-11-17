@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { Effect, getCurrentWindow } from "@tauri-apps/api/window";
 
 
 import { api, DEFAULT_SETTINGS, THIS_PC, type MenuEntry, type Settings } from "../lib/ipc";
@@ -62,6 +62,7 @@ function toPlain(s: SettingsStore): Settings {  return {
     perfApplied: s.perfApplied,
     fxGlass: s.fxGlass,
     fxAnim: s.fxAnim,
+    windowGlass: s.windowGlass,
     autostart: s.autostart,
     toolbarEntries: s.toolbarEntries,
     restoreLastSession: s.restoreLastSession,
@@ -238,6 +239,35 @@ export function applyPerfFx(fxGlass: boolean, fxAnim: boolean) {
   document.documentElement.classList.toggle("nofx-anim", !fxAnim);
 }
 
+/** 窗口毛玻璃当前模式：applyTheme 据此决定原生底色写画布色（实底）还是透明 */
+let glassWin: Settings["windowGlass"] = "off";
+
+/** 窗口毛玻璃（2026-11-17 外观 tab 定案）：tauri windowEffects 系统级毛玻璃——
+ *  模糊由 Windows 合成器（DWM）完成，桌面/背后窗口实时高斯模糊透出窗口；
+ *  WebView 内只做 alpha 透明（根类 glasswin 把画布/卡片换半透明 token，
+ *  见 index.css）。WebView2 底色规则（wry）：alpha=0 = 透明，其余强制不
+ *  透明——切到毛玻璃写 [0,0,0,0] 恢复透明底立即生效，关闭写回画布色。
+ *  ?. 防御：guard 测试桩的 getCurrentWindow 不含 setEffects 等方法 */
+export function applyWindowGlass(mode: Settings["windowGlass"]) {
+  glassWin = mode;
+  document.documentElement.classList.toggle("glasswin", mode !== "off");
+  const win = getCurrentWindow();
+  if (mode === "off") {
+    win.clearEffects?.().catch(() => undefined);
+    win
+      .setBackgroundColor?.(
+        document.documentElement.classList.contains("dark") ? "#161616" : "#e9ecf1",
+      )
+      .catch(() => undefined);
+    syncBorderColor();
+  } else {
+    win
+      .setEffects?.({ effects: [mode === "mica" ? Effect.Mica : Effect.Acrylic] })
+      .catch(() => undefined);
+    win.setBackgroundColor?.([0, 0, 0, 0]).catch(() => undefined);
+  }
+}
+
 export function applyTheme(theme: Settings["theme"]) {
   const dark =
     theme === "dark" ||
@@ -255,9 +285,12 @@ export function applyTheme(theme: Settings["theme"]) {
   // 窗口原生底色随主题 = 画布色（2026-11-06）：拖拽调宽等高频重排的长帧里
   // WebView 合成器来不及绘制的新区域会露出窗口底色（默认黑——用户实测
   // 侧栏拖宽时右缘黑条）；钉成画布色后即使露底也与界面同色不可见。
+  // 窗口毛玻璃开启时改写透明（2026-11-17）：不透明底盖住系统毛玻璃。
   // ?. 防御：guard 测试桩的 getCurrentWindow 不含本方法
   getCurrentWindow()
-    .setBackgroundColor?.(dark ? "#161616" : "#e9ecf1")
+    .setBackgroundColor?.(
+      glassWin === "off" ? (dark ? "#161616" : "#e9ecf1") : [0, 0, 0, 0],
+    )
     .catch(() => undefined);
   if (!themeFxInFlight) syncBorderColor();
 }
@@ -376,6 +409,13 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
         : dflt;
     merged.uiRadius = clampMetric(merged.uiRadius, 0, 24, DEFAULT_SETTINGS.uiRadius);
     merged.uiGap = clampMetric(merged.uiGap, 4, 24, DEFAULT_SETTINGS.uiGap);
+    // 窗口毛玻璃档位脏值回落关（旧档/手改档未知串）
+    if (
+      merged.windowGlass !== "off" &&
+      merged.windowGlass !== "mica" &&
+      merged.windowGlass !== "acrylic"
+    )
+      merged.windowGlass = "off";
     // 图标视图已删除（2026-10-13）：旧档存过 icons 时回落详细信息
     if ((merged.defaultView as string) === "icons") merged.defaultView = "details";
     // 截图十字辅助线（2026-11-11）：脏数据（非布尔，旧档缺键由 DEFAULT 兜底）
@@ -470,6 +510,7 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     applyZoom(get().uiZoom);
     applyMetrics(get().uiRadius, get().uiGap);
     applyPerfFx(get().fxGlass, get().fxAnim);
+    applyWindowGlass(get().windowGlass);
   },
 
   update(p) {
@@ -479,6 +520,7 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     // load() 自身走 set 直写不经此处；load 完成后（loaded=true）恢复落盘
     set(p);
     if (!get().loaded) return;
+    if (p.windowGlass !== undefined) applyWindowGlass(get().windowGlass);
     if (p.theme) applyTheme(p.theme);
     if (p.uiZoom !== undefined) applyZoom(p.uiZoom);
     if (p.uiRadius !== undefined || p.uiGap !== undefined)

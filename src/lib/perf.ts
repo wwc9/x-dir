@@ -1,7 +1,7 @@
 // 性能模式（2026-11-17 新设置页定案）：硬件档位判定纯函数 + 高/低两档预设
 // 与对比表数据。判定只在首启做一次（结果缓存 settings.perfTier），组件层
 // 只消费；模式解析规则 = perfMode 为 auto 时取判定档，否则取显式档。
-import type { SystemInfo } from "./ipc";
+import type { Settings, SystemInfo } from "./ipc";
 
 export type PerfMode = "auto" | "high" | "low";
 export type PerfTier = "high" | "low";
@@ -37,8 +37,10 @@ export function resolvePerf(mode: PerfMode, tier: PerfTier): PerfTier {
 }
 
 /** 两档预设（写入对应设置项；高性能 = 出厂默认值）。
- *  剪贴板历史常驻浮窗是第二个 WebView 进程，弱机内存开销显著 */
-export const PERF_PRESET: Record<PerfTier, Partial<Record<string, boolean>>> = {
+ *  剪贴板历史常驻浮窗是第二个 WebView 进程，弱机内存开销显著；
+ *  窗口毛玻璃属系统合成器开销，低配强制关；高性能档不含此键 = 不重置
+ *  用户显式开启的选择 */
+export const PERF_PRESET: Record<PerfTier, Partial<Settings>> = {
   high: {
     showFolderSize: true,
     shotCrosshair: true,
@@ -54,6 +56,7 @@ export const PERF_PRESET: Record<PerfTier, Partial<Record<string, boolean>>> = {
     cliphistEnabled: false,
     fxGlass: false,
     fxAnim: false,
+    windowGlass: "off",
   },
 };
 
@@ -88,5 +91,10 @@ export const PERF_TABLE: { label: string; high: string; low: string }[] = [
     label: "主题与浮层动画",
     high: "开（圆形揭示 / 进场过渡）",
     low: "关（直切，不重绘）",
+  },
+  {
+    label: "窗口毛玻璃",
+    high: "可选（设置 → 外观）",
+    low: "关（系统合成器开销）",
   },
 ];

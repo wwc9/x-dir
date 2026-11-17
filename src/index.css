@@ -373,6 +373,17 @@ body {
   backdrop-filter: none;
   background: var(--np-surface);
 }
+/* 窗口毛玻璃（2026-11-17 外观 tab 定案）：tauri windowEffects（mica/acrylic）
+   开启时挂根类 glasswin。模糊由 Windows 合成器（DWM）完成——桌面与背后窗口
+   实时高斯模糊透出窗口，WebView 内只做 alpha 透明：画布全透（沟槽/留白直接
+   看到模糊桌面），面板卡片换「霜」玻璃半透明底（token 深浅主题各一套自动
+   跟随）；填充输入面 --np-surface-2 保持实底保证可读。须压过 :root 与 .dark
+   两段 token：html 前缀同特异性置于其后即胜 */
+html.glasswin,
+html.glasswin.bp6-dark {
+  --np-bg: transparent;
+  --np-surface: var(--np-glass);
+}
 .nofx-anim .bp6-popover,
 .nofx-anim .bp6-transition-container {
   transition: none !important;

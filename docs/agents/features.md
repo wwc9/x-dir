@@ -490,6 +490,15 @@
 - **应用机制**：App 启动检测（先于 hotkeys/cliphistConfigure，保证按应用后偏好配置服务）→ `applyPerfMode(resolved)` 与 `perfApplied` 不同才写预设（幂等，用户改回的项不会被启动循环改回去）；首次落低配发灵动岛回执提示可调整。毛玻璃/动效经 `applyPerfFx` 挂根类 `nofx-glass`/`nofx-anim`：玻璃实底脸与 @supports 兜底同款、主题揭示在 setThemeWithFx 直切（fxAnim 与 prefers-reduced-motion 同口径），功能性指示（进度扫动）保留。
 - **检测失败的兜底**：system_info/is_remote_session 任一失败 = 保守按高性能档（默认值即高性能预设，不误降级）。
 
+### 12.9 窗口毛玻璃（设置 → 外观，2026-11-17 用户定案）
+
+**组件与模块**：`stores/settings.ts`（windowGlass 三档字段 + `applyWindowGlass`：setEffects/clearEffects + WebView2 底色透明切换 + 根类 `glasswin`）+ `lib/ipc.ts`（Settings 增 windowGlass；Rust 侧 settings.json 为无类型 JSON blob，新字段免改 Rust）+ `tauri.conf.json`（窗口 `transparent: true`）+ index.css `html.glasswin` token 覆写。
+
+- **机制**：模糊由 Windows 合成器（DWM）完成——Mica（仅 Win11，只采样壁纸，帧耗低、拖窗流畅）/ Acrylic（实时高斯模糊背后一切内容，最像苹果，弱 GPU/远程帧耗高，Win10 1903+ 走旧通道）；WebView 内只做 alpha 透明：画布 `--np-bg` 全透（沟槽/留白直接看到模糊桌面），面板卡片 `--np-surface` 换 `--np-glass` 半透明底（深浅主题 token 各一套自动跟随），填充输入面 `--np-surface-2` 保持实底保证可读。
+- **WebView2 底色规则（wry 源码确认）**：`SetDefaultBackgroundColor` alpha=0 = 透明、其余强制不透明——切到毛玻璃写 `[0,0,0,0]` 立即生效（无需重启），关闭写回画布色；`applyTheme` 随模块态 glassWin 写透明/画布色（不透明底会盖住系统毛玻璃）。
+- **性能联动**：低配预设强制 `windowGlass: "off"`（PERF_TABLE 增「窗口毛玻璃」行）；高性能档不含此键 = 不重置用户显式选择（theme 同口径不入预设）。
+- **兜底**：环境不支持所选效果（如 Win10 上选 Mica）时 setEffects 静默失败 → 半透明卡片叠实底，关闭开关即回现状；窗口不支持效果的检出不做（v1 实验开关）。
+
 ## 13. 横切改造记录（跨功能域批量改造，按时间倒序）
 
 ### 13.1 PDF/图片参数界面优化批

@@ -364,6 +364,18 @@ export function SettingsPanel() {
                 <span className="np-set-slider-val">{s.uiGap} px</span>
               </div>
             </SetRow>
+            <SetRow
+              label={t("窗口毛玻璃")}
+              desc={t("整个窗口透出系统毛玻璃；Mica 仅 Win11、亚克力帧耗更高，低性能档自动关")}
+            >
+              <ButtonGroup className="np-seg" size="small" variant="minimal">
+                {(["off", "mica", "acrylic"] as const).map((m) => (
+                  <Button key={m} active={s.windowGlass === m} onClick={() => s.update({ windowGlass: m })}>
+                    {m === "off" ? t("关") : m === "mica" ? t("Mica") : t("亚克力")}
+                  </Button>
+                ))}
+              </ButtonGroup>
+            </SetRow>
           </>
         )}
         {tab === "perf" && (
