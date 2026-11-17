@@ -369,6 +369,9 @@ export interface Settings {
   defaultView: ViewMode;
   defaultSort: Sort;
   confirmDelete: boolean;
+  /** 关闭含标签窗格前确认（2026-11-17 用户定案）：弹窗内「以后不再确认」即置 false，
+   *  设置 → 文件操作可恢复 */
+  confirmClosePane: boolean;
   restoreLastSession: boolean;
   /** 开机自启（2026-11-15）：单一事实源在 settings.json，注册表 Run 键为派生态
    *  （Rust 启动回放 apply_autostart_pref；切换经 api.autostartSet 刷注册表） */
@@ -556,6 +559,8 @@ export const DEFAULT_SETTINGS: Settings = {
   // 默认直删回收站（2026-11-05 定案）：回收站可还原无需默认打断；想要确认
   // 的用户在设置打开，或在弹窗里永远不勾「以后不再确认」
   confirmDelete: false,
+  // 关闭窗格前确认默认开（2026-11-17）：多标签一并关闭属破坏性动作
+  confirmClosePane: true,
   toolbarEntries: [],
   restoreLastSession: true,
   // 开机自启默认关（2026-11-15）：自启属显式选择，不替用户决定

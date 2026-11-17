@@ -1,10 +1,12 @@
 import { create } from "zustand";
 
+import { t } from "../lib/i18n";
 import type { FileEntry } from "../lib/ipc";
 import type { SettingsTabId } from "../components/SettingsPanel";
 import type { UpdateCheck } from "../lib/update";
 import { useLayout } from "./layout";
 import { useIsland } from "./island";
+import { useSettings } from "./settings";
 
 export type DialogSpec =
   | {
@@ -130,13 +132,21 @@ export function alertDialog(opts: {
   return useUi.getState().openDialog<null>({ type: "alert", ...opts });
 }
 
-/** 关闭窗格确认（窗格关闭按钮与 Ctrl+Shift+W 共用）：确认后关闭指定窗格 */
+/** 关闭窗格确认（窗格关闭按钮与 Ctrl+Shift+W 共用）：确认后关闭指定窗格。
+ *  settings.confirmClosePane=false（弹窗内「以后不再确认」勾选写入，设置 →
+ *  文件操作可恢复）时直接关闭（2026-11-17 用户定案与删除确认同模式） */
 export function closePaneConfirmed(paneId: string): void {
+  if (!useSettings.getState().confirmClosePane) {
+    useLayout.getState().close(paneId);
+    return;
+  }
   void confirmDialog({
-    title: "关闭窗格",
-    message: "确定关闭此窗格吗？其中的所有标签页将一并关闭。",
+    title: t("关闭窗格"),
+    message: t("确定关闭此窗格吗？其中的所有标签页将一并关闭。"),
     kind: "warn",
-    okText: "关闭",
+    okText: t("关闭"),
+    rememberLabel: t("以后不再确认，直接关闭窗格（可在设置 → 文件操作中恢复）"),
+    onRemember: () => useSettings.getState().update({ confirmClosePane: false }),
   }).then((ok) => {
     if (ok) useLayout.getState().close(paneId);
   });

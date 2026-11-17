@@ -51,6 +51,7 @@ function toPlain(s: SettingsStore): Settings {  return {
     workspaceOrder: s.workspaceOrder,
     activeScheme: s.activeScheme,
     confirmDelete: s.confirmDelete,
+    confirmClosePane: s.confirmClosePane,
     autostart: s.autostart,
     toolbarEntries: s.toolbarEntries,
     restoreLastSession: s.restoreLastSession,

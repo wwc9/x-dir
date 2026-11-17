@@ -558,6 +558,14 @@ export const EN: Record<string, string> = {
   "分割线": "Separator",
   "删除到回收站": "Move to Recycle Bin",
   "删除前确认": "Confirm before delete",
+  // 关闭窗格确认（2026-11-17 用户定案：与删除确认同模式的「以后不再确认」）
+  "确定关闭此窗格吗？其中的所有标签页将一并关闭。":
+    "Close this pane? All its tabs will be closed with it.",
+  "以后不再确认，直接关闭窗格（可在设置 → 文件操作中恢复）":
+    "Don’t ask again — close panes directly (restore in Settings → File operations)",
+  "关闭窗格前确认": "Confirm before closing a pane",
+  "关闭含标签的窗格前弹出确认框（弹窗内勾选「以后不再确认」即关闭本开关）":
+    "Show a confirmation before closing a pane with tabs (check “Don’t ask again” in the dialog to turn this off)",
   "删除规则": "Delete rule",
   "删除选中（回收站）": "Delete selected (Recycle Bin)",
   "刷新（重新读取已展开的目录）": "Refresh (re-read expanded folders)",

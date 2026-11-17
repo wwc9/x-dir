@@ -376,6 +376,15 @@ export function SettingsPanel() {
               />
             </SetRow>
             <SetRow
+              label={t("关闭窗格前确认")}
+              desc={t("关闭含标签的窗格前弹出确认框（弹窗内勾选「以后不再确认」即关闭本开关）")}
+            >
+              <Switch
+                checked={s.confirmClosePane}
+                onChange={(e) => s.update({ confirmClosePane: e.currentTarget.checked })}
+              />
+            </SetRow>
+            <SetRow
               label={t("系统进度与冲突框")}
               desc={t("复制 / 移动走 Windows 原生 IFileOperation（进度/冲突由系统承担，快操作系统不弹进度窗；关闭 = 灵动岛字节级进度 + 应用内冲突框）")}
             >
