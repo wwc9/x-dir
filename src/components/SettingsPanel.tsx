@@ -349,11 +349,11 @@ export function SettingsPanel() {
             </SetRow>
             <SetRow
               label={t("是否展示文件夹的大小")}
-              desc={t("文件夹不计算体积，开启时大小列显示「—」占位，关闭后留空")}
+              desc={t("开启后文件夹行异步计算并显示递归体积（大文件夹稍后补齐，单文件夹上限 20 万文件）；关闭后大小列留空")}
             >
               <Switch
-                checked={s.folderSizePlaceholder}
-                onChange={(e) => s.update({ folderSizePlaceholder: e.currentTarget.checked })}
+                checked={s.showFolderSize}
+                onChange={(e) => s.update({ showFolderSize: e.currentTarget.checked })}
               />
             </SetRow>
             <SetRow

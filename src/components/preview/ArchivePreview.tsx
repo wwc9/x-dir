@@ -28,7 +28,7 @@ export function ArchivePreview({
   const [entries, setEntries] = useState<ArchiveEntry[] | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const reqRef = useRef(0);
-  const folderSizePlaceholder = useSettings((s) => s.folderSizePlaceholder);
+  const showFolderSize = useSettings((s) => s.showFolderSize);
 
   useEffect(() => {
     const req = ++reqRef.current;
@@ -108,7 +108,7 @@ export function ArchivePreview({
                 >
                   <RowIcon e={e} />
                   <span className="np-ellipsis">{e.name}</span>
-                  <span className="np-pv-ar-size">{e.isDir ? folderSizePlaceholder ? "—" : "" : formatSize(e)}</span>
+                  <span className="np-pv-ar-size">{e.isDir ? (showFolderSize ? "—" : "") : formatSize(e)}</span>
                 </div>
               );
             })}

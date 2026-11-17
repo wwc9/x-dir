@@ -6,6 +6,7 @@ import {
   fileNameOf,
   isValidName,
   joinPath,
+  normKey,
   parentPath ,
   relativeTo,
   samePathList,
@@ -197,5 +198,13 @@ describe("stemOf", () => {
   it("隐藏文件/无扩展名主干 = 全名", () => {
     expect(stemOf(".gitignore")).toBe(".gitignore");
     expect(stemOf("Makefile")).toBe("Makefile");
+  });
+});
+
+describe("normKey（路径键归一，缓存键与 Rust norm_key 同语义）", () => {
+  it("尾反斜杠归一 + 大小写折叠", () => {
+    expect(normKey("E:\\Data\\A\\")).toBe("e:\\data\\a");
+    expect(normKey("E:\\DATA")).toBe("e:\\data");
+    expect(normKey("e:\\data")).toBe(normKey("E:\\Data\\"));
   });
 });

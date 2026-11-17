@@ -1,5 +1,11 @@
 // TS 侧路径工具（与 Rust fs/path.rs 行为一致，仅供 UI 层使用）
 
+/** 路径键归一（缓存/映射键用，与 Rust norm_key 同语义）：去尾反斜杠 + 小写
+ *  （Windows 路径大小写不敏感、尾反斜杠两态必须命中同一键） */
+export function normKey(path: string): string {
+  return path.replace(/\\+$/, "").toLowerCase();
+}
+
 export function fileNameOf(path: string): string {
   return path.replace(/\\+$/, "").split("\\").pop() || path;
 }

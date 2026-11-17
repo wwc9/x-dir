@@ -560,8 +560,8 @@ export const EN: Record<string, string> = {
   "删除前确认": "Confirm before delete",
   // 是否展示文件夹的大小（2026-11-17 用户定案措辞；关闭后文件夹大小列留空）
   "是否展示文件夹的大小": "Show folder sizes",
-  "文件夹不计算体积，开启时大小列显示「—」占位，关闭后留空":
-    "Folder sizes are not computed — when on, the size column shows “—” for folders; off leaves it blank",
+  "开启后文件夹行异步计算并显示递归体积（大文件夹稍后补齐，单文件夹上限 20 万文件）；关闭后大小列留空":
+    "When on, folder rows show asynchronously computed recursive sizes (large folders fill in later, capped at 200k files per folder); off leaves the size column blank",
   // 关闭窗格确认（2026-11-17 用户定案：与删除确认同模式的「以后不再确认」）
   "确定关闭此窗格吗？其中的所有标签页将一并关闭。":
     "Close this pane? All its tabs will be closed with it.",

@@ -15,15 +15,16 @@ import {
   type TagColor,
 } from "../lib/ipc";
 import { applyBatch, EMPTY_STREAM, nextPaneSearchReq } from "../lib/searchStream";
-import { formatElapsed, formatSize, formatTime } from "../lib/format";
+import { formatBytes, formatElapsed, formatTime } from "../lib/format";
 import { formatShortTime, selStats } from "../lib/selStats";
 import { extOf, fileIcon, typeName } from "../lib/fileIcons";
 import { DENSITY } from "../lib/tokens";
-import { isValidName, joinPath, parentPath, samePathList, relativeTo, stemOf, toExtendedLength, toForwardSlash, toQuoted } from "../lib/path";
+import { isValidName, joinPath, normKey, parentPath, samePathList, relativeTo, stemOf, toExtendedLength, toForwardSlash, toQuoted } from "../lib/path";
 import { useUndo } from "../lib/undo";
 import { rectsIntersect, rowDropDest } from "../lib/hitTest";
 import { registerList } from "../lib/listRegistry";
 import { useDnd } from "../stores/dnd";
+import { useDirSizes } from "../stores/dirSizes";
 import {
   applyRenames,
   cleanOfficeMeta,
@@ -251,7 +252,17 @@ export function FileList({
   const showHidden = useSettings((s) => s.showHidden);
   const confirmDelete = useSettings((s) => s.confirmDelete);
   const realIcons = useSettings((s) => s.realIcons);
-  const folderSizePlaceholder = useSettings((s) => s.folderSizePlaceholder);
+  const showFolderSize = useSettings((s) => s.showFolderSize);
+  const dirSizes = useDirSizes((s) => s.sizes);
+
+  /** 大小列文本：文件 = 字节数；文件夹 = 开关开启时异步计算的递归体积
+   *  （未算出留空，store 按父目录整批填充），关闭一律留空（2026-11-17 定案） */
+  function sizeTextOf(entry: FileEntry): string {
+    if (!entry.isDir) return formatBytes(entry.size);
+    if (!showFolderSize) return "";
+    const bytes = dirSizes[normKey(entry.path)];
+    return bytes === undefined ? "" : formatBytes(bytes);
+  }
   const iconMap = useIcons((s) => s.icons);
   const extMap = useIcons((s) => s.exts);
   const ui = usePanes((s) => s.tabs[tabId]);
@@ -481,6 +492,9 @@ export function FileList({
         setPages(new Map([[0, r.entries]]));
         fetched.current = new Set([0]);
         prefetchIcons(r.entries);
+        // 文件夹体积（2026-11-17 定案）：开关开启时按父目录整批异步拉取，
+        // 到位后 store 订阅驱动行内补齐；刷新（refreshTick）同 effect 重跑即重算
+        if (showFolderSize) useDirSizes.getState().request(path);
       })
       .catch((e) => {
         if (loadGenRef.current !== gen) return;
@@ -2062,7 +2076,7 @@ export function FileList({
                               })}
                             </span>
                             <span className="np-cell-muted np-col-size">
-                              {formatSize(entry, folderSizePlaceholder)}
+                              {sizeTextOf(entry)}
                             </span>
                           </>
                         ) : !isThisPc ? (
@@ -2076,20 +2090,17 @@ export function FileList({
                               })}
                             </span>
                             <span className="np-cell-muted np-col-size">
-                              {formatSize(entry, folderSizePlaceholder)}
+                              {sizeTextOf(entry)}
                             </span>
                           </>
                         ) : (
                           <>
                             <span className="np-cell-muted np-col-type">{t("本地磁盘")}</span>
                             <span className="np-cell-muted np-col-size">
-                              {formatSize(entry, folderSizePlaceholder)}
+                              {sizeTextOf(entry)}
                             </span>
                             <span className="np-cell-muted np-col-size">
-                              {formatSize({
-                                isDir: false,
-                                size: drivesFree.get(entry.path) ?? 0,
-                              })}
+                              {formatBytes(drivesFree.get(entry.path) ?? 0)}
                             </span>
                           </>
                         )}
@@ -2187,17 +2198,17 @@ export function FileList({
                 ? t(" · {name} · 文件夹", { name: stats.single.name })
                 : t(" · {name} · {size} · 修改于 {time}", {
                     name: stats.single.name,
-                    size: formatSize({ isDir: false, size: stats.single.size }),
+                    size: formatBytes(stats.single.size),
                     time: formatShortTime(stats.single.mtimeMs),
                   })
               : t(" · 选中 {n} 项", { n: selected.length }) +
                 // 含文件夹 = 仅数量（合计不展示——文件夹大小未知，部分和误导）
                 (!stats.hasDir && stats.size > 0
-                  ? ` (${formatSize({ isDir: false, size: stats.size })})`
+                  ? ` (${formatBytes(stats.size)})`
                   : ""))}
         </span>
         <span className="np-ellipsis">
-          {free !== null && !searchActive && t("可用 {s}", { s: formatSize({ isDir: false, size: free }) })}
+          {free !== null && !searchActive && t("可用 {s}", { s: formatBytes(free) })}
           {dropHover && t(" · 释放以放入")}
         </span>
       </div>

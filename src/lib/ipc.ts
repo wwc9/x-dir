@@ -372,8 +372,9 @@ export interface Settings {
   /** 关闭含标签窗格前确认（2026-11-17 用户定案）：弹窗内「以后不再确认」即置 false，
    *  设置 → 文件操作可恢复 */
   confirmClosePane: boolean;
-  /** 文件夹大小占位（2026-11-17 用户定案）：文件夹行大小列显示「—」；关闭留空 */
-  folderSizePlaceholder: boolean;
+  /** 是否展示文件夹的大小（2026-11-17 用户定案）：开启 = 窗格列表异步计算并
+   *  显示递归体积；关闭 = 大小列留空。旧档 folderSizePlaceholder 由 load 迁移 */
+  showFolderSize: boolean;
   restoreLastSession: boolean;
   /** 开机自启（2026-11-15）：单一事实源在 settings.json，注册表 Run 键为派生态
    *  （Rust 启动回放 apply_autostart_pref；切换经 api.autostartSet 刷注册表） */
@@ -563,8 +564,8 @@ export const DEFAULT_SETTINGS: Settings = {
   confirmDelete: false,
   // 关闭窗格前确认默认开（2026-11-17）：多标签一并关闭属破坏性动作
   confirmClosePane: true,
-  // 占位横线默认开（与历史行为一致）
-  folderSizePlaceholder: true,
+  // 默认开（展示真实体积；旧档占位开关按同布尔折算）
+  showFolderSize: true,
   toolbarEntries: [],
   restoreLastSession: true,
   // 开机自启默认关（2026-11-15）：自启属显式选择，不替用户决定

@@ -52,7 +52,7 @@ function toPlain(s: SettingsStore): Settings {  return {
     activeScheme: s.activeScheme,
     confirmDelete: s.confirmDelete,
     confirmClosePane: s.confirmClosePane,
-    folderSizePlaceholder: s.folderSizePlaceholder,
+    showFolderSize: s.showFolderSize,
     autostart: s.autostart,
     toolbarEntries: s.toolbarEntries,
     restoreLastSession: s.restoreLastSession,
@@ -441,6 +441,11 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     merged.staging = Array.isArray(merged.staging)
       ? merged.staging.filter((x): x is string => typeof x === "string")
       : [];
+    // 旧档迁移：folderSizePlaceholder（横线占位开关）→ showFolderSize 同布尔折算
+    const legacySaved = saved as { folderSizePlaceholder?: unknown } | null;
+    if (saved?.showFolderSize === undefined && legacySaved?.folderSizePlaceholder !== undefined) {
+      merged.showFolderSize = legacySaved.folderSizePlaceholder === true;
+    }
     migrateLegacyPrefs(merged, saved ?? {});
     set({ ...merged, loaded: true });
     applyTheme(get().theme);
