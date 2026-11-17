@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+import type { LayoutNode } from "../../lib/layoutTree";
+import { useLayout } from "../layout";
 import { usePanes } from "../panes";
 import { useSettings } from "../settings";
 
@@ -142,5 +144,52 @@ describe("选择记忆（selMemory，2026-10-15）", () => {
     expect(keys.length).toBeLessThanOrEqual(50);
     expect(keys).not.toContain("C:\\dir0");
     expect(keys).toContain("C:\\a\\b");
+  });
+});
+
+describe("返回上一级与当前路径事实源（2026-11-17 用户反馈）", () => {
+  function paneWith(tabId: string, path: string): LayoutNode {
+    return { type: "pane", id: "pane-1", tabs: [{ id: tabId, path }], activeTab: 0 };
+  }
+  beforeEach(() => {
+    usePanes.setState({ tabs: {} });
+    useLayout.getState().init(paneWith("t1", "E:\\Job"));
+  });
+
+  it("currentPathOf 以 layout 树为准（history 空缺也不为 null）", () => {
+    usePanes.getState().ensure("t1", { viewMode: "details", sort: { key: "name", dir: "asc" } });
+    expect(usePanes.getState().currentPathOf("t1")).toBe("E:\\Job");
+  });
+
+  it("会话恢复态（history 空缺）：up 直达显示路径的父级并补齐后退链", () => {
+    // 模拟重启恢复：树里 t1 在 E:\Job，panes store 仅有 ensure 空档（无历史）
+    usePanes.getState().ensure("t1", { viewMode: "details", sort: { key: "name", dir: "asc" } });
+    usePanes.getState().up("t1");
+    expect(useLayout.getState().tree).toMatchObject({ tabs: [{ id: "t1", path: "E:\\" }] });
+    const ui = usePanes.getState().tabs["t1"];
+    expect(ui.history).toEqual(["E:\\Job", "E:\\"]);
+    expect(ui.historyIndex).toBe(1);
+    // 后退回到子目录（补种历史链的意义所在）
+    usePanes.getState().back("t1");
+    expect(useLayout.getState().tree).toMatchObject({ tabs: [{ path: "E:\\Job" }] });
+  });
+
+  it("history 漂移（同 id 档被方案重新应用）：up 以显示路径为基点而非陈旧历史头", () => {
+    usePanes.getState().ensure("t1", { viewMode: "details", sort: { key: "name", dir: "asc" } });
+    usePanes.getState().navigate("t1", "E:\\Job\\sub"); // 历史头长到 sub
+    // 方案再次应用：layout 树整体重建，同 id 标签路径回到方案存档路径
+    useLayout.getState().init(paneWith("t1", "D:\\其他"));
+    usePanes.getState().up("t1");
+    expect(useLayout.getState().tree).toMatchObject({ tabs: [{ path: "D:\\" }] });
+  });
+
+  it("盘符根与伪路径（此电脑）不误导航", () => {
+    usePanes.getState().ensure("t1", { viewMode: "details", sort: { key: "name", dir: "asc" } });
+    useLayout.getState().init(paneWith("t1", "E:\\"));
+    usePanes.getState().up("t1");
+    expect(useLayout.getState().tree).toMatchObject({ tabs: [{ path: "E:\\" }] });
+    useLayout.getState().init(paneWith("t1", "::{ThisPC}"));
+    usePanes.getState().up("t1");
+    expect(useLayout.getState().tree).toMatchObject({ tabs: [{ path: "::{ThisPC}" }] });
   });
 });

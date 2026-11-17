@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { FileEntry, Sort, ViewMode } from "../lib/ipc";
+import { dfsPanes } from "../lib/layoutTree";
 import { parentPath } from "../lib/path";
 import { useHistory } from "./history";
 import { useLayout } from "./layout";
@@ -205,7 +206,14 @@ export const usePanes = create<PanesStore>()((set, get) => ({
     const cur = get().currentPathOf(tabId);
     if (!cur) return;
     const parent = parentPath(cur);
-    if (parent) get().navigate(tabId, parent);
+    if (!parent) return;
+    // history 头不等于当前显示路径（会话恢复/方案应用后从未导航过 = 空栈，
+    // 或同 id 档复用造成漂移）时先把当前路径补入栈再上行——否则 navigate
+    // 会以错位的历史头为基点，"上一级"不再指向当前窗格文件夹的父级
+    //（2026-11-17 用户反馈）；补种同时保住「后退回到子目录」的历史链
+    const ui = get().tabs[tabId];
+    if (ui && ui.history[ui.historyIndex] !== cur) get().navigate(tabId, cur);
+    get().navigate(tabId, parent);
   },
 
   setView(tabId, viewMode) {
@@ -278,8 +286,8 @@ export const usePanes = create<PanesStore>()((set, get) => ({
       pendingTimer = null;
       const hit = pendingDirs;
       pendingDirs = new Set<string>();
-      for (const [tabId, ui] of Object.entries(get().tabs)) {
-        const cur = ui.history[ui.historyIndex];
+      for (const tabId of Object.keys(get().tabs)) {
+        const cur = get().currentPathOf(tabId);
         if (cur && hit.has(cur.replace(/\\+$/, ""))) {
           get().bumpRefresh(tabId);
         }
@@ -288,6 +296,16 @@ export const usePanes = create<PanesStore>()((set, get) => ({
   },
 
   currentPathOf(tabId) {
-    return get().tabs[tabId]?.history[get().tabs[tabId]?.historyIndex ?? 0] ?? null;
+    // 标签当前路径以 layout 树为唯一事实源（2026-11-17 用户反馈「返回上一级
+    // 不针对当前窗格文件夹」根因）：panes store 的 history 只在用户导航时生长，
+    // 会话恢复/方案应用重建标签后它空缺或整体漂移——旧实现只读 history，
+    // up/目录监控匹配（bumpAffected）便对错目录或失灵
+    const { tree } = useLayout.getState();
+    if (!tree) return null;
+    for (const p of dfsPanes(tree)) {
+      const t = p.tabs[p.activeTab];
+      if (t?.id === tabId) return t.path;
+    }
+    return null;
   },
 }));
