@@ -31,6 +31,9 @@ export const EN: Record<string, string> = {
   "界面缩放 {p}% · Ctrl+滚轮 / Ctrl+加减号调整 · 点击重置 100%":
     "UI zoom {p}% · Ctrl+scroll or Ctrl+plus/minus to adjust · Click to reset to 100%",
   "切换到英文界面": "Switch to English",
+  // 语言切换钮的目标语言名（EN 界面下显示），专名不翻译；与尺寸档 t("中")
+  // → "Medium" 刻意区分（2026-11-17 键位冲突实测：语言钮曾错显 Medium）
+  "中文": "中文",
 
   // ── 边栏（布局方案 + 暂存区）──
   "布局方案": "Layouts",

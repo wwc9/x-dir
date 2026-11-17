@@ -598,7 +598,9 @@ export function TitleBar() {
           useSettings.getState().update({ lang: lang === "zh" ? "en" : "zh" })
         }
       >
-        {lang === "zh" ? "EN" : t("中")}
+        {/* 专属字面量「中文」：不得复用尺寸档的 t("中")（其 EN 词条是 Medium，
+            2026-11-17 用户实测英文界面下语言钮错显 Medium 即键位冲突） */}
+        {lang === "zh" ? "EN" : t("中文")}
       </button>
 
       {/* 窗口控制与功能钮之间：分组边界 + 安全间距（防误触窗口钮） */}
