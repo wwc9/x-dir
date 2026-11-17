@@ -37,7 +37,12 @@ impl WatchManager {
         }
     }
 
-    /// 同一路径重复 watch 只增加引用计数；回调在独立事件线程执行。
+    /// 同一路径重复 watch 引用计数 +1，**且 watcher 必须换新**：被监控目录
+    /// 删除时表项不注销（watcher 变僵尸但仍占键），同路径重建后旧 watcher
+    /// 永远收不到事件——只计数不换新会让重建目录的外部变更静默失联，前端
+    /// 停在陈旧快照（2026-11-17 用户实测：删文件夹→资源管理器复制同名文件夹
+    /// 进来，列表不自动刷新且软刷新无效）。换新即旧 watcher 连同事件通道
+    /// 丢弃，旧事件线程随 rx.recv() 出错自然退场。
     /// 键经 norm_key 归一（大小写/尾反斜杠），与快照缓存键保持同一语义，
     /// 否则 invalidate 打不到真实键。
     pub fn watch<F>(&self, path: &str, on_change: F) -> Result<(), String>
@@ -45,27 +50,36 @@ impl WatchManager {
         F: Fn(&str) + Send + 'static,
     {
         let key = norm_key(path);
-        let mut map = self.entries.lock().unwrap();
-        if let Some(e) = map.get_mut(&key) {
-            e.count += 1;
-            return Ok(());
+        {
+            let map = self.entries.lock().unwrap();
+            if map.len() >= MAX_WATCHES && !map.contains_key(&key) {
+                return Err("监控数量已达上限".to_string());
+            }
         }
-        if map.len() >= MAX_WATCHES {
-            return Err("监控数量已达上限".to_string());
-        }
+        // watcher 创建在锁外（Windows 侧 = 开目录句柄注册
+        // ReadDirectoryChangesW，属慢操作，不占全局表锁）
         let (tx, rx) = std::sync::mpsc::channel();
         let mut watcher =
             RecommendedWatcher::new(tx, Config::default()).map_err(|e| e.to_string())?;
         watcher
             .watch(Path::new(&to_extended(path)), RecursiveMode::NonRecursive)
             .map_err(|e| e.to_string())?;
-        map.insert(
-            key,
-            WatchEntry {
-                count: 1,
-                _watcher: watcher,
-            },
-        );
+        let mut map = self.entries.lock().unwrap();
+        match map.get_mut(&key) {
+            Some(e) => {
+                e.count += 1;
+                e._watcher = watcher;
+            }
+            None => {
+                map.insert(
+                    key,
+                    WatchEntry {
+                        count: 1,
+                        _watcher: watcher,
+                    },
+                );
+            }
+        }
         drop(map);
 
         // 回调收到原始显示路径（dir-changed 事件前端按原始路径匹配窗格）；
@@ -134,11 +148,13 @@ mod tests {
         let dir = tempdir("rc");
         let (tx, rx) = std::sync::mpsc::channel();
 
+        // 重复 watch = 引用计数 +1 且换新 watcher：事件只达最新回调
+        //（应用内同目录多窗格的回调行为一致，仅最新存活无功能损失）
+        m.watch(&dir, |_| {}).unwrap();
         m.watch(&dir, move |_| {
             let _ = tx.send(());
         })
         .unwrap();
-        m.watch(&dir, |_| {}).unwrap(); // 同路径第二引用
         assert_eq!(m.count(&dir), 2);
 
         // 触发一次文件变更 → 聚合后回调
@@ -186,6 +202,34 @@ mod tests {
         std::fs::write(&f, "2").unwrap();
         let second = rx.recv_timeout(Duration::from_secs(3));
         assert!(second.is_ok(), "冷却期内的变更必须再触发一次回调");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// 被监控目录删除→同路径重建→重新 watch：换新 watcher 后新目录内的
+    /// 事件必须可达。旧实现只加引用计数不换新，僵尸 watcher 让重建目录
+    /// 的外部变更永远失联（2026-11-17 用户实测事故回归）
+    #[test]
+    fn rewatch_after_recreate_receives_events() {
+        let m = WatchManager::new();
+        let dir = tempdir("rearm");
+        let (tx, rx) = std::sync::mpsc::channel();
+        m.watch(&dir, |_| {}).unwrap();
+        // 删除被监控目录（表项留存为僵尸），同路径重建后重新 watch
+        //（前端导航进入该目录的调用形态）
+        std::fs::remove_dir(&dir).unwrap();
+        std::thread::sleep(Duration::from_millis(150));
+        std::fs::create_dir(&dir).unwrap();
+        m.watch(&dir, move |_| {
+            let _ = tx.send(());
+        })
+        .unwrap();
+        assert_eq!(m.count(&dir), 2);
+        // 新 watcher 必须能收到重建目录内的变更
+        std::fs::write(std::path::Path::new(&dir).join("b.txt"), "x").unwrap();
+        rx.recv_timeout(Duration::from_secs(3))
+            .expect("重建目录内的事件必须经换新 watcher 达到回调");
+        m.unwatch(&dir);
+        m.unwatch(&dir);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -423,6 +423,10 @@ impl JobManager {
                             if let Some(par) = parent_of(p) {
                                 dirty_dirs.push(par);
                             }
+                            // 被删项自身的快照一并失效：只失效父目录时，同名
+                            // 删除→重建后进入新目录会命中删除前的陈旧快照
+                            //（2026-11-17 用户实测：重建目录显示为空/旧内容）
+                            dirty_dirs.push(p.clone());
                         }
                         run_delete(
                             &sources,

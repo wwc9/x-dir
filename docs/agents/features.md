@@ -110,6 +110,15 @@
 - 错误态分层渲染：E_NOT_FOUND =「文件夹不存在」+ 失败路径 + 人话提示；E_PERM =「无法打开此位置」+ 权限提示；其余透出后端 message。
 - **逃生口两钮**（任何加载错误恒显示）：「打开桌面」（getKnownFolder("desktop")，OneDrive 重定向正确）、「打开此电脑」（THIS_PC 伪路径导航）。
 
+### 2.5 刷新口径与缓存一致性（2026-11-17 用户实测事故定案）
+
+**事故**：删除文件夹 → 外部（资源管理器）复制同名文件夹进来 → X-Dir 停在陈旧快照（显示为空），工具栏刷新无效，重启才恢复。三因叠加，全部修复：
+
+- **刷新口径分层定案**：软刷新（refreshTick 不带 force）只用于自动链路（dir-changed/job-done/拖放后），语义 = 「后端缓存已被同一事件失效，重拉即可」；**任何用户手动刷新必须强制重扫**（`force_rescan=true` 绕过快照缓存）。F5/右键「刷新」本就走 `onRefresh(true)`，唯独窗格工具栏 ↻（Pane runTool "refresh"）漏成软刷新——已改走 `getList(tabId)?.onRefresh(true)`。新入口刷新一律对齐强制口径。
+- **watcher 僵尸复活**（`watch.rs` WatchManager::watch）：被监控目录删除时表项不注销、watcher 死亡；旧实现同路径重复 watch 只加引用计数，重建目录的新事件永远失联。定案 = 重复 watch 一律**换新 watcher**（旧 watcher 连同事件通道丢弃，旧事件线程随 rx.recv() 出错自然退场；watcher 创建在表锁外）。回归测试 `rewatch_after_recreate_receives_events` 锁定：删→重建→重挂→新目录内事件必达。
+- **删除失效含自身**（`jobs/mod.rs` Delete 分支）：dirty_dirs 此前只有父目录，被删文件夹自身的快照留缓存——同名删除→重建后进入新目录命中删除前的陈旧快照。定案 = 被删路径自身一并 push 进 dirty_dirs（文件路径为键无快照，失效是无害 no-op）。
+- 残余边界（已知可接受）：标签全程停在 X 内部（导航不离开）时 watcher 僵尸不会被重挂治愈（无重新 watch 的触发点）——手动强制刷新可随时兜底；下一次导航（离开再进入）即自愈。
+
 ## 3. 右键菜单与定制
 
 ### 3.1 右键菜单（数据驱动）

@@ -404,7 +404,10 @@ export function Pane({ pane }: { pane: PaneNode }) {
         );
         break;
       case "refresh":
-        usePanes.getState().bumpRefresh(tabId);
+        // 工具栏刷新 = 用户手动兜底，必须强制重扫（与 F5/右键刷新同口径）：
+        // 软刷新只重拉缓存——快照陈旧时（删文件夹后外部同名重建、watcher 失联）
+        // 永远端旧数据，用户按刷新无效（2026-11-17 实测事故）
+        getList(tabId)?.onRefresh(true);
         break;
       case "search":
         usePanes.getState().setSearch(tabId, searching ? null : "");
