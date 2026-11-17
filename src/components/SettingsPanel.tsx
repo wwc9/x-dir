@@ -348,8 +348,8 @@ export function SettingsPanel() {
               />
             </SetRow>
             <SetRow
-              label={t("文件夹大小占位")}
-              desc={t("文件夹行的大小列显示「—」占位（关闭后文件夹留空）")}
+              label={t("是否展示文件夹的大小")}
+              desc={t("文件夹不计算体积，开启时大小列显示「—」占位，关闭后留空")}
             >
               <Switch
                 checked={s.folderSizePlaceholder}

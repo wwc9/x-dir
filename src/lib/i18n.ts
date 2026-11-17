@@ -558,10 +558,10 @@ export const EN: Record<string, string> = {
   "分割线": "Separator",
   "删除到回收站": "Move to Recycle Bin",
   "删除前确认": "Confirm before delete",
-  // 文件夹大小占位（2026-11-17 用户定案：关闭后文件夹大小列留空）
-  "文件夹大小占位": "Folder size placeholder",
-  "文件夹行的大小列显示「—」占位（关闭后文件夹留空）":
-    "Show “—” in the size column for folder rows (turn off to leave it blank)",
+  // 是否展示文件夹的大小（2026-11-17 用户定案措辞；关闭后文件夹大小列留空）
+  "是否展示文件夹的大小": "Show folder sizes",
+  "文件夹不计算体积，开启时大小列显示「—」占位，关闭后留空":
+    "Folder sizes are not computed — when on, the size column shows “—” for folders; off leaves it blank",
   // 关闭窗格确认（2026-11-17 用户定案：与删除确认同模式的「以后不再确认」）
   "确定关闭此窗格吗？其中的所有标签页将一并关闭。":
     "Close this pane? All its tabs will be closed with it.",
