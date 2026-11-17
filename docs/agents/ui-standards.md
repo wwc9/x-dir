@@ -236,3 +236,14 @@
   PDF、CSV、文本、zip 打包）/ PDF 提取页、删除页全部对齐三段式；此前仅有
   PDF 合并与加水印符合。待处理清单共享组件 = `components/FileQueue.tsx`
   （DragFileList + QueueSection，2026-11-03 自 ToolsDialogs 抽出）。
+
+### 4.10 窗口毛玻璃（glasswin 渐变底 + 霜玻璃，2026-11-17 定案）
+
+设置 → 外观 →「窗口毛玻璃」开；**仅高性能档可用**（外观页按解析档门禁：低配档「开」钮禁用 + desc 提示；低配预设强制 off、高性能预设不重置用户选择）。纯 CSS 实现（backdrop-filter 采样页内渐变，不依赖 OS 合成器），根类 `glasswin` 挂 html，样式单源 index.css「窗口毛玻璃 glasswin」段。
+
+- **画布**：`--np-bg` 换 Big Sur 风渐变（浅色 = 白云带/天空蓝/橙浪/珊瑚粉；深色 = navy 顶/青蓝板岩/紫晕/绯红底，对照用户提供的壁纸亮暗对应取色），body 直接铺。
+- **卡片玻璃配方（单源）**：面板主卡片（.np-titlebar/.np-pane/.np-side-card/.np-navtree/.np-shelf）+ .np-dialog + .bp6-menu——`--np-surface` 换霜玻璃半透明底（浅 = --np-glass 白 0.55；深 = rgba(36,41,55,0.55) 蓝灰）+ `backdrop-filter: blur(22px) saturate(1.4)` + 边框换 `--np-glass-ring` + 外投影 `--np-glass-shadow`；深色另加顶缘 inset 白 8% 受光高光。
+- **强霜层**：.np-dialog 用 `--np-surface-glass-strong`（0.7）——浮层可读性优先于通透；菜单保持 0.55 霜（右键菜单「霜」定稿口径）。
+- **实底保持**：`--np-surface-2` 填充控件（输入/触发钮）、虚拟列表行、`.np-winedge` 窗缘盖板（渐变不能作 color 停靠点，涂边缘近似实色：浅 #f0e9ee / 深 #1e2233）。
+- **⚠ dark 类挂 html+body 两处陷阱**：`.dark` token 块在 body 直接声明 --np-bg/--np-surface，直接声明恒压过 html 继承——glasswin 覆写必须含 `html.glasswin > body` 直接声明体，漏写则浅色正常、深色整段失效回实底。
+- **性能**：模糊对象 = 卡片背后静态渐变，列表滚动不触发重模糊（合成层缓存）；常驻卡片挂 blur 为用户定案接受的成本，低性能档整段自动关对冲。

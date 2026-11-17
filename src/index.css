@@ -373,54 +373,48 @@ body {
   backdrop-filter: none;
   background: var(--np-surface);
 }
-/* 窗口毛玻璃（2026-11-17 外观 tab 定案 = 渐变底 + 窗格霜玻璃，纯 CSS）：
-   根类 glasswin 下画布 --np-bg 换极光渐变（深浅主题各一套：径向色斑 + 线性
-   基底），面板卡片换「霜」玻璃半透明底并挂 backdrop-filter 实时模糊渐变底
-   ——模糊在 WebView 内完成（backdrop-filter 只采样页内内容，渐变在页内所以
-   有效），不依赖 OS 合成器、远程会话友好；填充输入面 --np-surface-2 保持
-   实底保证可读。须压过 :root 与 .dark 两段 token：html 前缀同特异性置于其后 */
-/* ⚠ 深色下必须同时覆写 body：applyTheme 把 dark 类挂 html 和 body 两处，
-   `.dark` token 块会在 body 上直接声明 --np-bg/--np-surface（直接声明恒压过
-   html 的继承值）——只写 html 时浅色正常（body 无类走继承）、深色整段被
-   body.dark 短路回实底（2026-11-17 深色「看不出效果」的真正根因） */
+/* ═══ 窗口毛玻璃 glasswin（§4.10，2026-11-17 定案 = Big Sur 渐变底 + 霜玻璃卡片家族）：
+   根类 glasswin 下画布 --np-bg 换主题化极光渐变（浅：白云带/天空蓝/橙浪/珊瑚粉；
+   深：navy/青蓝板岩/紫晕/绯红），卡片家族换「霜」玻璃半透明底并挂 backdrop-filter
+   实时模糊渐变底——模糊在 WebView 内完成（backdrop-filter 只采样页内内容），
+   不依赖 OS 合成器、远程会话友好。规范全文见 ui-standards §4.10 ═══ */
+/* ⚠ 陷阱：dark 类挂 html+body 两处，`.dark` token 块会在 body 直接声明
+   --np-bg/--np-surface（直接声明恒压过继承）——覆写必须含 html.glasswin > body
+   直接声明体，漏写则浅色正常、深色整段失效回实底（2026-11-17 实测根因） */
 html.glasswin,
 html.glasswin > body {
+  /* 画布（Big Sur 浅色映射：白云带 / 天空蓝 / 橙浪 / 珊瑚粉） */
   --np-bg: radial-gradient(
-      120% 90% at 85% 6%,
-      rgba(96, 158, 255, 0.3),
-      transparent 62%
+      75% 50% at 60% 16%,
+      rgba(238, 244, 250, 0.9),
+      transparent 58%
     ),
-    radial-gradient(110% 85% at 8% 94%, rgba(64, 196, 182, 0.26), transparent 64%),
-    radial-gradient(90% 70% at 42% 42%, rgba(158, 128, 240, 0.18), transparent 66%),
-    linear-gradient(168deg, #eef2f8, #e3eaf4 52%, #dde7ee);
+    radial-gradient(110% 80% at 88% 2%, rgba(59, 130, 196, 0.5), transparent 62%),
+    radial-gradient(100% 80% at 52% 42%, rgba(255, 163, 71, 0.34), transparent 60%),
+    radial-gradient(130% 100% at 8% 96%, rgba(244, 78, 128, 0.42), transparent 64%),
+    linear-gradient(160deg, #f7f1f4, #f2eaef 50%, #e7ecf5);
   --np-surface: var(--np-glass);
+  /* 强霜面（Dialog 可读性优先，比卡片 0.55 霜更实） */
+  --np-surface-glass-strong: rgba(255, 255, 255, 0.7);
 }
-/* 深色霜 = macOS 深色 vibrancy 口径：高饱和极光画布（亮蓝/青/紫大色斑、
-   蓝调基底，肉眼直接可辨）+ 面板 tint 提亮偏蓝灰且压低 alpha（比背后模糊底
-   更沉稳，色相穿透，即「鲜艳壁纸 + 冷静玻璃板」的层次对比） */
 html.glasswin.bp6-dark,
 html.glasswin.bp6-dark > body {
+  /* 画布（Big Sur 深色映射：navy 顶 / 青蓝板岩 / 紫晕 / 绯红底） */
   --np-bg: radial-gradient(
-      120% 90% at 85% 6%,
-      rgba(92, 157, 255, 0.55),
-      transparent 60%
+      90% 70% at 78% 30%,
+      rgba(139, 92, 246, 0.4),
+      transparent 62%
     ),
-    radial-gradient(110% 85% at 8% 94%, rgba(64, 200, 190, 0.45), transparent 62%),
-    radial-gradient(90% 70% at 42% 42%, rgba(150, 115, 240, 0.5), transparent 64%),
-    linear-gradient(168deg, #253352, #1f2c48 52%, #182343);
-  --np-surface: rgba(52, 64, 92, 0.58);
+    radial-gradient(100% 80% at 90% 8%, rgba(26, 34, 56, 0.9), transparent 65%),
+    radial-gradient(110% 85% at 62% 55%, rgba(61, 110, 140, 0.5), transparent 62%),
+    radial-gradient(130% 100% at 6% 92%, rgba(196, 60, 92, 0.5), transparent 64%),
+    linear-gradient(160deg, #1e2436, #241d31 45%, #33141f);
+  --np-surface: rgba(36, 41, 55, 0.55);
+  --np-surface-glass-strong: rgba(30, 35, 50, 0.7);
 }
-/* 玻璃卡顶缘高光：深色下勾勒「玻璃板」受光边，强化玻璃体感 */
-html.glasswin.bp6-dark .np-titlebar,
-html.glasswin.bp6-dark .np-pane,
-html.glasswin.bp6-dark .np-side-card,
-html.glasswin.bp6-dark .np-navtree,
-html.glasswin.bp6-dark .np-shelf {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-/* 渐变底上的实时模糊家族：主卡片（顶栏/窗格/边栏三卡）+ Dialog + 全部菜单
-   浮层；右键菜单「霜」自带同款 blur 不受影响。虚拟列表行在卡片内部，模糊
-   对象是卡片背后的静态渐变，滚动不触发重模糊（合成层缓存，开销一次性） */
+/* 卡片玻璃配方（单源）：霜面 + 实时模糊 + glass-ring 边 + glass-shadow 光晕；
+   深色玻璃卡另加顶缘受光高光。虚拟列表行在卡片内部，模糊对象是卡片背后静态
+   渐变，滚动不触发重模糊（合成层缓存，开销一次性） */
 html.glasswin .np-titlebar,
 html.glasswin .np-pane,
 html.glasswin .np-side-card,
@@ -428,15 +422,31 @@ html.glasswin .np-navtree,
 html.glasswin .np-shelf,
 html.glasswin .np-dialog,
 html.glasswin .bp6-menu {
+  background: var(--np-surface);
+  border-color: var(--np-glass-ring);
   -webkit-backdrop-filter: blur(22px) saturate(1.4);
   backdrop-filter: blur(22px) saturate(1.4);
+  box-shadow: var(--np-glass-shadow);
+}
+html.glasswin.bp6-dark .np-titlebar,
+html.glasswin.bp6-dark .np-pane,
+html.glasswin.bp6-dark .np-side-card,
+html.glasswin.bp6-dark .np-navtree,
+html.glasswin.bp6-dark .np-shelf {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    var(--np-glass-shadow);
+}
+/* 强霜层：Dialog 可读性优先，用 0.7 强霜替代卡片 0.55 霜 */
+html.glasswin .np-dialog {
+  background: var(--np-surface-glass-strong);
 }
 /* 窗缘盖板原样引用 --np-bg（渐变值不能作 color 停靠点），改涂渐变边缘近似实色 */
 html.glasswin .np-winedge {
-  background: #e8edf5;
+  background: #f0e9ee;
 }
 html.glasswin.bp6-dark .np-winedge {
-  background: #182343;
+  background: #1e2233;
 }
 .nofx-anim .bp6-popover,
 .nofx-anim .bp6-transition-container {
