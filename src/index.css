@@ -3063,7 +3063,8 @@ body.np-col-resizing * {
   font-size: var(--np-font-sm);
 }
 .np-prop-key {
-  width: 64px;
+  /* 72px = 容纳 5 个汉字标签（微信公众号 5×13px=65px，2026-11-17 实测 64px 折行） */
+  width: 72px;
   flex: 0 0 auto;
   color: var(--np-muted);
 }
