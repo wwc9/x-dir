@@ -124,12 +124,14 @@ function PerfDeviceRow() {
       </div>
     );
   }
-  // 设备摘要：CPU 主名（cpu 字符串自带「· N 线程」后缀，与独立线程数重复，裁掉）
+  // 设备摘要：CPU 主名（cpu 字符串自带「· N 线程」后缀，与独立线程数重复，裁掉）；
+  // 全量文本流式换行展示，任何宽度都不截断
   const cpuName = detected.info.cpu.split(" · ")[0];
   const specs = [
     `${detected.info.cpuThreads} ${t("线程")}`,
     `${Math.round(detected.info.memoryGb)}GB ${t("内存")}`,
     detected.info.gpus[0] ?? t("未检出独立显卡"),
+    cpuName,
     ...(detected.remote ? [t("远程会话")] : []),
   ].join(" · ");
   const tierText = detected.remote
@@ -143,9 +145,6 @@ function PerfDeviceRow() {
         {tierText}
       </span>
       <span className="np-perf-specs">{specs}</span>
-      <span className="np-perf-cpu" title={cpuName}>
-        {cpuName}
-      </span>
     </div>
   );
 }

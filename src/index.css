@@ -425,16 +425,11 @@ body {
   background: color-mix(in srgb, var(--np-danger) 14%, transparent);
   color: var(--np-danger);
 }
-.np-perf-specs,
-.np-perf-cpu {
-  color: var(--np-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .np-perf-specs {
-  flex: 0 1 auto;
+  flex: 1 1 280px;
   min-width: 0;
+  color: var(--np-muted);
+  line-height: 1.6;
 }
 /* 窄宽度下控件换行到标题下方（性能模式 Seg 三钮宽，防横向溢出） */
 .np-set-wrap {
@@ -442,11 +437,6 @@ body {
 }
 .np-set-wrap .np-set-info {
   flex: 1 1 320px;
-}
-.np-perf-cpu {
-  flex: 1 1 0;
-  min-width: 0;
-  text-align: right;
 }
 /* 分段选择（§4.3：Blueprint ButtonGroup 现成件）。2026-10-24 定案 = 方案 A
    描边勾选 chip（design/wm-seg-proposals.html），替代 surface-2 轨道 + accent
