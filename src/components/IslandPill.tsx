@@ -3,20 +3,26 @@
 // 任务 → 展开任务面板（进度条 + 暂停/继续 + 取消，原 JobCenter 已并入）；
 // 交换模式 → 取消；全盘搜索 → 唤起面板；回执 → 点击消去。
 // 剪贴板持有为纯指示（不响应点击，粘贴仍走 Ctrl+V / 右键菜单）。
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { t } from "../lib/i18n";
 import {
   ArrowLeftRight,
   Check,
+  ChevronDown,
   CircleX,
   ClipboardCopy,
+  Copy,
   Info,
+  Pin,
+  PinOff,
   Scissors,
   Search,
+  X,
 } from "lucide-react";
 
 import { THIS_PC } from "../lib/ipc";
 import { fileNameOf } from "../lib/path";
+import { shouldExpandReceipt } from "../lib/island";
 import { DENSITY } from "../lib/tokens";
 import {
   resolveIsland,
@@ -48,11 +54,15 @@ export function IslandPill({ path }: { path: string }) {
     activeTabId ? (s.tabs[activeTabId]?.selected.length ?? 0) : 0,
   );
 
-  // 1s 心跳：驱动回执过期（组件极小，1fps 重渲染可忽略）
+  // 1s 心跳：驱动回执过期（组件极小，1fps 重渲染可忽略）；holdRef = 悬停中的
+  // 回执（展笺方案 A：悬停续期，渲染期镜像进 ref 供定时器闭包读取）
   const [, tick] = useState(0);
+  const holdRef = useRef<string | null>(null);
+  // 悬停态：展开回执展笺（仅回执通道且长文本，见 longReceipt）
+  const [hover, setHover] = useState(false);
   useEffect(() => {
     const t = window.setInterval(() => {
-      useIsland.getState().prune(Date.now());
+      useIsland.getState().prune(Date.now(), holdRef.current ?? undefined);
       tick((n) => n + 1);
     }, 1000);
     return () => window.clearInterval(t);
@@ -92,6 +102,12 @@ export function IslandPill({ path }: { path: string }) {
     view.kind === "swap" ||
     view.kind === "gsearch" ||
     view.kind === "receipt";
+  // 展笺（2026-11-17 方案 A）：仅回执通道且文本超出胶囊单行容量时，悬停展开
+  const isReceipt = view.kind === "receipt";
+  const longReceipt = isReceipt && shouldExpandReceipt(view.receipt.text);
+  // 心跳闭包经 ref 读当前悬停回执 id（渲染期镜像；固定态永不过期无需续期）
+  holdRef.current =
+    isReceipt && hover && !view.receipt.pinned ? view.receipt.id : null;
   const cls = [
     "np-island",
     interactive ? "is-clickable" : "is-static",
@@ -154,6 +170,7 @@ export function IslandPill({ path }: { path: string }) {
           <>
             <AppIcon icon={Icon} size={DENSITY.iconXs} />
             <span className="np-ellipsis">{view.receipt.text}</span>
+            {longReceipt && <AppIcon icon={ChevronDown} size={DENSITY.iconXs} />}
             {view.receipt.action && (
               <button
                 className="np-island-act"
@@ -196,15 +213,91 @@ export function IslandPill({ path }: { path: string }) {
   })();
 
   return (
-    <span className="np-island-wrap">
+    <span
+      className="np-island-wrap"
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
       <button
         type="button"
         className={cls}
         onClick={onClick}
-        data-tip={islandTitle(view)}
+        data-tip={longReceipt ? "" : islandTitle(view)}
       >
         {inner}
       </button>
+      {/* 展笺：锚定岛下方（与任务面板同锚点语义），全文 + 复制/固定/消去。
+          仅回执通道且长文本、悬停期间渲染；固定后展笺随时可再展开查看 */}
+      {isReceipt && longReceipt && hover && (
+        <div
+          className={`np-island-sheet is-${view.receipt.tone}${
+            view.receipt.pinned ? " is-pinned" : ""
+          }`}
+        >
+          <div className="np-island-sheet-body">
+            <AppIcon
+              icon={
+                view.receipt.tone === "ok"
+                  ? Check
+                  : view.receipt.tone === "fail"
+                    ? CircleX
+                    : Info
+              }
+              size={DENSITY.iconSm}
+              colorVar={
+                view.receipt.tone === "fail"
+                  ? "--np-danger"
+                  : view.receipt.tone === "ok"
+                    ? "--np-success"
+                    : undefined
+              }
+            />
+            <span>{view.receipt.text}</span>
+          </div>
+          <div className="np-island-sheet-foot">
+            {view.receipt.action && (
+              <button
+                className="np-island-act"
+                onClick={() => {
+                  view.receipt.action?.run();
+                  useIsland.getState().dismissReceipt(view.receipt.id);
+                }}
+              >
+                {view.receipt.action.label}
+              </button>
+            )}
+            <button
+              className="np-island-sheet-btn"
+              onClick={() => {
+                navigator.clipboard
+                  .writeText(view.receipt.text)
+                  .then(() => useUi.getState().toast(t("已复制详情")))
+                  .catch(() => undefined);
+              }}
+            >
+              <AppIcon icon={Copy} size={DENSITY.iconXs} />
+              {t("复制详情")}
+            </button>
+            <button
+              className="np-island-sheet-btn"
+              onClick={() =>
+                useIsland.getState().pinReceipt(view.receipt.id, !view.receipt.pinned)
+              }
+            >
+              <AppIcon icon={view.receipt.pinned ? PinOff : Pin} size={DENSITY.iconXs} />
+              {view.receipt.pinned ? t("取消固定") : t("固定不自动消失")}
+            </button>
+            <span style={{ flex: 1 }} />
+            <button
+              className="np-island-sheet-x"
+              onClick={() => useIsland.getState().dismissReceipt(view.receipt.id)}
+            >
+              <AppIcon icon={X} size={DENSITY.iconXs} />
+            </button>
+          </div>
+          <span className="np-island-sheet-line" aria-hidden />
+        </div>
+      )}
       {/* 任务面板：锚定岛下方，展开开关与 pill 点击共享（stores/jobs.expanded） */}
       {expanded && view.kind === "job" && <JobList />}
     </span>

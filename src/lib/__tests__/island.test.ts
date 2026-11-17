@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import type { JobInfo } from "../../stores/jobs";
+import { useIsland } from "../../stores/island";
 import {
+  ISLAND_SHEET_MIN,
   resolveIsland,
+  shouldExpandReceipt,
   summarizeJobs,
   type IslandInput,
 } from "../island";
@@ -80,6 +83,47 @@ describe("灵动岛仲裁（resolveIsland）", () => {
       clip: { count: 1, cut: false },
     });
     expect(expired.kind).toBe("clipboard");
+  });
+
+  it("固定（pinned）回执永不过期，仍占用回执通道（展笺方案 A）", () => {
+    const v = view({
+      receipts: [{ id: "p", tone: "fail", text: "已固定", until: base.now - 1, pinned: true }],
+      clip: { count: 1, cut: false },
+    });
+    expect(v).toEqual({
+      kind: "receipt",
+      receipt: { id: "p", tone: "fail", text: "已固定", until: base.now - 1, pinned: true },
+    });
+  });
+});
+
+describe("展笺阈值（shouldExpandReceipt，方案 A）", () => {
+  it("超过 ISLAND_SHEET_MIN 字符才展开；阈值内不展开", () => {
+    expect(shouldExpandReceipt("中".repeat(ISLAND_SHEET_MIN))).toBe(false);
+    expect(shouldExpandReceipt("中".repeat(ISLAND_SHEET_MIN + 1))).toBe(true);
+    expect(shouldExpandReceipt("")).toBe(false);
+  });
+});
+
+describe("回执剪枝（store.prune 的 hold/pinned 语义）", () => {
+  it("悬停中的回执续期不剪枝；移开恢复倒计时；固定回执永不剪", () => {
+    useIsland.setState({ receipts: [
+      { id: "held", tone: "fail", text: "悬停中", until: 1000 },
+      { id: "pinned", tone: "info", text: "固定", until: 1000, pinned: true },
+      { id: "gone", tone: "ok", text: "过期", until: 1000 },
+    ] });
+    // now=2000：held 在悬停（holdId）→ 续期存活；pinned 固定存活；gone 剪除
+    useIsland.getState().prune(2000, "held");
+    const kept = useIsland.getState().receipts;
+    expect(kept.map((r) => r.id)).toEqual(["held", "pinned"]);
+    expect(kept[0].until).toBeGreaterThan(2000); // 续期推高到期线
+    // 无 hold 继续剪：held 走自然过期，pinned 仍在
+    useIsland.getState().prune(kept[0].until + 1);
+    expect(useIsland.getState().receipts.map((r) => r.id)).toEqual(["pinned"]);
+    // 取消固定后恢复过期语义
+    useIsland.getState().pinReceipt("pinned", false);
+    useIsland.getState().prune(9999);
+    expect(useIsland.getState().receipts).toEqual([]);
   });
 });
 

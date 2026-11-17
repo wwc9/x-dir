@@ -85,10 +85,21 @@ export interface IslandReceipt {
   id: string;
   tone: "ok" | "fail" | "info";
   text: string;
-  /** 到期时间戳（resolve 时过期即丢弃） */
+  /** 到期时间戳（resolve 时过期即丢弃；pinned 回执除外） */
   until: number;
   /** 附加动作（2026-11-08 解压/压缩回执「打开」目标文件夹）：点击执行并收起 */
   action?: { label: string; run(): void };
+  /** 用户固定（2026-11-17 展笺方案 A）：不自动过期，仅手动消去 */
+  pinned?: boolean;
+}
+
+/** 展笺阈值（2026-11-17 方案 A 定案）：回执文本超过岛胶囊单行可容纳的长度
+ *  （钳制 min(46vw,540px) ≈ 40 个汉字）才悬停展开全文展笺；阈值内短回执
+ *  行为与旧版完全一致（无展笺、无展开箭头） */
+export const ISLAND_SHEET_MIN = 40;
+
+export function shouldExpandReceipt(text: string): boolean {
+  return text.length > ISLAND_SHEET_MIN;
 }
 
 /** 灵动岛当前应显示的通道视图 */
@@ -119,10 +130,12 @@ export function resolveIsland(input: IslandInput): IslandView {
   if (input.job) return { kind: "job", job: input.job };
   if (input.swap) return { kind: "swap" };
   if (input.gsearch !== null) return { kind: "gsearch", matched: input.gsearch };
-  // 回执取最新一条未过期的（push 顺序即新旧，末位最新）
+  // 回执取最新一条未过期的（push 顺序即新旧，末位最新）；pinned 回执永不过期，
+  // 直到用户手动消去
   for (let i = input.receipts.length - 1; i >= 0; i--) {
-    if (input.receipts[i].until > input.now) {
-      return { kind: "receipt", receipt: input.receipts[i] };
+    const r = input.receipts[i];
+    if (r.pinned || r.until > input.now) {
+      return { kind: "receipt", receipt: r };
     }
   }
   if (input.clip) return { kind: "clipboard", count: input.clip.count, cut: input.clip.cut };

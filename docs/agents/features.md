@@ -33,6 +33,7 @@
 **组件与模块**：`useUi.toast(text, kind)` = `stores/island` 回执别名；任务面板 `components/JobList.tsx`（经 `IslandPill` 锚定岛下渲染）+ `stores/jobs.expanded`。
 
 - 全部提示统一顶栏灵动岛回执播报（error→fail 驻留 6s / 其余→ok 4s，同文本去重刷新驻留期；独立 Toast 窗口已移除）；调用方 API 不变：`useUi.getState().toast(text, kind)`。
+- **回执展笺（2026-11-17 方案 A 定案，design/toast-proposal-a-island.html 用户挑选）**：超长回执（`shouldExpandReceipt`：文本 > `ISLAND_SHEET_MIN`=40 字符，≈岛胶囊单行容量）悬停岛胶囊向下展开全文展笺——锚定岛下方（与任务面板同锚点语义），全文换行 + 复制详情 + 固定/取消固定 + 回执自带动作钮 + 关闭。机制：岛胶囊显式视口钳制 `max-width: min(46vw, 540px)`（旧 `max-width:100%` 在顶栏 flex 链失效，长回执挤穿工具栏盖住搜索/缩放/刷新——本次事故根因）+ `.np-tb-fill` 补 `min-width:0`；心跳 `prune(now, holdId)` 对悬停中的回执**续期**（移开恢复倒计时）；`pinReceipt` 固定回执 `pinned:true` 不自动过期（`resolveIsland` 对 pinned 免过期判定），仅手动消去；阈值内短回执行为与旧版完全一致（无展笺无箭头）。展笺期 tooltip 关闭（data-tip 置空防双层）。测试：island.test.ts 展笺阈值/pinned 仲裁/prune hold 续期三组。
 - 任务迷你态在 pill（迷你进度条 + 标签/计数/百分比，不确定态降透明示意），点击展开任务面板：逐条进度条 + 暂停/继续（仅 copy/move）+ 取消；完成/失败经灵动岛回执（原左下角 JobCenter 已移除）。
 - **原生文件操作引擎 `nativeFileOps` 出厂默认 false**：原生 IFileOperation 的进度/冲突交系统 UI，与灵动岛实时进度相悖；改为可选开启（需系统冲突框场景），已存档 true 的用户在设置 → 文件操作手动切换。
 - **僵尸条目防护**：极快任务的 done 事件先于 register 到达时，register 落袋即除（任务已终态，补发成功回执），不再滞留列表。

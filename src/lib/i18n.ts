@@ -34,6 +34,11 @@ export const EN: Record<string, string> = {
   // 语言切换钮的目标语言名（EN 界面下显示），专名不翻译；与尺寸档 t("中")
   // → "Medium" 刻意区分（2026-11-17 键位冲突实测：语言钮曾错显 Medium）
   "中文": "中文",
+  // 回执展笺动作（2026-11-17 展笺方案 A）
+  "复制详情": "Copy details",
+  "已复制详情": "Details copied",
+  "固定不自动消失": "Pin (no auto-dismiss)",
+  "取消固定": "Unpin",
 
   // ── 边栏（布局方案 + 暂存区）──
   "布局方案": "Layouts",

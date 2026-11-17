@@ -884,6 +884,9 @@ body:has(
 }
 .np-tb-fill {
   flex: 1 1 0;
+  /* flex 链允许收缩（2026-11-17 展笺方案 A）：缺省 min-width:auto 会让超长
+     岛胶囊把中缝撑开、顶栏兄弟控件被盖 */
+  min-width: 0;
   align-self: stretch;
 }
 /* 顶栏灵动岛（2026-10-15）：中央动态信息位，默认回落活动窗格路径。
@@ -893,7 +896,9 @@ body:has(
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  max-width: 100%;
+  /* 显式视口钳制（2026-11-17 展笺方案 A 定案）：旧 max-width:100% 在顶栏
+     flex 链中失效，超长回执直接挤穿工具栏盖住搜索/缩放/刷新 */
+  max-width: min(46vw, 540px);
   min-height: var(--np-ctl-h);
   padding: 3px 16px;
   border: 0;
@@ -973,6 +978,100 @@ body:has(
 }
 .np-island-act:hover {
   background: color-mix(in srgb, var(--np-accent) 14%, transparent);
+}
+/* 回执展笺（2026-11-17 方案 A 定案，design/toast-proposal-a-island.html）：
+   超长回执悬停岛胶囊向下展开全文（锚定岛下方，与任务面板同锚点语义）；
+   浮层规范（surface + radius-lg + shadow，§4.7），tone 色指示条随 ok/fail/info */
+.np-island-sheet {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(560px, 58vw);
+  z-index: 80;
+  background: var(--np-surface);
+  border: 1px solid var(--np-hairline);
+  border-radius: var(--np-radius-lg);
+  box-shadow: var(--np-shadow);
+  padding: 10px 12px 0;
+  overflow: hidden;
+  cursor: default;
+}
+.np-island-sheet-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--np-font-ui);
+  line-height: 1.65;
+  color: var(--np-fg);
+  word-break: break-all;
+}
+.np-island-sheet-body > svg,
+.np-island-sheet-body > span {
+  flex: 0 0 auto;
+}
+.np-island-sheet-body > span {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.np-island-sheet.is-fail .np-island-sheet-body > svg {
+  color: var(--np-danger);
+}
+.np-island-sheet.is-ok .np-island-sheet-body > svg {
+  color: var(--np-success);
+}
+.np-island-sheet-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 9px;
+  padding: 8px 0;
+  border-top: 1px solid var(--np-hairline);
+}
+.np-island-sheet-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: var(--np-ctl-h);
+  padding: 0 10px;
+  border: 1px solid var(--np-hairline);
+  border-radius: var(--np-radius-lg);
+  background: transparent;
+  color: var(--np-fg);
+  font-size: var(--np-font-sm);
+  cursor: pointer;
+}
+.np-island-sheet-btn:hover {
+  background: var(--np-hover);
+}
+.np-island-sheet-x {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: var(--np-radius-lg);
+  background: transparent;
+  color: var(--np-muted);
+  cursor: pointer;
+}
+.np-island-sheet-x:hover {
+  background: var(--np-hover);
+  color: var(--np-fg);
+}
+/* tone 指示条（静态细线；自动消失由 store 的悬停续期机制承担，条仅示意色别） */
+.np-island-sheet-line {
+  display: block;
+  height: 2px;
+  margin: 0 -12px;
+  background: var(--np-muted);
+  opacity: 0.55;
+}
+.np-island-sheet.is-fail .np-island-sheet-line {
+  background: var(--np-danger);
+}
+.np-island-sheet.is-ok .np-island-sheet-line {
+  background: var(--np-success);
 }
 .np-winbtn {
   display: flex;

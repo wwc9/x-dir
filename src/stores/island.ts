@@ -18,7 +18,10 @@ interface IslandStore {
     opts?: { dwellMs?: number; action?: IslandReceipt["action"] },
   ): void;
   dismissReceipt(id: string): void;
-  prune(now: number): void;
+  /** 固定/取消固定（2026-11-17 展笺方案 A）：固定后不自动过期，仅手动消去 */
+  pinReceipt(id: string, pinned: boolean): void;
+  /** 过期剪枝；holdId = 用户悬停中的回执（展笺方案 A：悬停续期，移开恢复倒计时） */
+  prune(now: number, holdId?: string): void;
   setGsearch(matched: number | null): void;
 }
 
@@ -45,11 +48,35 @@ export const useIsland = create<IslandStore>()((set, get) => ({
     set((s) => ({ receipts: s.receipts.filter((r) => r.id !== id) }));
   },
 
-  prune(now) {
+  pinReceipt(id, pinned) {
+    set((s) => ({
+      receipts: s.receipts.map((r) => (r.id === id ? { ...r, pinned } : r)),
+    }));
+  },
+
+  prune(now, holdId) {
     const { receipts } = get();
     if (!receipts.length) return;
-    const kept = receipts.filter((r) => r.until > now);
-    if (kept.length !== receipts.length) set({ receipts: kept });
+    let changed = false;
+    const kept = receipts
+      .map((r) => {
+        if (r.pinned) return r; // 固定回执不自动过期
+        if (r.id === holdId) {
+          // 悬停续期：到期线推到 600ms 后（心跳 1s 周期内保持存活），
+          // 移开后从推高的到期线继续走完剩余驻留
+          const next = Math.max(r.until, now + 600);
+          if (next !== r.until) {
+            changed = true;
+            return { ...r, until: next };
+          }
+          return r;
+        }
+        if (r.until > now) return r;
+        changed = true;
+        return null;
+      })
+      .filter((r): r is IslandReceipt => r !== null);
+    if (changed) set({ receipts: kept });
   },
 
   setGsearch(matched) {
