@@ -417,6 +417,7 @@ export function TitleBar() {
         minimal
         size="small"
         icon={ic(FolderTree)}
+        data-tb="core"
         active={treeVisible}
         data-tip={t("显示/隐藏导航树（所有窗格共用）")}
         onClick={() => {
@@ -430,6 +431,7 @@ export function TitleBar() {
         minimal
         size="small"
         icon={ic(Search)}
+        data-tb="core"
         active={gsearchOpen}
         data-tip={t("全盘搜索")} data-kbd="Ctrl+Shift+F"
         onClick={() =>

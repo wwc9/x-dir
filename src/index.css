@@ -1049,7 +1049,12 @@ body:has(
 .np-title {
   font-weight: 600;
   margin-right: 10px;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  /* 高缩放深水档（≤440 core 已藏）标题允许收缩裁剪——nowrap 不缩会顶开
+     窗口控制钮造成压叠（2026-11-18 CDP 426px 实测） */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* 三段居中段容器（2026-11-11 方案 A）：左右段各自贴齐外缘，中段岛居中；
    段尾/段首 np-tb-fill 弹性补白带拖拽区，接管空白区的窗口拖动与双击最大化 */
@@ -1111,17 +1116,23 @@ body:has(
     display: none;
   }
 }
-@container np-tb (max-width: 820px) {
+@container np-tb (max-width: 900px) {
   .np-titlebar [data-tb="quick"] {
     display: none;
   }
 }
-@container np-tb (max-width: 700px) {
+@container np-tb (max-width: 780px) {
   .np-titlebar .np-pop-trigger {
     display: none;
   }
 }
-@container np-tb (max-width: 560px) {
+
+@container np-tb (max-width: 440px) {
+  .np-titlebar [data-tb="core"] {
+    display: none;
+  }
+}
+@container np-tb (max-width: 640px) {
   .np-titlebar .np-zoompill,
   .np-titlebar .np-langbtn,
   .np-titlebar .np-about-btn {
