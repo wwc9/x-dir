@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>玻璃背景图案六选一 · 全案对照 — Glass Wallpaper Gallery</title>
+<style>
+/* ═══ 染色极光玻璃弹窗基座（与已实装 glasswin 方案 C 同配方）═══ */
+:root {
+  --surface: rgba(255,255,255,.55);
+  --surface-solid: #ffffff;
+  --fg: #1c2127; --muted: #6f7b8a; --border: #e3e7ee; --hairline: #eef1f5;
+  --accent: #3574f0;
+  --shadow: 0 12px 32px rgba(20,28,40,.14);
+}
+html.dark {
+  --surface: rgba(36,41,55,.55);
+  --surface-solid: #2b2b2b;
+  --fg: #d4d4d4; --muted: #8f8f8f; --border: #454545; --hairline: #3a3a3a;
+  --accent: #5c9dff;
+  --shadow: 0 12px 32px rgba(0,0,0,.5);
+}
+* { margin: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  font: 13px/1.55 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+  color: var(--fg); overflow: hidden;
+}
+/* ═══ 六套背景图案（浅/深两版）：html 上的 bg-* 类切换 ═══ */
+/* A 云隙晨光 */
+body { background: radial-gradient(90% 60% at 70% 12%, rgba(255,255,255,.95), transparent 60%),
+    radial-gradient(70% 50% at 20% 30%, rgba(197,220,244,.75), transparent 65%),
+    radial-gradient(120% 70% at 50% 100%, rgba(255,214,178,.55), transparent 60%),
+    linear-gradient(165deg, #f4f7fb, #eef2f8 45%, #f9f1ea); }
+html.dark body { background: radial-gradient(80% 55% at 75% 10%, rgba(120,150,200,.35), transparent 60%),
+    radial-gradient(90% 60% at 30% 40%, rgba(70,90,140,.4), transparent 65%),
+    radial-gradient(120% 70% at 50% 100%, rgba(40,48,80,.6), transparent 60%),
+    linear-gradient(165deg, #1a2030, #141a28 50%, #10141f); }
+/* B 极光绸带 */
+html.bg-b body { background: linear-gradient(115deg, transparent 42%, rgba(148,224,196,.4) 50%, transparent 58%),
+    linear-gradient(105deg, transparent 55%, rgba(186,196,255,.4) 63%, transparent 72%),
+    linear-gradient(125deg, transparent 25%, rgba(255,214,224,.45) 33%, transparent 42%),
+    linear-gradient(160deg, #f2f7f4, #eef0f8 50%, #f7f3f0); }
+html.dark.bg-b body { background: linear-gradient(115deg, transparent 40%, rgba(80,220,170,.28) 50%, transparent 60%),
+    linear-gradient(100deg, transparent 55%, rgba(110,130,255,.3) 64%, transparent 74%),
+    linear-gradient(130deg, transparent 20%, rgba(255,120,190,.22) 30%, transparent 40%),
+    linear-gradient(160deg, #0c1220, #0a101c 50%, #0d0f18); }
+/* C 几何构成 */
+html.bg-c body { background: linear-gradient(135deg, rgba(53,116,240,.1) 0 12%, transparent 12% 25%, rgba(53,116,240,.06) 25% 31%, transparent 31%),
+    repeating-linear-gradient(45deg, rgba(20,28,40,.045) 0 2px, transparent 2px 26px),
+    repeating-linear-gradient(-45deg, rgba(20,28,40,.03) 0 2px, transparent 2px 34px),
+    linear-gradient(160deg, #f6f8fa, #eef1f6); }
+html.dark.bg-c body { background: linear-gradient(135deg, rgba(92,157,255,.14) 0 12%, transparent 12% 25%, rgba(92,157,255,.08) 25% 31%, transparent 31%),
+    repeating-linear-gradient(45deg, rgba(255,255,255,.05) 0 2px, transparent 2px 26px),
+    repeating-linear-gradient(-45deg, rgba(255,255,255,.035) 0 2px, transparent 2px 34px),
+    linear-gradient(160deg, #181d26, #141922); }
+/* D 绸缎流波 */
+html.bg-d body { background: radial-gradient(140% 90% at 10% -10%, rgba(255,244,224,.9), transparent 55%),
+    radial-gradient(120% 80% at 110% 20%, rgba(226,238,255,.8), transparent 55%),
+    radial-gradient(150% 100% at 50% 120%, rgba(255,228,235,.75), transparent 60%),
+    linear-gradient(160deg, #faf3ec, #f4eef4 50%, #eef3f7); }
+html.dark.bg-d body { background: radial-gradient(140% 90% at 10% -10%, rgba(46,64,110,.75), transparent 55%),
+    radial-gradient(120% 80% at 110% 20%, rgba(30,70,90,.6), transparent 55%),
+    radial-gradient(150% 100% at 50% 120%, rgba(70,40,80,.6), transparent 60%),
+    linear-gradient(160deg, #141a2a, #131726 50%, #1a1424); }
+/* E 点阵蓝图 */
+html.bg-e body { background: radial-gradient(rgba(53,116,240,.16) 1px, transparent 1.5px) 0 0 / 22px 22px,
+    linear-gradient(rgba(20,28,40,.05) 1px, transparent 1px) 0 0 / 110px 110px,
+    linear-gradient(90deg, rgba(20,28,40,.05) 1px, transparent 1px) 0 0 / 110px 110px,
+    linear-gradient(160deg, #f7f9fc, #f1f4f9); }
+html.dark.bg-e body { background: radial-gradient(rgba(92,157,255,.22) 1px, transparent 1.5px) 0 0 / 22px 22px,
+    linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px) 0 0 / 110px 110px,
+    linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px) 0 0 / 110px 110px,
+    linear-gradient(160deg, #161b24, #121722); }
+/* F 暮山层影 */
+html.bg-f body { background: radial-gradient(60% 90% at 15% 105%, rgba(120,110,160,.55), transparent 60%),
+    radial-gradient(55% 80% at 45% 108%, rgba(150,130,175,.5), transparent 60%),
+    radial-gradient(65% 95% at 80% 106%, rgba(95,95,145,.6), transparent 62%),
+    radial-gradient(120% 60% at 50% -8%, rgba(255,214,178,.85), transparent 55%),
+    linear-gradient(180deg, #fdeedd, #f6e3ea 45%, #e6e1f0); }
+html.dark.bg-f body { background: radial-gradient(rgba(255,255,255,.8) 1px, transparent 1.6px) 30px 20px / 180px 120px,
+    radial-gradient(60% 90% at 15% 105%, rgba(40,44,80,.7), transparent 60%),
+    radial-gradient(55% 80% at 45% 108%, rgba(56,50,90,.6), transparent 60%),
+    radial-gradient(65% 95% at 80% 106%, rgba(30,32,64,.7), transparent 62%),
+    radial-gradient(50% 40% at 78% 10%, rgba(220,228,255,.35), transparent 55%),
+    linear-gradient(180deg, #131a2e, #101426 50%, #161225); }
+/* ═══ 自定义图片模式（优先级最高：选图即退出图案）═══ */
+html.custom body { background: var(--bg-img) center/cover no-repeat fixed; }
+html.custom body::before {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background: rgba(255, 255, 255, var(--veil, .25));
+}
+html.custom.dark body::before { background: rgba(8, 12, 20, var(--veil, .25)); }
+/* ── 场景（霜玻璃主界面 mock）── */
+.scene { position: absolute; inset: 8px; display: flex; flex-direction: column; gap: 6px; }
+.titlebar, .pane, .side {
+  background: var(--surface);
+  backdrop-filter: blur(22px) saturate(1.4);
+  border: 1px solid rgba(20,28,40,.1); border-radius: 10px;
+}
+html.dark .titlebar, html.dark .pane, html.dark .side { border-color: rgba(255,255,255,.08); }
+.titlebar { height: 40px; flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 0 12px; }
+.logo { width: 18px; height: 18px; border-radius: 4px;
+  background: conic-gradient(from 210deg at 50% 50%, #2d72d2, #4cc2ff, #9de6ff, #2d72d2); }
+.titlebar b { font-size: 13px; }
+.pill { margin-left: auto; background: rgba(120,130,150,.14); border-radius: 999px; padding: 2px 12px; font-size: 11px; color: var(--muted); }
+.main { flex: 1; min-height: 0; display: flex; gap: 6px; }
+.side { width: 200px; flex: 0 0 auto; padding: 10px; }
+.side h4 { font-size: 13px; margin-bottom: 8px; }
+.side div.row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; color: var(--muted); }
+.side div.row.on { background: rgba(53,116,240,.12); color: var(--accent); }
+.pane { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+.tabs { display: flex; gap: 6px; padding: 6px 8px 0; }
+.tab { background: rgba(120,130,150,.12); border-radius: 6px 6px 0 0; padding: 3px 10px; font-size: 11px; color: var(--muted); }
+.tab.on { background: rgba(255,255,255,.65); color: var(--fg); }
+html.dark .tab.on { background: rgba(255,255,255,.08); }
+.head, .frow {
+  display: grid; grid-template-columns: 1fr 150px 90px 80px; gap: 8px;
+  padding: 4px 14px; align-items: center; font-size: 12px;
+}
+.head { color: var(--muted); font-size: 11px; border-bottom: 1px solid var(--hairline); margin-top: 6px; }
+.frow { height: 30px; }
+.frow:nth-child(odd) { background: rgba(120,130,150,.06); }
+.frow .ic { width: 16px; height: 16px; border-radius: 4px; display: inline-block; vertical-align: -3px; margin-right: 8px; }
+.ic.dir { background: linear-gradient(160deg, #ffd77a, #e8a33d); }
+.ic.doc { background: linear-gradient(160deg, #cfd8e6, #9fb0c8); }
+.frow .sub { color: var(--muted); }
+.status { margin-top: auto; border-top: 1px solid var(--hairline); padding: 4px 14px; font-size: 11px; color: var(--muted); }
+.backdrop { position: absolute; inset: 0; }
+/* ── 染色弹窗（与实装 glasswin 方案 C 同配方）── */
+:root { --dlg: linear-gradient(165deg, rgba(255,255,255,.8), rgba(238,244,250,.68) 45%, rgba(255,236,228,.62)); }
+html.dark { --dlg: linear-gradient(165deg, rgba(30,35,50,.82), rgba(40,34,58,.7) 45%, rgba(52,26,40,.62)); }
+.dialog {
+  position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%);
+  width: 520px; background: var(--dlg);
+  border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.5),
+    0 24px 64px rgba(15,22,34,.3), 0 0 0 0.5px rgba(20,28,40,.08);
+  backdrop-filter: blur(40px) saturate(1.8);
+}
+.d-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--hairline); font-weight: 600; }
+.d-head .x { margin-left: auto; color: var(--muted); cursor: pointer; }
+.d-body { padding: 14px 16px; max-height: 380px; overflow: auto; }
+.brand { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.brand .lg { width: 26px; height: 26px; border-radius: 6px;
+  background: conic-gradient(from 210deg at 50% 50%, #2d72d2, #4cc2ff, #9de6ff, #2d72d2); }
+.brand b { font-size: 15px; } .brand span { color: var(--muted); font-size: 12px; }
+.d-body p.desc { color: var(--fg); margin-bottom: 12px; }
+.kv { display: grid; grid-template-columns: 92px 1fr; row-gap: 7px; font-size: 12.5px; padding: 10px 0; border-top: 1px solid var(--hairline); }
+.kv .k { color: var(--muted); } .kv a { color: var(--accent); text-decoration: none; }
+.d-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--hairline); }
+.btn { border: 1px solid var(--border); background: transparent; color: var(--fg);
+  border-radius: 6px; height: 24px; padding: 0 12px; font-size: 12px; cursor: pointer; }
+.btn.pri { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* ── 图案切换条 / HUD / 控件 ── */
+.styles {
+  position: fixed; left: 50%; transform: translateX(-50%); top: 16px; z-index: 99;
+  display: flex; gap: 6px; background: var(--surface-solid);
+  border: 1px solid var(--border); border-radius: 8px; padding: 4px;
+}
+.styles button {
+  border: 1px solid transparent; background: transparent; color: var(--fg);
+  border-radius: 6px; height: 26px; padding: 0 10px; font-size: 12px; cursor: pointer;
+  white-space: nowrap;
+}
+.styles button:hover { background: rgba(120,130,150,.14); }
+.styles button.on { border-color: var(--accent); color: var(--accent); background: rgba(53,116,240,.1); }
+.hud { position: fixed; left: 16px; bottom: 16px; max-width: 330px; background: rgba(20,28,40,.82); color: #fff;
+  border-radius: 10px; padding: 12px 14px; font-size: 11.5px; line-height: 1.6; z-index: 99; }
+.hud b { font-size: 13px; } .hud .tag { color: #9de6ff; }
+.hud code { background: rgba(255,255,255,.14); border-radius: 4px; padding: 0 4px; }
+.ctl { position: fixed; right: 16px; top: 16px; display: flex; gap: 8px; z-index: 99; }
+.ctl button, .bgfile {
+  border: 1px solid var(--border); background: var(--surface-solid); color: var(--fg);
+  border-radius: 6px; height: 26px; padding: 0 12px; font-size: 12px; cursor: pointer;
+}
+.bgfile { display: inline-flex; align-items: center; gap: 6px; }
+.bgfile input { display: none; }
+.veilbar {
+  position: fixed; right: 16px; top: 56px; z-index: 99; display: none;
+  align-items: center; gap: 8px; height: 26px; padding: 0 10px;
+  background: var(--surface-solid); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--fg); font-size: 11px;
+}
+html.custom .veilbar { display: inline-flex; }
+.veilbar input[type="range"] { width: 110px; accent-color: var(--accent); }
+html.hide-show .backdrop, html.hide-show .dialog { display: none; }
+</style>
+</head>
+<body>
+  <div class="scene">
+    <div class="titlebar"><span class="logo"></span><b>X-Dir</b>
+      <span class="pill">test-data · 100%</span></div>
+    <div class="main">
+      <aside class="side"><h4>布局方案</h4>
+        <div class="row on">▤ 默认方案</div><div class="row">▦ 我的活动方案</div>
+        <div class="row">◫ 收益预算</div><div class="row">▢ 快报</div></aside>
+      <div class="pane">
+        <div class="tabs"><span class="tab on">📁 test-data ×</span><span class="tab">＋</span></div>
+        <div class="head"><span>名称 ↑</span><span>修改时间</span><span>类型</span><span>大小</span></div>
+        <div class="frow"><span><i class="ic dir"></i>pane-01</span><span class="sub">2026-08-29 10:09</span><span class="sub">文件夹</span><span class="sub">—</span></div>
+        <div class="frow"><span><i class="ic doc"></i>requirements_versions.txt</span><span class="sub">2025-04-12 11:29</span><span class="sub">文本文档</span><span class="sub">700 B</span></div>
+        <div class="frow"><span><i class="ic dir"></i>modules</span><span class="sub">2026-08-07 22:21</span><span class="sub">文件夹</span><span class="sub">—</span></div>
+        <div class="frow"><span><i class="ic doc"></i>特别说明，webui使用xfor....md</span><span class="sub">2025-04-12 11:29</span><span class="sub">文本文档</span><span class="sub">243 B</span></div>
+        <div class="frow"><span><i class="ic doc"></i>123.zip</span><span class="sub">2026-08-29 10:04</span><span class="sub">压缩文件</span><span class="sub">18.2 MB</span></div>
+        <div class="frow"><span><i class="ic dir"></i>python</span><span class="sub">2026-08-29 10:09</span><span class="sub">文件夹</span><span class="sub">—</span></div>
+        <div class="frow"><span><i class="ic doc"></i>python.rar</span><span class="sub">2025-04-12 11:29</span><span class="sub">压缩文件</span><span class="sub">24.9 MB</span></div>
+        <div class="status">#1 · Σ 11 个对象 · 可用 160.7 GB</div>
+      </div>
+      <div class="pane">
+        <div class="tabs"><span class="tab on">📁 zj ×</span><span class="tab">＋</span></div>
+        <div class="head"><span>名称 ↑</span><span>修改时间</span><span>类型</span><span>大小</span></div>
+        <div class="frow"><span><i class="ic doc"></i>打好基础-中级会计实务.pdf</span><span class="sub">2025-07-31 21:22</span><span class="sub">PDF 文档</span><span class="sub">1.2 GB</span></div>
+        <div class="frow"><span><i class="ic doc"></i>只做好题-中级会计实务.pdf</span><span class="sub">2025-07-31 21:13</span><span class="sub">PDF 文档</span><span class="sub">109.7 MB</span></div>
+        <div class="frow"><span><i class="ic doc"></i>中级经济法-完整版.pdf</span><span class="sub">2025-07-31 21:45</span><span class="sub">PDF 文档</span><span class="sub">168.9 MB</span></div>
+        <div class="frow"><span><i class="ic dir"></i>FocuSee</span><span class="sub">2026-10-15 17:06</span><span class="sub">文件夹</span><span class="sub">—</span></div>
+        <div class="frow"><span><i class="ic dir"></i>Job</span><span class="sub">2026-10-13 10:50</span><span class="sub">文件夹</span><span class="sub">—</span></div>
+        <div class="frow"><span><i class="ic dir"></i>Life</span><span class="sub">2026-05-23 15:15</span><span class="sub">文件夹</span><span class="sub">—</span></div>
+        <div class="status">#2 · Σ 28 个对象 · 可用 545.9 GB</div>
+      </div>
+    </div>
+  </div>
+  <div class="backdrop"></div>
+  <div class="dialog">
+    <div class="d-head">ⓘ 关于 X-Dir <span class="x">✕</span></div>
+    <div class="d-body">
+      <div class="brand"><span class="lg"></span><b>X-Dir</b><span>v0.2.0</span>
+        <span style="margin-left:auto; color: var(--muted); font-size:12px;">当前已是最新版本。</span></div>
+      <p class="desc">轻量级多窗格文件管理器：单窗口自由分割出任意数量的窗格，支持 Everything 式全盘秒搜（拼音检索）、空格快速预览、批量重命名、PDF 与图片批处理等内置工具箱；绿色便携，免费开源。</p>
+      <div class="kv">
+        <span class="k">开发者</span><span>王文铖</span>
+        <span class="k">微信公众号</span><span>效率视界</span>
+        <span class="k">开源地址</span><span><a href="#">https://gitee.com/wwc9/x-dir</a><br><a href="#">https://github.com/wwc9/x-dir</a></span>
+        <span class="k">运行环境</span><span>WebView2 157.0.0.0 · Chromium 157</span>
+        <span class="k">操作系统</span><span>Windows 11 专业版 (build 22631)</span>
+        <span class="k">处理器</span><span>AMD Ryzen 7 9700X 8-Core · 16 线程</span>
+        <span class="k">内存</span><span>48 GB</span>
+        <span class="k">显卡</span><span>NVIDIA GeForce RTX 5070 Ti / AMD Radeon™ Graphics</span>
+      </div>
+    </div>
+    <div class="d-foot"><button class="btn">⟳ 检查更新</button><button class="btn pri">关闭</button></div>
+  </div>
+  <div class="styles" id="stylebar"></div>
+  <div class="hud" id="hud"></div>
+  <div class="ctl">
+    <button onclick="document.documentElement.classList.toggle('dark')">浅 / 深</button>
+    <button onclick="document.documentElement.classList.toggle('hide-show')">弹窗显隐</button>
+    <label class="bgfile">自定义图片<input type="file" id="imgfile" accept="image/*"></label>
+  </div>
+  <div class="veilbar">
+    <span>自定义图片蒙版</span>
+    <input type="range" id="veil" min="0" max="60" value="25">
+    <span id="veilval">25%</span>
+  </div>
+<script>
+// ═══ 六套图案登记表：切换 = 换 bg-* 类 + 刷新说明卡 ═══
+const STYLES = {
+  a: { name: "A · 云隙晨光", tag: "Dawn",
+    hud: "<b>背景图案 A · 云隙晨光 <span class='tag'>Dawn</span></b><br>柔云 + 晨光暖底的低饱和空气感——玻璃存在感最轻，浅色近乎「无背景」；深色 = 静谧夜云。<br>✓ 任何玻璃浓度下都不抢戏，长时间工作最耐看<br>✗ 个性表达最收敛（适合「背景是氛围而非装饰」的取向）" },
+  b: { name: "B · 极光绸带", tag: "Aurora",
+    hud: "<b>背景图案 B · 极光绸带 <span class='tag'>Aurora</span></b><br>斜向彩绸带（薄荷/雪青/樱粉）掠过画布，与「极光玻璃」命名同源；深色为极光夜幕。<br>✓ 动态感与出片率最高<br>✗ 绸带经过处玻璃染色明显，慎与强染色弹窗同屏" },
+  c: { name: "C · 几何构成", tag: "Geo",
+    hud: "<b>背景图案 C · 几何构成 <span class='tag'>Geo</span></b><br>斜向色块 + 双向细网格（毛玻璃下透出理性骨架）；深色 = 炭底蓝块。<br>✓ 工作台感/秩序感最强，与文件管理器的工具属性同语言<br>✗ 图案密度最高，玻璃浓度调低时存在感偏强" },
+  d: { name: "D · 绸缎流波", tag: "Silk",
+    hud: "<b>背景图案 D · 绸缎流波 <span class='tag'>Silk</span></b><br>大曲面柔波缎面（奶香/海盐浅色系；深色深蓝绸 + 绛紫）。<br>✓ 柔和度与 A 相当但更有体积感，玻璃高光会在波面上流动<br>✗ 与浅色霜面叠加后整体偏「甜」，深色版更耐看" },
+  e: { name: "E · 点阵蓝图", tag: "Blueprint",
+    hud: "<b>背景图案 E · 点阵蓝图 <span class='tag'>Blueprint</span></b><br>工程点阵 + 粗网格纸（accent 蓝点；深色深板岩 + 青点）。<br>✓ 极客感/工具感拉满，点阵在高斯模糊下呈柔雾质感<br>✗ 网格线条透过霜面隐约可辨，不喜欢秩序图案的用户会嫌闹" },
+  f: { name: "F · 暮山层影", tag: "Dusk Hills",
+    hud: "<b>背景图案 F · 暮山层影 <span class='tag'>Dusk Hills</span></b><br>暮色天空 + 层峦剪影 + 稀疏星点（深色 = 夜山 + 月晕），场景感最强。<br>✓ 唯一有「画面叙事」的一套，山影只在下半场，上半场留给玻璃高光<br>✗ 具象图案 vs 抽象渐变的取向分野——喜欢具象墙纸的用户会选它" },
+};
+const KEYS = Object.keys(STYLES);
+function setStyle(k) {
+  const el = document.documentElement;
+  KEYS.forEach((x) => el.classList.remove("bg-" + x));
+  el.classList.remove("custom"); // 选图案即退出自定义图片模式
+  el.classList.add("bg-" + k);
+  [...document.querySelectorAll("#stylebar button")].forEach((b) =>
+    b.classList.toggle("on", b.dataset.k === k));
+  const it = STYLES[k];
+  document.getElementById("hud").innerHTML =
+    it.hud + "<br><span style='opacity:.65'>自定义图片：右上角选图（蒙版浓度可调），选图后进入自定义模式；再点任意图案即退出。</span>";
+}
+// 构建切换条
+const bar = document.getElementById("stylebar");
+KEYS.forEach((k) => {
+  const b = document.createElement("button");
+  b.dataset.k = k;
+  b.textContent = STYLES[k].name;
+  b.onclick = () => setStyle(k);
+  bar.appendChild(b);
+});
+// ═══ 自定义图片（所有图案通用）：选图即换画布 + 蒙版浓度可调 ═══
+const imgfile = document.getElementById("imgfile");
+imgfile.addEventListener("change", () => {
+  const f = imgfile.files[0];
+  if (!f) return;
+  const url = URL.createObjectURL(f);
+  document.documentElement.style.setProperty("--bg-img", 'url("' + url + '")');
+  document.documentElement.classList.add("custom");
+  [...document.querySelectorAll("#stylebar button")].forEach((b) => b.classList.remove("on"));
+  document.getElementById("hud").innerHTML =
+    "<b>自定义图片模式</b><br>画布已换为所选图片（cover/fixed 铺满）；<br>蒙版浓度滑条保证任意图片下的玻璃可读性：<br>浅色蒙白雾 · 深色蒙夜幕；再点任意图案即退出。";
+});
+const veil = document.getElementById("veil");
+const setVeil = () => {
+  document.documentElement.style.setProperty("--veil", (veil.value / 100).toFixed(2));
+  document.getElementById("veilval").textContent = veil.value + "%";
+};
+veil.addEventListener("input", setVeil);
+setVeil();
+// 默认 A
+setStyle("a");
+</script>
+</body>
+</html>
