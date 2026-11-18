@@ -383,23 +383,19 @@ export function SettingsPanel() {
                   : t("画布铺柔和渐变，窗格与浮层实时模糊透出底色；低性能档自动关")
               }
             >
-              <ButtonGroup className="np-seg" size="small" variant="minimal">
-                {(["off", "on"] as const).map((m) => (
-                  <Button
-                    key={m}
-                    active={s.windowGlass === m}
-                    disabled={m === "on" && glassLocked}
-                    onClick={() => {
-                      s.update({ windowGlass: m });
-                      useUi
-                        .getState()
-                        .toast(`${t("窗口毛玻璃")}：${m === "off" ? t("关") : t("开")}`);
-                    }}
-                  >
-                    {m === "off" ? t("关") : t("开")}
-                  </Button>
-                ))}
-              </ButtonGroup>
+              {/* 2026-11-18 用户定案：与上方真实文件图标行同为开关（Switch），
+                  替代关/开分段；低性能档门禁不变（开关禁用 + desc 提示） */}
+              <Switch
+                checked={s.windowGlass === "on"}
+                disabled={glassLocked}
+                onChange={(e) => {
+                  const m = e.currentTarget.checked ? "on" : "off";
+                  s.update({ windowGlass: m });
+                  useUi
+                    .getState()
+                    .toast(`${t("窗口毛玻璃")}：${m === "off" ? t("关") : t("开")}`);
+                }}
+              />
             </SetRow>
           </>
         )}

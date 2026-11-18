@@ -2103,7 +2103,12 @@ body.np-col-resizing .np-menued-grip::after {
   display: flex;
   gap: 4px;
 }
-/* 设置行内滑块（外观 → 面板圆角/组件间隔）：定宽 + 当前值随行尾回显 */
+/* 设置行内滑块（外观 → 面板圆角/组件间隔）：定宽 + 当前值随行尾回显。
+   皮肤（2026-11-18 简洁现代定案，单源本段）：细 4px 全圆角轨道（surface-2）
+   + accent 填充（修 Blueprint 默认 #2D72D2 未走 token 的偏差）+ 圆形描边
+   拇指（无阴影，hairline 边）+ 隐藏拖动值徽标（当前值在行尾回显不重复）。
+   几何只动 track 的 top/height（6px→4px、top 6px 保持与 16px 拇指同轴心），
+   拇指尺寸与定位机制不动避免错位 */
 .np-set-slider {
   display: flex;
   align-items: center;
@@ -2114,6 +2119,32 @@ body.np-col-resizing .np-menued-grip::after {
 .np-set-slider .bp6-slider {
   flex: 1 1 auto;
   min-width: 0;
+}
+.np-set-slider .bp6-slider-track {
+  top: 6px;
+  height: 4px;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-surface-2);
+  box-shadow: none;
+  overflow: hidden;
+}
+.np-set-slider .bp6-slider-progress {
+  background: transparent;
+}
+.np-set-slider .bp6-slider-progress.bp6-intent-primary {
+  background: var(--np-accent);
+}
+.np-set-slider .bp6-slider-handle {
+  border-radius: 50%;
+  background: var(--np-surface);
+  box-shadow: none;
+  border: 1px solid var(--np-border);
+}
+.np-set-slider .bp6-slider-handle:hover {
+  border-color: var(--np-accent);
+}
+.np-set-slider .bp6-slider-label {
+  display: none;
 }
 .np-set-slider-val {
   flex: 0 0 auto;

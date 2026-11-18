@@ -18,6 +18,7 @@
   - 例外 3：index.css 组件类内的间距微调（gap/padding 的 1–10px 级布局值）允许裸值，但同一语义必须取值一致
 - 色板为中性灰 + 单一强调色（浅 `#3574f0` / 深 `#5C9DFF`），强调色只用于激活态与主操作；调整主题只改 `index.css` 的 `:root` / `.dark` 两段。**深色主题灰阶（2026-11-11 定案）参考 zcode 深色方案截图取样定值**：画布 `#161616` / 浮起面板 `#2B2B2B` / 填充输入 `#3a3a3a` / 正文 `#D4D4D4` / muted `#8f8f8f` / 成功绿 `#46BF72`——zcode 为无边框语言、层级纯靠明度差，`--np-border` 仅为 popover ring 等线场景保留中性一档（`#454545`）；强调色仍为蓝（单一强调色决策不变）。原生窗口底色（`stores/settings.ts` 的 setBackgroundColor/syncBorderColor `#161616`）与 `--np-bg` 同值，改画布色必须两处同改
 - Blueprint 控件的对齐覆盖集中在 `index.css` 的"Blueprint 对齐覆盖"段（只动圆角/底色/描边）
+- **设置行滑块皮肤（2026-11-18 简洁现代定案，单源 index.css `.np-set-slider` 段）**：细 4px 全圆角轨道（surface-2）+ accent 填充 + 圆形 hairline 描边拇指（无阴影）+ 隐藏拖动值徽标（当前值行尾回显不重复）。教训：Blueprint Slider 默认填充是自家蓝 `#2D72D2` 未走 `--np-accent`（裸色值偏差）、方角拇指 + 常驻深色值徽标均偏离本规范语言——新滑块一律复用 `.np-set-slider` 包裹层，禁止裸用 Blueprint Slider 默认脸
 
 ### 4.2 组件选用优先级
 
@@ -239,7 +240,7 @@
 
 ### 4.10 窗口毛玻璃（glasswin 渐变底 + 霜玻璃，2026-11-17 定案）
 
-设置 → 外观 →「窗口毛玻璃」开；**仅高性能档可用**（外观页按解析档门禁：低配档「开」钮禁用 + desc 提示；低配预设强制 off、高性能预设不重置用户选择）。纯 CSS 实现（backdrop-filter 采样页内渐变，不依赖 OS 合成器），根类 `glasswin` 挂 html，样式单源 index.css「窗口毛玻璃 glasswin」段。
+设置 → 外观 →「窗口毛玻璃」开（**2026-11-18 改为 Switch 开关**，与同页「真实文件图标」行同组件；替代早期关/开分段）；**仅高性能档可用**（外观页按解析档门禁：低配档开关禁用 + desc 提示；低配预设强制 off、高性能预设不重置用户选择）。纯 CSS 实现（backdrop-filter 采样页内渐变，不依赖 OS 合成器），根类 `glasswin` 挂 html，样式单源 index.css「窗口毛玻璃 glasswin」段。
 
 - **画布**：`--np-bg` 换 Big Sur 风渐变（浅色 = 白云带/天空蓝/橙浪/珊瑚粉；深色 = navy 顶/青蓝板岩/紫晕/绯红底，对照用户提供的壁纸亮暗对应取色），body 直接铺。
 - **卡片玻璃配方（分层单源）**：**常驻主卡片**（.np-titlebar/.np-pane/.np-side-card/.np-navtree/.np-shelf）= `--np-surface` 换霜玻璃半透明底（浅 = --np-glass 白 0.55；深 = rgba(36,41,55,0.55) 蓝灰）+ `backdrop-filter: blur(22px) saturate(1.4)` + 边框换 `--np-glass-ring`，**不挂外阴影**（大卡片光晕在窄沟槽积灰；贴面便签语言靠 ring 边 + 画布渐变提层次；深色加顶缘 inset 白 8% 受光高光）；**浮层强霜**（.np-dialog/.bp6-menu/.bp6-popover-content/.np-tip）= `--np-surface-glass-strong` 0.7 强霜面 + `--np-glass-shadow` 光晕（浮离画布之上才有「浮」的资格）+ blur（Dialog 的 blur 挂 body 滚动容器，见下条陷阱）。
