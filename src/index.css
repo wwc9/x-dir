@@ -494,6 +494,14 @@ html.glasswin .np-dialog {
   background: var(--np-dialog-glass);
   border-color: var(--np-glass-ring);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), var(--np-glass-shadow);
+  /* ⚠ 免入场 opacity/transform 过渡（2026-11-18 用户反馈「还是有闪烁一下」
+     实测定位）：Blueprint 弹窗自带 0.3s opacity+scale 入场——祖先 opacity<1
+     / transform = 组隔离，内部 backdrop-filter 采样全程失效（白雾），过渡
+     结束隔离解除后陈样驻留、要等下一次重绘（如检查更新回包换文案）才纠正
+     = 「先白后黑 / 闪一下」。glasswin 弹窗直接满透明度满尺度出现，入场
+     线索交给遮罩自己的 300ms 淡入；translateZ(0) 合成层提升保留（首采样
+     双保险）。普通（非 glasswin）弹窗不透底，入场过渡无此病，维持 Blueprint 原样 */
+  transition: none !important;
 }
 html.glasswin.bp6-dark .np-dialog {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--np-glass-shadow);
