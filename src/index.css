@@ -434,20 +434,23 @@ html.glasswin.bp6-dark > body {
     rgba(52, 26, 40, 0.62)
   );
 }
-/* glasswin 作用域遮罩加深（方案 C 可读性兜底）：染色面更透，弹窗文字由
-   更深的 backdrop 扛——仅 glasswin 覆写（普通模式 0.35/0.45 不动）。
-   ⚠ 必须含 body 侧直接声明：dark 类挂 html+body 双锚点（settings.applyTheme），
-   .dark token 块在 body 直声明 --np-overlay 压过 html 继承（同 --np-bg 陷阱）；
-   .np-winedge::after 窗缘压暗同 token 自动跟随 */
+/* glasswin 零遮罩（2026-11-18 用户定案 = 遮罩方案 A，design/modal-scrim-proposal-a-noscrim.html）：
+   弹窗开合不再压暗画布——染色极光玻璃 blur(40)+染色面自持可读性，极光画布
+   全程鲜亮，「画布是主角」；backdrop 元素保留（点外关闭语义不变），仅浓度
+   归零。普通（非 glasswin）模式 0.35/0.45 不动。
+   ⚠ 仍须含 body 侧直接声明：dark 类挂 html+body 双锚点，.dark 块在 body
+   直声明 --np-overlay 压过 html 继承（同 --np-bg 陷阱）——漏写则深色模式
+   遮罩残留 0.45。--np-overlay 其余消费方（.np-winedge::after 窗缘压暗同步、
+   快速预览遮罩）在 glasswin 下随之自然透底，无需单独处理 */
 html.glasswin,
 html.glasswin > body {
-  --np-overlay: rgba(15, 22, 34, 0.45);
+  --np-overlay: rgba(15, 22, 34, 0);
 }
 html.glasswin.bp6-dark,
 html.glasswin.bp6-dark > body,
 body.glasswin.dark,
 body.glasswin.bp6-dark {
-  --np-overlay: rgba(0, 0, 0, 0.55);
+  --np-overlay: rgba(0, 0, 0, 0);
 }
 /* 常驻主卡片玻璃：霜面 + 实时模糊 + glass-ring 边——贴面便签语言，不挂外
    阴影（大卡片光晕在窄沟槽里积灰，沟槽靠画布渐变提层次）；深色加顶缘受光
@@ -485,8 +488,9 @@ html.glasswin .np-tip {
   backdrop-filter: blur(22px) saturate(1.4);
 }
 /* 弹窗染色极光玻璃（2026-11-18 用户定案 = 方案 C，design/dialog-glass-proposal-c-tinted.html）：
-   background = --np-dialog-glass 主题化极光染色渐变；可读性由 glasswin 作用域
-   加深的遮罩（0.45/0.55）兜底；顶缘受光内高光补边界（深色按卡片家族口径 8% 白）。
+   background = --np-dialog-glass 主题化极光染色渐变；顶缘受光内高光补边界
+   （深色按卡片家族口径 8% 白）。可读性由 blur(40)+染色面自持——遮罩方案 A
+   零遮罩定案（design/modal-scrim-proposal-a-noscrim.html）后无遮罩兜底。
    ⚠ 根节点不得挂 backdrop-filter：含内嵌滚动容器即采样失效白板化（见下方
    blur 挂载注释），白板基底会把头/尾染色区顶成灰白条带（2026-11-18 实测）；
    blur 由 body 滚动容器 + 头/尾两段各自承担，三段统一 */
