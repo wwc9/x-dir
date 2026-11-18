@@ -58,7 +58,9 @@ vi.stubGlobal("document", {
   ...globalThis.document,
   documentElement: {
     classList: { toggle: () => {}, contains: () => false },
-    style: { setProperty: () => undefined },
+    style: { setProperty: () => undefined, removeProperty: () => undefined },
+    // applyGlassBg 写 data-glassbg（2026-11-18 玻璃背景图案）：node 环境补桩
+    dataset: {},
   },
   body: { classList: { toggle: () => {}, contains: () => false } },
 });

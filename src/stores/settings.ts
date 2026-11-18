@@ -7,14 +7,10 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { api, DEFAULT_SETTINGS, THIS_PC, type GlassBg, type MenuEntry, type Settings, type TagColor } from "../lib/ipc";
 
 /** 任务分类可用色（2026-11-18 自 SettingsPanel 提升单源：设置规则调色板与日历页分类管理共用） */
-/** 玻璃背景图案选项（2026-11-18 六案+极光基座+自定义图片，设置 → 外观 → 毛玻璃） */
+/** 玻璃背景图案选项（2026-11-18 收敛为极光基座+自定义图片，设置 → 外观 → 毛玻璃；
+ *  五案已删，高色差新案比选后回灌；旧档值经 GLASS_BG_KEYS 守卫回落极光 */
 export const GLASS_BGS: { key: GlassBg; label: string }[] = [
   { key: "aurora", label: "极光（默认）" },
-  { key: "dawn", label: "云隙晨光" },
-  { key: "geo", label: "几何构成" },
-  { key: "silk", label: "绸缎流波" },
-  { key: "blueprint", label: "点阵蓝图" },
-  { key: "mountain", label: "暮山层影" },
   { key: "custom", label: "自定义图片" },
 ];
 const GLASS_BG_KEYS = GLASS_BGS.map((x) => x.key);

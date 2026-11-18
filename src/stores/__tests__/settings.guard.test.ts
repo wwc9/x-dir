@@ -49,7 +49,9 @@ vi.stubGlobal("document", {
   documentElement: {
     classList: { toggle: () => {}, contains: () => false },
     // load() 末尾 applyMetrics 写 CSS 变量（:root 内联覆写）：node 环境补桩
-    style: { setProperty: () => undefined },
+    style: { setProperty: () => undefined, removeProperty: () => undefined },
+    // applyGlassBg 写 data-glassbg（2026-11-18 玻璃背景图案）：node 环境补桩
+    dataset: {},
   },
   // applyTheme 双锚点（2026-11-05 加固）在 body 镜像挂主题类：同步补桩
   body: { classList: { toggle: () => {}, contains: () => false } },

@@ -361,14 +361,10 @@ export interface RenameScheme {
   ops: RenameOp[];
 }
 
-export type GlassBg =
-  | "aurora"
-  | "dawn"
-  | "geo"
-  | "silk"
-  | "blueprint"
-  | "mountain"
-  | "custom";
+/** 2026-11-18 用户定案收敛：五案（dawn/geo/silk/blueprint/mountain）删除，
+ *  仅留极光基座 + 自定义图片；待 10 套高色差新案比选后补位
+ *  （候选预览 design/glassbg-proposals-v2.html） */
+export type GlassBg = "aurora" | "custom";
 
 export interface Settings {
   theme: "system" | "light" | "dark";
@@ -400,7 +396,7 @@ export interface Settings {
    *  挂 backdrop-filter 实时模糊透出底色（不依赖 OS 合成器）；off = 实底画布。
    *  低性能预设强制 off */
   windowGlass: "off" | "on";
-  /** 玻璃背景图案（2026-11-18 外观 tab 六案+极光基座+自定义图片）：glasswin
+  /** 玻璃背景图案（2026-11-18 外观 tab：极光基座 + 自定义图片）：glasswin
    *  画布 --np-bg 预设；custom = 用户图片（glassBgCustom 绝对路径，经 asset
    *  协议 convertFileSrc 展示），叠加 --glassbg-veil 蒙版保可读性 */
   glassBg: GlassBg;
@@ -606,7 +602,7 @@ export const DEFAULT_SETTINGS: Settings = {
   fxAnim: true,
   // 窗口毛玻璃默认关（显式选择不替用户决定；低性能档自动回退实底）
   windowGlass: "off",
-  // 玻璃背景图案默认极光（2026-11-18 六案接入；custom 走 glassBgCustom）
+  // 玻璃背景图案默认极光（2026-11-18 收敛：五案删除，旧档值由守卫回灌极光；custom 走 glassBgCustom）
   glassBg: "aurora",
   glassBgCustom: "",
   glassBgVeil: 35,
