@@ -455,9 +455,15 @@ body.glasswin.bp6-dark {
 /* 常驻主卡片玻璃：霜面 + 实时模糊 + glass-ring 边——贴面便签语言，不挂外
    阴影（大卡片光晕在窄沟槽里积灰，沟槽靠画布渐变提层次）；深色加顶缘受光
    高光。虚拟列表行在卡片内部，模糊对象是卡片背后静态渐变，滚动不触发重
-   模糊（合成层缓存，开销一次性） */
+   模糊（合成层缓存，开销一次性）。
+   2026-11-18 全量审计扩员：整页壳（定制/日历 np-menupage、全盘搜索
+   np-gsearchpage）与剪贴板浮窗卡片 .np-clip 同为常驻主面，旧版 solid 面
+   在 glasswin 下呈「磨砂家族中的实底孤岛」，统一入族 */
 html.glasswin .np-titlebar,
 html.glasswin .np-pane,
+html.glasswin .np-menupage,
+html.glasswin .np-gsearchpage,
+html.glasswin .np-clip,
 html.glasswin .np-side-card,
 html.glasswin .np-navtree,
 html.glasswin .np-shelf {
@@ -468,6 +474,9 @@ html.glasswin .np-shelf {
 }
 html.glasswin.bp6-dark .np-titlebar,
 html.glasswin.bp6-dark .np-pane,
+html.glasswin.bp6-dark .np-menupage,
+html.glasswin.bp6-dark .np-gsearchpage,
+html.glasswin.bp6-dark .np-clip,
 html.glasswin.bp6-dark .np-side-card,
 html.glasswin.bp6-dark .np-navtree,
 html.glasswin.bp6-dark .np-shelf {
@@ -475,12 +484,17 @@ html.glasswin.bp6-dark .np-shelf {
 }
 /* 浮层强霜（0.78，浮层可读性优先）+ glass-shadow 光晕（浮离于画布之上才有
    「浮」的资格）：菜单 / Popover 内容面（布局预设等自定义内容弹层
-   ——半透明无模糊会背景文字穿透）/ 悬浮提示；ctx 子菜单弹层外壳按定稿保持
-   透明（菜单自带霜面），:not 排除防双重霜。弹窗已升级染色极光玻璃（下方
-   独立规则），不再共用本段 */
+   ——半透明无模糊会背景文字穿透）/ 悬浮提示 / 地址补全（np-sugg）/
+   年月跳转（np-cal-jump）/ 日历命中（np-cal-hits）——后三者为 2026-11-18
+   全量审计扩员（旧版半透明面无模糊，背后内容锐利穿透同病）；ctx 子菜单
+   弹层外壳按定稿保持透明（菜单自带霜面），:not 排除防双重霜。弹窗已升级
+   染色极光玻璃（下方独立规则），不再共用本段 */
 html.glasswin .bp6-menu,
 html.glasswin .bp6-popover:not(.np-ctx-pop) .bp6-popover-content,
-html.glasswin .np-tip {
+html.glasswin .np-tip,
+html.glasswin .np-sugg,
+html.glasswin .np-cal-jump,
+html.glasswin .np-cal-hits {
   background: var(--np-surface-glass-strong);
   border-color: var(--np-glass-ring);
   box-shadow: var(--np-glass-shadow);

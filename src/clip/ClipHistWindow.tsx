@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 
 import { api, type ClipHistItem, type Settings } from "../lib/ipc";
+import { applyWindowGlass } from "../stores/settings";
 import { clipKindMeta, pickDigit, relTime } from "../lib/cliphist";
 import { AppIcon } from "../components/AppIcon";
 import { initTooltip } from "../lib/tooltip";
@@ -143,6 +144,8 @@ export function ClipHistWindow() {
   // cliphist-updated 事件（聚焦中才刷新）、窗口 focus（= Rust 呼出）刷新+聚焦
   useEffect(() => {
     const offs: (() => void)[] = [initTooltip()];
+    // 最近一次已应用的毛玻璃档（onScheme 重放主题时无需重取设置）
+    const lastGlass = { current: "off" as Settings["windowGlass"] };
     const applyTheme = (theme: Settings["theme"]) => {
       const dark =
         theme === "dark" ||
@@ -152,6 +155,7 @@ export function ClipHistWindow() {
       // 双锚点同主窗 applyTheme（settings.ts 2026-11-05 加固）：body 镜像挂类
       document.body.classList.toggle("dark", dark);
       document.body.classList.toggle("bp6-dark", dark);
+      applyWindowGlass(lastGlass.current);
     };
     const onScheme = () => applyTheme("system");
     void api
@@ -159,6 +163,7 @@ export function ClipHistWindow() {
       .then((st) => {
         setDirectPaste(st?.cliphistDirectPaste ?? true);
         const theme = st?.theme ?? "system";
+        lastGlass.current = st?.windowGlass ?? "off";
         applyTheme(theme);
         if (theme === "system") {
           window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", onScheme);
@@ -184,6 +189,7 @@ export function ClipHistWindow() {
         .getSettings()
         .then((st) => {
           setDirectPaste(st?.cliphistDirectPaste ?? true);
+          lastGlass.current = st?.windowGlass ?? "off";
           applyTheme(st?.theme ?? "system");
         })
         .catch(() => undefined);
