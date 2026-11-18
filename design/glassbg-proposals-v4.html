@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>毛玻璃背景图案 · 10 套随机碰撞候选 v4（浅 / 深）</title>
+<!-- 独立静态设计预览，不参与构建（同 design/preview.html 约定）。
+     v4（2026-11-18）：推翻 v3——v3 每案规整的互补对半撞色被用户否决「不要这么整齐，碰撞要随机一点，也可以3种色系碰撞」；
+     v4 = 2–3 族随机碰撞：色斑落点/大小/角度不对称，混入三族案，向 macOS 壁纸式自然混彩看齐
+     （极光对照组本身就是该语言）。取代 glassbg-proposals-v3.html。
+     预览模拟真实实现：画布 --np-bg 渐变 + 霜面卡片 backdrop-filter + 弹窗染色 --np-dialog-glass。 -->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    background: #eceef2; color: #1c2430; padding: 28px 20px 60px;
+  }
+  .wrap { max-width: 1020px; margin: 0 auto; }
+  h1 { font-size: 22px; margin-bottom: 6px; }
+  .sub { font-size: 13px; color: #5a6472; line-height: 1.7; margin-bottom: 14px; }
+  .sub b { color: #1c2430; }
+  .nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 22px; }
+  .nav a {
+    font-size: 12px; text-decoration: none; color: #33404e;
+    background: #fff; border: 1px solid #d5dae2; border-radius: 999px; padding: 4px 12px;
+  }
+  .nav a:hover { border-color: #9fb0c4; }
+
+  /* ── 碰撞速览：每环 = 该案的色系随机拼（扇区比例刻意不等分） ── */
+  .wheel { display: flex; gap: 10px; margin-bottom: 26px; flex-wrap: wrap; }
+  .wheel .w { text-align: center; font-size: 11px; color: #5a6472; }
+  .wheel .w i { display: block; width: 34px; height: 34px; border-radius: 50%; margin: 0 auto 4px; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.18); }
+
+  /* ── 每案区块 ── */
+  .set { margin-bottom: 34px; }
+  .set-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; flex-wrap: wrap; }
+  .set-head .no { font-size: 13px; font-weight: 600; color: #8a94a4; }
+  .set-head .name { font-size: 17px; font-weight: 700; }
+  .set-head .en { font-size: 12.5px; color: #7a8494; }
+  .mix { font-size: 11px; font-weight: 700; color: #fff; border-radius: 999px; padding: 2px 10px; }
+  .keep { font-size: 11px; font-weight: 600; color: #1f7a3d; background: #ddf3e4; border-radius: 999px; padding: 2px 10px; }
+  .pitch { font-size: 12.5px; color: #5a6472; margin-bottom: 10px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 760px) { .pair { grid-template-columns: 1fr; } }
+  .mode-tag { font-size: 11px; color: #7a8494; margin: 0 0 4px 2px; }
+  .swatches { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
+  .swatches i { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+  .swatches span { font-size: 11px; color: #7a8494; margin-left: 6px; }
+
+  /* ── 预览窗 mock：画布 + 霜面卡片 + 染色弹窗（backdrop-filter 与实装同语言） ── */
+  .mock {
+    position: relative; height: 208px; border-radius: 12px; overflow: hidden;
+    border: 1px solid rgba(0,0,0,.1); box-shadow: 0 2px 10px rgba(0,0,0,.1);
+    font-size: 9.5px; line-height: 1.5;
+  }
+  .mock .card {
+    position: absolute; border-radius: 7px;
+    backdrop-filter: blur(12px) saturate(1.4);
+    -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  }
+  .mock .tb { top: 10px; left: 10px; right: 10px; height: 27px; display: flex; align-items: center; gap: 5px; padding: 0 9px; }
+  .mock .tb i { width: 7px; height: 7px; border-radius: 50%; background: rgba(128,132,140,.45); }
+  .mock .tb b { font-size: 9px; font-weight: 600; margin-left: 3px; }
+  .mock .pane { top: 44px; bottom: 12px; left: 10px; width: 55%; padding: 8px 10px; }
+  .mock .pane .ph { font-size: 9px; font-weight: 700; margin-bottom: 4px; }
+  .mock .row { display: flex; justify-content: space-between; padding: 2.5px 0; border-top: 1px solid rgba(128,132,140,.14); }
+  .mock .row:first-of-type { border-top: 0; }
+  .mock .row em { font-style: normal; opacity: .55; }
+  .mock .side { top: 44px; right: 10px; width: calc(45% - 22px); height: 74px; padding: 8px 10px; }
+  .mock .side .ph { font-size: 9px; font-weight: 700; margin-bottom: 3px; }
+  .mock .side div.item { padding: 1.5px 0; opacity: .8; }
+  .mock .dlg {
+    position: absolute; right: 26px; bottom: 16px; width: 172px; border-radius: 9px; padding: 9px 11px;
+    backdrop-filter: blur(16px) saturate(1.6);
+    -webkit-backdrop-filter: blur(16px) saturate(1.6);
+    box-shadow: 0 6px 22px rgba(0,0,0,.22);
+  }
+  .mock .dlg .dt { font-size: 10px; font-weight: 700; margin-bottom: 3px; }
+  .mock .dlg .dd { opacity: .78; margin-bottom: 7px; }
+  .mock .dlg .btns { display: flex; justify-content: flex-end; gap: 6px; }
+  .mock .dlg .btns u { text-decoration: none; font-size: 8.5px; padding: 2.5px 9px; border-radius: 5px; border: 1px solid rgba(128,132,140,.3); opacity: .85; }
+  .mock .dlg .btns b { font-size: 8.5px; font-weight: 600; padding: 2.5px 9px; border-radius: 5px; color: #fff; background: var(--acc); }
+
+  /* 浅色 mock：霜面 = 白 0.55（与实装一致，全案统一）；深色 mock：霜面 = 各案混彩染色 */
+  .mock.light { --txt: rgba(28,36,48,.88); }
+  .mock.dark  { --txt: rgba(238,242,250,.92); }
+  .mock { color: var(--txt); }
+  .mock.light .card { background: rgba(255,255,255,.55); border: 1px solid rgba(255,255,255,.45); }
+  .mock.dark  .card { background: var(--surf-d); border: 1px solid rgba(255,255,255,.16); }
+  .mock.light .dlg  { background: var(--dlg-l); border: 1px solid rgba(255,255,255,.5); }
+  .mock.dark  .dlg  { background: var(--dlg-d); border: 1px solid rgba(255,255,255,.16); }
+  .mock.light { background: var(--cv-l); }
+  .mock.dark  { background: var(--cv-d); }
+
+  /* ── 10 套随机碰撞候选 ── */
+
+  /* 01 糖云：蜜桃粉 · 湖蓝 · 薄荷（三族粉彩碰撞，落点全不对称） */
+  .p1 { --acc: #c25696;
+    --cv-l: radial-gradient(55% 45% at 78% 18%, rgba(90,170,240,.6), transparent 60%),
+            radial-gradient(70% 50% at 12% 32%, rgba(255,120,170,.55), transparent 58%),
+            radial-gradient(90% 60% at 45% 100%, rgba(70,220,170,.45), transparent 62%),
+            radial-gradient(40% 30% at 55% 8%, rgba(255,200,220,.6), transparent 60%),
+            linear-gradient(155deg,#fbe7f0,#e8ecf8 40%,#dff3ec);
+    --dlg-l: linear-gradient(160deg, rgba(255,255,255,.82), rgba(250,228,238,.7) 40%, rgba(224,240,236,.66));
+    --cv-d: radial-gradient(50% 40% at 82% 12%, rgba(255,110,165,.5), transparent 58%),
+            radial-gradient(70% 50% at 12% 35%, rgba(60,130,235,.5), transparent 60%),
+            radial-gradient(90% 55% at 50% 105%, rgba(30,190,140,.4), transparent 60%),
+            radial-gradient(35% 28% at 55% 45%, rgba(150,90,230,.3), transparent 58%),
+            linear-gradient(160deg,#1b1430,#171c38 45%,#10281e);
+    --surf-d: rgba(40,34,66,.55);
+    --dlg-d: linear-gradient(160deg, rgba(34,26,52,.85), rgba(30,40,72,.7) 45%, rgba(20,46,40,.62)); }
+
+  /* 02 熔海：焰橙 · 深海青 · 熔岩红（冷海撞火山，橙斑压右下破对称） */
+  .p2 { --acc: #d94f2a;
+    --cv-l: radial-gradient(60% 45% at 80% 78%, rgba(255,120,40,.6), transparent 55%),
+            radial-gradient(70% 50% at 15% 15%, rgba(20,160,170,.55), transparent 58%),
+            radial-gradient(45% 35% at 45% 45%, rgba(240,60,70,.4), transparent 55%),
+            linear-gradient(150deg,#e2f2f2,#f5e8dc 55%,#ffdfc2);
+    --dlg-l: linear-gradient(160deg, rgba(255,255,255,.82), rgba(226,240,240,.7) 40%, rgba(255,232,212,.66));
+    --cv-d: radial-gradient(60% 45% at 82% 85%, rgba(255,110,30,.6), transparent 55%),
+            radial-gradient(70% 50% at 12% 12%, rgba(15,140,155,.55), transparent 58%),
+            radial-gradient(40% 32% at 48% 50%, rgba(230,50,60,.4), transparent 55%),
+            linear-gradient(160deg,#0d2326,#141c33 50%,#2c1410);
+    --surf-d: rgba(18,50,58,.55);
+    --dlg-d: linear-gradient(160deg, rgba(12,38,42,.85), rgba(18,32,58,.7) 45%, rgba(52,26,20,.62)); }
+
+  /* 03 霓棘：青柠 · 玫红 · 电紫（酸性波普三族） */
+  .p3 { --acc: #b8429e;
+    --cv-l: radial-gradient(50% 40% at 20% 20%, rgba(180,235,60,.6), transparent 55%),
+            radial-gradient(55% 45% at 85% 30%, rgba(245,60,140,.55), transparent 55%),
+            radial-gradient(80% 55% at 60% 105%, rgba(150,80,235,.45), transparent 60%),
+            linear-gradient(150deg,#f2fad8,#fbe4ee 50%,#eee6f8);
+    --dlg-l: linear-gradient(160deg, rgba(255,255,255,.82), rgba(244,248,224,.7) 40%, rgba(248,232,244,.66));
+    --cv-d: radial-gradient(50% 40% at 18% 18%, rgba(170,230,50,.5), transparent 55%),
+            radial-gradient(55% 45% at 85% 28%, rgba(240,50,135,.55), transparent 55%),
+            radial-gradient(80% 55% at 62% 108%, rgba(140,70,230,.45), transparent 60%),
+            linear-gradient(160deg,#181410,#2c1024 50%,#1c1030);
+    --surf-d: rgba(58,26,56,.55);
+    --dlg-d: linear-gradient(160deg, rgba(30,24,16,.85), rgba(50,18,42,.7) 45%, rgba(32,18,54,.62)); }
+
+  /* 04 雨林黄昏：翡翠 · 落日橙 · 天蓝（绿荫撞落日） */
+  .p4 { --acc: #1f9e64;
+    --cv-l: radial-gradient(65% 50% at 18% 88%, rgba(25,185,115,.55), transparent 58%),
+            radial-gradient(55% 42% at 80% 15%, rgba(255,165,55,.62), transparent 55%),
+            radial-gradient(45% 38% at 45% 40%, rgba(80,160,245,.42), transparent 55%),
+            linear-gradient(150deg,#e3f1e6,#f7ecd9 50%,#dff0f6);
+    --dlg-l: linear-gradient(160deg, rgba(255,255,255,.82), rgba(228,240,230,.7) 40%, rgba(250,238,216,.66));
+    --cv-d: radial-gradient(65% 50% at 16% 92%, rgba(20,175,105,.5), transparent 58%),
+            radial-gradient(55% 42% at 82% 12%, rgba(250,150,45,.55), transparent 55%),
+            radial-gradient(45% 38% at 48% 42%, rgba(70,145,240,.4), transparent 55%),
+            linear-gradient(160deg,#0e2618,#2a1a10 50%,#101e33);
+    --surf-d: rgba(20,56,36,.55);
+    --dlg-d: linear-gradient(160deg, rgba(14,40,26,.85), rgba(48,30,16,.7) 45%, rgba(16,32,54,.62)); }
+
+  /* 05 葡萄汽水：葡萄紫 · 苏打青 · 蜜黄（气泡感三族） */
+  .p5 { --acc: #8a4fd6;
+    --cv-l: radial-gradient(55% 45% at 25% 15%, rgba(150,80,230,.58), transparent 55%),
+            radial-gradient(50% 42% at 82% 45%, rgba(50,205,220,.55), transparent 55%),
+            radial-gradient(70% 45% at 40% 100%, rgba(255,210,80,.5), transparent 58%),
+            linear-gradient(150deg,#efe6fa,#e2f2f4 50%,#faf0d4);
+    --dlg-l: linear-gradient(160deg, rgba(255,255,255,.82), rgba(238,230,248,.7) 40%, rgba(226,240,242,.66));
+    --cv-d: radial-gradient(55% 45% at 22% 12%, rgba(145,75,225,.52), transparent 55%),
+            radial-gradient(50% 42% at 84% 48%, rgba(45,195,215,.5), transparent 55%),
+            radial-gradient(70% 45% at 38% 105%, rgba(250,200,70,.4), transparent 58%),
+            linear-gradient(160deg,#1d1432,#10262e 50%,#2a2210);
+    --surf-d: rgba(44,32,74,.55);
+    --dlg-d: linear-gradient(160deg, rgba(32,22,54,.85), rgba(16,42,50,.7) 45%, rgba(48,40,18,.62)); }
+
+  /* 06 焦糖苹果：焦糖橙 · 青苹绿 · 奶油（两族半，暖调里埋一记冷斑） */
+  .p6 { --acc: #c4761f;
+    --cv-l: radial-gradient(60% 45% at 78% 20%, rgba(235,140,60,.6), transparent 55%),
+            radial-gradient(55% 42% at 15% 30%, rgba(140,205,70,.5), transparent 55%),
+            radial-gradient(80% 55% at 45% 100%, rgba(255,235,200,.7), transparent 60%),
+            linear-gradient(150deg,#fbf0dc,#f2ead6 50%,#e9f2d8);
+    --dlg-l: linear-gradient(160deg, rgba(255,255,255,.82), rgba(250,240,222,.7) 40%, rgba(238,244,220,.66));
+    --cv-d: radial-gradient(60% 45% at 80% 18%, rgba(230,125,45,.55), transparent 55%),
+            radial-gradient(55% 42% at 14% 32%, rgba(110,180,55,.45), transparent 55%),
+            radial-gradient(80% 55% at 45% 105%, rgba(120,80,30,.4), transparent 60%),
+            linear-gradient(160deg,#221a0e,#1e2410 50%,#2a2012);
+    --surf-d: rgba(62,46,24,.55);
+    --dlg-d: linear-gradient(160deg, rgba(40,30,14,.85), rgba(34,40,18,.7) 45%, rgba(46,36,20,.62)); }
+
+  /* 07 冰海火焰：冰川蓝 · 珊瑚橙（两族随机位——蓝压左上、珊瑚沉右下） */
+  .p7 { --acc: #2b87d9;
+    --cv-l: radial-gradient(65% 50% at 80% 85%, rgba(255,130,90,.58), transparent 55%),
+            radial-gradient(75% 55% at 15% 12%, rgba(70,180,250,.6), transparent 58%),
+            radial-gradient(50% 40% at 60% 40%, rgba(160,225,250,.5), transparent 60%),
+            linear-gradient(150deg,#ddeffb,#e8f2f8 50%,#ffe4d8);
+    --dlg-l: linear-gradient(160deg, rgba(255,255,255,.82), rgba(222,238,250,.7) 40%, rgba(255,230,220,.66));
+    --cv-d: radial-gradient(65% 50% at 82% 88%, rgba(250,115,75,.55), transparent 55%),
+            radial-gradient(75% 55% at 12% 10%, rgba(50,165,245,.55), transparent 58%),
+            radial-gradient(45% 35% at 55% 45%, rgba(120,200,245,.3), transparent 58%),
+            linear-gradient(160deg,#0c1c30,#10243a 50%,#301a16);
+    --surf-d: rgba(20,42,70,.55);
+    --dlg-d: linear-gradient(160deg, rgba(12,28,48,.85), rgba(16,38,62,.7) 45%, rgba(54,30,24,.62)); }
+
+  /* 08 樱花礁石：樱粉 · 海礁青 · 珊瑚（粉彩三族，海气感） */
+  .p8 { --acc: #d95f92;
+    --cv-l: radial-gradient(55% 45% at 20% 15%, rgba(250,140,180,.6), transparent 55%),
+            radial-gradient(60% 45% at 85% 70%, rgba(30,180,175,.5), transparent 58%),
+            radial-gradient(45% 35% at 60% 30%, rgba(255,170,130,.5), transparent 55%),
+            linear-gradient(150deg,#fce7ee,#f4e9e4 50%,#e0f2f0);
+    --dlg-l: linear-gradient(160deg, rgba(255,255,255,.82), rgba(250,232,238,.7) 40%, rgba(226,240,238,.66));
+    --cv-d: radial-gradient(55% 45% at 18% 12%, rgba(245,120,165,.5), transparent 55%),
+            radial-gradient(60% 45% at 86% 72%, rgba(25,170,165,.5), transparent 58%),
+            radial-gradient(45% 35% at 58% 32%, rgba(245,150,110,.4), transparent 55%),
+            linear-gradient(160deg,#2c1220,#123032 50%,#331a18);
+    --surf-d: rgba(66,28,48,.55);
+    --dlg-d: linear-gradient(160deg, rgba(48,20,36,.85), rgba(18,52,54,.7) 45%, rgba(56,30,26,.62)); }
+
+  /* 09 酸橙夜焰：靛蓝夜 · 青柠焰（两族冷门组合 + 星点，深色最出戏剧感） */
+  .p9 { --acc: #5558d6;
+    --cv-l: radial-gradient(60% 45% at 78% 15%, rgba(185,230,60,.6), transparent 55%),
+            radial-gradient(70% 50% at 15% 25%, rgba(90,100,235,.55), transparent 58%),
+            radial-gradient(80% 55% at 50% 108%, rgba(60,70,200,.4), transparent 60%),
+            linear-gradient(150deg,#e8ecfb,#f2f5dc 50%,#e4e6f8);
+    --dlg-l: linear-gradient(160deg, rgba(255,255,255,.82), rgba(232,236,250,.7) 40%, rgba(242,246,224,.66));
+    --cv-d: radial-gradient(rgba(255,255,255,.8) 1px, transparent 1.5px) 30px 22px / 140px 100px,
+            radial-gradient(55% 40% at 80% 12%, rgba(185,230,60,.45), transparent 55%),
+            radial-gradient(70% 50% at 12% 30%, rgba(80,90,230,.5), transparent 58%),
+            radial-gradient(60% 40% at 55% 90%, rgba(130,220,70,.2), transparent 55%),
+            linear-gradient(160deg,#121430,#161a26 50%,#181a10);
+    --surf-d: rgba(28,30,62,.55);
+    --dlg-d: linear-gradient(160deg, rgba(20,22,50,.85), rgba(26,30,44,.7) 45%, rgba(30,34,20,.62)); }
+
+  /* 10 曜石翠纹：石墨 · 鎏金 · 翠微光（无彩色系里埋金纹 + 一记冷翠） */
+  .p10 { --acc: #b8912a;
+    --cv-l: radial-gradient(50% 40% at 82% 12%, rgba(255,200,90,.5), transparent 55%),
+            radial-gradient(45% 38% at 25% 60%, rgba(60,200,150,.28), transparent 55%),
+            radial-gradient(70% 50% at 12% 20%, rgba(150,158,172,.4), transparent 60%),
+            repeating-linear-gradient(115deg, rgba(30,32,38,.06) 0 1px, transparent 1px 26px),
+            linear-gradient(150deg,#eef0f2,#e8eaec 50%,#e6e8e2);
+    --dlg-l: linear-gradient(160deg, rgba(255,255,255,.84), rgba(244,244,246,.72) 40%, rgba(240,244,240,.66));
+    --cv-d: linear-gradient(115deg, transparent 42%, rgba(235,195,75,.18) 52%, transparent 64%),
+            radial-gradient(45% 35% at 20% 65%, rgba(50,220,160,.14), transparent 55%),
+            radial-gradient(80% 55% at 82% 8%, rgba(245,205,95,.16), transparent 58%),
+            repeating-linear-gradient(115deg, rgba(255,255,255,.05) 0 1px, transparent 1px 26px),
+            linear-gradient(160deg,#141519,#18191d 50%,#15171a);
+    --surf-d: rgba(32,34,40,.55);
+    --dlg-d: linear-gradient(160deg, rgba(24,25,30,.88), rgba(34,36,42,.74) 45%, rgba(28,40,36,.62)); }
+
+  /* 对照组：极光基座（已保留，取实装 index.css 原值——本身就是随机多族混彩语言） */
+  .pa { --acc: #d0447c;
+    --cv-l: radial-gradient(75% 50% at 60% 16%, rgba(238,244,250,.9), transparent 58%),
+            radial-gradient(110% 80% at 88% 2%, rgba(59,130,196,.5), transparent 62%),
+            radial-gradient(100% 80% at 52% 42%, rgba(255,163,71,.34), transparent 60%),
+            radial-gradient(130% 100% at 8% 96%, rgba(244,78,128,.42), transparent 64%),
+            linear-gradient(160deg,#f7f1f4,#f2eaef 50%,#e7ecf5);
+    --dlg-l: linear-gradient(165deg, rgba(255,255,255,.8), rgba(238,244,250,.68) 45%, rgba(255,236,228,.62));
+    --cv-d: radial-gradient(90% 70% at 78% 30%, rgba(139,92,246,.4), transparent 62%),
+            radial-gradient(100% 80% at 90% 8%, rgba(26,34,56,.9), transparent 65%),
+            radial-gradient(110% 85% at 62% 55%, rgba(61,110,140,.5), transparent 62%),
+            radial-gradient(130% 100% at 6% 92%, rgba(196,60,92,.5), transparent 64%),
+            linear-gradient(160deg,#1e2436,#241d31 45%,#33141f);
+    --surf-d: rgba(40,38,66,.55);
+    --dlg-d: linear-gradient(165deg, rgba(30,35,50,.82), rgba(40,34,58,.7) 45%, rgba(52,26,40,.62)); }
+
+  .foot { font-size: 12.5px; color: #5a6472; line-height: 1.8; border-top: 1px solid #d5dae2; padding-top: 14px; }
+  .foot b { color: #1c2430; }
+  code { font-family: Consolas, monospace; font-size: 11.5px; background: #fff; border: 1px solid #d5dae2; border-radius: 4px; padding: 1px 5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>毛玻璃背景图案 · 10 套随机碰撞候选 v4</h1>
+  <p class="sub">
+    v3 被否决原因：撞色是规整的对半互补配对，太整齐。v4 改为<b>2–3 族随机碰撞</b>：色斑落点、大小、角度全部不对称
+    （如熔海的橙压右下、糖云的三族错位），八案三族碰撞 + 两案两族冷门组合 + 一案无彩色埋金翠纹；
+    向 macOS 壁纸式自然混彩看齐（页尾极光对照组本身就是该语言）。
+    预览模拟真实实现：画布渐变 + 霜面卡片（backdrop-filter）+ 染色弹窗，浅 / 深各一扇窗。
+    <b>回复编号即可（可多选，建议选 2–4 案与极光共存）</b>。
+  </p>
+  <div class="wheel">
+    <div class="w"><i style="background:conic-gradient(from 40deg,#5aaaf0 0 35%,#ff78aa 35% 60%,#46dcaa 60% 100%)"></i>01 糖云</div>
+    <div class="w"><i style="background:conic-gradient(from 200deg,#ff7828 0 30%,#149aaa 30% 65%,#f03c46 65% 100%)"></i>02 熔海</div>
+    <div class="w"><i style="background:conic-gradient(from 120deg,#b4eb3c 0 30%,#f53c8c 30% 60%,#9650eb 60% 100%)"></i>03 霓棘</div>
+    <div class="w"><i style="background:conic-gradient(from 300deg,#19b973 0 40%,#ffa537 40% 65%,#50a0f5 65% 100%)"></i>04 雨林黄昏</div>
+    <div class="w"><i style="background:conic-gradient(from 80deg,#9650e6 0 35%,#32cddc 35% 65%,#ffd250 65% 100%)"></i>05 葡萄汽水</div>
+    <div class="w"><i style="background:conic-gradient(from 220deg,#eb8c3c 0 50%,#8ccd46 50% 100%)"></i>06 焦糖苹果</div>
+    <div class="w"><i style="background:conic-gradient(from 160deg,#46b4fa 0 55%,#ff825a 55% 100%)"></i>07 冰海火焰</div>
+    <div class="w"><i style="background:conic-gradient(from 30deg,#fa8cb4 0 40%,#1eb4af 40% 70%,#ffaa82 70% 100%)"></i>08 樱花礁石</div>
+    <div class="w"><i style="background:conic-gradient(from 250deg,#5a64eb 0 60%,#b9e63c 60% 100%)"></i>09 酸橙夜焰</div>
+    <div class="w"><i style="background:conic-gradient(from 45deg,#3a3c44 0 45%,#e6c85a 45% 75%,#3cc896 75% 100%)"></i>10 曜石翠纹</div>
+    <div class="w"><i style="background:conic-gradient(from 200deg,#3b82c4 0 30%,#ffa347 30% 55%,#f44e80 55% 80%,#8b5cf6 80% 100%)"></i>极光（保留）</div>
+  </div>
+  <div class="nav">
+    <a href="#p1">01 糖云</a><a href="#p2">02 熔海</a><a href="#p3">03 霓棘</a>
+    <a href="#p4">04 雨林黄昏</a><a href="#p5">05 葡萄汽水</a><a href="#p6">06 焦糖苹果</a>
+    <a href="#p7">07 冰海火焰</a><a href="#p8">08 樱花礁石</a><a href="#p9">09 酸橙夜焰</a>
+    <a href="#p10">10 曜石翠纹</a><a href="#aurora">极光对照组</a>
+  </div>
+
+  <!-- ═══ 01 ═══ -->
+  <section class="set p1" id="p1">
+    <div class="set-head"><span class="no">01</span><span class="name">糖云</span><span class="en">Cotton Sky</span><span class="mix" style="background:linear-gradient(100deg,#5aaaf0,#ff78aa 55%,#46dcaa)">蜜桃粉 · 湖蓝 · 薄荷</span></div>
+    <p class="pitch">三族粉彩错位碰撞：湖蓝悬右上、桃粉浮左侧、薄荷沉底——棉花糖天空的随机感。</p>
+    <div class="pair">
+      <div><p class="mode-tag">浅色 Light</p>
+        <div class="mock light"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+        <div class="swatches"><i style="background:#fbe7f0"></i><i style="background:#5aaaf0"></i><i style="background:#ff78aa"></i><i style="background:#46dcaa"></i><i style="background:rgba(40,34,66,.9)"></i><span>浅底 / 蓝族 / 粉族 / 薄荷 / 深霜面</span></div>
+      </div>
+      <div><p class="mode-tag">深色 Dark</p>
+        <div class="mock dark"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ 02 ═══ -->
+  <section class="set p2" id="p2">
+    <div class="set-head"><span class="no">02</span><span class="name">熔海</span><span class="en">Molten Isle</span><span class="mix" style="background:linear-gradient(100deg,#149aaa,#f03c46 55%,#ff7828)">深海青 · 熔岩红 · 焰橙</span></div>
+    <p class="pitch">冷海撞火山：青占左上、红埋中央、橙熔右下——火口沉进海里的不对称张力。</p>
+    <div class="pair">
+      <div><p class="mode-tag">浅色 Light</p>
+        <div class="mock light"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+        <div class="swatches"><i style="background:#e2f2f2"></i><i style="background:#149aaa"></i><i style="background:#f03c46"></i><i style="background:#ff7828"></i><i style="background:rgba(18,50,58,.9)"></i><span>浅底 / 青族 / 红族 / 橙族 / 深霜面</span></div>
+      </div>
+      <div><p class="mode-tag">深色 Dark</p>
+        <div class="mock dark"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ 03 ═══ -->
+  <section class="set p3" id="p3">
+    <div class="set-head"><span class="no">03</span><span class="name">霓棘</span><span class="en">Neon Thorn</span><span class="mix" style="background:linear-gradient(100deg,#b4eb3c,#f53c8c 55%,#9650eb)">青柠 · 玫红 · 电紫</span></div>
+    <p class="pitch">酸性波普三族：青柠扎左上、玫红刺右侧、电紫漫底——全场最野的一记。</p>
+    <div class="pair">
+      <div><p class="mode-tag">浅色 Light</p>
+        <div class="mock light"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+        <div class="swatches"><i style="background:#f2fad8"></i><i style="background:#b4eb3c"></i><i style="background:#f53c8c"></i><i style="background:#9650eb"></i><i style="background:rgba(58,26,56,.9)"></i><span>浅底 / 柠族 / 红族 / 紫族 / 深霜面</span></div>
+      </div>
+      <div><p class="mode-tag">深色 Dark</p>
+        <div class="mock dark"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ 04 ═══ -->
+  <section class="set p4" id="p4">
+    <div class="set-head"><span class="no">04</span><span class="name">雨林黄昏</span><span class="en">Jungle Dusk</span><span class="mix" style="background:linear-gradient(100deg,#ffa537,#19b973 55%,#50a0f5)">落日橙 · 翡翠 · 天蓝</span></div>
+    <p class="pitch">绿荫撞落日：橙悬右上、翠绿漫左下、天蓝穿场——黄昏雨林的三色错落。</p>
+    <div class="pair">
+      <div><p class="mode-tag">浅色 Light</p>
+        <div class="mock light"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+        <div class="swatches"><i style="background:#e3f1e6"></i><i style="background:#ffa537"></i><i style="background:#19b973"></i><i style="background:#50a0f5"></i><i style="background:rgba(20,56,36,.9)"></i><span>浅底 / 橙族 / 绿族 / 蓝族 / 深霜面</span></div>
+      </div>
+      <div><p class="mode-tag">深色 Dark</p>
+        <div class="mock dark"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ 05 ═══ -->
+  <section class="set p5" id="p5">
+    <div class="set-head"><span class="no">05</span><span class="name">葡萄汽水</span><span class="en">Grape Soda</span><span class="mix" style="background:linear-gradient(100deg,#9650e6,#32cddc 55%,#ffd250)">葡萄紫 · 苏打青 · 蜜黄</span></div>
+    <p class="pitch">气泡感三族：紫泡浮左上、青泡贴右缘、蜜黄沉底——汽水开瓶的随机错落。</p>
+    <div class="pair">
+      <div><p class="mode-tag">浅色 Light</p>
+        <div class="mock light"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+        <div class="swatches"><i style="background:#efe6fa"></i><i style="background:#9650e6"></i><i style="background:#32cddc"></i><i style="background:#ffd250"></i><i style="background:rgba(44,32,74,.9)"></i><span>浅底 / 紫族 / 青族 / 黄族 / 深霜面</span></div>
+      </div>
+      <div><p class="mode-tag">深色 Dark</p>
+        <div class="mock dark"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ 06 ═══ -->
+  <section class="set p6" id="p6">
+    <div class="set-head"><span class="no">06</span><span class="name">焦糖苹果</span><span class="en">Caramel Apple</span><span class="mix" style="background:linear-gradient(100deg,#eb8c3c,#8ccd46)">焦糖橙 · 青苹绿 · 奶油</span></div>
+    <p class="pitch">两族半碰撞：焦糖橙为主、青苹绿埋一记冷斑、奶油底收——暖调里的小意外。</p>
+    <div class="pair">
+      <div><p class="mode-tag">浅色 Light</p>
+        <div class="mock light"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+        <div class="swatches"><i style="background:#fbf0dc"></i><i style="background:#eb8c3c"></i><i style="background:#8ccd46"></i><i style="background:#221a0e"></i><i style="background:rgba(62,46,24,.9)"></i><span>浅底 / 橙族 / 绿族 / 深底 / 深霜面</span></div>
+      </div>
+      <div><p class="mode-tag">深色 Dark</p>
+        <div class="mock dark"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ 07 ═══ -->
+  <section class="set p7" id="p7">
+    <div class="set-head"><span class="no">07</span><span class="name">冰海火焰</span><span class="en">Sea Flame</span><span class="mix" style="background:linear-gradient(100deg,#46b4fa,#ff825a)">冰川蓝 · 珊瑚橙</span></div>
+    <p class="pitch">两族随机位碰撞：冰川蓝压左上、珊瑚橙沉右下、冰白穿场——冰与火对角相望。</p>
+    <div class="pair">
+      <div><p class="mode-tag">浅色 Light</p>
+        <div class="mock light"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+        <div class="swatches"><i style="background:#ddeffb"></i><i style="background:#46b4fa"></i><i style="background:#ff825a"></i><i style="background:#0c1c30"></i><i style="background:rgba(20,42,70,.9)"></i><span>浅底 / 蓝族 / 珊瑚 / 深底 / 深霜面</span></div>
+      </div>
+      <div><p class="mode-tag">深色 Dark</p>
+        <div class="mock dark"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ 08 ═══ -->
+  <section class="set p8" id="p8">
+    <div class="set-head"><span class="no">08</span><span class="name">樱花礁石</span><span class="en">Sakura Reef</span><span class="mix" style="background:linear-gradient(100deg,#fa8cb4,#ffaa82 50%,#1eb4af)">樱粉 · 珊瑚 · 海礁青</span></div>
+    <p class="pitch">粉彩三族海气碰撞：樱粉浮左上、珊瑚透中场、海礁青压右下——花枝垂进海里。</p>
+    <div class="pair">
+      <div><p class="mode-tag">浅色 Light</p>
+        <div class="mock light"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+        <div class="swatches"><i style="background:#fce7ee"></i><i style="background:#fa8cb4"></i><i style="background:#ffaa82"></i><i style="background:#1eb4af"></i><i style="background:rgba(66,28,48,.9)"></i><span>浅底 / 粉族 / 珊瑚 / 青族 / 深霜面</span></div>
+      </div>
+      <div><p class="mode-tag">深色 Dark</p>
+        <div class="mock dark"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ 09 ═══ -->
+  <section class="set p9" id="p9">
+    <div class="set-head"><span class="no">09</span><span class="name">酸橙夜焰</span><span class="en">Lime Ember</span><span class="mix" style="background:linear-gradient(100deg,#5a64eb,#b9e63c)">靛蓝夜 · 青柠焰</span></div>
+    <p class="pitch">两族冷门组合：靛蓝夜幕 + 青柠火斑 + 星点——谁也不会把这两族摆一起，但成立了。</p>
+    <div class="pair">
+      <div><p class="mode-tag">浅色 Light</p>
+        <div class="mock light"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+        <div class="swatches"><i style="background:#e8ecfb"></i><i style="background:#5a64eb"></i><i style="background:#b9e63c"></i><i style="background:#121430"></i><i style="background:rgba(28,30,62,.9)"></i><span>浅底 / 靛族 / 柠焰 / 深底 / 深霜面</span></div>
+      </div>
+      <div><p class="mode-tag">深色 Dark</p>
+        <div class="mock dark"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ 10 ═══ -->
+  <section class="set p10" id="p10">
+    <div class="set-head"><span class="no">10</span><span class="name">曜石翠纹</span><span class="en">Obsidian Jade</span><span class="mix" style="background:linear-gradient(100deg,#3a3c44,#e6c85a 55%,#3cc896)">石墨 · 鎏金 · 翠微光</span></div>
+    <p class="pitch">无彩色系随机埋彩：石墨底上斜向鎏金纹 + 一记冷翠微光——比 v3 黑金多了一分意外。</p>
+    <div class="pair">
+      <div><p class="mode-tag">浅色 Light</p>
+        <div class="mock light"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+        <div class="swatches"><i style="background:#eef0f2"></i><i style="background:#e6c85a"></i><i style="background:#3cc896"></i><i style="background:#141519"></i><i style="background:rgba(32,34,40,.9)"></i><span>浅底 / 金纹 / 翠光 / 深底 / 深霜面</span></div>
+      </div>
+      <div><p class="mode-tag">深色 Dark</p>
+        <div class="mock dark"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ 对照组 ═══ -->
+  <section class="set pa" id="aurora">
+    <div class="set-head"><span class="no">—</span><span class="name">极光（保留）</span><span class="en">Aurora · Reference</span><span class="keep">已保留 · 对照组</span></div>
+    <p class="pitch">现役极光基座原值（蓝/橙/绯红/紫随机混彩，v4 的构图语言就是向它看齐），供并排比对。</p>
+    <div class="pair">
+      <div><p class="mode-tag">浅色 Light</p>
+        <div class="mock light"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+      </div>
+      <div><p class="mode-tag">深色 Dark</p>
+        <div class="mock dark"><div class="card tb"><i></i><i></i><i></i><b>X-Dir — 文件管理器</b></div>
+          <div class="card pane"><div class="ph">文档</div>
+            <div class="row"><span>项目计划书.docx</span><em>128 KB</em></div>
+            <div class="row"><span>季度报表.xlsx</span><em>2.4 MB</em></div>
+            <div class="row"><span>设计稿.png</span><em>860 KB</em></div>
+            <div class="row"><span>会议纪要.md</span><em>12 KB</em></div>
+            <div class="row"><span>数据备份.zip</span><em>96 MB</em></div>
+          </div>
+          <div class="card side"><div class="ph">快速访问</div><div class="item">桌面</div><div class="item">下载</div><div class="item">图片</div></div>
+          <div class="dlg"><div class="dt">删除确认</div><div class="dd">确定要将 2 个项目移入回收站吗？</div><div class="btns"><u>取消</u><b>删除</b></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="foot">
+    <b>选定后落地清单</b>（每案五件套，与极光基座同模板）：画布 <code>--np-bg</code> 浅 / 深两套 → 深色卡片霜面 <code>--np-surface</code> 混彩染色 → 弹窗染色 <code>--np-dialog-glass</code> 浅 / 深两套 → <code>GLASS_BGS</code> 选项 + 中文名 → i18n EN 词条。<br>
+    v4 取代 v3（v3 规整对半撞色被否决）；本页为独立静态预览（不参与构建）；窗口较窄时浅 / 深两扇窗会上下排列。
+  </div>
+</div>
+</body>
+</html>
