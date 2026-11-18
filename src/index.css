@@ -439,8 +439,9 @@ html.glasswin.bp6-dark > body {
 /* ═══ 玻璃背景图案（2026-11-18 收敛定案：六案比选后用户拍板「除极光外全删」——
    五案〔云隙晨光 dawn/几何构成 geo/绸缎流波 silk/点阵蓝图 blueprint/暮山层影
    mountain〕整段移除，仅留极光基座 + 自定义图片；色相家族近似〔深色五案全在
-   蓝紫海军蓝带内〕不满足「颜色差异大」诉求，10 候选新案浅深预览见
-   design/glassbg-proposals-v2.html，比选定案后按本段模板回灌）：
+   蓝紫海军蓝带内〕不满足「颜色差异大」诉求，10 候选新案（v3 撞色版：每案两个
+   色系对打、浅色为有色实底，取代被否决的 v2 淡彩版）浅深预览见
+   design/glassbg-proposals-v3.html，比选定案后按本段模板回灌）：
    data-glassbg 切 --np-bg 图案（浅/深双锚点——body 直声明陷阱同前，
    html.glasswin[data-glassbg=…] 与 > body 双写）；
    custom = 用户图片（asset 协议 convertFileSrc 转可展示 URL，applyGlassBg 下发
