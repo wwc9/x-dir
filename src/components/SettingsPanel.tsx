@@ -42,7 +42,7 @@ import { AppIcon, ic } from "./AppIcon";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { HotkeyRecorder } from "./HotkeyRecorder";
 import { Seg } from "./ImgDialogs";
-import { PERF_TABLE, detectTier, resolvePerf, type PerfTier } from "../lib/perf";
+import { PERF_TABLE, detectTier, type PerfTier } from "../lib/perf";
 import { NpSelect } from "./NpSelect";
 import { GLASS_BGS, TAG_COLORS } from "../stores/settings";
 
@@ -164,10 +164,6 @@ function SetRow({ label, desc, children, className }: { label: string; desc?: st
 export function SettingsPanel() {
   const t = useT();
   const s = useSettings();
-  const detected = usePerfDetect();
-  // 窗口毛玻璃门禁：仅高性能档（解析档）可用；低配档 desc 提示 + 开钮禁用
-  const glassLocked =
-    !!detected && resolvePerf(s.perfMode, detected.tier) === "low";
   /** 浮窗开合与直达分类状态在 useUi；打开时同步当前 tab（顶栏/其余入口只 set 状态） */
   const settingsTab = useUi((st) => st.settingsTab);
   const [tab, setTab] = useState<TabId>(settingsTab ?? "appearance");
@@ -367,17 +363,13 @@ export function SettingsPanel() {
             </SetRow>
             <SetRow
               label={t("窗口毛玻璃")}
-              desc={
-                glassLocked
-                  ? t("仅高性能模式可用；当前为低性能档，已自动关闭")
-                  : t("画布铺柔和渐变，窗格与浮层实时模糊透出底色；低性能档自动关")
-              }
+              desc={t("画布铺柔和渐变，窗格与浮层实时模糊透出底色；低性能档默认关，可手动开启")}
             >
               {/* 2026-11-18 用户定案：与上方真实文件图标行同为开关（Switch），
-                  替代关/开分段；低性能档门禁不变（开关禁用 + desc 提示） */}
+                  替代关/开分段。2026-11-18 二次定案：放开低性能档禁用——
+                  档位点击按预设切换（低配默认关），手动开关随时可用 */}
               <Switch
                 checked={s.windowGlass === "on"}
-                disabled={glassLocked}
                 onChange={(e) => {
                   const m = e.currentTarget.checked ? "on" : "off";
                   s.update({ windowGlass: m });

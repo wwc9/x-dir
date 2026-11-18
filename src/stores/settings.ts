@@ -615,7 +615,8 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
   },
 
   applyPerfMode(resolved) {
-    if (get().perfApplied === resolved) return;
+    // 幂等守卫移除（2026-11-18 用户定案「档位点击切换相应设置项」）：每次
+    // 点击都重新应用预设——否则手动改过预设内设置项后，同档再点不生效
     const preset = PERF_PRESET[resolved];
     // 预设写盘（update 走防抖合并）；perfApplied 记账防重复应用
     get().update({ ...(preset as Partial<Settings>), perfApplied: resolved });

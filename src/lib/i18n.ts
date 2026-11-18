@@ -1368,10 +1368,7 @@ export const EN: Record<string, string> = {
   "关": "Off",
   "开": "On",
   "窗口毛玻璃": "Window frosted glass",
-  "画布铺柔和渐变，窗格与浮层实时模糊透出底色；低性能档自动关":
-    "A soft gradient fills the canvas; panes and overlays frost-blur over it. Auto-off in low-performance mode.",
-  "仅高性能模式可用；当前为低性能档，已自动关闭":
-    "Available in high-performance mode only; the current low tier keeps it off.",
+  "画布铺柔和渐变，窗格与浮层实时模糊透出底色；低性能档默认关，可手动开启": "A soft gradient fills the canvas; panes and overlays frost-blur it in real time. Off by default on the Low tier — enable manually if you like",
   "开（背景图案可在设置 → 外观更换）": "On (change the background pattern in Settings → Appearance)",
   "关（省一层模糊合成）": "Off (saves one blur-compositing layer)",
   "清单已导出：{name}（{n} 项）": "List exported: {name} ({n} items)",
