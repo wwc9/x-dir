@@ -446,6 +446,7 @@ export function TitleBar() {
         minimal
         size="small"
         icon={ic(Camera)}
+        data-tb="quick"
         aria-label={t("截图")}
         data-tip={t("截图")} data-kbd={shotEnabled ? shotHotkey : undefined}
         onClick={() => {
@@ -462,6 +463,7 @@ export function TitleBar() {
         minimal
         size="small"
         icon={ic(ClipboardList)}
+        data-tb="quick"
         aria-label={t("剪贴板历史")}
         data-tip={t("剪贴板历史")} data-kbd={cliphistHotkey}
         onClick={() => {
@@ -475,6 +477,7 @@ export function TitleBar() {
         minimal
         size="small"
         icon={ic(CalendarDays)}
+        data-tb="quick"
         active={calendarOpen}
         aria-label={t("工作日历")}
         data-tip={t("工作日历")} data-kbd={calendarEnabled ? calendarHotkey : undefined}
@@ -489,6 +492,7 @@ export function TitleBar() {
         minimal
         size="small"
         icon={ic(WandSparkles)}
+        data-tb="quick"
         active={menuPage}
         aria-label={t("定制")}
         data-tip={t("定制右键菜单与工具栏")}

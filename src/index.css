@@ -1021,6 +1021,10 @@ body:has(
   background: var(--np-surface);
   border: 1px solid var(--np-border);
   border-radius: var(--np-radius-pane);
+  /* 高缩放（200% 时 CSS 视口折半）渐进收纳：容器查询按顶栏实际宽度分级
+     收起中段灵动岛 → 快捷钮组 → 低频钮，杜绝 grid 轨道内容超宽互相压叠 */
+  container-type: inline-size;
+  container-name: np-tb;
 }
 /* 顶栏语义分组分隔线（2026-10-20 定案）：浏览定位 | 全局模式、应用级 | 窗口控制。
    用 --np-border（hairline 对 14px 短竖线过淡）；与窗口控制钮之间自然形成
@@ -1096,6 +1100,33 @@ body:has(
   font-size: var(--np-font-sm);
   overflow: hidden;
   white-space: nowrap;
+}
+/* 顶栏渐进收纳（容器查询，宽度 = 顶栏实际 CSS 宽）：
+   ≤1000 撤中段灵动岛（路径/选中信息在状态条与面包屑均有冗余）；
+   ≤820 收快捷钮组（截图/剪贴板/日历/定制，均有热键与替代入口）；
+   ≤700 收历史/收藏/布局预设三弹层钮；≤560 再收缩放/语言/关于（缩放有
+   Ctrl+滚轮，语言与关于在配置 tab 均有落点）。窗口控制钮永不收纳 */
+@container np-tb (max-width: 1000px) {
+  .np-tb-mid {
+    display: none;
+  }
+}
+@container np-tb (max-width: 820px) {
+  .np-titlebar [data-tb="quick"] {
+    display: none;
+  }
+}
+@container np-tb (max-width: 700px) {
+  .np-titlebar .np-pop-trigger {
+    display: none;
+  }
+}
+@container np-tb (max-width: 560px) {
+  .np-titlebar .np-zoompill,
+  .np-titlebar .np-langbtn,
+  .np-titlebar .np-about-btn {
+    display: none;
+  }
 }
 .np-island.is-clickable {
   cursor: pointer;
