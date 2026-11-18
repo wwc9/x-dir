@@ -3,7 +3,17 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 
-import { api, DEFAULT_SETTINGS, THIS_PC, type MenuEntry, type Settings } from "../lib/ipc";
+import { api, DEFAULT_SETTINGS, THIS_PC, type MenuEntry, type Settings, type TagColor } from "../lib/ipc";
+
+/** 任务分类可用色（2026-11-18 自 SettingsPanel 提升单源：设置规则调色板与日历页分类管理共用） */
+export const TAG_COLORS: { key: TagColor; label: string }[] = [
+  { key: "red", label: "红" },
+  { key: "orange", label: "橙" },
+  { key: "yellow", label: "黄" },
+  { key: "green", label: "绿" },
+  { key: "blue", label: "蓝" },
+  { key: "purple", label: "紫" },
+];
 import { clampGsPreviewW, sanitizeColWidths, sanitizeGsColWidths } from "../lib/columns";
 import { sanitizeDialogPrefs } from "../lib/dialogPrefs";
 import { fileNameOf } from "../lib/path";

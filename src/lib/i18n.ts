@@ -1924,6 +1924,8 @@ export const EN: Record<string, string> = {
   "模板已保存，新生成 {n} 条实例": "Template saved, {n} new instances generated",
   "模板已保存，生成 {n} 条实例（90 天内）": "Template saved, {n} instances generated (within 90 days)",
   "定期任务": "Recurring task",
+  "管理任务分类（格子着色与导出标注用）": "Manage task categories (used for cell coloring and export tags)",
+  "管理定期任务模板（保存后往后 90 天生成实例）": "Manage recurring task templates (instances are generated 90 days ahead on save)",
   "格子着色维度": "Cell bar coloring",
   "按状态 = 绿/蓝/灰表达 已完成/执行中/待办；按分类 = 竖条改用任务分类的颜色": "By status = green/blue/grey for done/in-progress/to-do; by category = bars use the task category color",
   "按状态": "By status",

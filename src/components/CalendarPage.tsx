@@ -7,21 +7,24 @@
 // 键盘：方向键移格 / Enter 新增 / T 今天 / PgUp PgDn 翻月 / Ctrl-C·V 跨日
 // 复制粘贴 / Delete 删除选中条目。
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { Button, InputGroup } from "@blueprintjs/core";
+import { Button, Dialog, DialogBody, InputGroup, Switch } from "@blueprintjs/core";
 import {
   ArrowLeft,
+  CalendarClock,
   Check,
   ChevronLeft,
   ChevronRight,
   Plus,
   Search,
+  Tags,
+  Trash2,
   X,
 } from "lucide-react";
 
-import { useSettings } from "../stores/settings";
+import { TAG_COLORS, useSettings } from "../stores/settings";
 import { useUi, type MenuItem } from "../stores/ui";
 import { t, useT } from "../lib/i18n";
-import { api, type WorkEntry, type WorklogHit } from "../lib/ipc";
+import { api, type TagColor, type WorkEntry, type WorklogHit } from "../lib/ipc";
 import {
   dateKey,
   dayKind,
@@ -37,7 +40,9 @@ import {
 import { AppIcon, ic } from "./AppIcon";
 import { Seg } from "./ImgDialogs";
 import { NpSelect } from "./NpSelect";
+import { recurrenceSummary } from "./RecurrenceEditDialog";
 import { DENSITY } from "../lib/tokens";
+
 
 const TODAY = new Date();
 const TODAY_KEY = dateKey(TODAY.getFullYear(), TODAY.getMonth() + 1, TODAY.getDate());
@@ -102,6 +107,9 @@ export function CalendarPage() {
     return arr;
   });
   const [jumpOpen, setJumpOpen] = useState(false);
+  // 任务分类 / 定期任务模板管理弹窗（2026-11-18 自设置「日历」分页迁入）
+  const [catOpen, setCatOpen] = useState(false);
+  const [rtOpen, setRtOpen] = useState(false);
   const [jumpYear, setJumpYear] = useState(TODAY.getFullYear());
   const scrollRef = useRef<HTMLDivElement>(null);
   const fetchedRef = useRef<Set<string>>(new Set());
@@ -823,6 +831,24 @@ export function CalendarPage() {
           <Button minimal size="small" className="np-cal-todaybtn" onClick={gotoToday}>
             {t("今天")}
           </Button>
+          {/* 任务分类 / 定期任务模板管理（2026-11-18 自设置「日历」分页迁入）：
+              图标钮（悬停出提示）——头部窄幅下文字钮会逐字换行 */}
+          <Button
+            minimal
+            size="small"
+            icon={ic(Tags)}
+            aria-label={t("任务分类")}
+            data-tip={t("管理任务分类（格子着色与导出标注用）")}
+            onClick={() => setCatOpen(true)}
+          />
+          <Button
+            minimal
+            size="small"
+            icon={ic(CalendarClock)}
+            aria-label={t("定期任务模板")}
+            data-tip={t("管理定期任务模板（保存后往后 90 天生成实例）")}
+            onClick={() => setRtOpen(true)}
+          />
           <Button
             size="small"
             intent="primary"
@@ -1109,7 +1135,163 @@ export function CalendarPage() {
           )}
         </div>
       </div>
+      {/* 任务分类 / 定期任务模板管理（2026-11-18 自设置「日历」分页迁入）：
+          二级弹窗按 §4.7（标题必有 + DialogBody 玻璃载体） */}
+      <Dialog
+        isOpen={catOpen}
+        onClose={() => setCatOpen(false)}
+        className="np-dialog"
+        title={t("任务分类")}
+        icon={ic(Tags)}
+      >
+        <DialogBody>
+          <div className="np-dialog-muted">
+            {t("分类用于格子着色与导出标注；删除分类不影响已有条目（回落未分类）")}
+          </div>
+          <CalCatManager />
+        </DialogBody>
+      </Dialog>
+      <Dialog
+        isOpen={rtOpen}
+        onClose={() => setRtOpen(false)}
+        className="np-dialog"
+        title={t("定期任务模板")}
+        icon={ic(CalendarClock)}
+      >
+        <DialogBody>
+          <div className="np-dialog-muted">
+            {t("保存模板即往后 90 天生成实例（可单独编辑/删除，删除后不再重生）；格子右键「添加定期任务…」同入口")}
+          </div>
+          <CalRtManager />
+        </DialogBody>
+      </Dialog>
     </section>
+  );
+}
+
+/** 任务分类管理（2026-11-18 自设置「日历」分页迁入日历页「分类」按钮） */
+function CalCatManager() {
+  const s = useSettings();
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatColor, setNewCatColor] = useState<TagColor>("orange");
+  return (
+    <div className="np-cal-catlist">
+      {s.calendarCategories.map((c) => (
+        <span key={c.id} className="np-cal-catrow">
+          <i className="np-cal-catdot" style={{ background: `var(--np-tag-${c.color})` }} />
+          <InputGroup
+            small
+            value={c.name}
+            onChange={(e) =>
+              s.update({
+                calendarCategories: s.calendarCategories.map((x) =>
+                  x.id === c.id ? { ...x, name: e.currentTarget.value } : x,
+                ),
+              })
+            }
+          />
+          <Button
+            minimal
+            size="small"
+            icon={ic(Trash2)}
+            data-tip={t("删除分类")}
+            onClick={() =>
+              s.update({ calendarCategories: s.calendarCategories.filter((x) => x.id !== c.id) })
+            }
+          />
+        </span>
+      ))}
+      <span className="np-cal-catrow">
+        <i className="np-cal-catdot" style={{ background: `var(--np-tag-${newCatColor})` }} />
+        <InputGroup
+          small
+          className="np-cal-catadd"
+          placeholder={t("新分类名称")}
+          value={newCatName}
+          spellCheck={false}
+          onChange={(e) => setNewCatName(e.currentTarget.value)}
+        />
+        <NpSelect<TagColor>
+          className="np-cal-catsel"
+          value={newCatColor}
+          options={TAG_COLORS.map((c) => ({ value: c.key, label: c.label }))}
+          onChange={(v) => setNewCatColor(v)}
+        />
+        <Button
+          minimal
+          size="small"
+          icon={ic(Plus)}
+          disabled={!newCatName.trim()}
+          data-tip={t("添加分类")}
+          onClick={() => {
+            const id = `cat_${Date.now().toString(36)}`;
+            s.update({
+              calendarCategories: [
+                ...s.calendarCategories,
+                { id, name: newCatName.trim(), color: newCatColor },
+              ],
+            });
+            setNewCatName("");
+          }}
+        />
+      </span>
+    </div>
+  );
+}
+
+/** 定期任务模板管理（2026-11-18 自设置「日历」分页迁入日历页「定期任务」按钮） */
+function CalRtManager() {
+  const s = useSettings();
+  return (
+    <div className="np-cal-rtlist">
+      {s.calendarRecurrence.length === 0 && (
+        <span className="np-cal-rempty">{t("还没有定期任务模板")}</span>
+      )}
+      {s.calendarRecurrence.map((rt) => (
+        <span key={rt.id} className={"np-cal-rtrow" + (rt.enabled ? "" : " is-off")}>
+          <Switch
+            checked={rt.enabled}
+            onChange={(e) =>
+              s.update({
+                calendarRecurrence: s.calendarRecurrence.map((x) =>
+                  x.id === rt.id ? { ...x, enabled: e.currentTarget.checked } : x,
+                ),
+              })
+            }
+          />
+          <span className="np-cal-rttext">
+            {rt.text}
+            <small>{recurrenceSummary(rt.rule, rt.postponeHoliday)}</small>
+          </span>
+          <Button
+            minimal
+            size="small"
+            data-tip={t("编辑模板（保存后新生成缺失实例，已有实例不变）")}
+            onClick={() => useUi.getState().openDialog({ type: "recurrenceEdit", templateId: rt.id })}
+          >
+            {t("编辑")}
+          </Button>
+          <Button
+            minimal
+            size="small"
+            icon={ic(Trash2)}
+            data-tip={t("删除模板（已生成实例保留为普通条目）")}
+            onClick={() =>
+              s.update({ calendarRecurrence: s.calendarRecurrence.filter((x) => x.id !== rt.id) })
+            }
+          />
+        </span>
+      ))}
+      <Button
+        minimal
+        size="small"
+        icon={ic(Plus)}
+        data-tip={t("新增定期任务模板")}
+        onClick={() => useUi.getState().openDialog({ type: "recurrenceEdit" })}
+      >
+        {t("新增定期任务")}
+      </Button>
+    </div>
   );
 }
 
