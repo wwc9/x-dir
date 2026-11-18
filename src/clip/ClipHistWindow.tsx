@@ -31,8 +31,8 @@ import {
   X,
 } from "lucide-react";
 
-import { api, type ClipHistItem, type Settings } from "../lib/ipc";
-import { applyWindowGlass } from "../stores/settings";
+import { api, DEFAULT_SETTINGS, type ClipHistItem, type Settings } from "../lib/ipc";
+import { applyGlassParams, applyWindowGlass } from "../stores/settings";
 import { clipKindMeta, pickDigit, relTime } from "../lib/cliphist";
 import { AppIcon } from "../components/AppIcon";
 import { initTooltip } from "../lib/tooltip";
@@ -146,6 +146,11 @@ export function ClipHistWindow() {
     const offs: (() => void)[] = [initTooltip()];
     // 最近一次已应用的毛玻璃档（onScheme 重放主题时无需重取设置）
     const lastGlass = { current: "off" as Settings["windowGlass"] };
+    // 玻璃参数跟随（2026-11-19 外观可调）：浮窗 .np-clip 在卡片家族内，
+    // blur/frost 与主窗同源——两取值路径（getSettings/config-imported）写 ref
+    const lastTune = {
+      current: { blur: DEFAULT_SETTINGS.glassBlur, frost: DEFAULT_SETTINGS.glassFrost },
+    };
     const applyTheme = (theme: Settings["theme"]) => {
       const dark =
         theme === "dark" ||
@@ -156,6 +161,7 @@ export function ClipHistWindow() {
       document.body.classList.toggle("dark", dark);
       document.body.classList.toggle("bp6-dark", dark);
       applyWindowGlass(lastGlass.current);
+      applyGlassParams(lastTune.current.blur, lastTune.current.frost);
     };
     const onScheme = () => applyTheme("system");
     void api
@@ -164,6 +170,10 @@ export function ClipHistWindow() {
         setDirectPaste(st?.cliphistDirectPaste ?? true);
         const theme = st?.theme ?? "system";
         lastGlass.current = st?.windowGlass ?? "off";
+        lastTune.current = {
+          blur: st?.glassBlur ?? DEFAULT_SETTINGS.glassBlur,
+          frost: st?.glassFrost ?? DEFAULT_SETTINGS.glassFrost,
+        };
         applyTheme(theme);
         if (theme === "system") {
           window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", onScheme);
@@ -190,6 +200,10 @@ export function ClipHistWindow() {
         .then((st) => {
           setDirectPaste(st?.cliphistDirectPaste ?? true);
           lastGlass.current = st?.windowGlass ?? "off";
+          lastTune.current = {
+            blur: st?.glassBlur ?? DEFAULT_SETTINGS.glassBlur,
+            frost: st?.glassFrost ?? DEFAULT_SETTINGS.glassFrost,
+          };
           applyTheme(st?.theme ?? "system");
         })
         .catch(() => undefined);

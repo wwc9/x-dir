@@ -403,6 +403,12 @@ export interface Settings {
   glassBgCustom: string;
   /** 蒙版浓度 0-60（百分比；浅色蒙白雾/深色蒙夜幕） */
   glassBgVeil: number;
+  /** 模糊强度 0-48 px（2026-11-19 外观可调）：卡片家族与强霜浮层的
+   *  backdrop-filter 半径，经 --np-glass-blur 下发；弹窗恒 40 不随 */
+  glassBlur: number;
+  /** 霜面浓度 20-80 %（2026-11-19 外观可调）：卡片霜面 --np-surface 的
+   *  不透明度，经 --np-glass-alpha 下发；强霜 0.78/弹窗染色不随 */
+  glassFrost: number;
   restoreLastSession: boolean;
   /** 开机自启（2026-11-15）：单一事实源在 settings.json，注册表 Run 键为派生态
    *  （Rust 启动回放 apply_autostart_pref；切换经 api.autostartSet 刷注册表） */
@@ -606,6 +612,10 @@ export const DEFAULT_SETTINGS: Settings = {
   glassBg: "aurora",
   glassBgCustom: "",
   glassBgVeil: 35,
+  // 玻璃参数默认 = 既有定档（2026-11-19 参数化：blur 22 为卡片家族原值，
+  // frost 55 为霜面 alpha 原值；设置 → 外观可调）
+  glassBlur: 22,
+  glassFrost: 55,
   toolbarEntries: [],
   restoreLastSession: true,
   // 开机自启默认关（2026-11-15）：自启属显式选择，不替用户决定

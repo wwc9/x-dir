@@ -396,7 +396,10 @@ html.glasswin > body {
     radial-gradient(100% 80% at 52% 42%, rgba(255, 163, 71, 0.34), transparent 60%),
     radial-gradient(130% 100% at 8% 96%, rgba(244, 78, 128, 0.42), transparent 64%),
     linear-gradient(160deg, #f7f1f4, #f2eaef 50%, #e7ecf5);
-  --np-surface: var(--np-glass);
+  --np-surface: rgba(255, 255, 255, var(--np-glass-alpha, 0.55));
+  /* ↑ 霜面浓度可调（2026-11-19 外观 tab）：alpha 由 applyGlassParams 内联
+     下发 --np-glass-alpha（0.2-0.8），默认 0.55 = 既有定档；强霜 0.78/
+     弹窗染色为可读性锚点不随参数 */
   /* 弹窗染色极光玻璃（2026-11-18 用户定案 = 方案 C，design/dialog-glass-proposal-c-tinted.html）：
      霜面染极光色相——顶天空蓝、底珊瑚粉，弹窗成为画布的一部分而非贴上去的白片 */
   --np-dialog-glass: linear-gradient(
@@ -424,8 +427,8 @@ html.glasswin.bp6-dark > body {
     radial-gradient(130% 100% at 6% 92%, rgba(196, 60, 92, 0.5), transparent 64%),
     linear-gradient(160deg, #1e2436, #241d31 45%, #33141f);
   /* 深色卡片霜面随图案染色（2026-11-18 用户反馈「除极光外深色黑乎乎、无颜色变化」）：
-     极光画布紫/绯红 → 卡片紫灰，与弹窗染色同语言 */
-  --np-surface: rgba(40, 38, 66, 0.55);
+     极光画布紫/绯红 → 卡片紫灰，与弹窗染色同语言；alpha 可调同浅色（--np-glass-alpha） */
+  --np-surface: rgba(40, 38, 66, var(--np-glass-alpha, 0.55));
   --np-surface-2: rgba(255, 255, 255, 0.07);
   --np-surface-glass-strong: rgba(30, 35, 50, 0.78);
   /* 弹窗染色极光玻璃深色映射：navy 顶 / 紫晕中 / 绯红底 */
@@ -456,8 +459,9 @@ html.glasswin.bp6-dark > body {
    重写五案深色时连带删除独立克隆规则而复发：盖板与画布是两层独立绘制，人肉
    同步必漏，成对规则 + winedgePair.test.ts 审计锁死）；② 蒙版并入背景合成
    层（原 body::before 独立层退役——盖板才能连蒙版一起克隆）；③ 常驻卡片
-   blur 22→32——高细节图片透过霜面呈噪点，深模糊抹平使各卡片均质（弹窗本就
-   blur40）；④ 浅色玻璃描边 --np-glass-ring 换白色内光 rgba(255,255,255,.35)
+   模糊 2026-11-19 起参数化（设置 → 外观 → 模糊强度，--np-glass-blur 内联
+   下发，恒压过本段样式表）——原 blur32 定档退役，高细节壁纸下噪点由用户
+   自调（建议 32）；④ 浅色玻璃描边 --np-glass-ring 换白色内光 rgba(255,255,255,.35)
    （暗 12% 线在亮图上成显眼暗线；macOS 亮墙纸同语言），深色 16% 白；⑤ 弹窗
    染色回中性白霜渐变（极光染色与任意自定义图色相错位），深色中性深霜。
    ④⑤ 必须含 body 直声明锚点（双锚点陷阱同前：--np-dialog-glass 深色块挂
@@ -483,17 +487,8 @@ html.glasswin[data-glassbg="custom"].bp6-dark .np-winedge-top {
       fixed,
     var(--glassbg-img) center / cover no-repeat fixed;
 }
-html.glasswin[data-glassbg="custom"] .np-titlebar,
-html.glasswin[data-glassbg="custom"] .np-pane,
-html.glasswin[data-glassbg="custom"] .np-side-card,
-html.glasswin[data-glassbg="custom"] .np-navtree,
-html.glasswin[data-glassbg="custom"] .np-shelf,
-html.glasswin[data-glassbg="custom"] .np-menupage,
-html.glasswin[data-glassbg="custom"] .np-gsearchpage,
-html.glasswin[data-glassbg="custom"] .np-clip {
-  -webkit-backdrop-filter: blur(32px) saturate(1.4);
-  backdrop-filter: blur(32px) saturate(1.4);
-}
+/* custom 卡片模糊走 --np-glass-blur 参数（卡片段统一规则已消费，不再覆写）；
+   custom 默认与全局同值 22px——高细节壁纸建议经设置调至 32 抹噪点 */
 html.glasswin[data-glassbg="custom"],
 html.glasswin[data-glassbg="custom"] > body {
   --np-glass-ring: rgba(255, 255, 255, 0.35);
@@ -548,8 +543,10 @@ html.glasswin .np-navtree,
 html.glasswin .np-shelf {
   background: var(--np-surface);
   border-color: var(--np-glass-ring);
-  -webkit-backdrop-filter: blur(22px) saturate(1.4);
-  backdrop-filter: blur(22px) saturate(1.4);
+  /* 模糊强度可调（2026-11-19 外观 tab）：--np-glass-blur 由 applyGlassParams
+     内联下发（0-48px），默认 22px = 既有定档；blur 0 = 不模糊纯霜面 */
+  -webkit-backdrop-filter: blur(var(--np-glass-blur, 22px)) saturate(1.4);
+  backdrop-filter: blur(var(--np-glass-blur, 22px)) saturate(1.4);
 }
 html.glasswin.bp6-dark .np-titlebar,
 html.glasswin.bp6-dark .np-pane,
@@ -577,8 +574,10 @@ html.glasswin .np-cal-hits {
   background: var(--np-surface-glass-strong);
   border-color: var(--np-glass-ring);
   box-shadow: var(--np-glass-shadow);
-  -webkit-backdrop-filter: blur(22px) saturate(1.4);
-  backdrop-filter: blur(22px) saturate(1.4);
+  /* 模糊随参数但保 8px 可读性下限（max() 钳制）：强霜浮层透底文字不可锐利
+     穿透（穿透病审计口径），参数低于 8 时浮层仍 8 */
+  -webkit-backdrop-filter: blur(max(var(--np-glass-blur, 22px), 8px)) saturate(1.4);
+  backdrop-filter: blur(max(var(--np-glass-blur, 22px), 8px)) saturate(1.4);
 }
 /* 弹窗染色极光玻璃（2026-11-18 用户定案 = 方案 C，design/dialog-glass-proposal-c-tinted.html）：
    background = --np-dialog-glass 主题化极光染色渐变；顶缘受光内高光补边界

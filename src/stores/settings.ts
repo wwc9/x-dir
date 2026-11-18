@@ -85,6 +85,8 @@ function toPlain(s: SettingsStore): Settings {  return {
     glassBg: s.glassBg,
     glassBgCustom: s.glassBgCustom,
     glassBgVeil: s.glassBgVeil,
+    glassBlur: s.glassBlur,
+    glassFrost: s.glassFrost,
     autostart: s.autostart,
     toolbarEntries: s.toolbarEntries,
     restoreLastSession: s.restoreLastSession,
@@ -292,6 +294,16 @@ export function applyGlassBg(bg: GlassBg, custom: string, veil: number) {
   }
 }
 
+/** 玻璃参数下发（2026-11-19 外观 tab 可调 = 模糊强度/霜面浓度）：html 内联
+ *  写 --np-glass-blur（卡片家族与强霜浮层 backdrop-filter 半径，弹窗恒 40
+ *  不随）与 --np-glass-alpha（卡片霜面 --np-surface 不透明度，强霜 0.78/
+ *  弹窗染色不随）。两 token 仅 html.glasswin 作用域消费，非毛玻璃模式无效 */
+export function applyGlassParams(blur: number, frost: number) {
+  const root = document.documentElement;
+  root.style.setProperty("--np-glass-blur", `${blur}px`);
+  root.style.setProperty("--np-glass-alpha", String(frost / 100));
+}
+
 export function applyTheme(theme: Settings["theme"]) {
   const dark =
     theme === "dark" ||
@@ -440,6 +452,10 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     merged.glassBgCustom =
       typeof merged.glassBgCustom === "string" ? merged.glassBgCustom : "";
     merged.glassBgVeil = clampMetric(merged.glassBgVeil, 0, 60, DEFAULT_SETTINGS.glassBgVeil);
+    // 玻璃参数钳制（2026-11-19 参数化）：模糊 0-48 / 霜面 20-80（下限 20 保
+    // 卡片可读性下限，脏数据回落默认）
+    merged.glassBlur = clampMetric(merged.glassBlur, 0, 48, DEFAULT_SETTINGS.glassBlur);
+    merged.glassFrost = clampMetric(merged.glassFrost, 20, 80, DEFAULT_SETTINGS.glassFrost);
     // 图标视图已删除（2026-10-13）：旧档存过 icons 时回落详细信息
     if ((merged.defaultView as string) === "icons") merged.defaultView = "details";
     // 截图十字辅助线（2026-11-11）：脏数据（非布尔，旧档缺键由 DEFAULT 兜底）
@@ -540,6 +556,7 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
       get().glassBgCustom,
       get().glassBgVeil,
     );
+    applyGlassParams(get().glassBlur, get().glassFrost);
   },
 
   update(p) {
@@ -560,6 +577,8 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
         get().glassBgCustom,
         get().glassBgVeil,
       );
+    if (p.glassBlur !== undefined || p.glassFrost !== undefined)
+      applyGlassParams(get().glassBlur, get().glassFrost);
     if (p.theme) applyTheme(p.theme);
     if (p.uiZoom !== undefined) applyZoom(p.uiZoom);
     if (p.uiRadius !== undefined || p.uiGap !== undefined)

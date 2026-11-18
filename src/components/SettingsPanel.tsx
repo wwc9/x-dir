@@ -389,6 +389,38 @@ export function SettingsPanel() {
                     onChange={(v) => s.update({ glassBg: v })}
                   />
                 </SetRow>
+                <SetRow
+                  label={t("模糊强度")}
+                  desc={t("玻璃卡片与浮层的实时模糊半径；0 = 不模糊，弹窗恒 40 保可读性")}
+                >
+                  <div className="np-set-slider">
+                    <Slider
+                      min={0}
+                      max={48}
+                      stepSize={1}
+                      labelValues={[]}
+                      value={s.glassBlur}
+                      onChange={(v) => s.update({ glassBlur: Array.isArray(v) ? v[0] : v })}
+                    />
+                    <span className="np-set-slider-val">{s.glassBlur} px</span>
+                  </div>
+                </SetRow>
+                <SetRow
+                  label={t("霜面浓度")}
+                  desc={t("玻璃卡片霜面的不透明度，越高越实、越低越透；弹窗与菜单恒强霜保可读性")}
+                >
+                  <div className="np-set-slider">
+                    <Slider
+                      min={20}
+                      max={80}
+                      stepSize={1}
+                      labelValues={[]}
+                      value={s.glassFrost}
+                      onChange={(v) => s.update({ glassFrost: Array.isArray(v) ? v[0] : v })}
+                    />
+                    <span className="np-set-slider-val">{s.glassFrost} %</span>
+                  </div>
+                </SetRow>
                 {s.glassBg === "custom" && (
                   <>
                     <SetRow
