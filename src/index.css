@@ -472,12 +472,21 @@ html.glasswin .np-addrwrap:not(:focus-within) .np-addr .bp6-input {
   color: transparent;
   caret-color: transparent;
 }
-/* 窗缘盖板：glasswin 下隐藏——实色/磨砂边条都会与四周渐变色相不一致
-   （顶缘落在蓝斑上呈蓝灰、左右底呈暖粉，用户放大实测明显），画布渐变
-   直通四缘才连续统一；代价 = 弹层 portal 瞬间的顶缘合成器毛刺线在此模式
-   裸露（间歇性、瞬态，可接受） */
+/* 窗缘盖板：glasswin 下四缘全隐会裸露顶缘合成器毛刺——portal 弹层触发时
+   WebView2 顶缘浮出 ~2px 蓝线（2026-10-17 定案的覆盖对象，当时标注「瞬态
+   可接受」，2026-11-18 用户实测悬浮窗格布局钮即现蓝条不再接受）。改仅恢复
+   顶缘 + 画布渐变克隆：与 body 同源 var(--np-bg) 走 background-attachment
+   fixed（定位区 = 视口，与 body 满视口盒同坐标系，顶栏应用永不滚动），
+   渐变像素逐点一致 → 不透明盖住毛刺且与极光色相无缝（实色/磨砂边条与四围
+   渐变色相不一致的问题不复存在）；:after 遮罩压暗同步逻辑照旧生效。
+   左右/底三缘维持隐藏（毛刺仅顶缘，余者仅 backdrop 外侧 1px 露底级别） */
 html.glasswin .np-winedge {
   display: none;
+}
+html.glasswin .np-winedge-top {
+  display: block;
+  background-image: var(--np-bg);
+  background-attachment: fixed;
 }
 .nofx-anim .bp6-popover,
 .nofx-anim .bp6-transition-container {
