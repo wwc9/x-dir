@@ -485,15 +485,15 @@ html.glasswin .np-tip {
   backdrop-filter: blur(22px) saturate(1.4);
 }
 /* 弹窗染色极光玻璃（2026-11-18 用户定案 = 方案 C，design/dialog-glass-proposal-c-tinted.html）：
-   background = --np-dialog-glass 主题化极光染色渐变；blur(40) saturate(1.8)
-   吃透背景色相；可读性由 glasswin 作用域加深的遮罩（0.45/0.55）兜底；
-   顶缘受光内高光补边界（深色按卡片家族口径 8% 白） */
+   background = --np-dialog-glass 主题化极光染色渐变；可读性由 glasswin 作用域
+   加深的遮罩（0.45/0.55）兜底；顶缘受光内高光补边界（深色按卡片家族口径 8% 白）。
+   ⚠ 根节点不得挂 backdrop-filter：含内嵌滚动容器即采样失效白板化（见下方
+   blur 挂载注释），白板基底会把头/尾染色区顶成灰白条带（2026-11-18 实测）；
+   blur 由 body 滚动容器 + 头/尾两段各自承担，三段统一 */
 html.glasswin .np-dialog {
   background: var(--np-dialog-glass);
   border-color: var(--np-glass-ring);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), var(--np-glass-shadow);
-  -webkit-backdrop-filter: blur(40px) saturate(1.8);
-  backdrop-filter: blur(40px) saturate(1.8);
 }
 html.glasswin.bp6-dark .np-dialog {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--np-glass-shadow);
@@ -502,8 +502,14 @@ html.glasswin.bp6-dark .np-dialog {
    backdrop-filter + 内嵌滚动容器」采样失效返回白色（2026-11-17 实测白板
    穿透，CDP 截图定位），滚动容器自身挂 blur 采样正常（右键菜单同模式已
    验证）；根节点保持无 blur + 染色玻璃面。blur 值与上方弹窗规则同源同值
-   （2026-11-18 方案 C：22→40 / 1.4→1.8），改一处必须改另一处 */
-html.glasswin .np-dialog .bp6-dialog-body-scroll-container {
+   （2026-11-18 方案 C：22→40 / 1.4→1.8），改一处必须改另一处。
+   ⚠ 头/尾两段同样必须自挂 blur（2026-11-18 用户反馈「弹窗顶部和底部不需要
+   单独的颜色，统一颜色」）：透明头/尾底下正是根节点白板基底 → 染色渐变
+   盖出灰白条带；两段不含滚动容器、采样正常，自挂同值 blur 后 = 模糊画布 +
+   根节点同一染色渐变，与 body 区颜色统一 */
+html.glasswin .np-dialog .bp6-dialog-body-scroll-container,
+html.glasswin .np-dialog .bp6-dialog-header,
+html.glasswin .np-dialog .bp6-dialog-footer {
   -webkit-backdrop-filter: blur(40px) saturate(1.8);
   backdrop-filter: blur(40px) saturate(1.8);
 }
