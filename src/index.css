@@ -446,25 +446,71 @@ html.glasswin.bp6-dark > body {
    data-glassbg 切 --np-bg 图案（浅/深双锚点——body 直声明陷阱同前，
    html.glasswin[data-glassbg=…] 与 > body 双写）；
    custom = 用户图片（asset 协议 convertFileSrc 转可展示 URL，applyGlassBg 下发
-   --glassbg-img）+ 可调蒙版（body::before 浅白/深黑随主题，浓度
-   --glassbg-veil 由 applyGlassBg 下发；z-index:-1 垫在内容之下、画布之上，
-   backdrop-filter 采样链含蒙版层）。零遮罩定案下弹窗/霜面在任意图案上自持
-   可读性；非 glasswin 模式画布恒实底，不受图案影响 ═══ */
-/* 自定义图片：画布换图（cover/fixed）+ body::before 可调蒙版（z:-1 垫内容
-   之下；浅色蒙白雾、深色蒙夜幕），blur 采样链含蒙版层 */
+   --glassbg-img）+ 可调蒙版（浓度 --glassbg-veil 由 applyGlassBg 下发，并入
+   画布背景合成层，backdrop-filter 采样链含蒙版）。零遮罩定案下弹窗/霜面在
+   任意图案上自持可读性；非 glasswin 模式画布恒实底，不受图案影响 ═══ */
+/* ═══ 自定义图片模式适配（2026-11-18 用户 vivid 壁纸四问题；2026-11-19 根治
+   重构）：① 画布 = 蒙版层 + 图片两层合成，body 与顶缘盖板 .np-winedge-top
+   在同一条规则内成对逐字同源消费（fixed 同视口坐标系 → 像素逐点一致，盖板
+   无缝隐入画布、「顶部白条」结构性不可能复发——2026-11-18 曾因 166aaeb
+   重写五案深色时连带删除独立克隆规则而复发：盖板与画布是两层独立绘制，人肉
+   同步必漏，成对规则 + winedgePair.test.ts 审计锁死）；② 蒙版并入背景合成
+   层（原 body::before 独立层退役——盖板才能连蒙版一起克隆）；③ 常驻卡片
+   blur 22→32——高细节图片透过霜面呈噪点，深模糊抹平使各卡片均质（弹窗本就
+   blur40）；④ 浅色玻璃描边 --np-glass-ring 换白色内光 rgba(255,255,255,.35)
+   （暗 12% 线在亮图上成显眼暗线；macOS 亮墙纸同语言），深色 16% 白；⑤ 弹窗
+   染色回中性白霜渐变（极光染色与任意自定义图色相错位），深色中性深霜。
+   ④⑤ 必须含 body 直声明锚点（双锚点陷阱同前：--np-dialog-glass 深色块挂
+   body 直声明，html 级覆写压不过——2026-11-18 原版只挂 html，深色弹窗实际
+   仍极光染色，本次一并修正） */
+html.glasswin[data-glassbg="custom"] > body,
+html.glasswin[data-glassbg="custom"] .np-winedge-top {
+  background:
+    linear-gradient(
+      rgba(255, 255, 255, var(--glassbg-veil, 0.35)),
+      rgba(255, 255, 255, var(--glassbg-veil, 0.35))
+    )
+      fixed,
+    var(--glassbg-img) center / cover no-repeat fixed;
+}
+html.glasswin[data-glassbg="custom"].bp6-dark > body,
+html.glasswin[data-glassbg="custom"].bp6-dark .np-winedge-top {
+  background:
+    linear-gradient(
+      rgba(8, 12, 20, var(--glassbg-veil, 0.3)),
+      rgba(8, 12, 20, var(--glassbg-veil, 0.3))
+    )
+      fixed,
+    var(--glassbg-img) center / cover no-repeat fixed;
+}
+html.glasswin[data-glassbg="custom"] .np-titlebar,
+html.glasswin[data-glassbg="custom"] .np-pane,
+html.glasswin[data-glassbg="custom"] .np-side-card,
+html.glasswin[data-glassbg="custom"] .np-navtree,
+html.glasswin[data-glassbg="custom"] .np-shelf,
+html.glasswin[data-glassbg="custom"] .np-menupage,
+html.glasswin[data-glassbg="custom"] .np-gsearchpage,
+html.glasswin[data-glassbg="custom"] .np-clip {
+  -webkit-backdrop-filter: blur(32px) saturate(1.4);
+  backdrop-filter: blur(32px) saturate(1.4);
+}
+html.glasswin[data-glassbg="custom"],
 html.glasswin[data-glassbg="custom"] > body {
-  background: var(--glassbg-img) center / cover no-repeat fixed;
+  --np-glass-ring: rgba(255, 255, 255, 0.35);
+  --np-dialog-glass: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.85),
+    rgba(255, 255, 255, 0.72)
+  );
 }
-html.glasswin[data-glassbg="custom"] > body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background: rgba(255, 255, 255, var(--glassbg-veil, 0.25));
-}
-html.glasswin[data-glassbg="custom"].bp6-dark > body::before {
-  background: rgba(8, 12, 20, var(--glassbg-veil, 0.3));
+html.glasswin[data-glassbg="custom"].bp6-dark,
+html.glasswin[data-glassbg="custom"].bp6-dark > body {
+  --np-glass-ring: rgba(255, 255, 255, 0.16);
+  --np-dialog-glass: linear-gradient(
+    165deg,
+    rgba(30, 35, 50, 0.85),
+    rgba(36, 41, 55, 0.72)
+  );
 }
 
 /* glasswin 零遮罩（2026-11-18 用户定案 = 遮罩方案 A，design/modal-scrim-proposal-a-noscrim.html）：
@@ -604,7 +650,11 @@ html.glasswin .np-addrwrap:not(:focus-within) .np-addr .bp6-input {
    fixed（定位区 = 视口，与 body 满视口盒同坐标系，顶栏应用永不滚动），
    渐变像素逐点一致 → 不透明盖住毛刺且与极光色相无缝（实色/磨砂边条与四围
    渐变色相不一致的问题不复存在）；:after 遮罩压暗同步逻辑照旧生效。
-   左右/底三缘维持隐藏（毛刺仅顶缘，余者仅 backdrop 外侧 1px 露底级别） */
+   左右/底三缘维持隐藏（毛刺仅顶缘，余者仅 backdrop 外侧 1px 露底级别）。
+   ⚠ 2026-11-19 起自定义图片模式的顶缘克隆收进 glassbg 段 custom 成对规则
+   （body + .np-winedge-top 同规则逐字同源；2026-11-18 独立克隆规则曾被
+   166aaeb 连带删除致「顶栏白条」复发），新增画布配方必须成对改两处，
+   winedgePair.test.ts 审计锁死 */
 html.glasswin .np-winedge {
   display: none;
 }

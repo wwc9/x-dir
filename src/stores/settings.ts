@@ -271,7 +271,8 @@ export function applyWindowGlass(mode: Settings["windowGlass"]) {
 
 /** 玻璃背景图案应用（2026-11-18）：html 挂 data-glassbg（CSS 按 attr 切
  *  --np-bg 图案块）；custom 模式经 asset 协议把用户图片转可展示 URL 写入
- *  --glassbg-img，蒙版浓度写 --glassbg-veil（CSS body::before 蒙版消费）。
+ *  --glassbg-img，蒙版浓度写 --glassbg-veil（CSS 画布背景合成层消费——body
+ *  与顶缘盖板成对规则，见 index.css glassbg 段 custom 块）。
  *  asset 协议 scope = **（tauri.conf.json），生产/开发均可达 */
 export function applyGlassBg(bg: GlassBg, custom: string, veil: number) {
   const root = document.documentElement;
