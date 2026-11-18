@@ -1139,6 +1139,13 @@ body:has(
     display: none;
   }
 }
+/* ≤300 深水档（dpr 叠加超放大，CSS 视口 ~215）：仅留 logo/设置/窗口控制 */
+@container np-tb (max-width: 300px) {
+  .np-titlebar .np-title,
+  .np-titlebar .np-theme-btn {
+    display: none;
+  }
+}
 .np-island.is-clickable {
   cursor: pointer;
 }

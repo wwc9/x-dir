@@ -586,6 +586,7 @@ export function TitleBar() {
         minimal
         size="small"
         icon={ic(isDark ? Sun : Moon)}
+        className="np-theme-btn"
         data-tip={isDark ? t("切换为浅色主题") : t("切换为深色主题")}
         onClick={(e) => {
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
