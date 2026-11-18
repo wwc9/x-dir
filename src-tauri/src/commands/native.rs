@@ -40,6 +40,39 @@ pub fn set_border_color(app: AppHandle, color: u32) {
     let _ = (color, app);
 }
 
+/// Win11 系统级窗口圆角（2026-11-18 外观打磨）：无边框窗默认直角，渐变画布
+/// 铺满全窗后直角观感被放大（用户反馈「右上角好像是直角」）。交还给系统做
+/// 原生圆角——四角一致、抗锯齿、阴影跟随。Win10 无此属性静默忽略保持直角；
+/// shot-* 全屏覆盖层窗不参与（贴屏直角是正确形态）。幂等，可反复刷
+pub fn apply_rounded_corners(app: &AppHandle) {
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::Graphics::Dwm::{
+            DWM_WINDOW_CORNER_PREFERENCE, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND,
+            DwmSetWindowAttribute,
+        };
+        for (name, w) in app.webview_windows() {
+            if name.starts_with("shot") {
+                continue;
+            }
+            if let Ok(hwnd) = w.hwnd() {
+                let pref = DWMWCP_ROUND;
+                unsafe {
+                    let _ = DwmSetWindowAttribute(
+                        HWND(hwnd.0),
+                        DWMWA_WINDOW_CORNER_PREFERENCE,
+                        &pref as *const DWM_WINDOW_CORNER_PREFERENCE as *const std::ffi::c_void,
+                        std::mem::size_of::<DWM_WINDOW_CORNER_PREFERENCE>() as u32,
+                    );
+                }
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = app;
+}
+
 /// 弹出系统原生右键菜单（Shift+右键 / “显示更多选项”入口）。
 /// 模态阻塞直至菜单关闭；坐标取实时光标位置。
 #[tauri::command]

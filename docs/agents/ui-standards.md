@@ -247,4 +247,5 @@
 - **子面玻璃化**：`--np-surface-2` 填充面（输入框/地址 pill/缩放钮/chip/空态徽标等）在 glasswin 下换半透明白（浅 rgba(255,255,255,0.45) / 深 rgba(255,255,255,0.07)）呈现玻璃子面——子面都叠在已模糊的卡片面上，透出柔化色无文字穿透风险；窗格导航栏 `.np-nav` 默认透明裸条，glasswin 下铺 surface-2 玻璃条；虚拟列表行不挂模糊；`.np-winedge` 窗缘盖板改磨砂玻璃边框（强霜半透明 + blur 采样渐变边缘，消除实色条与渐变色相错位，四缘统一玻璃框语言，仍覆盖 WebView2 缘合线）。
 - **⚠ 地址双层面遮盖依赖**：`.np-addr-crumbs`（absolute inset-0）覆盖在地址输入上方，靠**不透明 surface-2 底**遮住下层输入文字——surface-2 半透明化后该遮盖失效（两层文字透叠，2026-11-17 实测）。修复 = glasswin 下未聚焦时输入文字转透明：`html.glasswin .np-addrwrap:not(:focus-within) .np-addr .bp6-input { color/caret: transparent }`（聚焦即编辑态，crumbs 已移除、输入恢复原色）。**凡叠加遮盖类子面改半透明前，先排查其是否依赖不透明底遮盖下层内容**。
 - **⚠ dark 类挂 html+body 两处陷阱**：`.dark` token 块在 body 直接声明 --np-bg/--np-surface，直接声明恒压过 html 继承——glasswin 覆写必须含 `html.glasswin > body` 直接声明体，漏写则浅色正常、深色整段失效回实底。
+- **窗口四角（系统级圆角，2026-11-18）**：主窗与剪贴板浮窗经 `DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND` 交给 Win11 做原生圆角（四角一致 + 抗锯齿 + 阴影跟随；无边框窗默认直角，渐变画布铺满全窗后直角观感被放大）。实现 = `commands/native.rs apply_rounded_corners`（遍历全窗排除 shot-* 全屏覆盖层），setup 主窗立即刷 + clip 窗建完补刷；Win10 无此属性静默忽略保持直角；贴图窗保持现状。
 - **性能**：模糊对象 = 卡片背后静态渐变，列表滚动不触发重模糊（合成层缓存）；常驻卡片挂 blur 为用户定案接受的成本，低性能档整段自动关对冲。

@@ -134,12 +134,16 @@ pub fn run() {
                 // WebView 建窗各耗数百 ms 且必须落在主线程，同一闭包连续建
                 // 两窗会把停顿叠加成一个长卡顿；分批后中间主循环可呼吸。
                 // 常驻停靠屏幕外，热键呼出只是一次原子移动；失败不致命
+                // Win11 系统级窗口圆角：主窗立即刷（shot 覆盖层窗排除）
+                commands::native::apply_rounded_corners(&shot_prewarm);
                 std::thread::sleep(std::time::Duration::from_millis(1000));
                 let h2 = shot_prewarm.clone();
                 let _ = shot_prewarm.run_on_main_thread(move || {
                     if let Err(e) = cliphist::ensure_clip_window(&h2) {
                         log::warn!("剪贴板浮窗预热失败：{e}");
                     }
+                    // clip 窗就绪，补刷系统级圆角（helper 遍历全窗幂等）
+                    commands::native::apply_rounded_corners(&h2);
                 });
                 // DXGI 复制会话保活预热（感知延迟二期）：哑捕获一帧把设备/
                 // 驱动/首帧合成全部热好，消掉首按 380ms 初始化罚金
