@@ -1,11 +1,25 @@
 import { create } from "zustand";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 
-import { api, DEFAULT_SETTINGS, THIS_PC, type MenuEntry, type Settings, type TagColor } from "../lib/ipc";
+import { api, DEFAULT_SETTINGS, THIS_PC, type GlassBg, type MenuEntry, type Settings, type TagColor } from "../lib/ipc";
 
 /** 任务分类可用色（2026-11-18 自 SettingsPanel 提升单源：设置规则调色板与日历页分类管理共用） */
+/** 玻璃背景图案选项（2026-11-18 六案+极光基座+自定义图片，设置 → 外观 → 毛玻璃） */
+export const GLASS_BGS: { key: GlassBg; label: string }[] = [
+  { key: "aurora", label: "极光（默认）" },
+  { key: "dawn", label: "云隙晨光" },
+  { key: "ribbon", label: "极光绸带" },
+  { key: "geo", label: "几何构成" },
+  { key: "silk", label: "绸缎流波" },
+  { key: "blueprint", label: "点阵蓝图" },
+  { key: "mountain", label: "暮山层影" },
+  { key: "custom", label: "自定义图片" },
+];
+const GLASS_BG_KEYS = GLASS_BGS.map((x) => x.key);
+
 export const TAG_COLORS: { key: TagColor; label: string }[] = [
   { key: "red", label: "红" },
   { key: "orange", label: "橙" },
@@ -73,6 +87,9 @@ function toPlain(s: SettingsStore): Settings {  return {
     fxGlass: s.fxGlass,
     fxAnim: s.fxAnim,
     windowGlass: s.windowGlass,
+    glassBg: s.glassBg,
+    glassBgCustom: s.glassBgCustom,
+    glassBgVeil: s.glassBgVeil,
     autostart: s.autostart,
     toolbarEntries: s.toolbarEntries,
     restoreLastSession: s.restoreLastSession,
@@ -257,6 +274,28 @@ export function applyWindowGlass(mode: Settings["windowGlass"]) {
   document.documentElement.classList.toggle("glasswin", mode !== "off");
 }
 
+/** 玻璃背景图案应用（2026-11-18）：html 挂 data-glassbg（CSS 按 attr 切
+ *  --np-bg 图案块）；custom 模式经 asset 协议把用户图片转可展示 URL 写入
+ *  --glassbg-img，蒙版浓度写 --glassbg-veil（CSS body::before 蒙版消费）。
+ *  asset 协议 scope = **（tauri.conf.json），生产/开发均可达 */
+export function applyGlassBg(bg: GlassBg, custom: string, veil: number) {
+  const root = document.documentElement;
+  root.dataset.glassbg = bg;
+  root.style.setProperty("--glassbg-veil", String(veil / 100));
+  if (bg === "custom" && custom) {
+    try {
+      root.style.setProperty(
+        "--glassbg-img",
+        `url("${convertFileSrc(custom)}")`,
+      );
+    } catch {
+      root.style.removeProperty("--glassbg-img");
+    }
+  } else {
+    root.style.removeProperty("--glassbg-img");
+  }
+}
+
 export function applyTheme(theme: Settings["theme"]) {
   const dark =
     theme === "dark" ||
@@ -398,6 +437,13 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     // 窗口毛玻璃档位脏值回落关（旧档未知串/OS 方案旧枚举 mica/acrylic 同回落）
     if (merged.windowGlass !== "off" && merged.windowGlass !== "on")
       merged.windowGlass = "off";
+    // 玻璃背景图案白名单回落极光；自定义图片路径须为字符串；蒙版 0-60
+    merged.glassBg = GLASS_BG_KEYS.includes(merged.glassBg)
+      ? merged.glassBg
+      : "aurora";
+    merged.glassBgCustom =
+      typeof merged.glassBgCustom === "string" ? merged.glassBgCustom : "";
+    merged.glassBgVeil = clampMetric(merged.glassBgVeil, 0, 60, DEFAULT_SETTINGS.glassBgVeil);
     // 图标视图已删除（2026-10-13）：旧档存过 icons 时回落详细信息
     if ((merged.defaultView as string) === "icons") merged.defaultView = "details";
     // 截图十字辅助线（2026-11-11）：脏数据（非布尔，旧档缺键由 DEFAULT 兜底）
@@ -493,6 +539,11 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     applyMetrics(get().uiRadius, get().uiGap);
     applyPerfFx(get().fxGlass, get().fxAnim);
     applyWindowGlass(get().windowGlass);
+    applyGlassBg(
+      get().glassBg,
+      get().glassBgCustom,
+      get().glassBgVeil,
+    );
   },
 
   update(p) {
@@ -503,6 +554,16 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     set(p);
     if (!get().loaded) return;
     if (p.windowGlass !== undefined) applyWindowGlass(get().windowGlass);
+    if (
+      p.glassBg !== undefined ||
+      p.glassBgCustom !== undefined ||
+      p.glassBgVeil !== undefined
+    )
+      applyGlassBg(
+        get().glassBg,
+        get().glassBgCustom,
+        get().glassBgVeil,
+      );
     if (p.theme) applyTheme(p.theme);
     if (p.uiZoom !== undefined) applyZoom(p.uiZoom);
     if (p.uiRadius !== undefined || p.uiGap !== undefined)

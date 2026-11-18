@@ -492,6 +492,8 @@
 
 ### 12.9 窗口毛玻璃（设置 → 外观，2026-11-17 用户定案 = 渐变底 + 窗格霜玻璃，纯 CSS）
 
+- **背景图案七选一 + 自定义图片（2026-11-18 用户六案比选接入）**：设置 → 外观 →「背景图案」NpSelect——极光（默认基座）/ 云隙晨光 dawn / 极光绸带 ribbon / 几何构成 geo / 绸缎流波 silk / 点阵蓝图 blueprint / 暮山层影 mountain（全部纯 CSS 渐变浅深双锚点，data-glassbg 切 `--np-bg` 图案块）+ 自定义图片（`glassBgCustom` 存本机绝对路径，asset 协议 `convertFileSrc` 转 `--glassbg-img` 铺 canvas + `glassBgVeil` 0-60 可调蒙版 `body::before` 浅白/深黑保可读性）；三字段 `settings.glassBg*` 经 `applyGlassBg` 统一下发（load/update 两挂载点）。设计预览 design/glassbg-proposals-all.html（六案切换画廊 + 单案六文件）。仅毛玻璃模式生效（rows 门禁 windowGlass === on）；图案为纯 CSS，无外部资源、离线可用。
+
 **组件与模块**：`stores/settings.ts`（windowGlass off/on 字段 + `applyWindowGlass` 纯根类切换）+ `lib/ipc.ts`（Rust 侧 settings.json 为无类型 JSON blob，新字段免改 Rust）+ index.css `html.glasswin` 段（渐变画布 + backdrop-filter 卡片家族）。已试作并撤除 OS 路线（tauri windowEffects Mica/Acrylic + window-vibrancy 直连）：WebView2 子窗口合成下 DWM backdrop 不透出、调度层 `let _ =` 丢错误不可诊断、叠加能力权限门禁三重静默失效——用户真实设想是应用内渐变底 + 窗格模糊，纯 CSS 即可完整达成。
 
 - **机制**：glasswin 根类下画布 `--np-bg` 换极光渐变（径向色斑 + 线性基底，深浅主题各一套），主卡片（顶栏 .np-titlebar / 窗格 .np-pane / 边栏三卡 .np-side-card·.np-navtree·.np-shelf）+ Dialog + 全部菜单（.bp6-menu）经 token 换 `--np-glass` 半透明底并挂 `backdrop-filter: blur(22px) saturate(1.4)` 实时模糊渐变底——backdrop-filter 只采样页内内容，渐变在页内所以有效，不依赖 OS 合成器；填充输入面 `--np-surface-2` 保持实底保证可读。

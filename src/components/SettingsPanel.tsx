@@ -22,6 +22,7 @@ import {
   Gauge,
   FolderOpen,
   Keyboard,
+  ImagePlus,
   Palette,
   Plus,
   Search,
@@ -38,11 +39,12 @@ import { hotkeySpecs } from "../lib/hotkey";
 import { setThemeWithFx, useSettings } from "../stores/settings";
 import { confirmDialog, useUi } from "../stores/ui";
 import { AppIcon, ic } from "./AppIcon";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { HotkeyRecorder } from "./HotkeyRecorder";
 import { Seg } from "./ImgDialogs";
 import { PERF_TABLE, detectTier, resolvePerf, type PerfTier } from "../lib/perf";
 import { NpSelect } from "./NpSelect";
-import { TAG_COLORS } from "../stores/settings";
+import { GLASS_BGS, TAG_COLORS } from "../stores/settings";
 
 const VIEW_LABELS: Record<ViewMode, string> = {
   list: "列表",
@@ -385,6 +387,66 @@ export function SettingsPanel() {
                 }}
               />
             </SetRow>
+                        {/* 玻璃背景图案（2026-11-18 六案+自定义图片）：仅毛玻璃模式生效 */}
+            {s.windowGlass === "on" && (
+              <>
+                <SetRow label={t("背景图案")} desc={t("毛玻璃画布的背景图案，任意图案下弹窗与霜面均可读")}>
+                  <NpSelect
+                    value={s.glassBg}
+                    options={GLASS_BGS.map((x) => ({ value: x.key, label: t(x.label) }))}
+                    onChange={(v) => s.update({ glassBg: v })}
+                  />
+                </SetRow>
+                {s.glassBg === "custom" && (
+                  <>
+                    <SetRow
+                      label={t("自定义图片")}
+                      desc={t("选择本机图片作为毛玻璃画布；路径持久化，移动原文件后需重新选择")}
+                    >
+                      <Button
+                        minimal
+                        size="small"
+                        icon={ic(ImagePlus)}
+                        data-tip={t("选择背景图片")}
+                        onClick={async () => {
+                          const sel = await openFileDialog({
+                            title: t("选择背景图片"),
+                            multiple: false,
+                            directory: false,
+                            filters: [
+                              {
+                                name: t("图片"),
+                                extensions: ["png", "jpg", "jpeg", "webp", "bmp", "gif"],
+                              },
+                            ],
+                          });
+                          if (typeof sel === "string")
+                            s.update({ glassBgCustom: sel, glassBgVeil: s.glassBgVeil });
+                        }}
+                      >
+                        {t("选择图片")}
+                      </Button>
+                    </SetRow>
+                    <SetRow
+                      label={t("蒙版浓度")}
+                      desc={t("叠加在自定义图片上的可读性蒙版（浅色蒙白雾、深色蒙夜幕）")}
+                    >
+                      <div className="np-set-slider">
+                        <Slider
+                          min={0}
+                          max={60}
+                          stepSize={1}
+                          labelValues={[]}
+                          value={s.glassBgVeil}
+                          onChange={(v) => s.update({ glassBgVeil: Array.isArray(v) ? v[0] : v })}
+                        />
+                        <span className="np-set-slider-val">{s.glassBgVeil} %</span>
+                      </div>
+                    </SetRow>
+                  </>
+                )}
+              </>
+            )}
           </>
         )}
         {tab === "perf" && (
