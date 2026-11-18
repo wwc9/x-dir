@@ -530,6 +530,13 @@ html.glasswin .np-dialog .bp6-dialog-footer {
   backdrop-filter: blur(40px) saturate(1.8);
   transform: translateZ(0);
 }
+/* 快速预览为定高弹窗（78vh）：Blueprint 给载体自带 max-height:70vh + padding，
+   定高 >70vh 时载体铺不满、弹窗底部留一条无模糊空窗（背后文字穿透，
+   2026-11-18 用户实测）。glasswin 下解除高度帽令载体满高铺展；padding 16px
+   为内容与玻璃缘的内缩，保留（blur 覆盖 padding 区） */
+html.glasswin .np-dialog.np-pv .bp6-dialog-body-scroll-container {
+  max-height: none;
+}
 /* 窗格导航栏（地址行）：glasswin 下铺 surface-2 玻璃子面条（默认透明裸条
    在渐变画布上显得未处理），底发丝线保留 */
 html.glasswin .np-nav {
