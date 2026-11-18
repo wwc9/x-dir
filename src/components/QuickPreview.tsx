@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../lib/i18n";
-import { Button, Dialog, InputGroup } from "@blueprintjs/core";
+import { Button, Dialog, DialogBody, InputGroup } from "@blueprintjs/core";
 import {
   ChevronDown,
   ChevronLeft,
@@ -222,7 +222,7 @@ export function QuickPreviewHost() {
       isCloseButtonShown={false}
     >
       {entry && spec && (
-        <div className="np-pv">
+        <DialogBody className="np-pv">
           <header className="np-pv-head">
             <AppIcon icon={spec.icon} size={DENSITY.iconMd} colorVar={spec.colorVar} />
             <span className="np-pv-name np-ellipsis">{entry.name}</span>
@@ -386,7 +386,7 @@ export function QuickPreviewHost() {
               {index + 1} / {queue.length}
             </span>
           </footer>
-        </div>
+        </DialogBody>
       )}
     </Dialog>
   );
