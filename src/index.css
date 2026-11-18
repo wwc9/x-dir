@@ -223,8 +223,11 @@ body {
    滚动条伪元素重绘；祖先 :hover 变化在 Chromium 中不会，故不用 CSS :hover）；
    Chromium 不支持滚动条伪元素过渡，显隐为瞬时切换 */
 ::-webkit-scrollbar {
+  /* 纵横同粗 10px（2026-11-18 用户反馈窗格横/纵滚动条粗细不一致——旧值
+     height: 8px）；横向向上对齐：纵向 10px 槽已入列宽布局假设（.np-rows
+     表头右侧 24 = 14 + 10 滚动条槽），动纵不动横 */
   width: 10px;
-  height: 8px;
+  height: 10px;
 }
 ::-webkit-scrollbar-thumb {
   background: transparent;
