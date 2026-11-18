@@ -52,11 +52,31 @@ pub fn apply_rounded_corners(app: &AppHandle) {
             DWM_WINDOW_CORNER_PREFERENCE, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND,
             DwmSetWindowAttribute,
         };
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GWL_STYLE, GetWindowLongPtrW, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+            SetWindowLongPtrW, SetWindowPos, WS_THICKFRAME,
+        };
         for (name, w) in app.webview_windows() {
             if name.starts_with("shot") {
                 continue;
             }
             if let Ok(hwnd) = w.hwnd() {
+                // ⚠ 无边框窗（WS_POPUP、缺 WS_THICKFRAME 框架样式）会被系统忽略
+                // 圆角偏好——补 thickframe 样式位 + FRAMECHANGED 才能让 DWM 圆角
+                // 真正渲染（原生边缘缩放/阴影亦随 thickframe 恢复）
+                unsafe {
+                    let style = GetWindowLongPtrW(HWND(hwnd.0), GWL_STYLE);
+                    SetWindowLongPtrW(HWND(hwnd.0), GWL_STYLE, style | WS_THICKFRAME.0 as isize);
+                    let _ = SetWindowPos(
+                        HWND(hwnd.0),
+                        Some(HWND(hwnd.0)),
+                        0,
+                        0,
+                        0,
+                        0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED,
+                    );
+                }
                 let pref = DWMWCP_ROUND;
                 unsafe {
                     let _ = DwmSetWindowAttribute(

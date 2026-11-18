@@ -470,13 +470,12 @@ html.glasswin .np-addrwrap:not(:focus-within) .np-addr .bp6-input {
   color: transparent;
   caret-color: transparent;
 }
-/* 窗缘盖板：glasswin 下改磨砂玻璃边框——强霜半透明 + backdrop blur 采样
-   渐变边缘（实色条与渐变色相错位的旧问题消除），四缘统一「玻璃框」语言，
-   仍覆盖 WebView2 缘合线 */
+/* 窗缘盖板：glasswin 下隐藏——实色/磨砂边条都会与四周渐变色相不一致
+   （顶缘落在蓝斑上呈蓝灰、左右底呈暖粉，用户放大实测明显），画布渐变
+   直通四缘才连续统一；代价 = 弹层 portal 瞬间的顶缘合成器毛刺线在此模式
+   裸露（间歇性、瞬态，可接受） */
 html.glasswin .np-winedge {
-  background: var(--np-surface-glass-strong);
-  -webkit-backdrop-filter: blur(22px) saturate(1.4);
-  backdrop-filter: blur(22px) saturate(1.4);
+  display: none;
 }
 .nofx-anim .bp6-popover,
 .nofx-anim .bp6-transition-container {
