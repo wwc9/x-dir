@@ -38,8 +38,9 @@ export function resolvePerf(mode: PerfMode, tier: PerfTier): PerfTier {
 
 /** 两档预设（写入对应设置项；高性能 = 出厂默认值）。
  *  剪贴板历史常驻浮窗是第二个 WebView 进程，弱机内存开销显著；
- *  窗口毛玻璃属全窗模糊合成开销，低配强制关；高性能档不含此键 = 不重置
- *  用户显式开启的选择 */
+ *  窗口毛玻璃属全窗模糊合成开销，低配强制关。
+ *  2026-11-18 用户定案「点击档位切换相应设置项」：两档对称切换——
+ *  高性能 = 毛玻璃开（背景图案为用户审美选择不重置），低性能 = 毛玻璃关 */
 export const PERF_PRESET: Record<PerfTier, Partial<Settings>> = {
   high: {
     showFolderSize: true,
@@ -48,6 +49,7 @@ export const PERF_PRESET: Record<PerfTier, Partial<Settings>> = {
     cliphistEnabled: true,
     fxGlass: true,
     fxAnim: true,
+    windowGlass: "on",
   },
   low: {
     showFolderSize: false,
@@ -94,7 +96,7 @@ export const PERF_TABLE: { label: string; high: string; low: string }[] = [
   },
   {
     label: "窗口毛玻璃",
-    high: "可选（设置 → 外观）",
+    high: "开（背景图案可在设置 → 外观更换）",
     low: "关（省一层模糊合成）",
   },
 ];

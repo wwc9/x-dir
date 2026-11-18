@@ -71,15 +71,21 @@ describe("resolvePerf 与两档预设", () => {
     expect(resolvePerf("high", "low")).toBe("high");
     expect(resolvePerf("low", "high")).toBe("low");
   });
-  it("预设联动项：高性能全开，低配全关；窗口毛玻璃仅低配强制关", () => {
+  it("预设联动项：高性能全开，低配全关；窗口毛玻璃两档对称切换（2026-11-18 用户定案）", () => {
     const highKeys = Object.keys(PERF_PRESET.high);
     for (const k of highKeys) {
       const key = k as keyof typeof PERF_PRESET.high;
+      // windowGlass 为三值字段（"on"/"off"）：高性能开、低配关
+      if (key === "windowGlass") {
+        expect(PERF_PRESET.high.windowGlass).toBe("on");
+        expect(PERF_PRESET.low.windowGlass).toBe("off");
+        continue;
+      }
       expect(PERF_PRESET.high[key]).toBe(true);
       expect(PERF_PRESET.low[key]).toBe(false);
     }
-    // 窗口毛玻璃：低配强制关（系统合成器开销）；高性能不含此键 = 不重置用户显式选择
+    // 窗口毛玻璃：低配强制关（系统合成器开销）；高性能开——档位点击切换相应设置项
+    expect(PERF_PRESET.high.windowGlass).toBe("on");
     expect(PERF_PRESET.low.windowGlass).toBe("off");
-    expect(highKeys).not.toContain("windowGlass");
   });
 });

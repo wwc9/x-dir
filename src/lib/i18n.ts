@@ -1372,7 +1372,7 @@ export const EN: Record<string, string> = {
     "A soft gradient fills the canvas; panes and overlays frost-blur over it. Auto-off in low-performance mode.",
   "仅高性能模式可用；当前为低性能档，已自动关闭":
     "Available in high-performance mode only; the current low tier keeps it off.",
-  "可选（设置 → 外观）": "Optional (Settings → Appearance)",
+  "开（背景图案可在设置 → 外观更换）": "On (change the background pattern in Settings → Appearance)",
   "关（省一层模糊合成）": "Off (saves one blur-compositing layer)",
   "清单已导出：{name}（{n} 项）": "List exported: {name} ({n} items)",
   "清理历史条目": "Clear history entries",
