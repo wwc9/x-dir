@@ -60,12 +60,17 @@ interface DriveLite {
   label: string;
 }
 
-/** 自绘顶栏（2026-11-11 方案 A 三段居中定案）：grid 1fr auto 1fr 三段——
- *  左 = 品牌 + 三组（每组三个图标，2026-11-14 用户定案）：弹层组（浏览记录/
- *  收藏/布局预设）| 视图与捕获组（导航树/全盘搜索/截图）| 会话工具组（剪贴板/
- *  工作日历/定制）；中 = 灵动岛严格水平居中；右 = 设置/关于 + 系统态
- *  （缩放/主题/语言）+ 窗口控制。段容器与段尾 np-tb-fill 弹性补白均带
- *  拖拽区：顶栏空白处可拖动窗口、双击最大化/还原 */
+/** 自绘顶栏（2026-11-11 方案 A 三段居中定案）：三段网格挂 np-tb-grid 内衬层
+ *  （2026-11-18 改：容器查询不能样式化容器自身，且中岛撤收后右轨 1fr 转
+ *  auto、左轨独享全部余量——旧 1fr auto 1fr 的空轨白吃一半余量，深水档左段
+ *  提前挤爆）——左 = 品牌 + 三组（每组三个图标，2026-11-14 用户定案）：弹层
+ *  组（浏览记录/收藏/布局预设）| 视图与捕获组（导航树/全盘搜索/截图）| 会话
+ *  工具组（剪贴板/工作日历/定制）；中 = 灵动岛严格水平居中；右 = 设置/关于 +
+ *  系统态（缩放/主题/语言）+ 窗口控制。高缩放渐进收纳口径单源 index.css
+ *  「顶栏渐进收纳」段：分组分隔线挂同名 data-tb 随组同收（孤儿线防护），
+ *  深水档保三段 = logo | 搜索钮 | 设置+窗口控制（2026-11-18 用户定案）。
+ *  段容器与段尾 np-tb-fill 弹性补白均带拖拽区：顶栏空白处可拖动窗口、
+ *  双击最大化/还原 */
 export function TitleBar() {
   const [drives, setDrives] = useState<DriveLite[]>([]);
   const [known, setKnown] = useState<Record<string, string>>({});
@@ -210,6 +215,9 @@ export function TitleBar() {
           }
         }}
     >
+      {/* 三段网格内衬：gap 区拖拽由本层承载（属性语义与 header 同），详见
+          .np-tb-grid 注释 */}
+      <div className="np-tb-grid" data-tauri-drag-region>
       {/* ── 左段：品牌 + 弹层组 + 模式组 ── */}
       <div className="np-tb-side np-tb-l" data-tauri-drag-region>
       {/* 品牌标：九宫格对角渐变（与应用/任务栏图标同源，BrandLogo 与「关于」浮窗共用） */}
@@ -217,7 +225,8 @@ export function TitleBar() {
         <BrandLogo />
       </span>
       <span className="np-title">X-Dir</span>
-      <span className="np-tb-sep" aria-hidden />
+      {/* 分隔线随弹层组同收（data-tb=pop，≤780）：组界消失线不留孤儿 */}
+      <span className="np-tb-sep" aria-hidden data-tb="pop" />
 
       <PopoverNext
         isOpen={histOpen}
@@ -410,14 +419,15 @@ export function TitleBar() {
         />
       </PopoverNext>
 
-      {/* 语义分组分隔：快捷弹层组 | 模式切换组（2026-10-20 四次定案 · 方案 B 弹层组最前） */}
-      <span className="np-tb-sep" aria-hidden />
+      {/* 语义分组分隔：快捷弹层组 | 模式切换组（2026-10-20 四次定案 · 方案 B 弹层组最前；
+          data-tb=pop 随弹层组同收） */}
+      <span className="np-tb-sep" aria-hidden data-tb="pop" />
 
       <Button
         minimal
         size="small"
         icon={ic(FolderTree)}
-        data-tb="core"
+        data-tb="tree"
         active={treeVisible}
         data-tip={t("显示/隐藏导航树（所有窗格共用）")}
         onClick={() => {
@@ -427,11 +437,12 @@ export function TitleBar() {
         }}
       />
 
+      {/* 全盘搜索（深水档左段最后一钮，2026-11-18 用户定案三段结构不灭的落点） */}
       <Button
         minimal
         size="small"
         icon={ic(Search)}
-        data-tb="core"
+        data-tb="search"
         active={gsearchOpen}
         data-tip={t("全盘搜索")} data-kbd="Ctrl+Shift+F"
         onClick={() =>
@@ -456,8 +467,9 @@ export function TitleBar() {
         }}
       />
 
-      {/* 语义分组分隔：视图与捕获组 | 会话工具组（2026-11-14 用户定案 3/3/3） */}
-      <span className="np-tb-sep" aria-hidden />
+      {/* 语义分组分隔：视图与捕获组 | 会话工具组（2026-11-14 用户定案 3/3/3；
+          data-tb=quick 随会话工具组同收，≤900 先撤） */}
+      <span className="np-tb-sep" aria-hidden data-tb="quick" />
 
       {/* 剪贴板历史（2026-11-06）：与系统热键同入口的开/关浮窗；开 = 抓主窗
           为粘贴目标、光标显示器居中上屏，已开 = 收浮窗 */}
@@ -567,8 +579,9 @@ export function TitleBar() {
       </Button>
 
       {/* 语义分组分隔：设置/关于 | 系统态组（原中央拖拽区已拆为三段各自的
-          np-tb-fill 弹性补白，2026-11-11 三段居中定案） */}
-      <span className="np-tb-sep" aria-hidden />
+          np-tb-fill 弹性补白，2026-11-11 三段居中定案；data-tb=sys ≤290 随
+          主题钮同收防孤儿线） */}
+      <span className="np-tb-sep" aria-hidden data-tb="sys" />
 
       {/* 界面缩放指示：右簇首位常驻，点击重置 100%（Ctrl+滚轮/Ctrl+加减 调整后在此确认） */}
       <button
@@ -634,6 +647,7 @@ export function TitleBar() {
       >
         <AppIcon icon={X} size={DENSITY.iconSm} />
       </button>
+      </div>
       </div>
     </header>
   );

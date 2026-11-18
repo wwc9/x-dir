@@ -1008,13 +1008,10 @@ body:has(
   min-height: 0;
 }
 
-/* 自绘顶栏（2026-11-11 方案 A 三段居中）：grid 1fr auto 1fr——左内容 /
-   中岛严格水平居中 / 右系统；空隙区可拖拽移动窗口 */
+/* 自绘顶栏（2026-11-11 方案 A 三段居中）：三段网格挂下方 .np-tb-grid 内衬层；
+   空隙区可拖拽移动窗口 */
 .np-titlebar {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 4px;
+  display: flex;
   flex: 0 0 auto;
   height: 40px;
   padding: 0 6px 0 10px;
@@ -1022,13 +1019,28 @@ body:has(
   border: 1px solid var(--np-border);
   border-radius: var(--np-radius-pane);
   /* 高缩放（200% 时 CSS 视口折半）渐进收纳：容器查询按顶栏实际宽度分级
-     收起中段灵动岛 → 快捷钮组 → 低频钮，杜绝 grid 轨道内容超宽互相压叠 */
+     收起中段灵动岛 → 快捷钮组 → 低频钮，杜绝内容超宽互相压叠；
+     梯度口径详注见下方「顶栏渐进收纳」段 */
   container-type: inline-size;
   container-name: np-tb;
 }
+/* 三段网格内衬（2026-11-18）：grid 不直接挂顶栏——容器查询不能样式化容器
+   自身，撤中岛后需把右轨 1fr 转 auto（旧 1fr auto 1fr 的空第三轨按 1fr 白吃
+   一半剩余宽度，深水档左段容量减半提前挤爆）；中段在场时仍 1fr auto 1fr
+   保岛严格水平居中。gap 区窗口拖拽由 TSX 同名内衬层的 drag-region 承载 */
+.np-tb-grid {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+}
 /* 顶栏语义分组分隔线（2026-10-20 定案）：浏览定位 | 全局模式、应用级 | 窗口控制。
    用 --np-border（hairline 对 14px 短竖线过淡）；与窗口控制钮之间自然形成
-   ~9px 间隙，兼作低频钮的防误触安全距离 */
+   ~9px 间隙，兼作低频钮的防误触安全距离。高分缩放收纳时部分分隔线挂同名
+   data-tb 随组同收（孤儿线防护，梯度见「顶栏渐进收纳」段） */
 .np-tb-sep {
   flex: 0 0 auto;
   align-self: center;
@@ -1050,8 +1062,8 @@ body:has(
   font-weight: 600;
   margin-right: 10px;
   flex: 0 1 auto;
-  /* 高缩放深水档（≤440 core 已藏）标题允许收缩裁剪——nowrap 不缩会顶开
-     窗口控制钮造成压叠（2026-11-18 CDP 426px 实测） */
+  /* 高缩放深水档标题允许收缩裁剪（nowrap 不缩会顶开窗口控制钮造成压叠）；
+     ≤340 与导航树并档整收（2026-11-18 三段定案：logo 即品牌位） */
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1106,14 +1118,26 @@ body:has(
   overflow: hidden;
   white-space: nowrap;
 }
-/* 顶栏渐进收纳（容器查询，宽度 = 顶栏实际 CSS 宽）：
-   ≤1000 撤中段灵动岛（路径/选中信息在状态条与面包屑均有冗余）；
-   ≤820 收快捷钮组（截图/剪贴板/日历/定制，均有热键与替代入口）；
-   ≤700 收历史/收藏/布局预设三弹层钮；≤560 再收缩放/语言/关于（缩放有
-   Ctrl+滚轮，语言与关于在配置 tab 均有落点）。窗口控制钮永不收纳 */
+/* 顶栏渐进收纳（容器查询，宽度 = 顶栏实际 CSS 宽）。2026-11-18 用户定案：
+   深水档仍保三段结构 = logo | 左侧功能图标区（搜索钮）| 右侧图标区（设置/
+   窗口控制）；分组分隔线挂同名 data-tb 随组同收（孤儿分隔线防护）：
+   ≤1000 撤中段灵动岛（路径/选中信息在状态条与面包屑均有冗余）+ 右轨转 auto；
+   ≤900 收会话工具组（截图/剪贴板/日历/定制，均有热键与替代入口）+ 组前分隔线；
+   ≤780 收三弹层钮（历史/收藏/布局预设，弹层作用主界面）+ 段首两道分隔线；
+   ≤640 再收缩放/语言/关于（缩放有 Ctrl+滚轮，语言与关于在配置 tab 均有落点）；
+   ≤340 收导航树钮 + 标题（树有热键；标题不在三段定案清单，logo 即品牌位——
+   实测标题与 moon 态右段共存需 ≥344 才不挤压，并档收口最干净）；
+   ≤300 收主题钮 + 系统态前分隔线（主题在设置「外观」有落点；实测 moon 态
+   右段 208px 与左段 logo+搜索共存需 ≥292，300 留 8px 余量）；
+   ≤250 物理下限收搜索钮：仅剩 logo | 设置 | 窗口控制（三段共存物理下限
+   ≈240，dpr6 叠加超放大 CSS 215 时仅 logo 右缘让位 ~2px）。窗口控制钮与
+   设置钮永不收纳 */
 @container np-tb (max-width: 1000px) {
   .np-tb-mid {
     display: none;
+  }
+  .np-tb-grid {
+    grid-template-columns: 1fr auto;
   }
 }
 @container np-tb (max-width: 900px) {
@@ -1122,13 +1146,8 @@ body:has(
   }
 }
 @container np-tb (max-width: 780px) {
-  .np-titlebar .np-pop-trigger {
-    display: none;
-  }
-}
-
-@container np-tb (max-width: 440px) {
-  .np-titlebar [data-tb="core"] {
+  .np-titlebar .np-pop-trigger,
+  .np-titlebar [data-tb="pop"] {
     display: none;
   }
 }
@@ -1139,10 +1158,20 @@ body:has(
     display: none;
   }
 }
-/* ≤300 深水档（dpr 叠加超放大，CSS 视口 ~215）：仅留 logo/设置/窗口控制 */
-@container np-tb (max-width: 300px) {
+@container np-tb (max-width: 340px) {
   .np-titlebar .np-title,
-  .np-titlebar .np-theme-btn {
+  .np-titlebar [data-tb="tree"] {
+    display: none;
+  }
+}
+@container np-tb (max-width: 300px) {
+  .np-titlebar .np-theme-btn,
+  .np-titlebar [data-tb="sys"] {
+    display: none;
+  }
+}
+@container np-tb (max-width: 250px) {
+  .np-titlebar [data-tb="search"] {
     display: none;
   }
 }
