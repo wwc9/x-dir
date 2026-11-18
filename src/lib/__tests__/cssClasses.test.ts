@@ -10,7 +10,6 @@ import { describe, expect, it } from "vitest";
 const ALLOWLIST = new Set<string>([
   // np-dialog 已于 2026-11-10 移出：`.np-dialog .bp6-checkbox` 字号紧凑化
   // （§4.7 Blueprint 控件文案对齐两档字号）起它成为合法样式宿主，不再纯钩子
-  "np-pop-trigger", // JS 查询钩子（TitleBar 判断点击目标是否在弹层触发钮内），不参与样式
   "np-search-type-pop", // JS 查询钩子（Pane 搜索外点退出豁免：类型下拉弹层内容卡标记，经 NpSelect popoverClassName 透传），不参与样式
 ]);
 
