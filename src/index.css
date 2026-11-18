@@ -434,9 +434,12 @@ html.glasswin.bp6-dark > body {
     rgba(52, 26, 40, 0.62)
   );
 }
-/* ═══ 玻璃背景图案（2026-11-18 六案接入 + 极光基座 + 自定义图片，设置 → 外观）：
-   data-glassbg 切 --np-bg 图案（浅/深双锚点——body 直声明陷阱同前）；custom =
-   用户图片（asset 协议 convertFileSrc 转可展示 URL，applyGlassBg 下发
+/* ═══ 玻璃背景图案（2026-11-18 六案比选 + 极光基座 + 自定义图片，设置 → 外观；
+   2026-11-18 二次修订：删极光绸带〔与基座极光/绸缎流波质感重叠〕、深色画布
+   浓度全员加强至与极光基座同级可见度、每图案专属弹窗染色 --np-dialog-glass
+   消除「弹窗与主界面不同调」）：
+   data-glassbg 切 --np-bg 图案（浅/深双锚点——body 直声明陷阱同前）；
+   custom = 用户图片（asset 协议 convertFileSrc 转可展示 URL，applyGlassBg 下发
    --glassbg-img）+ 可调蒙版（body::before 浅白/深黑随主题，浓度
    --glassbg-veil 由 applyGlassBg 下发；z-index:-1 垫在内容之下、画布之上，
    backdrop-filter 采样链含蒙版层）。零遮罩定案下弹窗/霜面在任意图案上自持
@@ -447,27 +450,15 @@ html.glasswin[data-glassbg="dawn"] > body {
     radial-gradient(70% 50% at 20% 30%, rgba(197, 220, 244, 0.75), transparent 65%),
     radial-gradient(120% 70% at 50% 100%, rgba(255, 214, 178, 0.55), transparent 60%),
     linear-gradient(165deg, #f4f7fb, #eef2f8 45%, #f9f1ea);
+  --np-dialog-glass: linear-gradient(165deg, rgba(255, 255, 255, 0.8), rgba(233, 241, 250, 0.68) 45%, rgba(236, 238, 246, 0.62));
 }
 html.glasswin[data-glassbg="dawn"].bp6-dark,
 html.glasswin[data-glassbg="dawn"].bp6-dark > body {
-  --np-bg: radial-gradient(80% 55% at 75% 10%, rgba(120, 150, 200, 0.35), transparent 60%),
-    radial-gradient(90% 60% at 30% 40%, rgba(70, 90, 140, 0.4), transparent 65%),
-    radial-gradient(120% 70% at 50% 100%, rgba(40, 48, 80, 0.6), transparent 60%),
-    linear-gradient(165deg, #1a2030, #141a28 50%, #10141f);
-}
-html.glasswin[data-glassbg="ribbon"],
-html.glasswin[data-glassbg="ribbon"] > body {
-  --np-bg: linear-gradient(115deg, transparent 42%, rgba(148, 224, 196, 0.4) 50%, transparent 58%),
-    linear-gradient(105deg, transparent 55%, rgba(186, 196, 255, 0.4) 63%, transparent 72%),
-    linear-gradient(125deg, transparent 25%, rgba(255, 214, 224, 0.45) 33%, transparent 42%),
-    linear-gradient(160deg, #f2f7f4, #eef0f8 50%, #f7f3f0);
-}
-html.glasswin[data-glassbg="ribbon"].bp6-dark,
-html.glasswin[data-glassbg="ribbon"].bp6-dark > body {
-  --np-bg: linear-gradient(115deg, transparent 40%, rgba(80, 220, 170, 0.28) 50%, transparent 60%),
-    linear-gradient(100deg, transparent 55%, rgba(110, 130, 255, 0.3) 64%, transparent 74%),
-    linear-gradient(130deg, transparent 20%, rgba(255, 120, 190, 0.22) 30%, transparent 40%),
-    linear-gradient(160deg, #0c1220, #0a101c 50%, #0d0f18);
+  --np-bg: radial-gradient(80% 55% at 75% 12%, rgba(140, 175, 225, 0.5), transparent 62%),
+    radial-gradient(90% 60% at 28% 42%, rgba(86, 116, 180, 0.55), transparent 65%),
+    radial-gradient(120% 70% at 50% 100%, rgba(52, 64, 105, 0.65), transparent 62%),
+    linear-gradient(165deg, #1d2536, #16203a 50%, #121a2e);
+  --np-dialog-glass: linear-gradient(165deg, rgba(24, 34, 54, 0.84), rgba(34, 48, 78, 0.7) 45%, rgba(20, 30, 52, 0.62));
 }
 html.glasswin[data-glassbg="geo"],
 html.glasswin[data-glassbg="geo"] > body {
@@ -475,13 +466,15 @@ html.glasswin[data-glassbg="geo"] > body {
     repeating-linear-gradient(45deg, rgba(20, 28, 40, 0.045) 0 2px, transparent 2px 26px),
     repeating-linear-gradient(-45deg, rgba(20, 28, 40, 0.03) 0 2px, transparent 2px 34px),
     linear-gradient(160deg, #f6f8fa, #eef1f6);
+  --np-dialog-glass: linear-gradient(165deg, rgba(255, 255, 255, 0.8), rgba(236, 240, 246, 0.68) 45%, rgba(233, 237, 244, 0.62));
 }
 html.glasswin[data-glassbg="geo"].bp6-dark,
 html.glasswin[data-glassbg="geo"].bp6-dark > body {
-  --np-bg: linear-gradient(135deg, rgba(92, 157, 255, 0.14) 0 12%, transparent 12% 25%, rgba(92, 157, 255, 0.08) 25% 31%, transparent 31%),
-    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.05) 0 2px, transparent 2px 26px),
-    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.035) 0 2px, transparent 2px 34px),
-    linear-gradient(160deg, #181d26, #141922);
+  --np-bg: linear-gradient(135deg, rgba(92, 157, 255, 0.2) 0 12%, transparent 12% 25%, rgba(92, 157, 255, 0.12) 25% 31%, transparent 31%),
+    repeating-linear-gradient(45deg, rgba(148, 190, 255, 0.09) 0 2px, transparent 2px 26px),
+    repeating-linear-gradient(-45deg, rgba(148, 190, 255, 0.06) 0 2px, transparent 2px 34px),
+    linear-gradient(160deg, #1a2130, #151b28);
+  --np-dialog-glass: linear-gradient(165deg, rgba(26, 32, 44, 0.84), rgba(30, 42, 62, 0.7) 45%, rgba(22, 28, 42, 0.62));
 }
 html.glasswin[data-glassbg="silk"],
 html.glasswin[data-glassbg="silk"] > body {
@@ -489,13 +482,15 @@ html.glasswin[data-glassbg="silk"] > body {
     radial-gradient(120% 80% at 110% 20%, rgba(226, 238, 255, 0.8), transparent 55%),
     radial-gradient(150% 100% at 50% 120%, rgba(255, 228, 235, 0.75), transparent 60%),
     linear-gradient(160deg, #faf3ec, #f4eef4 50%, #eef3f7);
+  --np-dialog-glass: linear-gradient(165deg, rgba(255, 255, 255, 0.8), rgba(244, 240, 250, 0.68) 45%, rgba(250, 238, 230, 0.62));
 }
 html.glasswin[data-glassbg="silk"].bp6-dark,
 html.glasswin[data-glassbg="silk"].bp6-dark > body {
-  --np-bg: radial-gradient(140% 90% at 10% -10%, rgba(46, 64, 110, 0.75), transparent 55%),
-    radial-gradient(120% 80% at 110% 20%, rgba(30, 70, 90, 0.6), transparent 55%),
-    radial-gradient(150% 100% at 50% 120%, rgba(70, 40, 80, 0.6), transparent 60%),
-    linear-gradient(160deg, #141a2a, #131726 50%, #1a1424);
+  --np-bg: radial-gradient(140% 90% at 10% -10%, rgba(52, 74, 126, 0.85), transparent 55%),
+    radial-gradient(120% 80% at 110% 20%, rgba(34, 86, 110, 0.7), transparent 55%),
+    radial-gradient(150% 100% at 50% 120%, rgba(88, 44, 96, 0.7), transparent 60%),
+    linear-gradient(160deg, #161c30, #141830 50%, #1c1628);
+  --np-dialog-glass: linear-gradient(165deg, rgba(24, 32, 54, 0.84), rgba(30, 46, 74, 0.7) 45%, rgba(52, 30, 62, 0.62));
 }
 html.glasswin[data-glassbg="blueprint"],
 html.glasswin[data-glassbg="blueprint"] > body {
@@ -503,13 +498,15 @@ html.glasswin[data-glassbg="blueprint"] > body {
     linear-gradient(rgba(20, 28, 40, 0.05) 1px, transparent 1px) 0 0 / 110px 110px,
     linear-gradient(90deg, rgba(20, 28, 40, 0.05) 1px, transparent 1px) 0 0 / 110px 110px,
     linear-gradient(160deg, #f7f9fc, #f1f4f9);
+  --np-dialog-glass: linear-gradient(165deg, rgba(255, 255, 255, 0.8), rgba(234, 240, 248, 0.68) 45%, rgba(230, 238, 246, 0.62));
 }
 html.glasswin[data-glassbg="blueprint"].bp6-dark,
 html.glasswin[data-glassbg="blueprint"].bp6-dark > body {
-  --np-bg: radial-gradient(rgba(92, 157, 255, 0.22) 1px, transparent 1.5px) 0 0 / 22px 22px,
-    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px) 0 0 / 110px 110px,
-    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px) 0 0 / 110px 110px,
-    linear-gradient(160deg, #161b24, #121722);
+  --np-bg: radial-gradient(rgba(96, 170, 255, 0.32) 1px, transparent 1.5px) 0 0 / 22px 22px,
+    linear-gradient(rgba(148, 190, 255, 0.07) 1px, transparent 1px) 0 0 / 110px 110px,
+    linear-gradient(90deg, rgba(148, 190, 255, 0.07) 1px, transparent 1px) 0 0 / 110px 110px,
+    linear-gradient(160deg, #182031, #131a2a);
+  --np-dialog-glass: linear-gradient(165deg, rgba(22, 30, 42, 0.84), rgba(26, 40, 58, 0.7) 45%, rgba(20, 34, 48, 0.62));
 }
 html.glasswin[data-glassbg="mountain"],
 html.glasswin[data-glassbg="mountain"] > body {
@@ -518,15 +515,17 @@ html.glasswin[data-glassbg="mountain"] > body {
     radial-gradient(65% 95% at 80% 106%, rgba(95, 95, 145, 0.6), transparent 62%),
     radial-gradient(120% 60% at 50% -8%, rgba(255, 214, 178, 0.85), transparent 55%),
     linear-gradient(180deg, #fdeedd, #f6e3ea 45%, #e6e1f0);
+  --np-dialog-glass: linear-gradient(165deg, rgba(255, 255, 255, 0.8), rgba(246, 234, 242, 0.68) 45%, rgba(240, 232, 244, 0.62));
 }
 html.glasswin[data-glassbg="mountain"].bp6-dark,
 html.glasswin[data-glassbg="mountain"].bp6-dark > body {
-  --np-bg: radial-gradient(rgba(255, 255, 255, 0.8) 1px, transparent 1.6px) 30px 20px / 180px 120px,
-    radial-gradient(60% 90% at 15% 105%, rgba(40, 44, 80, 0.7), transparent 60%),
-    radial-gradient(55% 80% at 45% 108%, rgba(56, 50, 90, 0.6), transparent 60%),
-    radial-gradient(65% 95% at 80% 106%, rgba(30, 32, 64, 0.7), transparent 62%),
-    radial-gradient(50% 40% at 78% 10%, rgba(220, 228, 255, 0.35), transparent 55%),
-    linear-gradient(180deg, #131a2e, #101426 50%, #161225);
+  --np-bg: radial-gradient(rgba(255, 255, 255, 0.9) 1.2px, transparent 1.8px) 30px 20px / 150px 100px,
+    radial-gradient(60% 90% at 15% 105%, rgba(52, 56, 104, 0.8), transparent 60%),
+    radial-gradient(55% 80% at 45% 108%, rgba(72, 64, 116, 0.7), transparent 60%),
+    radial-gradient(65% 95% at 80% 106%, rgba(38, 40, 86, 0.8), transparent 62%),
+    radial-gradient(55% 45% at 78% 8%, rgba(230, 238, 255, 0.5), transparent 55%),
+    linear-gradient(180deg, #17203a, #131a30 50%, #191330);
+  --np-dialog-glass: linear-gradient(165deg, rgba(24, 30, 52, 0.84), rgba(40, 38, 74, 0.7) 45%, rgba(28, 24, 52, 0.62));
 }
 /* 自定义图片：画布换图（cover/fixed）+ body::before 可调蒙版（z:-1 垫内容
    之下；浅色蒙白雾、深色蒙夜幕），blur 采样链含蒙版层 */

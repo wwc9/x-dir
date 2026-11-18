@@ -1408,7 +1408,6 @@ export const EN: Record<string, string> = {
   "毛玻璃画布的背景图案，任意图案下弹窗与霜面均可读": "Glass canvas background pattern; dialogs and frost surfaces stay readable on every pattern",
   "极光（默认）": "Aurora (default)",
   "云隙晨光": "Dawn clouds",
-  "极光绸带": "Aurora ribbons",
   "几何构成": "Geometric",
   "绸缎流波": "Silk waves",
   "点阵蓝图": "Blueprint dots",

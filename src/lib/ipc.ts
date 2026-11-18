@@ -364,7 +364,6 @@ export interface RenameScheme {
 export type GlassBg =
   | "aurora"
   | "dawn"
-  | "ribbon"
   | "geo"
   | "silk"
   | "blueprint"

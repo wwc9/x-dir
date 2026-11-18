@@ -11,7 +11,6 @@ import { api, DEFAULT_SETTINGS, THIS_PC, type GlassBg, type MenuEntry, type Sett
 export const GLASS_BGS: { key: GlassBg; label: string }[] = [
   { key: "aurora", label: "极光（默认）" },
   { key: "dawn", label: "云隙晨光" },
-  { key: "ribbon", label: "极光绸带" },
   { key: "geo", label: "几何构成" },
   { key: "silk", label: "绸缎流波" },
   { key: "blueprint", label: "点阵蓝图" },
