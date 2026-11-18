@@ -397,6 +397,14 @@ html.glasswin > body {
     radial-gradient(130% 100% at 8% 96%, rgba(244, 78, 128, 0.42), transparent 64%),
     linear-gradient(160deg, #f7f1f4, #f2eaef 50%, #e7ecf5);
   --np-surface: var(--np-glass);
+  /* 弹窗染色极光玻璃（2026-11-18 用户定案 = 方案 C，design/dialog-glass-proposal-c-tinted.html）：
+     霜面染极光色相——顶天空蓝、底珊瑚粉，弹窗成为画布的一部分而非贴上去的白片 */
+  --np-dialog-glass: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.8),
+    rgba(238, 244, 250, 0.68) 45%,
+    rgba(255, 236, 228, 0.62)
+  );
   /* 玻璃子面（地址 pill/缩放钮/chip/空态徽标等 surface-2 消费方）：半透明白，
      叠在已模糊的卡片面上透出柔化色——子面无文字穿透风险（背后是霜面非裸列表） */
   --np-surface-2: rgba(255, 255, 255, 0.45);
@@ -418,6 +426,28 @@ html.glasswin.bp6-dark > body {
   --np-surface: rgba(36, 41, 55, 0.55);
   --np-surface-2: rgba(255, 255, 255, 0.07);
   --np-surface-glass-strong: rgba(30, 35, 50, 0.78);
+  /* 弹窗染色极光玻璃深色映射：navy 顶 / 紫晕中 / 绯红底 */
+  --np-dialog-glass: linear-gradient(
+    165deg,
+    rgba(30, 35, 50, 0.82),
+    rgba(40, 34, 58, 0.7) 45%,
+    rgba(52, 26, 40, 0.62)
+  );
+}
+/* glasswin 作用域遮罩加深（方案 C 可读性兜底）：染色面更透，弹窗文字由
+   更深的 backdrop 扛——仅 glasswin 覆写（普通模式 0.35/0.45 不动）。
+   ⚠ 必须含 body 侧直接声明：dark 类挂 html+body 双锚点（settings.applyTheme），
+   .dark token 块在 body 直声明 --np-overlay 压过 html 继承（同 --np-bg 陷阱）；
+   .np-winedge::after 窗缘压暗同 token 自动跟随 */
+html.glasswin,
+html.glasswin > body {
+  --np-overlay: rgba(15, 22, 34, 0.45);
+}
+html.glasswin.bp6-dark,
+html.glasswin.bp6-dark > body,
+body.glasswin.dark,
+body.glasswin.bp6-dark {
+  --np-overlay: rgba(0, 0, 0, 0.55);
 }
 /* 常驻主卡片玻璃：霜面 + 实时模糊 + glass-ring 边——贴面便签语言，不挂外
    阴影（大卡片光晕在窄沟槽里积灰，沟槽靠画布渐变提层次）；深色加顶缘受光
@@ -441,10 +471,10 @@ html.glasswin.bp6-dark .np-shelf {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 /* 浮层强霜（0.78，浮层可读性优先）+ glass-shadow 光晕（浮离于画布之上才有
-   「浮」的资格）：Dialog / 菜单 / Popover 内容面（布局预设等自定义内容弹层
+   「浮」的资格）：菜单 / Popover 内容面（布局预设等自定义内容弹层
    ——半透明无模糊会背景文字穿透）/ 悬浮提示；ctx 子菜单弹层外壳按定稿保持
-   透明（菜单自带霜面），:not 排除防双重霜 */
-html.glasswin .np-dialog,
+   透明（菜单自带霜面），:not 排除防双重霜。弹窗已升级染色极光玻璃（下方
+   独立规则），不再共用本段 */
 html.glasswin .bp6-menu,
 html.glasswin .bp6-popover:not(.np-ctx-pop) .bp6-popover-content,
 html.glasswin .np-tip {
@@ -454,13 +484,28 @@ html.glasswin .np-tip {
   -webkit-backdrop-filter: blur(22px) saturate(1.4);
   backdrop-filter: blur(22px) saturate(1.4);
 }
+/* 弹窗染色极光玻璃（2026-11-18 用户定案 = 方案 C，design/dialog-glass-proposal-c-tinted.html）：
+   background = --np-dialog-glass 主题化极光染色渐变；blur(40) saturate(1.8)
+   吃透背景色相；可读性由 glasswin 作用域加深的遮罩（0.45/0.55）兜底；
+   顶缘受光内高光补边界（深色按卡片家族口径 8% 白） */
+html.glasswin .np-dialog {
+  background: var(--np-dialog-glass);
+  border-color: var(--np-glass-ring);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), var(--np-glass-shadow);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  backdrop-filter: blur(40px) saturate(1.8);
+}
+html.glasswin.bp6-dark .np-dialog {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--np-glass-shadow);
+}
 /* ⚠ Dialog 的 blur 必须挂 body 滚动容器而非根节点：Chromium 下「根节点
    backdrop-filter + 内嵌滚动容器」采样失效返回白色（2026-11-17 实测白板
    穿透，CDP 截图定位），滚动容器自身挂 blur 采样正常（右键菜单同模式已
-   验证）；根节点保持无 blur + 强霜色 */
+   验证）；根节点保持无 blur + 染色玻璃面。blur 值与上方弹窗规则同源同值
+   （2026-11-18 方案 C：22→40 / 1.4→1.8），改一处必须改另一处 */
 html.glasswin .np-dialog .bp6-dialog-body-scroll-container {
-  -webkit-backdrop-filter: blur(22px) saturate(1.4);
-  backdrop-filter: blur(22px) saturate(1.4);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  backdrop-filter: blur(40px) saturate(1.8);
 }
 /* 窗格导航栏（地址行）：glasswin 下铺 surface-2 玻璃子面条（默认透明裸条
    在渐变画布上显得未处理），底发丝线保留 */
