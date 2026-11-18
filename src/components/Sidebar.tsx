@@ -44,8 +44,9 @@ const DEFAULT_PRESET = "2x2";
 /** 默认方案的出厂预览树（未保存过时显示/应用这棵） */
 const DEFAULT_TREE: LayoutNode = applyPreset(mkPane(THIS_PC), DEFAULT_PRESET);
 
-/** 布局预设（顺序与图示一致）：应用 = 以当前窗格路径按预设重建分割树 */
-const PRESET_LIST: { id: Preset; label: string; tip: string }[] = [
+/** 布局预设（顺序与图示一致）：应用 = 以当前窗格路径按预设重建分割树。
+ *  导出供顶栏「更多」菜单的布局预设子菜单复用同一清单 */
+export const PRESET_LIST: { id: Preset; label: string; tip: string }[] = [
   { id: "1x1", label: "单格", tip: "单窗格" },
   { id: "1x2", label: "左右两栏 1×2", tip: "左右两栏" },
   { id: "2x1", label: "上下两行 2×1", tip: "上下两行" },

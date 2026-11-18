@@ -14,6 +14,7 @@ import {
   Camera,
   ClipboardList,
   Copy,
+  Ellipsis,
   FolderOpen,
   FolderTree,
   HardDrive,
@@ -36,7 +37,7 @@ import { AppIcon, ic } from "./AppIcon";
 import { AboutBadgeDot } from "./AboutDialog";
 import { BrandLogo } from "./BrandLogo";
 import { IslandPill } from "./IslandPill";
-import { PresetPicker } from "./Sidebar";
+import { PresetPicker, PRESET_LIST } from "./Sidebar";
 import { DENSITY } from "../lib/tokens";
 import { isUpdateAvailable } from "../lib/update";
 import { useLayout } from "../stores/layout";
@@ -55,6 +56,17 @@ const KNOWN = [
 /** 顶栏浏览记录弹层的展示上限（settings.recentFolders 存储上限 50 条，超出只存不显） */
 const HISTORY_SHOW_MAX = 20;
 
+/** 顶栏收纳档位（顶栏 content-box 宽 px）——与 index.css「顶栏渐进收纳」段
+ *  同名档位保持同值，改一处必须改另一处。更多钮 = 左段被收纳功能的聚合
+ *  入口（2026-11-18 用户定案「左段图标隐藏后纳入更多按钮」）；各项并入
+ *  菜单的档位与对应按钮的 CSS 收纳档同值。档位在 TSX 侧算是因为弹层经
+ *  portal 挂 body，容器查询够不着 portal 内容 */
+const TB_MORE_AT = 900; // 更多钮出现 = 快捷组收纳档
+const TB_MORE_POP = 780; // 弹层三件套（浏览记录/收藏/布局预设）并入菜单档
+const TB_MORE_TREE = 380; // 导航树并入菜单档（同档还收标题与主题钮）
+const TB_MORE_SEARCH = 280; // 全盘搜索并入菜单档
+const TB_FLOOR = 250; // 物理下限：更多钮自身隐藏
+
 interface DriveLite {
   letter: string;
   label: string;
@@ -68,7 +80,8 @@ interface DriveLite {
  *  工具组（剪贴板/工作日历/定制）；中 = 灵动岛严格水平居中；右 = 设置/关于 +
  *  系统态（缩放/主题/语言）+ 窗口控制。高缩放渐进收纳口径单源 index.css
  *  「顶栏渐进收纳」段：分组分隔线挂同名 data-tb 随组同收（孤儿线防护），
- *  深水档保三段 = logo | 搜索钮 | 设置+窗口控制（2026-11-18 用户定案）。
+ *  被收纳的左段图标并入「更多」聚合钮（菜单项档位见 TB_MORE_* 常量），
+ *  深水档保三段 = logo | 更多钮 | 设置+窗口控制（2026-11-18 用户定案）。
  *  段容器与段尾 np-tb-fill 弹性补白均带拖拽区：顶栏空白处可拖动窗口、
  *  双击最大化/还原 */
 export function TitleBar() {
@@ -102,6 +115,11 @@ export function TitleBar() {
   const hasNewVersion = isUpdateAvailable(updateCheck);
   const [histOpen, setHistOpen] = useState(false);
   const [favOpen, setFavOpen] = useState(false);
+  // 更多钮（左段收纳聚合入口）：开合态 + 顶栏实际宽驱动档位。按钮显隐由
+  // TSX 条件渲染（菜单项并入档位也靠它），CSS 容器查询只管各功能钮本体
+  const [moreOpen, setMoreOpen] = useState(false);
+  const tbRef = useRef<HTMLElement | null>(null);
+  const [tbW, setTbW] = useState(0);
   // 跟随系统档的实时长亮态：只驱动切换按钮的图标/文案，文档类名由 applyTheme 统一管
   const [sysDark, setSysDark] = useState(
     () => window.matchMedia("(prefers-color-scheme: dark)").matches,
@@ -144,8 +162,24 @@ export function TitleBar() {
     return () => mq.removeEventListener("change", fn);
   }, []);
 
-  // 当前生效是否深色（含"跟随系统"档），决定切换按钮的朝向
+  // 顶栏宽度观测：contentRect.width = content-box 宽，与容器查询同口径基准
+  useEffect(() => {
+    const el = tbRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((es) => setTbW(es[0].contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // 当前生效是否深色（含"跟随系统"档），决定切换按钮的图标/文案
   const isDark = theme === "dark" || (theme === "system" && sysDark);
+
+  // 更多钮档位（与 index.css 收纳梯度同名档，常量见 TB_MORE_*）：出现区间
+  // = 快捷组收纳档 → 物理下限之前；各功能项并入档与对应按钮的 CSS 收纳档同值
+  const moreShown = tbW > TB_FLOOR && tbW <= TB_MORE_AT;
+  const morePop = moreShown && tbW <= TB_MORE_POP;
+  const moreTree = moreShown && tbW <= TB_MORE_TREE;
+  const moreSearch = moreShown && tbW <= TB_MORE_SEARCH;
 
   // ── 弹层按钮悬浮打开（2026-10-17）：浏览记录/收藏夹/布局预设悬浮即开 ──
   // 关闭 = 指针离开按钮与弹层（共享宽限 DENSITY.hoverCloseMs，横穿缝隙不闪跳），
@@ -166,6 +200,7 @@ export function TitleBar() {
     setHistOpen(false);
     setFavOpen(false);
     setPresetOpen(false);
+    setMoreOpen(false);
     on();
   };
   /** 离开触发钮/弹层：宽限后关闭（期间进入任一悬浮面即取消） */
@@ -193,6 +228,7 @@ export function TitleBar() {
 
   return (
     <header
+      ref={tbRef}
       className="np-titlebar"
       data-tauri-drag-region
       data-tip-down=""
@@ -203,15 +239,22 @@ export function TitleBar() {
         if (ae instanceof HTMLInputElement && ae.closest(".np-addrwrap")) ae.blur();
         // 顶栏带拖拽区（data-tauri-drag-region）：空白处按下会进入原生窗口拖动，
           // click 事件被拖动循环吞掉，Blueprint 的"点外关闭"收不到 → 弹层关不上。
-          // 因此按下时主动关闭弹层；按在触发钮（.np-pop-trigger）上则交给按钮自身 toggle。
+          // 因此按下时主动关闭弹层；按在触发钮（.np-pop-trigger / 更多钮
+          // data-tb=more——后者不带该类，≤780 弹层收纳规则按类隐藏，更多钮
+          // 必须存活）上则交给按钮自身 toggle。
           // 弹层内容经 React portal 挂在 body，合成事件却沿 React 树冒泡回 header——
           // portal 内部（.bp6-portal）的按下必须排除，否则弹层在 mousedown 阶段被卸载，
           // mouseup 落空，MenuItem.onClick 永远收不到 click（收藏夹/历史菜单失灵的根因）
           const t = e.target as HTMLElement;
-          if (!t.closest(".np-pop-trigger") && !t.closest(".bp6-portal")) {
+          if (
+            !t.closest(".np-pop-trigger") &&
+            !t.closest('[data-tb="more"]') &&
+            !t.closest(".bp6-portal")
+          ) {
             setHistOpen(false);
             setFavOpen(false);
             setPresetOpen(false);
+            setMoreOpen(false);
           }
         }}
     >
@@ -291,6 +334,7 @@ export function TitleBar() {
             setHistOpen((o) => !o);
             setFavOpen(false);
             setPresetOpen(false);
+            setMoreOpen(false);
           }}
         />
       </PopoverNext>
@@ -384,6 +428,7 @@ export function TitleBar() {
             setFavOpen((o) => !o);
             setHistOpen(false);
             setPresetOpen(false);
+            setMoreOpen(false);
           }}
         />
       </PopoverNext>
@@ -415,6 +460,7 @@ export function TitleBar() {
             setPresetOpen((o) => !o);
             setHistOpen(false);
             setFavOpen(false);
+            setMoreOpen(false);
           }}
         />
       </PopoverNext>
@@ -516,6 +562,219 @@ export function TitleBar() {
             : useUi.getState().openMenuPage()
         }
       />
+
+      {/* 更多（2026-11-18 用户定案：左段图标被收纳后并入此钮保住入口）。
+          点按开合（非悬浮），项随收纳档位并入：≤780 弹层三件套（子菜单）、
+          ≤380 导航树、≤280 全盘搜索；截图/剪贴板/日历/定制恒在（更多钮只
+          出现在快捷组收纳档之后）。宽度驱动见 TB_MORE_* 常量 */}
+      {moreShown && (
+        <PopoverNext
+          isOpen={moreOpen}
+          onClose={() => setMoreOpen(false)}
+          placement="bottom-start"
+          arrow={false}
+          content={
+            <Menu>
+              {morePop && (
+                <MenuItem icon={ic(History)} text={t("浏览记录")}>
+                  {recentFolders.length === 0 && (
+                    <MenuItem text={t("暂无浏览记录")} disabled />
+                  )}
+                  {recentFolders.slice(0, HISTORY_SHOW_MAX).map((p) => (
+                    <MenuItem
+                      key={p}
+                      icon={ic(FolderOpen)}
+                      text={p === THIS_PC ? t("此电脑") : p}
+                      onClick={() => {
+                        setMoreOpen(false);
+                        useUi.getState().exitPages();
+                        navigateActive(p);
+                      }}
+                    />
+                  ))}
+                  {recentFolders.length > HISTORY_SHOW_MAX && (
+                    <MenuItem
+                      text={t("仅显示最近 {a} 条（共 {b} 条）", {
+                        a: HISTORY_SHOW_MAX,
+                        b: recentFolders.length,
+                      })}
+                      disabled
+                    />
+                  )}
+                  {recentFolders.length > 0 && (
+                    <MenuItem
+                      icon={ic(Trash2)}
+                      text={t("清空浏览记录")}
+                      onClick={() => {
+                        useHistory.getState().clear();
+                        setMoreOpen(false);
+                      }}
+                    />
+                  )}
+                </MenuItem>
+              )}
+              {morePop && (
+                <MenuItem icon={ic(Star)} text={t("收藏夹")}>
+                  {KNOWN.map((k) => (
+                    <MenuItem
+                      key={k.id}
+                      text={t(k.label)}
+                      onClick={() => {
+                        const p = known[k.id];
+                        if (p) {
+                          setMoreOpen(false);
+                          useUi.getState().exitPages();
+                          navigateActive(p);
+                        }
+                      }}
+                    />
+                  ))}
+                  <MenuDivider />
+                  {drives.map((d) => (
+                    <MenuItem
+                      key={d.letter}
+                      icon={ic(HardDrive)}
+                      text={d.label ? `${d.label} (${d.letter})` : d.letter}
+                      onClick={() => {
+                        setMoreOpen(false);
+                        useUi.getState().exitPages();
+                        navigateActive(d.letter + "\\");
+                      }}
+                    />
+                  ))}
+                  {favorites.length > 0 && <MenuDivider />}
+                  {favorites.map((f) => (
+                    <MenuItem
+                      key={f.path}
+                      text={f.name}
+                      labelElement={
+                        <span
+                          className="np-fav-remove"
+                          data-tip={t("移除收藏")}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            useSettings.getState().removeFavorite(f.path);
+                          }}
+                        >
+                          <AppIcon icon={X} size={DENSITY.iconXs} />
+                        </span>
+                      }
+                      onClick={() => {
+                        setMoreOpen(false);
+                        useUi.getState().exitPages();
+                        navigateActive(f.path);
+                      }}
+                    />
+                  ))}
+                  <MenuDivider />
+                  <MenuItem
+                    icon={ic(Plus)}
+                    text={t("添加当前文件夹")}
+                    onClick={() => {
+                      const p = useLayout.getState().activePath();
+                      if (p === THIS_PC) {
+                        useUi.getState().toast(t("“此电脑”不能加入收藏"), "error");
+                      } else {
+                        useSettings.getState().addFavorite(p);
+                      }
+                      setMoreOpen(false);
+                    }}
+                  />
+                </MenuItem>
+              )}
+              {morePop && (
+                <MenuItem icon={ic(LayoutTemplate)} text={t("窗格布局预设")}>
+                  {PRESET_LIST.map((p) => (
+                    <MenuItem
+                      key={p.id}
+                      text={t(p.label)}
+                      onClick={() => {
+                        setMoreOpen(false);
+                        useUi.getState().exitPages();
+                        useLayout.getState().preset(p.id);
+                      }}
+                    />
+                  ))}
+                </MenuItem>
+              )}
+              {(morePop || moreTree || moreSearch) && <MenuDivider />}
+              {moreTree && (
+                <MenuItem
+                  icon={ic(FolderTree)}
+                  text={t("显示/隐藏导航树（所有窗格共用）")}
+                  onClick={() => {
+                    setMoreOpen(false);
+                    useUi.getState().exitPages();
+                    useSettings.getState().update({ navTreeVisible: !treeVisible });
+                  }}
+                />
+              )}
+              {moreSearch && (
+                <MenuItem
+                  icon={ic(Search)}
+                  text={t("全盘搜索")}
+                  onClick={() => {
+                    setMoreOpen(false);
+                    if (gsearchOpen) useUi.getState().closeGlobalSearch();
+                    else useUi.getState().openGlobalSearch();
+                  }}
+                />
+              )}
+              {(moreTree || moreSearch) && <MenuDivider />}
+              <MenuItem
+                icon={ic(Camera)}
+                text={t("截图")}
+                onClick={() => {
+                  setMoreOpen(false);
+                  void api.shotBegin().catch((e) => useUi.getState().toast(String(e), "error"));
+                }}
+              />
+              <MenuItem
+                icon={ic(ClipboardList)}
+                text={t("剪贴板历史")}
+                onClick={() => {
+                  setMoreOpen(false);
+                  void api.cliphistToggle().catch((e) => useUi.getState().toast(String(e), "error"));
+                }}
+              />
+              <MenuItem
+                icon={ic(CalendarDays)}
+                text={t("工作日历")}
+                onClick={() => {
+                  setMoreOpen(false);
+                  if (calendarOpen) useUi.getState().closeCalendar();
+                  else useUi.getState().openCalendar();
+                }}
+              />
+              <MenuItem
+                icon={ic(WandSparkles)}
+                text={t("定制")}
+                onClick={() => {
+                  setMoreOpen(false);
+                  if (menuPage) useUi.getState().closeMenuPage();
+                  else useUi.getState().openMenuPage();
+                }}
+              />
+            </Menu>
+          }
+        >
+          <Button
+            minimal
+            size="small"
+            icon={ic(Ellipsis)}
+            active={moreOpen}
+            data-tb="more"
+            aria-label={t("更多")}
+            data-tip={t("更多")}
+            onClick={() => {
+              setMoreOpen((o) => !o);
+              setHistOpen(false);
+              setFavOpen(false);
+              setPresetOpen(false);
+            }}
+          />
+        </PopoverNext>
+      )}
 
       {/* 左段尾弹性拖拽补白：接管左段右侧大片空白（拖动窗口 / 双击最大化） */}
       <span

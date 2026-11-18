@@ -1062,8 +1062,10 @@ body:has(
   font-weight: 600;
   margin-right: 10px;
   flex: 0 1 auto;
-  /* 高缩放深水档标题允许收缩裁剪（nowrap 不缩会顶开窗口控制钮造成压叠）；
-     ≤340 与导航树并档整收（2026-11-18 三段定案：logo 即品牌位） */
+  /* 高缩放深水档标题允许收缩裁剪；nowrap 缺不得——省略号三件套没它会在
+     收缩时词换行成两行（2026-11-18 426 档实测「X-/Dir」两行）；
+     ≤380 与导航树/主题并档整收（2026-11-18 三段定案：logo 即品牌位） */
+  white-space: nowrap;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1119,19 +1121,21 @@ body:has(
   white-space: nowrap;
 }
 /* 顶栏渐进收纳（容器查询，宽度 = 顶栏实际 CSS 宽）。2026-11-18 用户定案：
-   深水档仍保三段结构 = logo | 左侧功能图标区（搜索钮）| 右侧图标区（设置/
-   窗口控制）；分组分隔线挂同名 data-tb 随组同收（孤儿分隔线防护）：
+   左段图标收纳后并入「更多」聚合钮（TSX 条件渲染，档位常量 TB_MORE_* 与
+   本段同名档同值，改一处必须改另一处），深水档仍保三段 = logo | 更多钮 |
+   右侧图标区（设置/窗口控制）；分组分隔线挂同名 data-tb 随组同收（孤儿
+   分隔线防护）：
    ≤1000 撤中段灵动岛（路径/选中信息在状态条与面包屑均有冗余）+ 右轨转 auto；
-   ≤900 收会话工具组（截图/剪贴板/日历/定制，均有热键与替代入口）+ 组前分隔线；
-   ≤780 收三弹层钮（历史/收藏/布局预设，弹层作用主界面）+ 段首两道分隔线；
+   ≤900 收会话工具组（截图/剪贴板/日历/定制，均有热键与替代入口）+ 组前分隔线
+     +「更多」钮出现（并入被收项）；
+   ≤780 收三弹层钮（历史/收藏/布局预设）+ 段首两道分隔线，并入更多菜单子项；
    ≤640 再收缩放/语言/关于（缩放有 Ctrl+滚轮，语言与关于在配置 tab 均有落点）；
-   ≤340 收导航树钮 + 标题（树有热键；标题不在三段定案清单，logo 即品牌位——
-   实测标题与 moon 态右段共存需 ≥344 才不挤压，并档收口最干净）；
-   ≤300 收主题钮 + 系统态前分隔线（主题在设置「外观」有落点；实测 moon 态
-   右段 208px 与左段 logo+搜索共存需 ≥292，300 留 8px 余量）；
-   ≤250 物理下限收搜索钮：仅剩 logo | 设置 | 窗口控制（三段共存物理下限
-   ≈240，dpr6 叠加超放大 CSS 215 时仅 logo 右缘让位 ~2px）。窗口控制钮与
-   设置钮永不收纳 */
+   ≤380 收导航树钮 + 标题 + 主题钮 + 系统态前分隔线（树并入更多菜单；标题/
+     主题在三段定案清单之外，主题在设置「外观」有落点——并档给更多钮腾位）；
+   ≤280 收全盘搜索钮（并入更多菜单）；
+   ≤250 物理下限：「更多」钮自身隐藏（三段共存物理下限 ≈240，dpr6 叠加超
+   放大 CSS 215 时仅 logo 右缘让位 ~2px），仅剩 logo | 设置 | 窗口控制。
+   窗口控制钮与设置钮永不收纳 */
 @container np-tb (max-width: 1000px) {
   .np-tb-mid {
     display: none;
@@ -1158,19 +1162,15 @@ body:has(
     display: none;
   }
 }
-@container np-tb (max-width: 340px) {
+@container np-tb (max-width: 380px) {
   .np-titlebar .np-title,
-  .np-titlebar [data-tb="tree"] {
-    display: none;
-  }
-}
-@container np-tb (max-width: 300px) {
+  .np-titlebar [data-tb="tree"],
   .np-titlebar .np-theme-btn,
   .np-titlebar [data-tb="sys"] {
     display: none;
   }
 }
-@container np-tb (max-width: 250px) {
+@container np-tb (max-width: 280px) {
   .np-titlebar [data-tb="search"] {
     display: none;
   }
