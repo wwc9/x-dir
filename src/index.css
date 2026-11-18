@@ -506,12 +506,17 @@ html.glasswin.bp6-dark .np-dialog {
    ⚠ 头/尾两段同样必须自挂 blur（2026-11-18 用户反馈「弹窗顶部和底部不需要
    单独的颜色，统一颜色」）：透明头/尾底下正是根节点白板基底 → 染色渐变
    盖出灰白条带；两段不含滚动容器、采样正常，自挂同值 blur 后 = 模糊画布 +
-   根节点同一染色渐变，与 body 区颜色统一 */
+   根节点同一染色渐变，与 body 区颜色统一。
+   ⚠ translateZ(0) 合成层提升（2026-11-18 用户反馈「刚打开更白、过一会变黑」）：
+   新建弹层的 backdrop-filter 首帧采样不及时——打开时无模糊（亮页直透显白），
+   数秒后任意 DOM 变更（如检查更新回包换文案）触发重绘 blur 才生效（显黑）。
+   三载体首帧即提升为独立合成层，强制 backdrop-filter 开窗首帧正确采样 */
 html.glasswin .np-dialog .bp6-dialog-body-scroll-container,
 html.glasswin .np-dialog .bp6-dialog-header,
 html.glasswin .np-dialog .bp6-dialog-footer {
   -webkit-backdrop-filter: blur(40px) saturate(1.8);
   backdrop-filter: blur(40px) saturate(1.8);
+  transform: translateZ(0);
 }
 /* 窗格导航栏（地址行）：glasswin 下铺 surface-2 玻璃子面条（默认透明裸条
    在渐变画布上显得未处理），底发丝线保留 */
