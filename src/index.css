@@ -538,10 +538,51 @@ html.glasswin[data-glassbg="custom"] > body::before {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background: rgba(255, 255, 255, var(--glassbg-veil, 0.25));
+  background: rgba(255, 255, 255, var(--glassbg-veil, 0.35));
 }
 html.glasswin[data-glassbg="custom"].bp6-dark > body::before {
   background: rgba(8, 12, 20, var(--glassbg-veil, 0.3));
+}
+
+/* ═══ 自定义图片模式适配（2026-11-18 用户反馈 vivid 壁纸四问题）：
+   ① 顶缘条带 .np-winedge-top 旧版克隆极光 --np-bg，与自定义图色相错位成
+      「顶部白条」→ 改克隆自定义图（attachment fixed 同源采样）；
+   ② 常驻卡片 blur 22→32——高细节图片透过霜面呈噪点，深模糊抹平使各卡片
+      均质（弹窗本就 blur40 不变）；
+   ③ 浅色玻璃描边 --np-glass-ring（暗 12% 线）在亮图上成显眼暗线 → 换白色
+      内光 rgba(255,255,255,.35)（macOS 亮墙纸同语言）；深色主题描边本为
+      白 12% 不动；
+   ④ 弹窗染色回中性白霜——极光染色渐变与任意自定义图色相错位；
+   ⑤ 默认蒙版 0.25→0.35（滑条仍 0-60 可调），全局压暗画布提对比 */
+html.glasswin[data-glassbg="custom"] .np-winedge-top {
+  background-image: var(--glassbg-img);
+}
+html.glasswin[data-glassbg="custom"] .np-titlebar,
+html.glasswin[data-glassbg="custom"] .np-pane,
+html.glasswin[data-glassbg="custom"] .np-side-card,
+html.glasswin[data-glassbg="custom"] .np-navtree,
+html.glasswin[data-glassbg="custom"] .np-shelf,
+html.glasswin[data-glassbg="custom"] .np-menupage,
+html.glasswin[data-glassbg="custom"] .np-gsearchpage,
+html.glasswin[data-glassbg="custom"] .np-clip {
+  -webkit-backdrop-filter: blur(32px) saturate(1.4);
+  backdrop-filter: blur(32px) saturate(1.4);
+}
+html.glasswin[data-glassbg="custom"] {
+  --np-glass-ring: rgba(255, 255, 255, 0.35);
+  --np-dialog-glass: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.85),
+    rgba(255, 255, 255, 0.72)
+  );
+}
+html.glasswin[data-glassbg="custom"].bp6-dark {
+  --np-glass-ring: rgba(255, 255, 255, 0.16);
+  --np-dialog-glass: linear-gradient(
+    165deg,
+    rgba(30, 35, 50, 0.85),
+    rgba(36, 41, 55, 0.72)
+  );
 }
 
 /* glasswin 零遮罩（2026-11-18 用户定案 = 遮罩方案 A，design/modal-scrim-proposal-a-noscrim.html）：

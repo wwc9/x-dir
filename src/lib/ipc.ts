@@ -609,7 +609,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // 玻璃背景图案默认极光（2026-11-18 六案接入；custom 走 glassBgCustom）
   glassBg: "aurora",
   glassBgCustom: "",
-  glassBgVeil: 25,
+  glassBgVeil: 35,
   toolbarEntries: [],
   restoreLastSession: true,
   // 开机自启默认关（2026-11-15）：自启属显式选择，不替用户决定
