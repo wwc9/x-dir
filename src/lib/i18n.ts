@@ -1402,7 +1402,7 @@ export const EN: Record<string, string> = {
   "空文件（0 字节）": "Empty files (0 bytes)",
   "窗格 {n}": "Pane {n}",
   "窗格、侧栏卡片、导航树、对话框等所有面板的统一圆角半径": "Corner radius shared by panes, sidebar cards, the nav tree, dialogs and all other panels",
-  "窗格之间及各卡片组件的间隔条宽度（分隔条可拖拽热区同宽）": "Gutter width between panes and card components (drag splitters share the same hit zone)",
+  "窗格之间及各卡片组件的间隔（设为 0 时窗格贴合，分隔条热区悬跨缝隙仍可拖拽）": "Gutter between panes and card components (0 = panes touch; the splitter hit zone still overlays the seam for dragging)",
   "立即试一次": "Try now",
   "第 {a}–{b} 项": "items {a}–{b}",
   "系统": "System",

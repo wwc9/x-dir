@@ -361,11 +361,11 @@ export function SettingsPanel() {
             </SetRow>
             <SetRow
               label={t("组件间隔")}
-              desc={t("窗格之间及各卡片组件的间隔条宽度（分隔条可拖拽热区同宽）")}
+              desc={t("窗格之间及各卡片组件的间隔（设为 0 时窗格贴合，分隔条热区悬跨缝隙仍可拖拽）")}
             >
               <div className="np-set-slider">
                 <Slider
-                  min={4}
+                  min={0}
                   max={24}
                   stepSize={1}
                   labelValues={[]}

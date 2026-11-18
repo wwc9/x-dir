@@ -384,7 +384,7 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
         ? Math.min(hi, Math.max(lo, Math.round(v)))
         : dflt;
     merged.uiRadius = clampMetric(merged.uiRadius, 0, 24, DEFAULT_SETTINGS.uiRadius);
-    merged.uiGap = clampMetric(merged.uiGap, 4, 24, DEFAULT_SETTINGS.uiGap);
+    merged.uiGap = clampMetric(merged.uiGap, 0, 24, DEFAULT_SETTINGS.uiGap);
     // 窗口毛玻璃档位脏值回落关（旧档未知串/OS 方案旧枚举 mica/acrylic 同回落）
     if (merged.windowGlass !== "off" && merged.windowGlass !== "on")
       merged.windowGlass = "off";

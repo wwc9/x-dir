@@ -2707,13 +2707,28 @@ body.np-col-resizing .np-menued-grip::after {
   align-items: center;
   justify-content: center;
   background: transparent;
+  /* gutter 0（2026-11-18 组件间隔支持 0）时分隔条悬跨两侧窗格各 3px，
+     须压在窗格之上才能保住热区；常规 gutter ≥6 时无悬跨，不可见无影响 */
+  position: relative;
+  z-index: 5;
   /* 库在拖拽开始时脚本聚焦分隔条（支持方向键微调），脚本 focus 必触发
      Chromium UA 焦点环（2px + 2px offset），会压在两侧窗格边框上；
      焦点反馈由下方 [data-separator="focus"] 的 2px 指示线承担 */
   outline: none;
 }
-.np-sep-v { width: var(--np-gutter); align-self: stretch; }
-.np-sep-h { height: var(--np-gutter); align-self: stretch; }
+/* 热区下限 6px（2026-11-18 组件间隔支持 0）：旧实现宽 = gutter（4px 下限的
+   历史原因），0 即不可抓取。现 width 取 max(gutter, 6px)，负外边距把多出的
+   占用补回——gutter 0 时布局占位归零、元素悬跨两窗格各 3px，缝隙处仍可拖拽 */
+.np-sep-v {
+  width: max(var(--np-gutter), 6px);
+  margin-inline: calc(min(var(--np-gutter) - 6px, 0px) / 2);
+  align-self: stretch;
+}
+.np-sep-h {
+  height: max(var(--np-gutter), 6px);
+  margin-block: calc(min(var(--np-gutter) - 6px, 0px) / 2);
+  align-self: stretch;
+}
 /* 分隔条细线配方与悬停/拖拽着色走上方「拖拽条统一规范」段；库 v4 的
    悬停/拖拽驱动是 data-separator 状态属性，旧版 data-resize-handle-state 已不存在 */
 .np-nav {
