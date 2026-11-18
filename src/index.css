@@ -423,7 +423,9 @@ html.glasswin.bp6-dark > body {
     radial-gradient(110% 85% at 62% 55%, rgba(61, 110, 140, 0.5), transparent 62%),
     radial-gradient(130% 100% at 6% 92%, rgba(196, 60, 92, 0.5), transparent 64%),
     linear-gradient(160deg, #1e2436, #241d31 45%, #33141f);
-  --np-surface: rgba(36, 41, 55, 0.55);
+  /* 深色卡片霜面随图案染色（2026-11-18 用户反馈「除极光外深色黑乎乎、无颜色变化」）：
+     极光画布紫/绯红 → 卡片紫灰，与弹窗染色同语言 */
+  --np-surface: rgba(40, 38, 66, 0.55);
   --np-surface-2: rgba(255, 255, 255, 0.07);
   --np-surface-glass-strong: rgba(30, 35, 50, 0.78);
   /* 弹窗染色极光玻璃深色映射：navy 顶 / 紫晕中 / 绯红底 */
@@ -459,6 +461,8 @@ html.glasswin[data-glassbg="dawn"].bp6-dark > body {
     radial-gradient(120% 70% at 50% 100%, rgba(52, 64, 105, 0.65), transparent 62%),
     linear-gradient(165deg, #1d2536, #16203a 50%, #121a2e);
   --np-dialog-glass: linear-gradient(165deg, rgba(24, 34, 54, 0.84), rgba(34, 48, 78, 0.7) 45%, rgba(20, 30, 52, 0.62));
+  /* 深色卡片霜面染色：雾蓝/藏青 */
+  --np-surface: rgba(28, 44, 84, 0.5);
 }
 html.glasswin[data-glassbg="geo"],
 html.glasswin[data-glassbg="geo"] > body {
@@ -475,6 +479,8 @@ html.glasswin[data-glassbg="geo"].bp6-dark > body {
     repeating-linear-gradient(-45deg, rgba(148, 190, 255, 0.06) 0 2px, transparent 2px 34px),
     linear-gradient(160deg, #1a2130, #151b28);
   --np-dialog-glass: linear-gradient(165deg, rgba(26, 32, 44, 0.84), rgba(30, 42, 62, 0.7) 45%, rgba(22, 28, 42, 0.62));
+  /* 深色卡片霜面染色：石墨蓝 */
+  --np-surface: rgba(26, 38, 60, 0.5);
 }
 html.glasswin[data-glassbg="silk"],
 html.glasswin[data-glassbg="silk"] > body {
@@ -491,6 +497,8 @@ html.glasswin[data-glassbg="silk"].bp6-dark > body {
     radial-gradient(150% 100% at 50% 120%, rgba(88, 44, 96, 0.7), transparent 60%),
     linear-gradient(160deg, #161c30, #141830 50%, #1c1628);
   --np-dialog-glass: linear-gradient(165deg, rgba(24, 32, 54, 0.84), rgba(30, 46, 74, 0.7) 45%, rgba(52, 30, 62, 0.62));
+  /* 深色卡片霜面染色：深蓝偏紫 */
+  --np-surface: rgba(34, 40, 76, 0.5);
 }
 html.glasswin[data-glassbg="blueprint"],
 html.glasswin[data-glassbg="blueprint"] > body {
@@ -507,6 +515,8 @@ html.glasswin[data-glassbg="blueprint"].bp6-dark > body {
     linear-gradient(90deg, rgba(148, 190, 255, 0.07) 1px, transparent 1px) 0 0 / 110px 110px,
     linear-gradient(160deg, #182031, #131a2a);
   --np-dialog-glass: linear-gradient(165deg, rgba(22, 30, 42, 0.84), rgba(26, 40, 58, 0.7) 45%, rgba(20, 34, 48, 0.62));
+  /* 深色卡片霜面染色：青蓝 */
+  --np-surface: rgba(22, 44, 66, 0.5);
 }
 html.glasswin[data-glassbg="mountain"],
 html.glasswin[data-glassbg="mountain"] > body {
@@ -526,6 +536,8 @@ html.glasswin[data-glassbg="mountain"].bp6-dark > body {
     radial-gradient(55% 45% at 78% 8%, rgba(230, 238, 255, 0.5), transparent 55%),
     linear-gradient(180deg, #17203a, #131a30 50%, #191330);
   --np-dialog-glass: linear-gradient(165deg, rgba(24, 30, 52, 0.84), rgba(40, 38, 74, 0.7) 45%, rgba(28, 24, 52, 0.62));
+  /* 深色卡片霜面染色：夜山蓝紫 */
+  --np-surface: rgba(30, 30, 66, 0.5);
 }
 /* 自定义图片：画布换图（cover/fixed）+ body::before 可调蒙版（z:-1 垫内容
    之下；浅色蒙白雾、深色蒙夜幕），blur 采样链含蒙版层 */
