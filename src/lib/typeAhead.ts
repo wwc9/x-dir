@@ -246,7 +246,9 @@ export function typeAheadCycle(
   if (!items.length) return null;
   const hit = findDir(items, prev.needle, curIdx, prev.mode, dir, prev.src);
   if (hit === null) return null;
-  const { pos, total } = statsOf(items, prev.needle, hit, prev.mode);
+  // 统计口径必须与循环集一致（同传 prev.src）：缺省 src 会按「名称+全部
+  // 读音变体」重算 pos/total，多音字场景 pill 计数虚高而 Tab 实际无处可去
+  const { pos, total } = statsOf(items, prev.needle, hit, prev.mode, prev.src);
   return { ...prev, idx: hit, pos, total };
 }
 

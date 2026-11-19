@@ -366,6 +366,15 @@ describe("首批扩容规则（首尾空白/父文件夹名/插入第N字符后/
     expect(items2[0].newName).toBe("AB-.txt");
   });
 
+  it("插入文字：at 按码点计，emoji 主名不拆代理对（2026-11-19 回归）", () => {
+    // "📁报告" = 4 码元 / 3 码点：at=1 应插在 📁 之后——按 UTF-16 码元直切
+    // 会得到孤立高位代理 + 插入文本的损坏名
+    const items = planRenames([f("📁报告.txt")], ops(newOp({ type: "insert", position: "at", at: 1, text: "-" })));
+    expect(items[0].newName).toBe("📁-报告.txt");
+    const items2 = planRenames([f("📁报告.txt")], ops(newOp({ type: "insert", position: "at", at: 9, text: "!" })));
+    expect(items2[0].newName).toBe("📁报告!.txt"); // 越界钳制到码点数
+  });
+
   it("扩展名小写（case+ext+lower 句式卡）", () => {
     const items = planRenames([f("报告.TXT"), f("照片.PNG")], ops(newOp({ type: "case", scope: "ext", mode: "lower" })));
     expect(items.map((i) => i.newName)).toEqual(["报告.txt", "照片.png"]);

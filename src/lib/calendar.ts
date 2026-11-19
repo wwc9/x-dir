@@ -45,16 +45,24 @@ export function parseKey(key: string): { y: number; m: number; d: number } | nul
   return { y: Number(m[1]), m: Number(m[2]), d: Number(m[3]) };
 }
 
-/** 6×7 月矩阵（周一起始）：首行补上月尾、末行补下月头，恒 42 格 */
+/** 6×7 月矩阵（周一起始）：首行补上月尾、末行补下月头，恒 42 格。
+ *  灰格（inMonth=false）的 y/m/d 一律为**真实相邻月日期**——消费端按
+ *  y-m-d 直取班休/农历/条目即正确，无须自行翻月（旧约定存所查月份 +
+ *  相邻月日号，消费端 new Date(y, m-1, d) 不翻月导致灰格整列错一天数据） */
 export function monthMatrix(year: number, month: number): CalCell[] {
   const lead = (new Date(year, month - 1, 1).getDay() + 6) % 7;
   const days = new Date(year, month, 0).getDate();
-  const prevDays = new Date(year, month - 1, 0).getDate();
   const cells: CalCell[] = [];
-  for (let i = lead - 1; i >= 0; i--) cells.push({ y: year, m: month, d: prevDays - i, inMonth: false });
+  for (let i = lead - 1; i >= 0; i--) {
+    const dt = new Date(year, month - 1, -i); // day 0 = 上月最后一天
+    cells.push({ y: dt.getFullYear(), m: dt.getMonth() + 1, d: dt.getDate(), inMonth: false });
+  }
   for (let d = 1; d <= days; d++) cells.push({ y: year, m: month, d, inMonth: true });
   let next = 1;
-  while (cells.length < 42) cells.push({ y: year, m: month, d: next++, inMonth: false });
+  while (cells.length < 42) {
+    const dt = new Date(year, month, next++); // 月序 month = 次月
+    cells.push({ y: dt.getFullYear(), m: dt.getMonth() + 1, d: dt.getDate(), inMonth: false });
+  }
   return cells;
 }
 

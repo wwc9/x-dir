@@ -154,13 +154,25 @@ try {
     if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue }
 }
 
-# ---- ④ 恢复真机版本（默认 v0.2.0 正式包）----
+# ---- ④ 恢复真机版本（默认 dist-release 最新正式包）----
 if ($SkipRestore) {
     Write-Host "SkipRestore：本机保持测试版 v$NewVersion，恢复请手动运行正式安装包"
     exit 0
 }
 $restore = if ($RestoreInstaller -ne "") { $RestoreInstaller }
-           else { Join-Path $Root "dist-release\v0.2.0\X-Dir_0.2.0_x64-setup.exe" }
+           else {
+               # 动态取 dist-release 下可解析的最新版本目录：硬编码版本在每次 bump 后
+               # 都会过期，默认恢复路径会静默指向旧版安装包
+               $latest = Get-ChildItem (Join-Path $Root "dist-release") -Directory -ErrorAction SilentlyContinue |
+                   Where-Object {
+                       $_.Name -like "v*" -and [System.Version]::TryParse(
+                           $_.Name.TrimStart("v"), [ref][System.Version]::new())
+                   } |
+                   Sort-Object { [System.Version]$_.Name.TrimStart("v") } |
+                   Select-Object -Last 1
+               if ($null -eq $latest) { Join-Path $Root "dist-release" }
+               else { Join-Path $latest.FullName ("X-Dir_{0}_x64-setup.exe" -f $latest.Name.TrimStart("v")) }
+           }
 if (-not (Test-Path $restore)) { Write-Host "  ⚠ 未找到 $restore，请手动恢复正式版" -ForegroundColor Yellow; exit 0 }
 Step "恢复真机正式版（$([IO.Path]::GetFileName($restore))，静默降级覆盖）"
 Start-Process -FilePath $restore -ArgumentList "/S" -Wait

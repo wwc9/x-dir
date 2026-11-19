@@ -197,7 +197,11 @@ export function moveTab(
   if (!from || !tab || from.tabs.length <= 1) return tree;
   let next = updatePane(tree, fromPaneId, (p) => {
     const tabs = p.tabs.filter((_, i) => i !== tabIndex);
-    return { ...p, tabs, activeTab: Math.min(p.activeTab, tabs.length - 1) };
+    // 移除的标签在活动标签左侧时，原活动标签左移一位需同步减一——
+    // 只做上界钳制会让活动焦点跳到右侧相邻标签（Explorer 语义是保持原标签）
+    const activeTab =
+      p.activeTab > tabIndex ? p.activeTab - 1 : Math.min(p.activeTab, tabs.length - 1);
+    return { ...p, tabs, activeTab };
   });
   next = updatePane(next, toPaneId, (p) => ({
     ...p,

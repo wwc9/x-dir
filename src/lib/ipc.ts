@@ -675,7 +675,11 @@ export const DEFAULT_SETTINGS: Settings = {
   shotBorderW: 0,
   shotBorderColor: "#000000",
   cliphistEnabled: true,
-  cliphistHotkey: "Ctrl+Shift+V",
+  // 默认键位不可与内置 global 快捷键冲突：Ctrl+Shift+V 是纵向窗格分裂
+  //（keyboard.ts，scope=global）——系统级 RegisterHotKey 会先吞掉该组合，
+  // 纵向分裂默认永远无法触发；错开为 Ctrl+Alt+A 同族（shot=Ctrl+Alt+A、
+  // calendar=Ctrl+Alt+D）。已显式存值的用户设置不受默认值影响
+  cliphistHotkey: "Ctrl+Alt+V",
   cliphistDirectPaste: true,
   cliphistCapacity: 500,
   cliphistKeepDays: 30,

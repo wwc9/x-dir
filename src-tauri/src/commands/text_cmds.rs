@@ -301,6 +301,15 @@ fn validate_output(output: &str) -> Result<(), AppError> {
     if output.trim().is_empty() || !is_valid_name(&crate::fs::path::file_name_of(output)) {
         return Err(AppError::new("E_INVALID_NAME", "输出文件名无效"));
     }
+    // 输出已存在 = E_EXISTS 拒绝（zip_files 同款兜底——对话框内联冲突校验
+    // 与执行之间存在竞态窗口，合并任务入队即写，检查必须在命令层收口：
+    // merge_documents 直接 fs::write，覆盖既有文件属静默数据丢失）
+    if crate::fs::entry::path_exists(output) {
+        return Err(AppError::new(
+            "E_EXISTS",
+            format!("同名文件已存在：{output}"),
+        ));
+    }
     Ok(())
 }
 
@@ -347,7 +356,7 @@ pub struct ExportedListing {
 /// 内容筛选；recursive = 穿透子文件夹（选中文件夹行后跟子树；空白处整树/
 /// 直接子项由它决定）。fmt ∈ csv|md|txt。行数超 MAX_ROWS 整体中止
 #[tauri::command]
-pub fn export_listing(
+pub async fn export_listing(
     paths: Vec<String>,
     dir: String,
     file_name: String,
@@ -355,8 +364,9 @@ pub fn export_listing(
     content: String,
     recursive: bool,
 ) -> Result<ExportedListing, AppError> {
+    // 先定型为 String（闭包要 move fmt，借用不能跨入闭包）
     let ext = match fmt.as_str() {
-        "csv" | "md" | "txt" | "xlsx" => fmt.as_str(),
+        "csv" | "md" | "txt" | "xlsx" => fmt.to_string(),
         _ => return Err(AppError::new("E_INVALID_NAME", "不支持的清单格式")),
     };
     let keep_dirs = match content.as_str() {
@@ -367,23 +377,6 @@ pub fn export_listing(
     };
     if !path_exists(&dir) {
         return Err(AppError::new("E_NOT_FOUND", format!("目录不存在：{dir}")));
-    }
-    let mut rows = if paths.is_empty() {
-        crate::fs::listing::collect_tree(&dir, recursive, crate::fs::listing::MAX_ROWS)
-    } else {
-        crate::fs::listing::collect_selected(&paths, &dir, recursive, crate::fs::listing::MAX_ROWS)
-    }
-    .map_err(|e| match e {
-        crate::fs::listing::CollectError::TooMany(cap) => {
-            AppError::new("E_LIMIT", format!("条目超过导出上限（{cap}），已中止"))
-        }
-        crate::fs::listing::CollectError::Unreadable => {
-            AppError::new("E_NOT_FOUND", "所选条目均无法读取")
-        }
-    })?;
-    crate::fs::listing::retain_content(&mut rows, keep_dirs);
-    if rows.is_empty() {
-        return Err(AppError::new("E_NOT_FOUND", "筛选后无条目可导出"));
     }
     let trimmed = file_name.trim();
     let base = if trimmed.is_empty() {
@@ -396,19 +389,69 @@ pub fn export_listing(
             format!("文件名含非法字符或为 Windows 保留名：{trimmed}"),
         ));
     };
-    let target = crate::jobs::pick::available_name(&join_name(&dir, &format!("{base}.{ext}")));
-    match crate::fs::listing::build_listing(&rows, &fmt) {
-        crate::fs::listing::ListingPayload::Text(text) => {
-            let mut bytes = vec![0xEF, 0xBB, 0xBF];
-            bytes.extend_from_slice(text.as_bytes());
-            std::fs::write(to_extended(&target), bytes)?;
+    // 整树收集最高 20 万行 + xlsx 构建 + 写盘，全在 spawn_blocking：
+    // 同步命令在主线程跑会冻住全部窗口（本仓库约定，files.rs/config_cmds.rs 同款）
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut rows = if paths.is_empty() {
+            crate::fs::listing::collect_tree(&dir, recursive, crate::fs::listing::MAX_ROWS)
+        } else {
+            crate::fs::listing::collect_selected(
+                &paths,
+                &dir,
+                recursive,
+                crate::fs::listing::MAX_ROWS,
+            )
         }
-        crate::fs::listing::ListingPayload::Xlsx(book) => {
-            std::fs::write(to_extended(&target), book)?;
+        .map_err(|e| match e {
+            crate::fs::listing::CollectError::TooMany(cap) => {
+                AppError::new("E_LIMIT", format!("条目超过导出上限（{cap}），已中止"))
+            }
+            crate::fs::listing::CollectError::Unreadable => {
+                AppError::new("E_NOT_FOUND", "所选条目均无法读取")
+            }
+        })?;
+        crate::fs::listing::retain_content(&mut rows, keep_dirs);
+        if rows.is_empty() {
+            return Err(AppError::new("E_NOT_FOUND", "筛选后无条目可导出"));
         }
-    }
-    Ok(ExportedListing {
-        count: rows.len(),
-        path: target,
+        let target = crate::jobs::pick::available_name(&join_name(&dir, &format!("{base}.{ext}")));
+        match crate::fs::listing::build_listing(&rows, &fmt) {
+            crate::fs::listing::ListingPayload::Text(text) => {
+                let mut bytes = vec![0xEF, 0xBB, 0xBF];
+                bytes.extend_from_slice(text.as_bytes());
+                std::fs::write(to_extended(&target), bytes)?;
+            }
+            crate::fs::listing::ListingPayload::Xlsx(book) => {
+                std::fs::write(to_extended(&target), book)?;
+            }
+        }
+        Ok(ExportedListing {
+            count: rows.len(),
+            path: target,
+        })
     })
+    .await
+    .map_err(|e| AppError::new("E_IO", format!("清单导出线程失败：{e}")))?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_output_rejects_existing_file() {
+        // 合并族输出已存在 = E_EXISTS 拒绝（zip_files 同款兜底）：旧实现
+        // merge_documents 直接 fs::write，覆盖既有文件属静默数据丢失
+        let d = std::env::temp_dir().join(format!("xdir_merge_out_{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let out = d.join("合并结果.txt").to_string_lossy().into_owned();
+        std::fs::write(&out, "既有内容").unwrap();
+        let err = validate_output(&out).unwrap_err();
+        assert_eq!(err.code, "E_EXISTS");
+        assert_eq!(std::fs::read_to_string(&out).unwrap(), "既有内容");
+        // 不存在的输出名放行
+        let fresh = d.join("新输出.txt").to_string_lossy().into_owned();
+        assert!(validate_output(&fresh).is_ok());
+        std::fs::remove_dir_all(&d).unwrap();
+    }
 }

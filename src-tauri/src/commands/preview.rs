@@ -7,6 +7,8 @@ use std::path::Path;
 
 use serde::Serialize;
 
+use crate::fs::path::to_extended;
+
 /// preview_read_text 返回：解码后的文本 + 截断/编码标记
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -175,7 +177,7 @@ fn trim_trailing_replacement(mut s: String) -> String {
 #[tauri::command]
 pub async fn preview_read_text(path: String, max_bytes: u32) -> Result<PreviewText, String> {
     let cap = max_bytes.min(TEXT_READ_CAP) as u64;
-    let mut f = std::fs::File::open(&path).map_err(|e| e.to_string())?;
+    let mut f = std::fs::File::open(to_extended(&path)).map_err(|e| e.to_string())?;
     let total = f.metadata().map_err(|e| e.to_string())?.len();
     let mut raw = Vec::with_capacity(cap.min(total) as usize);
     (&mut f)
@@ -212,13 +214,13 @@ pub async fn preview_extract_office(path: String) -> Result<OfficeText, String> 
         .and_then(|e| e.to_str())
         .map(|s| s.to_ascii_lowercase())
         .unwrap_or_default();
-    let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+    let meta = std::fs::metadata(to_extended(&path)).map_err(|e| e.to_string())?;
     if meta.len() > OFFICE_FILE_CAP {
         return Err("文件超过 100MB，不支持的预览体积".into());
     }
     match ext.as_str() {
         "docx" | "docm" => {
-            let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+            let data = std::fs::read(to_extended(&path)).map_err(|e| e.to_string())?;
             let (mut sections, truncated) = docx_sections(&data)?;
             if sections.is_empty() {
                 sections.push(OfficeSection::text_only("（空文档）", String::new(), false));
@@ -231,7 +233,7 @@ pub async fn preview_extract_office(path: String) -> Result<OfficeText, String> 
             })
         }
         "pptx" | "pptm" => {
-            let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+            let data = std::fs::read(to_extended(&path)).map_err(|e| e.to_string())?;
             let (sections, truncated) = pptx_slides(&data)?;
             Ok(OfficeText {
                 kind: "slides".into(),
@@ -257,7 +259,7 @@ pub async fn preview_extract_office(path: String) -> Result<OfficeText, String> 
             })
         }
         "epub" => {
-            let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+            let data = std::fs::read(to_extended(&path)).map_err(|e| e.to_string())?;
             let (sections, truncated) = epub_chapters(&data)?;
             let cover = epub_cover(&data);
             Ok(OfficeText {
@@ -269,31 +271,31 @@ pub async fn preview_extract_office(path: String) -> Result<OfficeText, String> 
         }
         // ODF 文字/演示（2026-10-18 补齐；.ods 早已支持）
         "odt" => {
-            let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+            let data = std::fs::read(to_extended(&path)).map_err(|e| e.to_string())?;
             odf_text_office(&data)
         }
         "odp" => {
-            let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+            let data = std::fs::read(to_extended(&path)).map_err(|e| e.to_string())?;
             odp_slides_office(&data)
         }
         // RTF：控制字剥离的降级文本抽取
         "rtf" => {
-            let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+            let data = std::fs::read(to_extended(&path)).map_err(|e| e.to_string())?;
             rtf_office(&data)
         }
         // 邮件原件（2026-10-18）
         "eml" => {
-            let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+            let data = std::fs::read(to_extended(&path)).map_err(|e| e.to_string())?;
             eml_office(&data)
         }
         "msg" => {
-            let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+            let data = std::fs::read(to_extended(&path)).map_err(|e| e.to_string())?;
             msg_office(&data)
         }
         // WPS 自有扩展名与 ppsx：容器嗅探分流（zip → 按 OOXML/ODF 部件路由；
         // OLE（旧版二进制）→ 明确报错并指引右键转 PDF）
         "et" | "wps" | "dps" | "ppsx" | "ppsm" => {
-            let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+            let data = std::fs::read(to_extended(&path)).map_err(|e| e.to_string())?;
             sniff_extract(&data, &path)
         }
         // CSV/TSV → 表格网格预览（2026-10-17：原走纯文本，现与 office 表格同管线）
@@ -310,17 +312,17 @@ pub async fn preview_extract_office(path: String) -> Result<OfficeText, String> 
         }
         // OFD 版式文档（GB/T 33190，2026-11-03）：文本抽取预览（版式不保真）
         "ofd" => {
-            let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+            let data = std::fs::read(to_extended(&path)).map_err(|e| e.to_string())?;
             ofd_office(&data)
         }
         // 旧版二进制 Office（2026-11-03）：原生文本抽取（无 Office/WPS 依赖）；
         // 前端在本通道失败时回落 COM 转 PDF
         "doc" => {
-            let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+            let data = std::fs::read(to_extended(&path)).map_err(|e| e.to_string())?;
             doc_office(&data)
         }
         "ppt" | "pps" => {
-            let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+            let data = std::fs::read(to_extended(&path)).map_err(|e| e.to_string())?;
             ppt_office(&data)
         }
         other => Err(format!("不支持的预览格式：.{other}")),
@@ -981,7 +983,7 @@ pub fn tiff_to_png_data_url<R: std::io::Read + std::io::Seek>(reader: R) -> Resu
 
 #[tauri::command]
 pub async fn preview_tiff_data_url(path: String) -> Result<String, String> {
-    let file = std::fs::File::open(&path).map_err(|e| e.to_string())?;
+    let file = std::fs::File::open(to_extended(&path)).map_err(|e| e.to_string())?;
     tiff_to_png_data_url(file)
 }
 
@@ -1491,7 +1493,7 @@ const MERGE_CAP: usize = 4_000;
 /// xlsx/xlsm → 每个工作表的合并单元格清单（顺序与 calamine sheet_names 对齐）。
 /// 任一部件缺失/解析失败返回空（合并展示是增强项，不让预览失败）。
 fn sheet_merges_xlsx(path: &str) -> Vec<Vec<SheetMerge>> {
-    let Ok(data) = std::fs::read(path) else {
+    let Ok(data) = std::fs::read(to_extended(path)) else {
         return Vec::new();
     };
     let Ok(wb_xml) = zip_read_entry(&data, "xl/workbook.xml") else {
@@ -1625,7 +1627,7 @@ pub fn ods_merges_xml(xml: &str, cap: usize) -> Vec<Vec<SheetMerge>> {
 
 /// ods 文件 → 每表合并清单（IO 壳：读 content.xml；失败返回空不让预览失败）
 fn sheet_merges_ods(path: &str) -> Vec<Vec<SheetMerge>> {
-    let Ok(data) = std::fs::read(path) else {
+    let Ok(data) = std::fs::read(to_extended(path)) else {
         return Vec::new();
     };
     zip_read_entry(&data, "content.xml")
@@ -1795,7 +1797,7 @@ fn clean_cell_text(raw: String) -> String {
 /// CSV/TSV → 单节表格预览：编码探测（BOM → UTF-8 → GB18030，Excel 导出的 GBK 可读）
 /// → RFC4180 解析（引号内逗号/换行/转义引号）→ 复用表格网格管线。csv 无合并概念。
 fn csv_section(path: &str, delim: char) -> Result<OfficeSection, String> {
-    let data = std::fs::read(path).map_err(|e| e.to_string())?;
+    let data = std::fs::read(to_extended(path)).map_err(|e| e.to_string())?;
     if sniff_binary(&data) {
         return Err("二进制文件不支持按表格预览".into());
     }
@@ -3094,7 +3096,7 @@ fn prune_preview_cache(dir: &std::path::Path) {
 pub async fn preview_doc_pdf(path: String) -> Result<DocPdfPreview, String> {
     let kind = crate::office::office_kind(&path)
         .ok_or_else(|| format!("不支持的转换格式：{}", crate::fs::path::file_name_of(&path)))?;
-    let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+    let meta = std::fs::metadata(to_extended(&path)).map_err(|e| e.to_string())?;
     let mtime_ms = meta
         .modified()
         .ok()
@@ -3170,7 +3172,7 @@ pub async fn preview_list_archive(
     path: String,
 ) -> Result<ArchiveListing, String> {
     let lower = path.to_ascii_lowercase();
-    let file = std::fs::File::open(&path).map_err(|e| e.to_string())?;
+    let file = std::fs::File::open(to_extended(&path)).map_err(|e| e.to_string())?;
     if lower.ends_with(".zip") {
         list_zip(file)
     } else if lower.ends_with(".tar") {
@@ -3390,7 +3392,7 @@ pub(crate) fn gz_probe(
 
 fn list_gz(path: &str, _lower: &str) -> Result<ArchiveListing, String> {
     use std::io::{Read, Seek, SeekFrom};
-    let mut f = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut f = std::fs::File::open(to_extended(path)).map_err(|e| e.to_string())?;
     let len = f.metadata().map_err(|e| e.to_string())?.len();
     if len < 18 {
         return Err("gzip 文件过小".into());
@@ -3452,7 +3454,7 @@ fn xz_index_size(footer: &[u8; 12], index: &[u8]) -> Result<u64, String> {
 
 fn list_xz(path: &str, lower: &str) -> Result<ArchiveListing, String> {
     use std::io::{Read, Seek, SeekFrom};
-    let mut f = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut f = std::fs::File::open(to_extended(path)).map_err(|e| e.to_string())?;
     let len = f.metadata().map_err(|e| e.to_string())?.len();
     if len < 32 {
         return Err("xz 文件过小".into());

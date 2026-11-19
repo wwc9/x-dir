@@ -483,15 +483,15 @@ export function FileList({
         force,
         nameFilter: filterActive ? filter.trim() : undefined,
       })
-      .then((r) => {
-        if (loadGenRef.current !== gen) return;
-        setTotal(r.total);
-        setLoaded(true);
-        // 只换第 0 页（可视窗必在其中）；其余页丢弃并同步重置 fetched，
-        // 滚动补页 effect 会按需重拉——软刷取数期间旧页继续展示，已浏览内容不闪空
-        setPages(new Map([[0, r.entries]]));
-        fetched.current = new Set([0]);
-        prefetchIcons(r.entries);
+        .then((r) => {
+          if (loadGenRef.current !== gen) return;
+          setTotal(r.total);
+          setLoaded(true);
+          // 就地替换第 0 页并保留其余旧页展示：数据置陈，fetched 已在 effect
+          // 入口清过——可视窗落在旧页时补页 effect 立即重拉换新。丢弃旧页
+          // （new Map([[0,...]])）会让深滚动处的可见行整屏闪空一个 IPC 往返
+          setPages((prev) => new Map(prev).set(0, r.entries));
+          prefetchIcons(r.entries);
         // 文件夹体积（2026-11-17 定案）：开关开启时按父目录整批异步拉取，
         // 到位后 store 订阅驱动行内补齐；刷新（refreshTick）同 effect 重跑即重算
         if (showFolderSize) useDirSizes.getState().request(path);
@@ -563,11 +563,17 @@ export function FileList({
       const reqId = nextPaneSearchReq(paneId);
       searchReqRef.current = reqId;
       setSearchRes({ entries: [], truncated: false, scanned: 0, elapsedMs: 0, engine: "scan" });
+      // 新搜索发起前清错误态：主加载 effect 在搜索词变化（searchActive 已
+      // true）时不重跑，上一次搜索失败的整页错误态不会被清除，成功结果
+      // 永远被 error 短路
+      setError(null);
+      usePanes.getState().setError(tabId, null);
       api
         .searchDir({ path, query: composed, typeFilter, reqId, deep: searchDeep })
         .then((r) => {
           if (stale || searchReqRef.current !== reqId) return;
           searchReqRef.current = null;
+          setError(null);
           setSearchRes(r);
           prefetchIcons(r.entries);
         })
@@ -730,13 +736,15 @@ export function FileList({
           if (loadGenRef.current !== gen) return;
           setTotal(r.total);
           setPages((prev) => new Map(prev).set(p, r.entries));
+          usePanes.getState().setError(tabId, null);
         })
         .catch((e) => {
           fetched.current.delete(p); // 允许下次滚动重试
           if (loadGenRef.current !== gen) return;
-          // 与首页加载同语义：状态条与地址栏都要感知错误
-          setError(e);
+          // 补页失败不整页替换为错误态（位置本身可打开，列表已大半在档）：
+          // 状态条感知 + toast，滚动重试可恢复；整页错误态只属于首页/上下文失败
           usePanes.getState().setError(tabId, String(e));
+          useUi.getState().toast(String(e), "error");
         });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

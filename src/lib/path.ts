@@ -10,11 +10,16 @@ export function fileNameOf(path: string): string {
   return path.replace(/\\+$/, "").split("\\").pop() || path;
 }
 
-/// 父目录；盘符根（C:\）返回 null
+/// 父目录；盘符根（C:\）返回 null；UNC 共享根（\\srv\share）返回 null
+///（\\server 不是可列目录的文件系统路径，向其发起 list_dir 必报错）
 export function parentPath(path: string): string | null {
   const trimmed = path.replace(/\\+$/, "");
   const idx = trimmed.lastIndexOf("\\");
   if (idx <= 0) return null;
+  if (trimmed.startsWith("\\\\")) {
+    const shareRoot = trimmed.indexOf("\\", 2); // server 与 share 的分隔位
+    if (shareRoot < 0 || idx <= shareRoot) return null;
+  }
   if (idx <= 2) return `${trimmed.slice(0, 2)}\\`;
   return trimmed.slice(0, idx);
 }

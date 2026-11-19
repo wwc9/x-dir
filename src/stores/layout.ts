@@ -199,11 +199,11 @@ export const useLayout = create<LayoutStore>()((set, get) => ({
     set({
       tree: updatePane(tree, paneId, (p) => {
         const tabs = p.tabs.filter((_, i) => i !== tabIndex);
-        return {
-          ...p,
-          tabs,
-          activeTab: Math.min(p.activeTab, tabs.length - 1),
-        };
+        // 与 layoutTree.moveTab 同语义：关掉活动标签左侧的标签时活动索引同步减一，
+        // 否则活动焦点跳到右侧相邻标签
+        const activeTab =
+          p.activeTab > tabIndex ? p.activeTab - 1 : Math.min(p.activeTab, tabs.length - 1);
+        return { ...p, tabs, activeTab };
       }),
     });
   },

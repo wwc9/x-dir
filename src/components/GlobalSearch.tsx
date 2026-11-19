@@ -215,13 +215,17 @@ export function GlobalSearchPage() {
     requestAnimationFrame(() => inputRef.current?.focus());
   }, [open]);
 
-  // 关闭时取消在途搜索
+  // 关闭即取消在途搜索 + 复位灵动岛。必须挂卸载 cleanup：关闭页面时
+  // App 条件渲染直接卸载本组件，[open] 收尾 effect 永远不会执行——
+  // 在途扫描会继续烧 IO 直到扫完，且灵动岛恒显「全盘搜索… N 项」
   useEffect(() => {
-    if (open) return;
-    const req = activeReq.current;
-    if (req !== null) api.cancelSearch(req).catch(() => undefined);
-    activeReq.current = null;
-  }, [open]);
+    return () => {
+      const req = activeReq.current;
+      if (req !== null) api.cancelSearch(req).catch(() => undefined);
+      activeReq.current = null;
+      useIsland.getState().setGsearch(null);
+    };
+  }, []);
 
   // 搜索：防抖（索引就绪 120ms 秒搜体感 / 遍历 300ms）；发起前显式取消上一轮
   //（流式批次按 reqId 守卫，旧批次自动丢弃）。类型选择器二态：files/dirs 直发

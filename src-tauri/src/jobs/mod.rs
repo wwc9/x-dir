@@ -319,14 +319,24 @@ impl JobManager {
 
     /// 暂停任务（仅 Copy/Move 生效：传输可中途停，批处理类瞬态任务不支持）
     pub fn pause(&self, job_id: u32) {
-        if let Some(f) = self.pauses.lock().unwrap().get(&job_id) {
+        if let Some(f) = self
+            .pauses
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(&job_id)
+        {
             f.store(true, Ordering::SeqCst);
         }
     }
 
     /// 恢复已暂停的任务
     pub fn resume(&self, job_id: u32) {
-        if let Some(f) = self.pauses.lock().unwrap().get(&job_id) {
+        if let Some(f) = self
+            .pauses
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(&job_id)
+        {
             f.store(false, Ordering::SeqCst);
         }
     }
@@ -342,9 +352,15 @@ impl JobManager {
     ) -> u32 {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let cancel = Arc::new(AtomicBool::new(false));
-        self.cancels.lock().unwrap().insert(id, cancel.clone());
+        self.cancels
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(id, cancel.clone());
         let paused = Arc::new(AtomicBool::new(false));
-        self.pauses.lock().unwrap().insert(id, paused.clone());
+        self.pauses
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(id, paused.clone());
         let slot = self.slot.clone();
         let cancels = Arc::clone(&self.cancels);
         let pauses = Arc::clone(&self.pauses);
@@ -388,13 +404,16 @@ impl JobManager {
                                 note: None,
                             },
                         );
-                        cancels.lock().unwrap().remove(&id);
-                        pauses.lock().unwrap().remove(&id);
+                        cancels
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner())
+                            .remove(&id);
+                        pauses.lock().unwrap_or_else(|p| p.into_inner()).remove(&id);
                         return;
                     }
-                    match slot.try_lock() {
-                        Ok(g) => break g,
-                        Err(_) => std::thread::sleep(std::time::Duration::from_millis(80)),
+                    match try_lock_recover(&slot) {
+                        Some(g) => break g,
+                        None => std::thread::sleep(std::time::Duration::from_millis(80)),
                     }
                 };
                 // 暂停旗标装配进线程本地（仅 Copy/Move；批处理类瞬态任务不响应暂停）
@@ -451,17 +470,22 @@ impl JobManager {
                         let mut todo: Vec<String> = sources.to_vec();
                         let mut native_done = false;
                         if native {
-                            if crate::native_ops::transfer(
+                            match crate::native_ops::transfer(
                                 matches!(kind, JobKind::Move),
                                 &sources,
                                 &dest,
-                            )
-                            .is_ok()
-                            {
-                                native_done = true;
-                            } else {
-                                todo.retain(|s| path_exists(s));
-                                native_done = todo.is_empty();
+                            ) {
+                                Ok(crate::native_ops::NativeOutcome::Done) => native_done = true,
+                                Ok(crate::native_ops::NativeOutcome::Aborted) => {
+                                    // 用户在系统对话框点了取消：按取消收尾。
+                                    // 回退内置引擎会把用户刚拒绝的传输原样做完；
+                                    // 置取消旗标让 job-done 带 cancelled=true
+                                    cancel.store(true, Ordering::SeqCst);
+                                }
+                                Err(_) => {
+                                    todo.retain(|s| path_exists(s));
+                                    native_done = todo.is_empty();
+                                }
                             }
                         }
                         if native_done {
@@ -971,8 +995,11 @@ impl JobManager {
                     cache.invalidate(d.trim_end_matches('\\'));
                 }
                 drop(cache);
-                cancels.lock().unwrap().remove(&id);
-                pauses.lock().unwrap().remove(&id);
+                cancels
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .remove(&id);
+                pauses.lock().unwrap_or_else(|p| p.into_inner()).remove(&id);
             });
             if std::panic::catch_unwind(body).is_err() {
                 let _ = app_h.emit(
@@ -990,15 +1017,26 @@ impl JobManager {
                         note: None,
                     },
                 );
-                cancels_h.lock().unwrap().remove(&id);
-                pauses_h.lock().unwrap().remove(&id);
+                cancels_h
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .remove(&id);
+                pauses_h
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .remove(&id);
             }
         });
         id
     }
 
     pub fn cancel(&self, job_id: u32) {
-        if let Some(flag) = self.cancels.lock().unwrap().get(&job_id) {
+        if let Some(flag) = self
+            .cancels
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(&job_id)
+        {
             flag.store(true, Ordering::SeqCst);
         }
     }
@@ -1006,6 +1044,18 @@ impl JobManager {
 
 pub(crate) fn is_cancelled(cancel: &AtomicBool) -> bool {
     cancel.load(Ordering::SeqCst)
+}
+
+/// try_lock + 毒锁恢复：任务体 panic 展开时 drop 掉持有的槽守卫会把 std
+/// Mutex 置毒，出队循环若把 Poisoned 与「槽被占用」同等对待（WouldBlock
+/// 重试），之后所有任务永久卡在排队轮询——全局串行队列整体瘫痪。此处
+/// 主动解一次毒接续执行（任务 panic 本身已有 catch_unwind 兜底收场）
+fn try_lock_recover<T>(m: &Mutex<T>) -> Option<std::sync::MutexGuard<'_, T>> {
+    match m.try_lock() {
+        Ok(g) => Some(g),
+        Err(std::sync::TryLockError::Poisoned(p)) => Some(p.into_inner()),
+        Err(std::sync::TryLockError::WouldBlock) => None,
+    }
 }
 
 /// 共享冲突（拖放事务/缩略图缓存等短暂占用源句柄）：可用短重试消解
@@ -1666,6 +1716,30 @@ mod tests {
         assert_eq!(Policy::parse("rename"), Policy::Rename);
         assert_eq!(Policy::parse("skip"), Policy::Skip);
         assert_eq!(Policy::parse("nonsense"), Policy::Skip);
+    }
+
+    #[test]
+    fn try_lock_recovers_poisoned_mutex() {
+        // 毒锁恢复回归（2026-11-19）：任务体 panic 毒化全局串行槽后，
+        // 出队循环必须拿到守卫继续跑，而不是把 Poisoned 当占用永久轮询
+        let m: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
+        let m2 = Arc::clone(&m);
+        let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            let _g = m2.lock().unwrap();
+            panic!("模拟任务体 panic");
+        }))
+        .is_err();
+        assert!(poisoned, "panic 应被捕获且 Mutex 已置毒");
+        // 裸 try_lock 对毒锁返回 Err（旧实现由此永久排队）；恢复版必须拿到守卫
+        assert!(m.try_lock().is_err());
+        let g = try_lock_recover(&m);
+        assert!(g.is_some(), "毒锁必须被恢复而非按占用处理");
+        drop(g);
+        // 未占用 = 正常拿到（毒锁被接管后守卫照常工作）；已占用 = None（走轮询）
+        let held = try_lock_recover(&m);
+        assert!(held.is_some());
+        assert!(try_lock_recover(&m).is_none());
+        drop(held);
     }
 
     #[test]

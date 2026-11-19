@@ -178,6 +178,17 @@ describe("highlightParts", () => {
       expect(pinyinHighlightRange("王文铖", "wwc", "zz")).toBeNull();
       expect(pinyinHighlightRange("王文铖", "", "wwc")).toBeNull();
     });
+    it("扩展区字符（emoji）按码元折算区间，不拆代理对（2026-11-19 回归）", () => {
+      // 📁 = 2 码元：旧实现按码点计数返回 [1,5]，写进码元下标的 marks 会从
+      // emoji 中间开始高亮并漏掉末字（渲染出孤立代理对）
+      expect(pinyinHighlightRange("📁审计报告.txt", "📁sjbg.txt", "sjbg")).toEqual([2, 6]);
+      // 端到端：分段高亮不产生孤立代理对
+      expect(highlightParts("📁审计报告.txt", "sjbg", ["📁sjbg.txt"])).toEqual([
+        { text: "📁", hit: false },
+        { text: "审计报告", hit: true },
+        { text: ".txt", hit: false },
+      ]);
+    });
   });
   it("无命中返回整段原文", () => {
     expect(highlightParts("abc", "xyz")).toEqual([{ text: "abc", hit: false }]);

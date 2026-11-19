@@ -26,6 +26,38 @@ export type UndoEntry =
 
 const MAX_STACK = 50;
 
+/** 重做成功后把条目压回撤销栈。与 push() 的差别是**不清 redoStack**：
+ *  push 的清空语义只属于「新操作」入口（编辑器惯例），重做压回若复用
+ *  push 会把尚未消费的重做分支连根清掉——多级重做第二次 Ctrl+Y 即失效，
+ *  且中间条目从两个栈中永久消失（无法再撤销也无法再重做） */
+function pushRedone(e: UndoEntry): void {
+  useUndo.setState((s) => ({ stack: [...s.stack, e].slice(-MAX_STACK) }));
+}
+
+/** 撤销移动的实际落点回写：撤销用 "(2)" 策略落回时，真实文件名可能与
+ *  原始 from 不同（原移动曾因冲突改名的场景）；重做仍按原始 from 找源
+ *  必失败（文件已是别的名字）。任务成功后把重做条目的 from 同步为撤销后
+ *  的真实落点，撤销/重做往复才闭环 */
+export function patchRedoneMove(
+  entry: Extract<UndoEntry, { kind: "move" }>,
+  items: { from: string; to: string }[],
+): void {
+  useUndo.setState((s) => {
+    const i = s.redoStack.indexOf(entry);
+    if (i < 0) return s; // 条目已被新操作挤出重做栈：无账可补
+    const landed = new Map(items.map((it) => [it.from, it.to]));
+    const redoStack = [...s.redoStack];
+    redoStack[i] = {
+      ...entry,
+      pairs: entry.pairs.map((p) => {
+        const real = landed.get(p.to);
+        return real ? { ...p, from: real } : p;
+      }),
+    };
+    return { redoStack };
+  });
+}
+
 interface UndoStore {
   stack: UndoEntry[];
   redoStack: UndoEntry[];
@@ -94,7 +126,9 @@ export const useUndo = create<UndoStore>()((set, get) => ({
     const top = stack[stack.length - 1];
     if (!top) return;
     set({ stack: stack.slice(0, -1), redoStack: [...get().redoStack, top] });
-    const label = get().peekLabel() ?? "";
+    // toast 文案描述的是「本次撤销的条目」：pop 之后再 peekLabel 取到的是
+    // 新栈顶（更早的、未撤销操作）的标签，张冠李戴
+    const label = labelOf(top);
     try {
       switch (top.kind) {
         case "rename": {
@@ -138,7 +172,15 @@ export const useUndo = create<UndoStore>()((set, get) => ({
             const { jobId } = await api.moveItems(paths, parent, "rename", false);
             useJobs
               .getState()
-              .register(jobId, "move", parent, paths.map(parentPath).filter((p): p is string => !!p));
+              .register(
+                jobId,
+                "move",
+                parent,
+                paths.map(parentPath).filter((p): p is string => !!p),
+                ({ ok, cancelled, items }) => {
+                  if (ok && !cancelled && items?.length) patchRedoneMove(top, items);
+                },
+              );
           }
           bump([...byParent.keys(), ...top.pairs.map((p) => parentPath(p.to))]);
           useUi.getState().toast(`已撤销：${label || "移动"}`);
@@ -181,7 +223,7 @@ export const useUndo = create<UndoStore>()((set, get) => ({
             await api.renameItem(op.from, fileNameOf(op.to));
           }
           bump(top.ops.flatMap((op) => [parentPath(op.to), parentPath(op.from)]));
-          get().push(top);
+          pushRedone(top);
           useUi.getState().toast(`已重做：${labelOf(top)}`);
           break;
         }
@@ -189,7 +231,7 @@ export const useUndo = create<UndoStore>()((set, get) => ({
           const { jobId } = await api.deleteItems(top.paths, false);
           const parents = top.paths.map(parentPath).filter((p): p is string => !!p);
           useJobs.getState().register(jobId, "delete", null, parents, ({ ok, cancelled }) => {
-            if (ok && !cancelled) get().push(top);
+            if (ok && !cancelled) pushRedone(top);
           });
           bump(parents);
           break;
@@ -203,7 +245,7 @@ export const useUndo = create<UndoStore>()((set, get) => ({
             .filter((p): p is string => !!p);
           useJobs.getState().register(jobId, "move", top.destDir, sourceParents, ({ ok, cancelled, items }) => {
             if (ok && !cancelled && items?.length) {
-              get().push({ kind: "move", destDir: top.destDir, pairs: items });
+              pushRedone({ kind: "move", destDir: top.destDir, pairs: items });
             }
           });
           bump([...sourceParents, top.destDir]);
@@ -217,7 +259,7 @@ export const useUndo = create<UndoStore>()((set, get) => ({
             .filter((p): p is string => !!p);
           useJobs.getState().register(jobId, "copy", top.destDir, sourceParents, ({ ok, cancelled, items }) => {
             if (ok && !cancelled && items?.length) {
-              get().push({
+              pushRedone({
                 kind: "copy",
                 sources: top.sources,
                 destDir: top.destDir,
@@ -232,7 +274,7 @@ export const useUndo = create<UndoStore>()((set, get) => ({
           const parent = parentPath(top.path);
           if (!parent) return;
           await api.createDir(parent, fileNameOf(top.path));
-          get().push(top);
+          pushRedone(top);
           bump([parent]);
           useUi.getState().toast(`已重做：${labelOf(top)}`);
           break;

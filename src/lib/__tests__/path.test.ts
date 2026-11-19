@@ -53,6 +53,15 @@ describe("parentPath", () => {
   it("尾反斜杠不影响结果", () => {
     expect(parentPath("E:\\a\\b\\")).toBe("E:\\a");
   });
+  it("UNC 共享根返回 null（\\server 不是可列目录的路径，2026-11-19 回归）", () => {
+    expect(parentPath("\\\\srv\\share")).toBeNull();
+    expect(parentPath("\\\\srv\\share\\")).toBeNull(); // 尾反斜杠先裁剪
+    expect(parentPath("\\\\server-noshare")).toBeNull();
+  });
+  it("UNC 子路径回溯到共享根为止", () => {
+    expect(parentPath("\\\\srv\\share\\sub")).toBe("\\\\srv\\share");
+    expect(parentPath("\\\\srv\\share\\sub\\deeper")).toBe("\\\\srv\\share\\sub");
+  });
 });
 
 describe("isValidName", () => {

@@ -387,6 +387,24 @@ describe("moveTab（V2 标签跨窗格拖动）", () => {
     expect(src.activeTab).toBe(1);
   });
 
+  it("移动激活标签左侧的标签：原活动标签保持激活（索引同步减一，2026-11-19 回归）", () => {
+    // [a, b, c] 激活 b(1)，把 a(0) 拖走：b 左移到 0，活动焦点必须还是 b——
+    // 旧实现只做上界钳制得 min(1,1)=1，活动焦点跳到右侧相邻标签 c
+    const { tree: t0, from, to } = seed();
+    const tree = updatePane(t0, from.id, (p) => ({ ...p, activeTab: 1 }));
+    const next = moveTab(tree, from.id, 0, to.id);
+    const src = dfsPanes(next).find((p) => p.id === from.id)!;
+    expect(src.tabs.map((t) => t.path)).toEqual(["C:\\b", "C:\\c"]);
+    expect(src.activeTab).toBe(0); // b（原索引 1 − 1）
+  });
+
+  it("移动激活标签右侧的标签：活动索引不动", () => {
+    const { tree, from, to } = seed(); // activeTab = 2 (c)
+    const next = moveTab(tree, from.id, 0, to.id); // 拖走 a
+    const src = dfsPanes(next).find((p) => p.id === from.id)!;
+    expect(src.activeTab).toBe(1); // c（原索引 2 − 1）
+  });
+
   it("同窗格 / 源仅剩一个标签 / 越界索引 均为无操作", () => {
     const { tree, from, to } = seed();
     expect(moveTab(tree, from.id, 0, from.id)).toBe(tree);

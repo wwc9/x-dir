@@ -24,31 +24,38 @@ pub struct HashRow {
     pub error: Option<String>,
 }
 
-/// 批量哈希（前端逐文件循环调用亦可，本命令支持一次整批）
+/// 批量哈希（前端逐文件循环调用亦可，本命令支持一次整批）。
+/// spawn_blocking（本仓库约定：同步命令在主线程跑会冻住全部窗口）——
+/// 多 GB 累计哈希分钟级，绝不能占主线程
 #[tauri::command]
-pub fn hash_files(paths: Vec<String>, algo: String) -> Result<Vec<HashRow>, AppError> {
+pub async fn hash_files(paths: Vec<String>, algo: String) -> Result<Vec<HashRow>, AppError> {
     let algo = HashAlgo::parse(&algo)
         .ok_or_else(|| AppError::new("E_INVALID_NAME", format!("未知算法：{algo}")))?;
-    Ok(paths
-        .iter()
-        .map(|p| {
-            let name = file_name_of(p);
-            match filetools::hash_file(p, algo) {
-                Ok(h) => HashRow {
-                    path: p.clone(),
-                    name,
-                    hash: Some(h),
-                    error: None,
-                },
-                Err(e) => HashRow {
-                    path: p.clone(),
-                    name,
-                    hash: None,
-                    error: Some(e.to_string()),
-                },
-            }
-        })
-        .collect())
+    tauri::async_runtime::spawn_blocking(move || {
+        let rows = paths
+            .iter()
+            .map(|p| {
+                let name = file_name_of(p);
+                match filetools::hash_file(p, algo) {
+                    Ok(h) => HashRow {
+                        path: p.clone(),
+                        name,
+                        hash: Some(h),
+                        error: None,
+                    },
+                    Err(e) => HashRow {
+                        path: p.clone(),
+                        name,
+                        hash: None,
+                        error: Some(e.to_string()),
+                    },
+                }
+            })
+            .collect::<Vec<HashRow>>();
+        Ok::<_, AppError>(rows)
+    })
+    .await
+    .map_err(|e| AppError::new("E_IO", format!("哈希线程失败：{e}")))?
 }
 
 /// 校验文件核对报告
@@ -63,9 +70,10 @@ pub struct VerifyReport {
 }
 
 /// 核对一个校验文件（.md5/.sha1/.sha256/.sha512，GNU SUMS 格式）：
-/// 以清单所在目录为基准哈希各文件并比对
+/// 以清单所在目录为基准哈希各文件并比对。spawn_blocking：逐项全量哈希
+/// 与批量哈希同类重 IO，主线程跑会冻住全部窗口（本仓库约定）
 #[tauri::command]
-pub fn verify_sums_file(path: String) -> Result<VerifyReport, AppError> {
+pub async fn verify_sums_file(path: String) -> Result<VerifyReport, AppError> {
     if !path_exists(&path) {
         return Err(AppError::new(
             "E_NOT_FOUND",
@@ -74,30 +82,35 @@ pub fn verify_sums_file(path: String) -> Result<VerifyReport, AppError> {
     }
     let text = std::fs::read_to_string(to_extended(&path))
         .map_err(|e| AppError::new("E_IO", e.to_string()))?;
-    let rows = filetools::verify_sums(&path, &text);
-    if rows.is_empty() {
+    // 有效性预检走纯解析（不哈希）：真正的逐项哈希在 spawn_blocking 里只做一次
+    if filetools::parse_sums(&text).is_empty() {
         return Err(AppError::new(
             "E_INVALID_NAME",
             "不是有效的校验文件（未解析出合法行）",
         ));
     }
-    // 算法优先按扩展名（.sha256 等），无扩展名信息时按首行哈希长度推断
-    let algo = filetools::algo_from_ext(&file_name_of(&path))
-        .map(|a| a.code())
-        .unwrap_or_else(|| match rows[0].expected.len() {
-            40 => "sha1",
-            64 => "sha256",
-            128 => "sha512",
-            _ => "md5",
-        });
-    let total = rows.len() as u32;
-    let ok_count = rows.iter().filter(|r| r.status == "ok").count() as u32;
-    Ok(VerifyReport {
-        algo: algo.into(),
-        total,
-        ok_count,
-        rows,
+    tauri::async_runtime::spawn_blocking(move || {
+        let rows = filetools::verify_sums(&path, &text);
+        // 算法优先按扩展名（.sha256 等），无扩展名信息时按首行哈希长度推断
+        let algo = filetools::algo_from_ext(&file_name_of(&path))
+            .map(|a| a.code())
+            .unwrap_or_else(|| match rows[0].expected.len() {
+                40 => "sha1",
+                64 => "sha256",
+                128 => "sha512",
+                _ => "md5",
+            });
+        let total = rows.len() as u32;
+        let ok_count = rows.iter().filter(|r| r.status == "ok").count() as u32;
+        Ok(VerifyReport {
+            algo: algo.into(),
+            total,
+            ok_count,
+            rows,
+        })
     })
+    .await
+    .map_err(|e| AppError::new("E_IO", format!("校验线程失败：{e}")))?
 }
 
 /// 批改时间戳/属性结果（best-effort：逐项失败不中断整批）

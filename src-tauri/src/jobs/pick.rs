@@ -22,15 +22,19 @@ pub fn available_name(target: &str) -> String {
             return p;
         }
     }
-    join_name(
-        &dir,
-        &format!(
-            "{stem} (副本){}",
-            ext.is_empty()
-                .then(String::new)
-                .unwrap_or_else(|| format!(".{ext}"))
-        ),
-    )
+    // 回退名也须查重：9999 个变体并存的极端场景下 "(副本)" 名可能已被占用，
+    // 不查重直接返回会被 Rename/Overwrite 策略覆盖既有文件（数据丢失）
+    let suffix = ext
+        .is_empty()
+        .then(String::new)
+        .unwrap_or_else(|| format!(".{ext}"));
+    let mut cand = join_name(&dir, &format!("{stem} (副本){suffix}"));
+    let mut n = 1;
+    while path_exists(&cand) {
+        n += 1;
+        cand = join_name(&dir, &format!("{stem} (副本) ({n}){suffix}"));
+    }
+    cand
 }
 
 #[cfg(test)]
@@ -71,6 +75,22 @@ mod tests {
         let a = join_name(&dir, "makefile");
         std::fs::write(&a, "x").unwrap();
         assert_eq!(available_name(&a), join_name(&dir, "makefile (2)"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn fallback_name_is_also_collision_checked() {
+        // 9999 个变体全占用 → "(副本)" 回退名；回退名也必须查重，
+        // 否则 Rename/Overwrite 策略下会覆盖既有 "xxx (副本).txt"
+        let dir = tempdir();
+        let a = join_name(&dir, "a.txt");
+        std::fs::write(&a, "x").unwrap();
+        for n in 2..10000u32 {
+            std::fs::write(join_name(&dir, &format!("a ({n}).txt")), "x").unwrap();
+        }
+        assert_eq!(available_name(&a), join_name(&dir, "a (副本).txt"));
+        std::fs::write(join_name(&dir, "a (副本).txt"), "x").unwrap();
+        assert_eq!(available_name(&a), join_name(&dir, "a (副本) (2).txt"));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

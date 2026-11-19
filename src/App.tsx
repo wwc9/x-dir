@@ -200,6 +200,7 @@ export default function App() {
         if (disposed) {
           unSettings();
           unCalendar();
+          unPastePane();
         } else {
           unsubSettings = unSettings;
           unsubPastePane = unPastePane;

@@ -159,11 +159,14 @@ pub(crate) fn run_office_to_pdf(
         prog.current_path = p.clone();
         let result = (|| -> Result<(), String> {
             let kind = office_kind(p).ok_or("不支持的 Office 格式")?;
-            let dst = format!(
+            // 同目录已有同名 PDF 时自动 "(2)" 改名（run_extract_text 同款）：
+            // PowerShell COM 的 ExportAsFixedFormat 对已存在目标静默覆盖，
+            // 直接旁写会把手工签章/旧版 PDF 无提示冲掉
+            let dst = crate::jobs::pick::available_name(&format!(
                 "{}\\{}.pdf",
                 parent_of(p).unwrap_or_else(|| ".".into()),
                 stem_of(p)
-            );
+            ));
             convert_to_pdf_file(p, &dst, kind)
         })();
         if let Err(e) = result {
@@ -291,12 +294,13 @@ pub(crate) fn run_clean_meta(
             }
             let data = std::fs::read(to_extended(p)).map_err(|e| e.to_string())?;
             let cleaned = clean_ooxml_bytes(&data)?;
-            let out = format!(
+            // 重复执行清洁会撞上上次的产物：available_name 顺延 "(2)"，不覆盖
+            let out = crate::jobs::pick::available_name(&format!(
                 "{}\\{}_清洁.{}",
                 parent_of(p).unwrap_or_else(|| ".".into()),
                 stem_of(p),
                 ext
-            );
+            ));
             std::fs::write(to_extended(&out), cleaned).map_err(|e| e.to_string())
         })();
         if let Err(e) = result {

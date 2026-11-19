@@ -69,12 +69,22 @@ pub fn file_name_of(path: &str) -> String {
         .to_string()
 }
 
-/// 父目录；盘符根（C:\）返回 None。UNC 路径 V1 不支持（§3.4）。
+/// 父目录；盘符根（C:\）返回 None；UNC 共享根（\\srv\share）返回 None
+/// （\\server 不是可列目录的文件系统路径，对它发起列目录必报错）。
+/// UNC 路径 V1 不支持（§3.4）。
 pub fn parent_of(path: &str) -> Option<String> {
     let trimmed = path.trim_end_matches('\\');
     let idx = trimmed.rfind('\\')?;
     if idx == 0 {
         return None;
+    }
+    if let Some(rest) = trimmed.strip_prefix("\\\\") {
+        // server 与 share 的分隔位：idx 未越过它 = 已是最浅共享根（或裸 \\server）
+        match rest.find('\\').map(|p| p + 2) {
+            Some(sr) if idx <= sr => return None,
+            None => return None,
+            _ => {}
+        }
     }
     if idx <= 2 {
         // "C:\a" 的父级是根 "C:\"
@@ -133,6 +143,31 @@ pub fn split_ext(name: &str) -> (&str, &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parent_of_unc_share_root_has_no_parent() {
+        // \\server\share 是可列目录的最浅层，\\server 非文件系统路径
+        assert_eq!(parent_of(r"\\srv\share"), None);
+        assert_eq!(parent_of(r"\\srv\share\"), None);
+        assert_eq!(parent_of(r"\\server-noshare"), None);
+        // 子路径回溯到共享根为止
+        assert_eq!(
+            parent_of(r"\\srv\share\sub"),
+            Some(r"\\srv\share".to_string())
+        );
+        assert_eq!(
+            parent_of(r"\\srv\share\sub\deeper"),
+            Some(r"\\srv\share\sub".to_string())
+        );
+    }
+
+    #[test]
+    fn parent_of_drive_paths_unchanged() {
+        assert_eq!(parent_of(r"E:\a\b\c"), Some(r"E:\a\b".to_string()));
+        assert_eq!(parent_of(r"E:\a"), Some(r"E:\".to_string()));
+        assert_eq!(parent_of(r"C:\"), None);
+        assert_eq!(parent_of("file.txt"), None);
+    }
 
     /// junction 实物回归（2026-11-01）：std 语义下 symlink_metadata 的
     /// is_dir() 对 reparse 目录恒 false，旧实现 `md.is_dir() && REPARSE`

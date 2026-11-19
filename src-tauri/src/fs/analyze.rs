@@ -3,11 +3,10 @@
 //! （Windows 下 junction 的 file_type().is_symlink() = true），防环防重复计数。
 
 use std::collections::HashMap;
-use std::path::Path;
 
 use sha2::{Digest, Sha256};
 
-use super::path::file_name_of;
+use super::path::{file_name_of, to_extended};
 
 /// 扫描规模上限（防病态目录树把会话拖死）
 const MAX_FILES: usize = 200_000;
@@ -23,7 +22,7 @@ fn walk_files(dir: &str, out: &mut Vec<(String, u64)>, cap: usize) {
     if out.len() >= cap {
         return;
     }
-    let Ok(rd) = std::fs::read_dir(dir) else {
+    let Ok(rd) = std::fs::read_dir(to_extended(dir)) else {
         return;
     };
     for entry in rd.flatten() {
@@ -44,8 +43,8 @@ fn walk_files(dir: &str, out: &mut Vec<(String, u64)>, cap: usize) {
     }
 }
 
-fn sha256_of(path: &Path) -> std::io::Result<String> {
-    let mut f = std::fs::File::open(path)?;
+fn sha256_of(path: &str) -> std::io::Result<String> {
+    let mut f = std::fs::File::open(to_extended(path))?;
     let mut h = Sha256::new();
     let mut buf = vec![0u8; 1 << 20];
     loop {
@@ -88,7 +87,7 @@ pub fn find_duplicates(root: &str) -> Vec<DupGroup> {
                 break;
             }
             hashed += 1;
-            if let Ok(h) = sha256_of(Path::new(&p)) {
+            if let Ok(h) = sha256_of(&p) {
                 by_hash.entry((size, h)).or_default().push(p);
             }
         }
@@ -122,7 +121,7 @@ pub struct DirSizeEntry {
 /// 目录体积：列出 dir 的直接子项（文件夹递归计体积与文件数，文件单计），按体积降序
 pub fn dir_sizes(dir: &str) -> Vec<DirSizeEntry> {
     let mut out = Vec::new();
-    let Ok(rd) = std::fs::read_dir(dir) else {
+    let Ok(rd) = std::fs::read_dir(to_extended(dir)) else {
         return out;
     };
     for entry in rd.flatten() {
@@ -173,7 +172,7 @@ pub fn scan_empty(root: &str) -> EmptyScan {
         if out.scanned >= MAX_FILES as u64 {
             return;
         }
-        let Ok(rd) = std::fs::read_dir(dir) else {
+        let Ok(rd) = std::fs::read_dir(to_extended(dir)) else {
             return;
         };
         let mut child_count = 0u64;
@@ -238,7 +237,7 @@ fn collect_rel(root: &str, map: &mut HashMap<String, RelItem>) {
         if map.len() >= MAX_FILES {
             return;
         }
-        let Ok(rd) = std::fs::read_dir(dir) else {
+        let Ok(rd) = std::fs::read_dir(to_extended(dir)) else {
             return;
         };
         for entry in rd.flatten() {

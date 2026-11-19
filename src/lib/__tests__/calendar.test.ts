@@ -23,23 +23,33 @@ describe("monthMatrix（周一起始 6×7）", () => {
   it("2026-10：首行补 9 月尾（10-01 周四 → lead 3），恒 42 格", () => {
     const cells = monthMatrix(2026, 10);
     expect(cells).toHaveLength(42);
-    expect(cells[0]).toEqual({ y: 2026, m: 10, d: 28, inMonth: false });
+    // 灰格存真实相邻月日期（消费端按 y-m-d 直取班休/农历/条目即正确）
+    expect(cells[0]).toEqual({ y: 2026, m: 9, d: 28, inMonth: false });
+    expect(cells[2]).toEqual({ y: 2026, m: 9, d: 30, inMonth: false });
     expect(cells[3]).toEqual({ y: 2026, m: 10, d: 1, inMonth: true });
-    expect(cells[41]).toEqual({ y: 2026, m: 10, d: 8, inMonth: false }); // 34 格 → 补 11-01..08
+    expect(cells[41]).toEqual({ y: 2026, m: 11, d: 8, inMonth: false }); // 34 格 → 补 11-01..08
   });
 
-  it("2024-02 闰月：29 天 + 首行 3 格前置（1-29..31），尾行补 12-01..10", () => {
+  it("2024-02 闰月：29 天 + 首行 3 格前置（1-29..31），尾行补 3-01..10", () => {
     const cells = monthMatrix(2024, 2);
-    expect(cells[0]).toEqual({ y: 2024, m: 2, d: 29, inMonth: false });
-    expect(cells[2]).toEqual({ y: 2024, m: 2, d: 31, inMonth: false });
+    expect(cells[0]).toEqual({ y: 2024, m: 1, d: 29, inMonth: false });
+    expect(cells[2]).toEqual({ y: 2024, m: 1, d: 31, inMonth: false });
     expect(cells[3]).toEqual({ y: 2024, m: 2, d: 1, inMonth: true });
-    expect(cells[41]).toEqual({ y: 2024, m: 2, d: 10, inMonth: false });
+    expect(cells[41]).toEqual({ y: 2024, m: 3, d: 10, inMonth: false });
   });
 
-  it("2024-12：12-01 周日 → lead 6（前置 11-25..30，11 月 30 天止）", () => {
+  it("2024-12：12-01 周日 → lead 6（前置 11-25..30，11 月 30 天止），尾行跨年补 2025-01", () => {
     const cells = monthMatrix(2024, 12);
-    expect(cells[5]).toEqual({ y: 2024, m: 12, d: 30, inMonth: false });
+    expect(cells[5]).toEqual({ y: 2024, m: 11, d: 30, inMonth: false });
     expect(cells[6]).toEqual({ y: 2024, m: 12, d: 1, inMonth: true });
+    expect(cells[41]).toEqual({ y: 2025, m: 1, d: 5, inMonth: false });
+  });
+
+  it("2026-01：首行跨年补 2025-12 尾（01-01 周四 → lead 3）", () => {
+    const cells = monthMatrix(2026, 1);
+    expect(cells[0]).toEqual({ y: 2025, m: 12, d: 29, inMonth: false });
+    expect(cells[2]).toEqual({ y: 2025, m: 12, d: 31, inMonth: false });
+    expect(cells[3]).toEqual({ y: 2026, m: 1, d: 1, inMonth: true });
   });
 });
 

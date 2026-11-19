@@ -44,12 +44,20 @@ import { recurrenceSummary } from "./RecurrenceEditDialog";
 import { DENSITY } from "../lib/tokens";
 
 
-const TODAY = new Date();
-const TODAY_KEY = dateKey(TODAY.getFullYear(), TODAY.getMonth() + 1, TODAY.getDate());
+/** 「今天」取整页挂载时刻（useMemo [] = 每次打开页面刷新）：模块级常量
+ *  会跨零点过期——常驻运行的应用在午夜后打开日历，今天高亮/T 键/跳转/
+ *  过期判定会全部指向昨天（跨月零点更会出现今天格不在月窗内） */
+function useToday(): { TODAY: Date; TODAY_KEY: string } {
+  return useMemo(() => {
+    const d = new Date();
+    return { TODAY: d, TODAY_KEY: dateKey(d.getFullYear(), d.getMonth() + 1, d.getDate()) };
+  }, []);
+}
 
 const STATUS_ORDER = ["todo", "doing", "done"] as const;
 
-/** 日期单元格用真实日期（首尾行的越界 d 由 Date 自动翻月），统一以真实键存取 */
+/** 日期单元格转真实键：monthMatrix 灰格已存真实相邻月日期，这里只做
+ *  y-m-d → "yyyy-MM-dd" 归一（历史约定的兼容层，消费端统一以真实键存取） */
 function realDate(cell: { y: number; m: number; d: number }): {
   ry: number;
   rm: number;
@@ -82,6 +90,7 @@ function highlightText(text: string, query: string): Array<{ t: string; hit: boo
 
 export function CalendarPage() {
   const t = useT();
+  const { TODAY, TODAY_KEY } = useToday();
   const showLunar = useSettings((s) => s.calendarShowLunar);
   const categories = useSettings((s) => s.calendarCategories);
   const colorBy = useSettings((s) => s.calendarColorBy);
@@ -160,7 +169,11 @@ export function CalendarPage() {
         if (!alive) return;
         setWorklog((prev) => {
           const next = { ...prev };
-          for (const days of rows) for (const d of days) next[d.date] = d.entries;
+          for (const days of rows)
+            for (const d of days) {
+              if (pendingRef.current.has(d.date)) continue; // 同月视图：不覆盖在途编辑
+              next[d.date] = d.entries;
+            }
           return next;
         });
       });
@@ -177,7 +190,12 @@ export function CalendarPage() {
         .then((days) => {
           setWorklog((prev) => {
             const next = { ...prev };
-            for (const d of days) next[d.date] = d.entries;
+            for (const d of days) {
+              // 本地在途编辑（未落盘）不被拉取响应覆盖：打开页面瞬间的
+              // 竞态窗口里新增的条目会被服务器旧值冲掉且不再重发
+              if (pendingRef.current.has(d.date)) continue;
+              next[d.date] = d.entries;
+            }
             return next;
           });
         })
@@ -218,19 +236,25 @@ export function CalendarPage() {
       saveTimer.current = window.setTimeout(() => {
         const pending = pendingRef.current;
         pendingRef.current = new Map();
-        let failed = false;
-        for (const [k, list] of pending) {
-          void api.worklogSetDay(k, list).catch(() => {
-            failed = true;
-          });
-        }
-        const now = new Date();
-        setSavedAt(
-          failed
-            ? null
-            : `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
+        // catch 是异步回调，同步读标志恒为 false（落盘失败静默假「已保存」）：
+        // 全部 settle 后再统一判定成功/失败（口径对齐 flushAll 的逐键报错）
+        const jobs = [...pending].map(([k, list]) =>
+          api.worklogSetDay(k, list).then(
+            () => null,
+            () => k,
+          ),
         );
-        if (failed) useUi.getState().toast(t("工作记录保存失败"), "error");
+        void Promise.all(jobs).then((results) => {
+          const bad = results.filter((k): k is string => k !== null);
+          if (bad.length) {
+            for (const k of bad) useUi.getState().toast(t("工作记录保存失败：{k}", { k }), "error");
+            return;
+          }
+          const now = new Date();
+          setSavedAt(
+            `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
+          );
+        });
       }, 800);
     },
     [t],

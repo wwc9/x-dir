@@ -231,7 +231,9 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     items: [
       {
         id: "cliphist-open",
-        keys: ["Ctrl+Shift+V"],
+        // 默认键位错开内置 global 快捷键（Ctrl+Shift+V = 纵向窗格分裂，
+        // 系统级热键会吞掉该组合）；scope 与 ipc.ts DEFAULTS.cliphistHotkey 同源
+        keys: ["Ctrl+Alt+V"],
         label: "呼出剪贴板历史浮窗（系统级热键，任意界面生效；键位可在设置 → 剪贴板自定义录制）",
         scope: "system",
       },

@@ -13,7 +13,10 @@ export function formatBytes(n: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
   let v = n;
   let u = 0;
-  while (v >= 1024 && u < units.length - 1) {
+  while (u < units.length - 1) {
+    // 升单位以「显示值」为准：一位小数四舍五入满 1024 即进位
+    //（1048575 B 显示 1024.0 KB 是边界瑕疵，应为 1.0 MB）
+    if (Number(u === 0 ? String(v) : v.toFixed(1)) < 1024) break;
     v /= 1024;
     u++;
   }

@@ -487,6 +487,9 @@ export function Sidebar() {  const t = useT();
     startY: number;
     moved: boolean;
   } | null>(null);
+  /** 本次拖拽结束时要吞掉的 click（up 与补发 click 之间 dragSessionRef 已清空，
+   *  守卫改读本标记；click 消费或宏任务兜底复位） */
+  const swallowClickRef = useRef(false);
   const ordered = useMemo(
     () => orderWorkspaces(items.map((i) => i.name), order),
     [items, order],
@@ -580,6 +583,15 @@ export function Sidebar() {  const t = useT();
     const onUp = () => {
       const ss = dragSessionRef.current;
       dragSessionRef.current = null;
+      // 拖拽已发生时吞掉随后浏览器补发的 click（onClickCapture 消费）。
+      // 不能让 onClickCapture 读 dragSessionRef——up 已把它清空，守卫必然落空。
+      // 宏任务兜底复位：click 未派发（如指针移出窗口松开）时不滞留
+      if (ss?.moved) {
+        swallowClickRef.current = true;
+        window.setTimeout(() => {
+          swallowClickRef.current = false;
+        }, 0);
+      }
       if (ss?.moved) {
         // overIdx 经 setState 异步——落位目标在 onMove 里同步算不出，这里
         // 从最终指示态取：直接读 React 最新渲染前的 overIdx 闭包值可能滞后
@@ -895,8 +907,10 @@ export function Sidebar() {  const t = useT();
                 };
               }}
               onClickCapture={(e) => {
-                // 拖拽已发生时吞掉落点 click（up 后浏览器补发的 click 不应切换方案）
-                if (dragSessionRef.current?.moved) {
+                // 拖拽已发生时吞掉落点 click（up 后浏览器补发的 click 不应切换方案）：
+                // 会话在 up 已清空，改读 swallowClickRef 标记
+                if (swallowClickRef.current) {
+                  swallowClickRef.current = false;
                   e.stopPropagation();
                   e.preventDefault();
                 }

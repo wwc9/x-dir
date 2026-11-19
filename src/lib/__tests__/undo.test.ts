@@ -28,8 +28,9 @@ vi.mock("../../stores/ui", async () => {
   return { useUi };
 });
 
-import { useUndo } from "../undo";
+import { useUndo, patchRedoneMove, type UndoEntry } from "../undo";
 import { api } from "../ipc";
+import { useUi } from "../../stores/ui";
 
 // redo/undo 的 bump() → usePanes.bumpAffected 走 window.setTimeout 计时窗口：
 // node 环境把 window 指回 globalThis（同 keyboard.test 惯例）
@@ -179,6 +180,78 @@ describe("重做栈（redo）", () => {
     expect(useUndo.getState().stack).toEqual([]);
     await useUndo.getState().redo();
     expect(useUndo.getState().stack).toHaveLength(1);
+  });
+
+  it("多级重做逐级推进：重做压回不清掉剩余重做分支（2026-11-19 回归）", async () => {
+    // 3 次操作 → 撤 2 次（redoStack=[最早, 次早]）→ 重做 1 次：
+    // 旧实现 redo 复用 push（清 redoStack），第二级条目从两个栈中永久消失
+    useUndo.getState().push({ kind: "rename", ops: [{ from: "C:\\1.txt", to: "C:\\一.txt" }] });
+    useUndo.getState().push({ kind: "rename", ops: [{ from: "C:\\2.txt", to: "C:\\二.txt" }] });
+    useUndo.getState().push({ kind: "rename", ops: [{ from: "C:\\3.txt", to: "C:\\三.txt" }] });
+    await useUndo.getState().undo();
+    await useUndo.getState().undo();
+    expect(useUndo.getState().redoStack).toHaveLength(2);
+    await useUndo.getState().redo();
+    // 重做 1 次 = 消费栈顶 1 条、另 1 条必须仍在重做分支可继续重做
+    expect(useUndo.getState().redoStack).toHaveLength(1);
+    expect(useUndo.getState().stack).toHaveLength(2);
+    await useUndo.getState().redo();
+    expect(useUndo.getState().redoStack).toHaveLength(0);
+    expect(useUndo.getState().stack).toHaveLength(3);
+    // 全部重做后还能继续撤销（栈未损坏）
+    await useUndo.getState().undo();
+    expect(useUndo.getState().redoStack).toHaveLength(1);
+  });
+
+  it("撤销 toast 标签 = 本次撤销条目，而非新栈顶（2026-11-19 回归）", async () => {
+    const toast = vi.fn();
+    type ToastStore = {
+      setState(p: { toast: (text: string, kind?: "info" | "error") => void }): void;
+    };
+    const store = useUi as unknown as ToastStore;
+    store.setState({ toast });
+    spy("deleteItems").mockResolvedValue({ jobId: 9 });
+    // 先重命名后新建文件夹，撤销的是「新建文件夹」：
+    // 旧实现 pop 后 peekLabel 取到新栈顶（重命名）的标签，张冠李戴
+    useUndo.getState().push({ kind: "rename", ops: [{ from: "C:\\a.txt", to: "C:\\b.txt" }] });
+    useUndo.getState().push({ kind: "newfolder", path: "C:\\新建文件夹" });
+    await useUndo.getState().undo();
+    expect(toast).toHaveBeenCalledWith('已撤销：新建 "新建文件夹"（已移入回收站）');
+    store.setState({ toast: () => undefined });
+  });
+
+  it("patchRedoneMove：撤销落点改名回写重做条目源路径", async () => {
+    spy("moveItems").mockResolvedValue({ jobId: 11 });
+    // 原移动因冲突落成 "(2)" 名：撤销把它移回源目录时若再次落成别的名字，
+    // 重做仍按原始 from 找源必失败——回写后 from = 撤销后的真实落点
+    const entry: UndoEntry = {
+      kind: "move",
+      destDir: "C:\\dest",
+      pairs: [{ from: "C:\\src\\a.txt", to: "C:\\dest\\a (2).txt" }],
+    };
+    useUndo.getState().push(entry);
+    await useUndo.getState().undo();
+    // 条目已进重做栈（同一引用）
+    expect(useUndo.getState().redoStack[0]).toBe(entry);
+    // 模拟撤销移动的任务回执：移回源目录时冲突落成 "a (3).txt"
+    patchRedoneMove(entry, [{ from: "C:\\dest\\a (2).txt", to: "C:\\src\\a (3).txt" }]);
+    const patched = useUndo.getState().redoStack[0];
+    expect(patched.kind === "move" ? patched.pairs[0].from : null).toBe("C:\\src\\a (3).txt");
+    expect(patched.kind === "move" ? patched.pairs[0].to : null).toBe("C:\\dest\\a (2).txt");
+  });
+
+  it("patchRedoneMove：条目已被新操作挤出重做栈时不动（无账可补）", async () => {
+    spy("moveItems").mockResolvedValue({ jobId: 12 });
+    const entry: UndoEntry = {
+      kind: "move",
+      destDir: "C:\\dest",
+      pairs: [{ from: "C:\\src\\a.txt", to: "C:\\dest\\a.txt" }],
+    };
+    useUndo.getState().push(entry);
+    await useUndo.getState().undo();
+    useUndo.getState().push({ kind: "newfolder", path: "C:\\x" }); // 挤掉重做分支
+    patchRedoneMove(entry, [{ from: "C:\\dest\\a.txt", to: "C:\\src\\a (2).txt" }]);
+    expect(useUndo.getState().redoStack).toEqual([]);
   });
 
   it("redo newfolder：重新建目录并压回", async () => {

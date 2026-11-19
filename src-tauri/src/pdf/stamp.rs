@@ -170,13 +170,16 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
     (y, m as u32, d as u32)
 }
 
-/// 当前本机日期（UTC 近似，水印用途足够）
+/// 当前本机日期（本地时区，经 GetLocalTime 同源的偏移换算）：水印与输出
+/// 文件名里的 [日期时间] 是交付留档标识，UTC 近似会在本地 0 点至偏移区间
+/// 内落错一天（东八区凌晨操作的文件名全挂前一天）
 pub fn today() -> (i64, u32, u32) {
-    let secs = std::time::SystemTime::now()
+    let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
+        .map(|d| d.as_millis() as u64)
         .unwrap_or(0);
-    civil_from_days((secs / 86_400) as i64)
+    let local_ms = now_ms as i64 + crate::fs::matcher::local_utc_offset_ms(now_ms);
+    civil_from_days(local_ms.div_euclid(86_400_000))
 }
 
 /// 当前日期按格式渲染
@@ -714,6 +717,27 @@ fn set_xobject_and_gs(res: &mut Dictionary, img_id: ObjectId, ext_gstate: Dictio
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn today_is_local_not_utc() {
+        // 本地时区回归（2026-11-19）：水印/输出文件名里的 [日期时间] 必须
+        // 取本地墙钟日——UTC 近似会在本地 0 点–偏移区间错前一天（东八区凌晨）
+        let (y, m, d) = today();
+        unsafe {
+            use windows::Win32::System::SystemInformation::GetLocalTime;
+            let st = GetLocalTime();
+            // 跨午夜竞态兜底：重取一次本地时间再判（两次取样的并集覆盖边界）
+            let st2 = GetLocalTime();
+            let matches_st = y == st.wYear as i64 && m == st.wMonth as u32 && d == st.wDay as u32;
+            let matches_st2 =
+                y == st2.wYear as i64 && m == st2.wMonth as u32 && d == st2.wDay as u32;
+            assert!(
+                matches_st || matches_st2,
+                "today() 应为本地墙钟日期：got ({y},{m},{d})"
+            );
+        }
+    }
 
     #[test]
     fn render_text_placeholders() {

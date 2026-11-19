@@ -332,8 +332,12 @@ function applyOp(text: string, op: RenameOp, idx: number, mtimeMs: number | unde
     }
     case "insert": {
       if (op.position === "at") {
-        const at = Math.max(0, Math.min(op.at ?? 0, text.length));
-        return text.slice(0, at) + op.text + text.slice(at);
+        // 「第 N 个字符后插入」按码点定位（UI 语义是字符）：UTF-16 码元
+        // 直切会拆散 emoji 等代理对，产生损坏名
+        const chars = [...text];
+        const at = Math.max(0, Math.min(op.at ?? 0, chars.length));
+        const cut = chars.slice(0, at).join("").length;
+        return text.slice(0, cut) + op.text + text.slice(cut);
       }
       return op.position === "start" ? op.text + text : text + op.text;
     }

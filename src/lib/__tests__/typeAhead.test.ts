@@ -246,6 +246,20 @@ describe("typeAheadCycle（Tab 命中集内循环，沿用生效针与档位）"
     const m = typeAheadStep(items, "", "c", -1)!; // c 唯一
     expect(typeAheadCycle(items, m, 4, 1)?.idx).toBe(4);
   });
+  it("循环统计按冻结读音层计算（src 缺省虚高计数，2026-11-19 回归）", () => {
+    const lay = [
+      { name: "aa.txt", path: "l0", py: ["m", "yja"] }, // 仅变体层（src1）命中
+      { name: "yy.txt", path: "l1", py: ["yjfirst"] }, // 首选层命中，但是当前项不驻留
+      { name: "zz.txt", path: "l2", py: ["q"] },
+    ];
+    // 从 yy.txt 敲 yj：首选层只命中当前项被跳过 → 变体层兜底 aa.txt
+    const m = typeAheadStep(lay, "y", "j", 1)!;
+    expect(m).toMatchObject({ idx: 0, needle: "yj", mode: "prefix", src: 1 });
+    // Tab 循环集 = src1 命中集（仅 aa.txt 自身）→ 原地驻留，统计 1/1；
+    // 旧实现缺省 src 按全层重算会把 yy.txt（首选层）也数进去虚报 1/2
+    const c = typeAheadCycle(lay, m, 0, 1)!;
+    expect(c).toMatchObject({ idx: 0, pos: 1, total: 1 });
+  });
 });
 
 describe("typeAheadRematch（Backspace 回删重匹配）", () => {

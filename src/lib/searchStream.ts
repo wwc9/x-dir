@@ -107,9 +107,12 @@ function isHanziChar(c: string): boolean {
 
 /**
  * 拼音首字母命中 → 名称字符区间：term 在 py 串（`FileEntry.py`，Rust
- * `pinyin_initials` 产物）中的码位区间映射回名称字符下标。对齐规则与 Rust
- * 构建侧一致（每字符贡献：汉字 1 个首字母 / 非汉字取小写展开），命中即说明
- * 首字母通道匹配成立，可安全高亮。无对应返回 null。
+ * `pinyin_initials` 产物）中的码位区间映射回名称下标。返回值为 **UTF-16
+ * 码元下标**——与名称字面通道的 indexOf/marks 同口径；码点计数在返回前
+ * 折算成码元（emoji/扩展区字符一字符记 2），否则含代理对的名称高亮错位
+ * 并拆散代理对。对齐规则与 Rust 构建侧一致（每字符贡献：汉字 1 个首字母
+ * / 非汉字取小写展开），命中即说明首字母通道匹配成立，可安全高亮。
+ * 无对应返回 null。
  */
 export function pinyinHighlightRange(
   name: string,
@@ -123,16 +126,16 @@ export function pinyinHighlightRange(
   let pyIdx = 0;
   let start = -1;
   let end = -1;
-  let i = 0;
+  let cu = 0; // 码元下标（surrogate pair 记 2）
   for (const ch of name) {
     const contrib = isHanziChar(ch) ? 1 : ch.toLowerCase().length;
     const segEnd = pyIdx + contrib;
     if (segEnd > at && pyIdx < termEnd) {
-      if (start < 0) start = i;
-      end = i + 1;
+      if (start < 0) start = cu;
+      end = cu + ch.length;
     }
     pyIdx = segEnd;
-    i += 1;
+    cu += ch.length;
   }
   return start >= 0 ? [start, end] : null;
 }

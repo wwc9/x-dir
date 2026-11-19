@@ -52,6 +52,13 @@ describe("formatSize", () => {
     expect(formatBytes(1536)).toBe("1.5 KB");
     expect(formatBytes(3 * 1024 ** 3)).toBe("3.0 GB");
   });
+  it("formatBytes：单位边界按显示值进位，不出现 1024.0 KB（2026-11-19 回归）", () => {
+    expect(formatBytes(1048575)).toBe("1.0 MB"); // 1MB−1：旧实现显示 1024.0 KB
+    expect(formatBytes(1073741823)).toBe("1.0 GB"); // 1GB−1
+    expect(formatBytes(1024 ** 4 - 1)).toBe("1.0 TB"); // 1TB−1
+    expect(formatBytes(1048576)).toBe("1.0 MB"); // 精确边界不变
+    expect(formatBytes(1023)).toBe("1023 B");
+  });
 });
 
 describe("formatTime", () => {

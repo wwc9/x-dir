@@ -1871,7 +1871,6 @@ export const EN: Record<string, string> = {
   "已保存 {t}": "Saved {t}",
   "本月已记录 {d} 天 · 完成 {n} 条": "{d} days recorded this month · {n} done",
   "工作记录保存失败：{k}": "Failed to save work log: {k}",
-  "工作记录保存失败": "Failed to save work log",
   "月度": "Monthly",
   "年度": "Yearly",
   "区间": "Range",

@@ -294,6 +294,12 @@ pub fn create_file(parent_dir: String, name: String) -> Result<String, AppError>
         ));
     }
     let p = join_name(&parent_dir, &name);
+    // 重名拒绝（大小写不敏感，与 create_dir 冲突语义一致）：File::create 对
+    // 已存在文件是截断为 0 字节、办公模板是整体覆盖——静默清空用户旧文件
+    // 属数据丢失，Explorer 对话框新建同场景也是报错而非覆盖
+    if name_exists_ci(&parent_dir, &name) {
+        return Err(AppError::new("E_EXISTS", format!("同名文件已存在：{p}")));
+    }
     // 办公格式带最小合法模板落盘（方案 A，2026-11-05 定案）：0 字节的
     // docx/xlsx/pptx 不是合法 OOXML（ZIP 容器缺 [Content_Types].xml 等部件），
     // Office/WPS 打开报损坏，rtf 须带规范头；txt/md/csv/py 等纯文本空文件
@@ -723,6 +729,30 @@ mod office_template_tests {
         assert!(office_template("表.csv").is_none());
         assert!(office_template("脚本.py").is_none());
         assert!(office_template("无扩展名").is_none());
+    }
+
+    #[test]
+    fn create_file_rejects_existing_name() {
+        // 旧实现 File::create 对已存在文件截断为 0 字节、办公模板整体覆盖
+        // ——静默清空用户旧文件属数据丢失；重名必须 E_EXISTS 拒绝
+        let d = std::env::temp_dir().join(format!("xdir_cf_conflict_{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let dir = d.to_string_lossy().into_owned();
+        let p = create_file(dir.clone(), "笔记.txt".into()).unwrap();
+        std::fs::write(&p, "重要内容").unwrap();
+        // 同名（精确）拒绝且原文件不被截断
+        let err = create_file(dir.clone(), "笔记.txt".into()).unwrap_err();
+        assert_eq!(err.code, "E_EXISTS", "同名新建必须报 E_EXISTS");
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), "重要内容");
+        // 大小写不同、_ntfs 折叠视为同一文件（笔记.TXT ↔ 笔记.txt）
+        let err2 = create_file(dir.clone(), "笔记.TXT".into()).unwrap_err();
+        assert_eq!(err2.code, "E_EXISTS");
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), "重要内容");
+        // 办公模板同名同理（此前会被模板字节整体覆盖）
+        create_file(dir.clone(), "台账.docx".into()).unwrap();
+        let err3 = create_file(dir, "台账.docx".into()).unwrap_err();
+        assert_eq!(err3.code, "E_EXISTS");
+        std::fs::remove_dir_all(&d).unwrap();
     }
 
     #[test]
