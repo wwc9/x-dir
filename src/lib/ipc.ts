@@ -1539,10 +1539,18 @@ export const api = {
     cmd<void>("shot_gif_begin", { rx, ry, rw: w, rh: h, mx, my }),
   /** GIF 录制第二段：等蒙层停靠 → 复用 shot-bar 窗换装 gifbar 浮条 → 起录制循环 */
   shotGifLaunch: () => cmd<void>("shot_gif_launch"),
-  /** 录制浮条操作：finish = 用已录内容出结果；cancel = 丢弃并删临时文件；
-   *  fps:N = 切换帧率档（8/12/15，下一帧起生效） */
-  shotGifControl: (action: "finish" | "cancel" | `fps:${8 | 12 | 15}`) =>
-    cmd<void>("shot_gif_control", { action }),
+  /** 录制浮条操作：start = 待命态开始录制（点开始才录，2026-11-19 定案）；
+   *  finish = 录制中完成出结果；cancel = 丢弃并删临时文件（待命/录制均可）；
+   *  fps:N = 切换帧率档（8/12/15，下一帧起生效）；
+   *  bar:on|off = 底部进度条开关（待命态可切，控制导出后是否合成） */
+  shotGifControl: (
+    action:
+      | "start"
+      | "finish"
+      | "cancel"
+      | `fps:${8 | 12 | 15}`
+      | `bar:${"on" | "off"}`,
+  ) => cmd<void>("shot_gif_control", { action }),
   /** 滚动结果窗：长图（临时 PNG 路径）写入剪贴板 */
   shotResultCopy: (file: string) => cmd<void>("shot_result_copy", { file }),
   /** 结果窗：另存（原生对话框；kind = png 滚动长图（缺省）/ gif GIF 录制，

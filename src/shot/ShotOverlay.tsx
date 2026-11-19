@@ -36,9 +36,9 @@ import {
   Save,
   ScanText,
   Square,
+  Film,
   Type,
   Undo2,
-  Video,
   Waves,
   X,
 } from "lucide-react";
@@ -2658,10 +2658,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             </button>
             <button
               className="np-shot-tool np-shot-primary"
-              data-tip="录制 GIF：录制选区实时画面（120s 上限）"
+              data-tip="录制 GIF：框定区域后点开始录制（120s 上限）"
               onClick={startGif}
             >
-              <AppIcon icon={Video} size={DENSITY.iconLg} />
+              <AppIcon icon={Film} size={DENSITY.iconLg} />
             </button>
             <button
               className="np-shot-tool"

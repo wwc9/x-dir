@@ -188,7 +188,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       {
         id: "shot-gif-keys",
         keys: ["Enter / Esc"],
-        label: "GIF 录制浮条：完成出结果 / 取消丢弃（录制中）",
+        label: "GIF 录制浮条：待命态 Enter=开始录制；录制中 Enter=完成、Esc=取消",
         scope: "system",
       },
       { id: "pin-wheel", keys: ["滚轮 / Alt+滚轮"], label: "贴图：缩放 / 调整不透明度", scope: "system" },

@@ -39,12 +39,16 @@ const BAD_CAPTURE_STREAK: u32 = 5;
 /// 选区下限（与滚动截图同款口径）
 const MIN_REGION: (u32, u32) = (96, 80);
 
-/// 0=录制中 1=请求完成（用已录内容出结果）2=请求取消（丢弃并删临时文件）
+/// 0=待命（浮条「开始录制」前的预览态，选区已框定不抓帧）1=录制中
+/// 2=请求完成（用已录内容出结果）3=请求取消（丢弃并删临时文件）
 static GIF_FLAG: AtomicU8 = AtomicU8::new(0);
 /// 会话进行中（begin 到收尾全程）：热键叠加截图 / 滚动会话的互斥依据
 static GIF_ACTIVE: AtomicBool = AtomicBool::new(false);
-/// 当前帧率档（录制中可切，下一帧起生效）
+/// 当前帧率档（待命/录制中均可切，下一帧起生效）
 static GIF_FPS: AtomicU32 = AtomicU32::new(FPS_DEFAULT);
+/// 底部进度条开关（2026-11-19 用户定案：待命态可选，开启则导出后对 GIF
+/// 逐帧合成底部进度条——随回放填充到 100%，标示「看到全程的多少处」）
+static GIF_BAR: AtomicBool = AtomicBool::new(true);
 /// begin 与 launch 两段间的会话载荷，launch 取走即清；重入未消费即拒绝
 static GIF_PENDING: Mutex<Option<GifGeo>> = Mutex::new(None);
 
@@ -156,6 +160,7 @@ pub fn shot_gif_begin(
     );
     GIF_FLAG.store(0, Ordering::Relaxed);
     GIF_FPS.store(FPS_DEFAULT, Ordering::Relaxed);
+    GIF_BAR.store(true, Ordering::Relaxed);
     GIF_ACTIVE.store(true, Ordering::Relaxed);
     // 覆盖窗停靠（异步消息，必须等真正摘屏才能建窗——蒙层在场时 build()
     // 泵消息永久卡死，滚动截图同款坑在案），拆两段命令由前端顺序调用
@@ -303,7 +308,6 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
             return;
         }
     };
-    let started = Instant::now();
     let mut next_tick = Instant::now();
     let mut last_cap: Option<Instant> = None;
     let mut frames: u32 = 0;
@@ -311,95 +315,122 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
     let mut last_emit = Instant::now();
     let mut cancelled = false;
     let mut aborted = false;
+    let mut record_started = Instant::now(); // 待命期不计入时长上限
     log::info!(
-        "GIF 录制循环进场：选区 ({rx},{ry}) {rw}×{rh}，fps {}",
+        "GIF 录制循环进场（待命态）：选区 ({rx},{ry}) {rw}×{rh}，fps {}",
         GIF_FPS.load(Ordering::Relaxed)
     );
+    // ── 待命态（2026-11-19 用户定案「点开始才开始录」）：选区遮罩 + 浮条
+    // 已在场，用户可切 fps/进度条开关；抓帧与时长上限计时都不启动 ──
     loop {
-        // 控制与时长上限（先于本帧捕获：停止请求即刻生效）
-        let flag = GIF_FLAG.load(Ordering::Relaxed);
-        let secs = started.elapsed().as_secs();
-        if flag == 2 {
-            cancelled = true;
-            break;
-        }
-        if flag == 1 || secs >= GIF_MAX_SECS {
-            if secs >= GIF_MAX_SECS {
-                log::info!("GIF 录制：达到 {GIF_MAX_SECS}s 上限，自动收场");
-            }
-            break;
-        }
-        let fps = normalize_fps(GIF_FPS.load(Ordering::Relaxed));
-        match monitor.capture_region(rx, ry, rw, rh) {
-            Ok(frame) => {
-                bad_streak = 0;
-                let now = Instant::now();
-                // 帧延迟 = 距上一帧捕获的实际间隔（回放节奏与录制所见一致；
-                // 大选区量化降帧率时诚实放慢，不快进）。首帧用目标间隔
-                let delay_ms = last_cap
-                    .map(|t| now.duration_since(t).as_millis() as u64)
-                    .unwrap_or_else(|| 1000 / u64::from(fps));
-                last_cap = Some(now);
-                let (fw, fh) = frame.dimensions();
-                let mut rgba = frame.into_raw();
-                let mut gframe = gif::Frame::from_rgba_speed(
-                    u16::try_from(fw).unwrap_or(w16),
-                    u16::try_from(fh).unwrap_or(h16),
-                    &mut rgba,
-                    quant_speed(rw * rh),
+        match GIF_FLAG.load(Ordering::Relaxed) {
+            0 => std::thread::sleep(Duration::from_millis(50)),
+            1 => {
+                record_started = Instant::now();
+                let _ = app.emit_to(
+                    "shot-bar",
+                    "shot-gif-phase",
+                    serde_json::json!({ "phase": "recording" }),
                 );
-                gframe.delay = gif_delay_cs(delay_ms);
-                if let Err(e) = encoder.write_frame(&gframe) {
-                    log::error!("GIF 录制：帧写入失败：{e}");
-                    aborted = true;
-                    break;
-                }
-                frames += 1;
+                log::info!("GIF 录制：用户点开始，进入录制");
+                break;
             }
-            Err(e) => {
-                bad_streak += 1;
-                log::warn!("GIF 录制：抓帧失败（{bad_streak} 连击）：{e}");
-                if bad_streak >= BAD_CAPTURE_STREAK {
-                    if frames == 0 {
+            _ => {
+                // 待命态直接取消/完成（无帧）= 与取消同径清理
+                cancelled = true;
+                break;
+            }
+        }
+    }
+    if !cancelled {
+        // ── 录制态：按当前 fps 节奏抓帧 → 量化 → 流式写盘 ──
+        loop {
+            // 控制与时长上限（先于本帧捕获：停止请求即刻生效）
+            let flag = GIF_FLAG.load(Ordering::Relaxed);
+            let secs = record_started.elapsed().as_secs();
+            if flag == 3 {
+                cancelled = true;
+                break;
+            }
+            if flag == 2 || secs >= GIF_MAX_SECS {
+                if secs >= GIF_MAX_SECS {
+                    log::info!("GIF 录制：达到 {GIF_MAX_SECS}s 上限，自动收场");
+                }
+                break;
+            }
+            let fps = normalize_fps(GIF_FPS.load(Ordering::Relaxed));
+            match monitor.capture_region(rx, ry, rw, rh) {
+                Ok(frame) => {
+                    bad_streak = 0;
+                    let now = Instant::now();
+                    // 帧延迟 = 距上一帧捕获的实际间隔（回放节奏与录制所见一致；
+                    // 大选区量化降帧率时诚实放慢，不快进）。首帧用目标间隔
+                    let delay_ms = last_cap
+                        .map(|t| now.duration_since(t).as_millis() as u64)
+                        .unwrap_or_else(|| 1000 / u64::from(fps));
+                    last_cap = Some(now);
+                    let (fw, fh) = frame.dimensions();
+                    let mut rgba = frame.into_raw();
+                    let mut gframe = gif::Frame::from_rgba_speed(
+                        u16::try_from(fw).unwrap_or(w16),
+                        u16::try_from(fh).unwrap_or(h16),
+                        &mut rgba,
+                        quant_speed(rw * rh),
+                    );
+                    gframe.delay = gif_delay_cs(delay_ms);
+                    if let Err(e) = encoder.write_frame(&gframe) {
+                        log::error!("GIF 录制：帧写入失败：{e}");
                         aborted = true;
                         break;
                     }
-                    log::warn!("GIF 录制：抓帧连击收场，用已录 {frames} 帧出结果");
-                    break;
+                    frames += 1;
+                }
+                Err(e) => {
+                    bad_streak += 1;
+                    log::warn!("GIF 录制：抓帧失败（{bad_streak} 连击）：{e}");
+                    if bad_streak >= BAD_CAPTURE_STREAK {
+                        if frames == 0 {
+                            aborted = true;
+                            break;
+                        }
+                        log::warn!("GIF 录制：抓帧连击收场，用已录 {frames} 帧出结果");
+                        break;
+                    }
                 }
             }
-        }
-        // 进度事件（≥1s 间隔；浮条显示秒数/帧数/字节）
-        if last_emit.elapsed() >= Duration::from_secs(1) {
-            last_emit = Instant::now();
-            let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-            let _ = app.emit_to(
-                "shot-bar",
-                "shot-gif-progress",
-                serde_json::json!({
-                    "secs": started.elapsed().as_secs(),
-                    "frames": frames,
-                    "bytes": bytes,
-                    "fps": GIF_FPS.load(Ordering::Relaxed),
-                }),
-            );
-        }
-        // 节奏：等下一拍（超预算 = 编码超时，基点重置继续，不追帧）
-        next_tick += Duration::from_millis(1000 / u64::from(fps));
-        let now = Instant::now();
-        if next_tick > now {
-            std::thread::sleep(next_tick - now);
-        } else {
-            next_tick = now;
+            // 进度事件（≥1s 间隔；浮条显示秒数/帧数/字节）
+            if last_emit.elapsed() >= Duration::from_secs(1) {
+                last_emit = Instant::now();
+                let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+                let _ = app.emit_to(
+                    "shot-bar",
+                    "shot-gif-progress",
+                    serde_json::json!({
+                        "secs": record_started.elapsed().as_secs(),
+                        "frames": frames,
+                        "bytes": bytes,
+                        "fps": GIF_FPS.load(Ordering::Relaxed),
+                    }),
+                );
+            }
+            // 节奏：等下一拍（超预算 = 编码超时，基点重置继续，不追帧）
+            next_tick += Duration::from_millis(1000 / u64::from(fps));
+            let now = Instant::now();
+            if next_tick > now {
+                std::thread::sleep(next_tick - now);
+            } else {
+                next_tick = now;
+            }
         }
     }
     // 收尾：drop 编码器冲刷缓冲（取消即丢弃整文件）
     drop(encoder);
     let flush = std::io::Write::flush(&mut writer);
     drop(writer);
-    hide_windows(&app);
     GIF_ACTIVE.store(false, Ordering::Relaxed);
+    // 窗口收场延后到出结果窗之前：进度条合成期间浮条保持「生成中」可见
     if cancelled || (aborted && frames == 0) {
+        hide_windows(&app);
         let _ = std::fs::remove_file(&path);
         if cancelled {
             log::info!("GIF 录制：用户取消，临时文件已删除（{frames} 帧）");
@@ -411,21 +442,144 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
     }
     if let Err(e) = flush {
         log::error!("GIF 录制：编码收尾冲刷失败：{e}");
+        hide_windows(&app);
         let _ = std::fs::remove_file(&path);
         dialog_error(&app, &format!("GIF 录制写盘失败：{e}"));
         return;
     }
     log::info!(
         "GIF 录制完成：{frames} 帧 / {}s / {} KB → {}",
-        started.elapsed().as_secs(),
+        record_started.elapsed().as_secs(),
         std::fs::metadata(&path)
             .map(|m| m.len() / 1024)
             .unwrap_or(0),
         path.display()
     );
-    if let Err(e) = show_gif_result_window(&app, &mon, &path, rw, rh) {
+    // 底部进度条（2026-11-19 用户定案：待命态可选）：逐帧合成随回放填充的
+    // 进度条。生成可能秒级~数十秒（帧数×重新量化），浮条停在「生成中」提示
+    if GIF_BAR.load(Ordering::Relaxed) {
+        let _ = app.emit_to(
+            "shot-bar",
+            "shot-gif-phase",
+            serde_json::json!({ "phase": "processing" }),
+        );
+        if let Err(e) = append_progress_bar(&path) {
+            log::error!("GIF 录制：进度条合成失败（保留原 GIF 出结果）：{e}");
+        }
+    }
+    hide_windows(&app);
+    // 结果窗尺寸取文件实际头（进度条合成后高度 +PROGRESS_BAR_H）
+    let (out_w, out_h) = image::image_dimensions(&path).unwrap_or((rw, rh));
+    if let Err(e) = show_gif_result_window(&app, &mon, &path, out_w, out_h) {
         log::error!("打开 GIF 结果窗失败：{e}");
         dialog_error(&app, &format!("打开 GIF 结果窗失败：{e}"));
+    }
+}
+
+/// 进度条高度（物理像素）：细条不遮挡内容，原始尺寸下清晰可辨
+const PROGRESS_BAR_H: u32 = 8;
+
+/// 逐帧合成底部进度条：解码原 GIF 全部帧，画布向下扩 PROGRESS_BAR_H——
+/// 第 i 帧（1 起）的填充宽 = w×i/total（回放到最后一帧恰好填满），随帧
+/// 重编码（逐帧独立调色板，与录制路径同款）。两遍扫描：先跳解码数帧数
+///（skip_frame_decoding 零 LZW 开销），再 RGBA 解码逐帧合成流式写新文件
+/// 后原子替换。线程阻塞型：由录制线程在收尾阶段调用，浮条已切「生成中」
+fn append_progress_bar(path: &Path) -> Result<(), String> {
+    // pass 1：帧数计数（不解码像素）
+    let total = {
+        let file = std::fs::File::open(path).map_err(|e| format!("打开 GIF 失败：{e}"))?;
+        let mut options = gif::DecodeOptions::new();
+        options.skip_frame_decoding(true);
+        let mut dec = options
+            .read_info(file)
+            .map_err(|e| format!("GIF 解析失败：{e}"))?;
+        let mut n = 0u32;
+        while dec
+            .next_frame_info()
+            .map_err(|e| format!("GIF 解析失败：{e}"))?
+            .is_some()
+        {
+            n += 1;
+        }
+        n
+    };
+    if total == 0 {
+        return Err("无帧可合成".into());
+    }
+    // pass 2：逐帧 RGBA 解码 → 画布合成 → 重编码流式写临时文件
+    let tmp_path = path.with_extension("gif.tmp");
+    let out = std::fs::File::create(&tmp_path).map_err(|e| format!("进度条写盘失败：{e}"))?;
+    let mut writer = std::io::BufWriter::new(out);
+    let encode = encode_with_bar(path, &mut writer, total);
+    drop(writer);
+    match encode {
+        Ok(()) => {
+            std::fs::rename(&tmp_path, path).map_err(|e| format!("进度条替换失败：{e}"))?;
+            log::info!("GIF 录制：底部进度条合成完成（{total} 帧，条高 {PROGRESS_BAR_H}px）");
+            Ok(())
+        }
+        Err(e) => {
+            let _ = std::fs::remove_file(&tmp_path); // 失败保留原 GIF 出结果
+            Err(e)
+        }
+    }
+}
+
+/// 进度条合成主体（&mut writer 借用收敛在函数边界）：RGBA 解码逐帧 →
+/// 画布扩底条 → 重编码流式写 writer
+fn encode_with_bar(
+    path: &Path,
+    writer: &mut std::io::BufWriter<std::fs::File>,
+    total: u32,
+) -> Result<(), String> {
+    {
+        use gif::ColorOutput;
+        let file = std::fs::File::open(path).map_err(|e| format!("打开 GIF 失败：{e}"))?;
+        let mut options = gif::DecodeOptions::new();
+        options.set_color_output(ColorOutput::RGBA);
+        let mut dec = options
+            .read_info(file)
+            .map_err(|e| format!("GIF 解析失败：{e}"))?;
+        let (gw, gh) = (dec.width(), dec.height());
+        let bar_h = u16::try_from(PROGRESS_BAR_H.min(u32::from(gh))).unwrap_or(0);
+        let mut encoder = gif::Encoder::new(writer, gw, gh + bar_h, &[])
+            .map_err(|e| format!("进度条编码器失败：{e}"))?;
+        let mut i: u32 = 0;
+        while let Some(frame) = dec
+            .read_next_frame()
+            .map_err(|e| format!("GIF 解码失败：{e}"))?
+        {
+            i += 1;
+            let fw = u32::from(frame.width);
+            let delay = frame.delay;
+            // RGBA 解码缓冲（read_next_frame 产物按 ColorOutput::RGBA 展平）
+            // 画布向下扩 bar_h：底条 = 深色轨道 + accent 填充（i/total，
+            // 回放到最后一帧恰好填满）。解码缓冲直接扩容复用
+            let mut rgba = frame.buffer.to_vec();
+            rgba.resize(usize::from(gw) * usize::from(gh + bar_h) * 4, 0);
+            let fill_w =
+                u32::try_from(u64::from(gw) * u64::from(i) / u64::from(total)).unwrap_or(0);
+            for y in (gh..gh + bar_h).rev() {
+                for x in 0..fw {
+                    let off = (y as usize) * (gw as usize) + x as usize;
+                    let (r, g, b) = if x < fill_w {
+                        (53, 116, 240)
+                    } else {
+                        (26, 26, 26)
+                    };
+                    rgba[off * 4..off * 4 + 4].copy_from_slice(&[r, g, b, 255]);
+                }
+            }
+            let mut out_frame = gif::Frame::from_rgba_speed(gw, gh + bar_h, &mut rgba, 10);
+            out_frame.delay = delay;
+            encoder
+                .write_frame(&out_frame)
+                .map_err(|e| format!("进度条帧写入失败：{e}"))?;
+        }
+        if i != total {
+            return Err(format!("帧数两遍扫描不一致（{total} vs {i}）"));
+        }
+        Ok(())
     }
 }
 
@@ -440,9 +594,18 @@ pub fn shot_gif_control(action: String) -> Result<(), String> {
         GIF_FPS.store(normalize_fps(fps), Ordering::Relaxed);
         return Ok(());
     }
+    // 底部进度条开关（待命态可切）
+    if let Some(on) = action.strip_prefix("bar:") {
+        GIF_BAR.store(on == "on", Ordering::Relaxed);
+        return Ok(());
+    }
     match action.as_str() {
-        "finish" => GIF_FLAG.store(1, Ordering::Relaxed),
-        "cancel" => GIF_FLAG.store(2, Ordering::Relaxed),
+        // 待命 → 录制（浮条「开始录制」）
+        "start" => GIF_FLAG.store(1, Ordering::Relaxed),
+        // 录制中 → 完成出结果
+        "finish" => GIF_FLAG.store(2, Ordering::Relaxed),
+        // 任意态 → 取消丢弃
+        "cancel" => GIF_FLAG.store(3, Ordering::Relaxed),
         _ => return Err("未知操作".into()),
     }
     Ok(())
@@ -499,7 +662,7 @@ fn show_gif_bar_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
         (geo.rx as i32, geo.ry as i32, geo.rw as i32, geo.rh as i32),
         mon,
     );
-    let boot = serde_json::json!({ "window": "gifbar", "fps": GIF_FPS.load(Ordering::Relaxed) });
+    let boot = serde_json::json!({ "window": "gifbar", "fps": GIF_FPS.load(Ordering::Relaxed), "barOn": GIF_BAR.load(Ordering::Relaxed) });
     let win = match app.get_webview_window("shot-bar") {
         Some(w) => w,
         None => WebviewWindowBuilder::new(app, "shot-bar", WebviewUrl::App("shot.html".into()))
@@ -635,6 +798,68 @@ mod tests {
         assert_eq!(normalize_fps(15), 15);
         assert_eq!(normalize_fps(30), FPS_DEFAULT);
         assert_eq!(normalize_fps(0), FPS_DEFAULT);
+    }
+
+    #[test]
+    fn append_progress_bar_extends_and_fills() {
+        // 两帧 8×4 GIF：合成后高 +8（进度条），帧 1 底条半填充（fill=w×1/2）、
+        // 帧 2 全填充；轨道深色在填充段之外
+        let dir = std::env::temp_dir().join(format!("xdir-gifbar-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("bar_test.gif");
+        let (w, h) = (8u16, 4u16);
+        {
+            let mut buf = std::io::BufWriter::new(std::fs::File::create(&path).unwrap());
+            let mut enc = gif::Encoder::new(&mut buf, w, h, &[]).unwrap();
+            for (i, (r, g, b)) in [(255u8, 255u8, 255u8), (0u8, 255u8, 0u8)]
+                .iter()
+                .enumerate()
+            {
+                let mut rgba = vec![0u8; usize::from(w) * usize::from(h) * 4];
+                for px in rgba.chunks_exact_mut(4) {
+                    px[0] = *r;
+                    px[1] = *g;
+                    px[2] = *b;
+                    px[3] = 255;
+                }
+                let mut frame = gif::Frame::from_rgba_speed(w, h, &mut rgba, 10);
+                frame.delay = if i == 0 { 5 } else { 9 };
+                enc.write_frame(&frame).unwrap();
+            }
+        }
+        append_progress_bar(&path).unwrap();
+        let mut options = gif::DecodeOptions::new();
+        options.set_color_output(gif::ColorOutput::RGBA);
+        let mut options = gif::DecodeOptions::new();
+        options.set_color_output(gif::ColorOutput::RGBA);
+        let mut dec = options
+            .read_info(std::fs::File::open(&path).unwrap())
+            .unwrap();
+        // 条高护栏 = min(PROGRESS_BAR_H, 帧高)：测试帧仅 4px 高
+        let expect_bar = PROGRESS_BAR_H.min(u32::from(h));
+        assert_eq!(
+            u32::from(dec.height()),
+            u32::from(h) + expect_bar,
+            "画布应向下扩进度条"
+        );
+        let mut delays: Vec<u16> = Vec::new();
+        let mut fills: Vec<(bool, bool)> = Vec::new(); // (左半=填充色, 右半=轨道色)
+        let stride = usize::from(w) * 4; // dec 不可在 read_next_frame 借用期取值，用已知宽
+        while let Some(frame) = dec.read_next_frame().unwrap() {
+            delays.push(frame.delay);
+            // 底条第一行的左半与右半采样（y = h，即进度条行）
+            let row = usize::from(h) * stride;
+            let left = &frame.buffer[row + 4..row + 8];
+            let right = &frame.buffer[row + (usize::from(w) / 2) * 4 + 4..][..4];
+            fills.push((left[0] == 53, right[0] == 26));
+        }
+        assert_eq!(delays, vec![5u16, 9u16], "帧延迟应逐帧保留");
+        assert_eq!(
+            fills,
+            vec![(true, true), (true, false)],
+            "帧 1 右半仍轨道色（半填充）、帧 2 全填充"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
