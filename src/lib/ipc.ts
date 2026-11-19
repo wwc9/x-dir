@@ -410,11 +410,11 @@ export interface Settings {
    *  不透明度，经 --np-glass-alpha 下发；强霜 0.78/弹窗染色不随 */
   glassFrost: number;
   /** 弹层模糊 0-64 px（2026-11-19 外观可调 = 二级弹窗独立参数）：弹窗三
-   *  载体直接随（8px 下限），强霜浮层按 0.55 比例联动——默认 40 时菜单
-   *  22 = 既有定档，经 --np-glass-pop-blur 下发 */
+   *  载体直接随（8px 下限），强霜浮层按 0.55 比例联动——默认 20 时菜单
+   *  11，经 --np-glass-pop-blur 下发 */
   glassPopBlur: number;
   /** 弹层浓度 40-95 %（2026-11-19 外观可调 = 二级弹窗独立参数）：强霜面
-   *  alpha 直接随（默认 78 = 既有定档），弹窗染色渐变各档按原比例
+   *  alpha 直接随（默认 50），弹窗染色渐变各档按原比例
    *  （÷0.78）缩放，经 --np-glass-pop-alpha 下发 */
   glassPopFrost: number;
   restoreLastSession: boolean;
@@ -619,13 +619,13 @@ export const DEFAULT_SETTINGS: Settings = {
   // 玻璃背景图案默认极光（2026-11-18 收敛：五案删除，旧档值由守卫回灌极光；custom 走 glassBgCustom）
   glassBg: "aurora",
   glassBgCustom: "",
-  glassBgVeil: 35,
-  // 玻璃参数默认 = 既有定档（2026-11-19 参数化：blur 22/frost 55 为卡片家族
-  // 原值；popBlur 40/popFrost 78 为弹窗三载体与强霜面原值；设置 → 外观可调）
-  glassBlur: 22,
-  glassFrost: 55,
-  glassPopBlur: 40,
-  glassPopFrost: 78,
+  glassBgVeil: 40,
+  // 玻璃参数默认 = 2026-11-19 用户实机调选定档（轻透风：卡片 blur 10 /
+  // frost 40，弹层 popBlur 20 / popFrost 50；设置 → 外观可调）
+  glassBlur: 10,
+  glassFrost: 40,
+  glassPopBlur: 20,
+  glassPopFrost: 50,
   toolbarEntries: [],
   restoreLastSession: true,
   // 开机自启默认关（2026-11-15）：自启属显式选择，不替用户决定

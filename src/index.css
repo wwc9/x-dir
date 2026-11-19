@@ -396,24 +396,25 @@ html.glasswin > body {
     radial-gradient(100% 80% at 52% 42%, rgba(255, 163, 71, 0.34), transparent 60%),
     radial-gradient(130% 100% at 8% 96%, rgba(244, 78, 128, 0.42), transparent 64%),
     linear-gradient(160deg, #f7f1f4, #f2eaef 50%, #e7ecf5);
-  --np-surface: rgba(255, 255, 255, var(--np-glass-alpha, 0.55));
+  --np-surface: rgba(255, 255, 255, var(--np-glass-alpha, 0.4));
   /* ↑ 霜面浓度可调（2026-11-19 外观 tab）：alpha 由 applyGlassParams 内联
-     下发 --np-glass-alpha（0.2-0.8），默认 0.55 = 既有定档；强霜/弹窗染色
+     下发 --np-glass-alpha（0.2-0.8），默认 0.4（2026-11-19 用户定档设默认）；
+     强霜/弹窗染色
      随弹层浓度参数（--np-glass-pop-alpha），与本参数解耦 */
   /* 弹窗染色极光玻璃（2026-11-18 用户定案 = 方案 C，design/dialog-glass-proposal-c-tinted.html）：
      霜面染极光色相——顶天空蓝、底珊瑚粉，弹窗成为画布的一部分而非贴上去的白片 */
   --np-dialog-glass: linear-gradient(
     165deg,
-    rgba(255 255 255 / calc(var(--np-glass-pop-alpha, 0.78) * 1.03)),
-    rgba(238 244 250 / calc(var(--np-glass-pop-alpha, 0.78) * 0.87)) 45%,
-    rgba(255 236 228 / calc(var(--np-glass-pop-alpha, 0.78) * 0.8))
+    rgba(255 255 255 / calc(var(--np-glass-pop-alpha, 0.5) * 1.03)),
+    rgba(238 244 250 / calc(var(--np-glass-pop-alpha, 0.5) * 0.87)) 45%,
+    rgba(255 236 228 / calc(var(--np-glass-pop-alpha, 0.5) * 0.8))
   );
   /* 玻璃子面（地址 pill/缩放钮/chip/空态徽标等 surface-2 消费方）：半透明白，
      叠在已模糊的卡片面上透出柔化色——子面无文字穿透风险（背后是霜面非裸列表） */
   --np-surface-2: rgba(255, 255, 255, 0.45);
   /* 强霜面（Dialog 可读性优先，比卡片霜更实）：alpha 随弹层浓度参数
-     （2026-11-19 外观可调 --np-glass-pop-alpha，默认 0.78 = 既有定档） */
-  --np-surface-glass-strong: rgba(255, 255, 255, var(--np-glass-pop-alpha, 0.78));
+     （2026-11-19 外观可调 --np-glass-pop-alpha，默认 0.5 = 用户定档设默认） */
+  --np-surface-glass-strong: rgba(255, 255, 255, var(--np-glass-pop-alpha, 0.5));
 }
 html.glasswin.bp6-dark,
 html.glasswin.bp6-dark > body {
@@ -429,16 +430,17 @@ html.glasswin.bp6-dark > body {
     linear-gradient(160deg, #1e2436, #241d31 45%, #33141f);
   /* 深色卡片霜面随图案染色（2026-11-18 用户反馈「除极光外深色黑乎乎、无颜色变化」）：
      极光画布紫/绯红 → 卡片紫灰，与弹窗染色同语言；alpha 可调同浅色（--np-glass-alpha） */
-  --np-surface: rgba(40, 38, 66, var(--np-glass-alpha, 0.55));
+  --np-surface: rgba(40, 38, 66, var(--np-glass-alpha, 0.4));
   --np-surface-2: rgba(255, 255, 255, 0.07);
-  --np-surface-glass-strong: rgba(30, 35, 50, var(--np-glass-pop-alpha, 0.78));
+  --np-surface-glass-strong: rgba(30, 35, 50, var(--np-glass-pop-alpha, 0.5));
   /* 弹窗染色极光玻璃深色映射：navy 顶 / 紫晕中 / 绯红底；各档 alpha 按
-     弹层浓度参数比例缩放（calc 系数 = 原档 ÷ 0.78 基准，默认档逐点还原） */
+     弹层浓度参数比例缩放（calc 系数 = 2026-11-18 原档 ÷ 当日 0.78 基准；
+     现默认浓度 0.5〔2026-11-19 用户定档〕下呈轻透版，调回 0.78 即原档） */
   --np-dialog-glass: linear-gradient(
     165deg,
-    rgba(30 35 50 / calc(var(--np-glass-pop-alpha, 0.78) * 1.05)),
-    rgba(40 34 58 / calc(var(--np-glass-pop-alpha, 0.78) * 0.9)) 45%,
-    rgba(52 26 40 / calc(var(--np-glass-pop-alpha, 0.78) * 0.8))
+    rgba(30 35 50 / calc(var(--np-glass-pop-alpha, 0.5) * 1.05)),
+    rgba(40 34 58 / calc(var(--np-glass-pop-alpha, 0.5) * 0.9)) 45%,
+    rgba(52 26 40 / calc(var(--np-glass-pop-alpha, 0.5) * 0.8))
   );
 }
 /* ═══ 玻璃背景图案（2026-11-18 收敛定案：六案比选后用户拍板「除极光外全删」——
@@ -473,8 +475,8 @@ html.glasswin[data-glassbg="custom"] > body,
 html.glasswin[data-glassbg="custom"] .np-winedge-top {
   background:
     linear-gradient(
-      rgba(255, 255, 255, var(--glassbg-veil, 0.35)),
-      rgba(255, 255, 255, var(--glassbg-veil, 0.35))
+      rgba(255, 255, 255, var(--glassbg-veil, 0.4)),
+      rgba(255, 255, 255, var(--glassbg-veil, 0.4))
     )
       fixed,
     var(--glassbg-img) center / cover no-repeat fixed;
@@ -490,14 +492,14 @@ html.glasswin[data-glassbg="custom"].bp6-dark .np-winedge-top {
     var(--glassbg-img) center / cover no-repeat fixed;
 }
 /* custom 卡片模糊走 --np-glass-blur 参数（卡片段统一规则已消费，不再覆写）；
-   custom 默认与全局同值 22px——高细节壁纸建议经设置调至 32 抹噪点 */
+   custom 默认与全局同值——高细节壁纸建议经设置调至 32 抹噪点 */
 html.glasswin[data-glassbg="custom"],
 html.glasswin[data-glassbg="custom"] > body {
   --np-glass-ring: rgba(255, 255, 255, 0.35);
   --np-dialog-glass: linear-gradient(
     165deg,
-    rgba(255 255 255 / calc(var(--np-glass-pop-alpha, 0.78) * 1.09)),
-    rgba(255 255 255 / calc(var(--np-glass-pop-alpha, 0.78) * 0.92))
+    rgba(255 255 255 / calc(var(--np-glass-pop-alpha, 0.5) * 1.09)),
+    rgba(255 255 255 / calc(var(--np-glass-pop-alpha, 0.5) * 0.92))
   );
 }
 html.glasswin[data-glassbg="custom"].bp6-dark,
@@ -505,8 +507,8 @@ html.glasswin[data-glassbg="custom"].bp6-dark > body {
   --np-glass-ring: rgba(255, 255, 255, 0.16);
   --np-dialog-glass: linear-gradient(
     165deg,
-    rgba(30 35 50 / calc(var(--np-glass-pop-alpha, 0.78) * 1.09)),
-    rgba(36 41 55 / calc(var(--np-glass-pop-alpha, 0.78) * 0.92))
+    rgba(30 35 50 / calc(var(--np-glass-pop-alpha, 0.5) * 1.09)),
+    rgba(36 41 55 / calc(var(--np-glass-pop-alpha, 0.5) * 0.92))
   );
 }
 
@@ -546,9 +548,9 @@ html.glasswin .np-shelf {
   background: var(--np-surface);
   border-color: var(--np-glass-ring);
   /* 模糊强度可调（2026-11-19 外观 tab）：--np-glass-blur 由 applyGlassParams
-     内联下发（0-48px），默认 22px = 既有定档；blur 0 = 不模糊纯霜面 */
-  -webkit-backdrop-filter: blur(var(--np-glass-blur, 22px)) saturate(1.4);
-  backdrop-filter: blur(var(--np-glass-blur, 22px)) saturate(1.4);
+     内联下发（0-48px），默认 10px（2026-11-19 用户定档设默认）；blur 0 = 不模糊纯霜面 */
+  -webkit-backdrop-filter: blur(var(--np-glass-blur, 10px)) saturate(1.4);
+  backdrop-filter: blur(var(--np-glass-blur, 10px)) saturate(1.4);
 }
 html.glasswin.bp6-dark .np-titlebar,
 html.glasswin.bp6-dark .np-pane,
@@ -576,11 +578,11 @@ html.glasswin .np-cal-hits {
   background: var(--np-surface-glass-strong);
   border-color: var(--np-glass-ring);
   box-shadow: var(--np-glass-shadow);
-  /* 模糊随弹层参数按 0.55 比例联动（默认 40 → 22 = 既有定档）+ 8px 可读性
+  /* 模糊随弹层参数按 0.55 比例联动（默认 20 → 菜单 11，用户定档设默认）+ 8px 可读性
      下限（max() 钳制）：强霜浮层透底文字不可锐利穿透（穿透病审计口径），
      参数低于 ~15 时浮层仍 8 */
-  -webkit-backdrop-filter: blur(max(calc(var(--np-glass-pop-blur, 40px) * 0.55), 8px)) saturate(1.4);
-  backdrop-filter: blur(max(calc(var(--np-glass-pop-blur, 40px) * 0.55), 8px)) saturate(1.4);
+  -webkit-backdrop-filter: blur(max(calc(var(--np-glass-pop-blur, 20px) * 0.55), 8px)) saturate(1.4);
+  backdrop-filter: blur(max(calc(var(--np-glass-pop-blur, 20px) * 0.55), 8px)) saturate(1.4);
 }
 /* 弹窗染色极光玻璃（2026-11-18 用户定案 = 方案 C，design/dialog-glass-proposal-c-tinted.html）：
    background = --np-dialog-glass 主题化极光染色渐变；顶缘受光内高光补边界
@@ -622,8 +624,8 @@ html.glasswin.bp6-dark .np-dialog {
 html.glasswin .np-dialog .bp6-dialog-body-scroll-container,
 html.glasswin .np-dialog .bp6-dialog-header,
 html.glasswin .np-dialog .bp6-dialog-footer {
-  -webkit-backdrop-filter: blur(max(var(--np-glass-pop-blur, 40px), 8px)) saturate(1.8);
-  backdrop-filter: blur(max(var(--np-glass-pop-blur, 40px), 8px)) saturate(1.8);
+  -webkit-backdrop-filter: blur(max(var(--np-glass-pop-blur, 20px), 8px)) saturate(1.8);
+  backdrop-filter: blur(max(var(--np-glass-pop-blur, 20px), 8px)) saturate(1.8);
   transform: translateZ(0);
 }
 /* 快速预览为定高弹窗（78vh）：Blueprint 给载体自带 max-height:70vh + padding，
