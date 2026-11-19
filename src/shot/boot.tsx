@@ -16,6 +16,7 @@ import { PinWindow, type PinBoot } from "./PinWindow";
 import { ScrollBar, type ScrollBarBoot } from "./ScrollBar";
 import { ScrollPreview, type ScrollPreviewBoot } from "./ScrollPreview";
 import { ScrollFrame, type ScrollFrameBoot } from "./ScrollFrame";
+import { GifBar, type GifBarBoot } from "./GifBar";
 import { ShotResult, type ResultBoot } from "./ShotResult";
 
 // WebView2 默认右键菜单屏蔽（2026-11-11）：截图覆盖窗右键退出 / 贴图自绘
@@ -29,6 +30,7 @@ declare global {
       | ScrollBarBoot
       | ScrollPreviewBoot
       | ScrollFrameBoot
+      | GifBarBoot
       | ResultBoot
       | { window: "shot-idle" };
   }
@@ -74,6 +76,8 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <ScrollFrame boot={boot} />
   ) : boot.window === "scrollbar" ? (
     <ScrollBar boot={boot} />
+  ) : boot.window === "gifbar" ? (
+    <GifBar boot={boot} />
   ) : boot.window === "scroll-preview" ? (
     <ScrollPreview boot={boot} />
   ) : (

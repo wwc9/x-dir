@@ -38,6 +38,7 @@ import {
   Square,
   Type,
   Undo2,
+  Video,
   Waves,
   X,
 } from "lucide-react";
@@ -1387,6 +1388,30 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     })();
   }, [busy, boot.mx, boot.my]);
 
+  /** GIF 录制（2026-11-19 新功能）：两段式同滚动——begin 校验/互斥/停靠，
+   *  launch 等停靠后起录制循环 + 浮条；失败解锁 busy 留在会话内改用其他动作 */
+  const startGif = useCallback(() => {
+    const s = selRef.current;
+    if (!s || busy) return;
+    setBusy(true);
+    void (async () => {
+      try {
+        await api.shotGifBegin(
+          Math.round(s.x),
+          Math.round(s.y),
+          Math.round(s.w),
+          Math.round(s.h),
+          boot.mx,
+          boot.my,
+        );
+        await api.shotGifLaunch();
+      } catch (e) {
+        setSavedTip(`GIF 录制启动失败：${String(e)}`);
+        setBusy(false);
+      }
+    })();
+  }, [busy, boot.mx, boot.my]);
+
   // ── 撤销 ────────────────────────────────────────────────────────────────
   // 快照模型：undo 恢复 undoStack 顶快照。同步刷 live 层：redrawBase 不覆
   // 盖 live，若 live 有历史预览残影，撤销删掉 base 图形后残影仍可见（看
@@ -2630,6 +2655,13 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               onClick={startScroll}
             >
               <ScrollShotGlyph />
+            </button>
+            <button
+              className="np-shot-tool np-shot-primary"
+              data-tip="录制 GIF：录制选区实时画面（120s 上限）"
+              onClick={startGif}
+            >
+              <AppIcon icon={Video} size={DENSITY.iconLg} />
             </button>
             <button
               className="np-shot-tool"

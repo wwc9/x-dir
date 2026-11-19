@@ -630,7 +630,7 @@ fn panel_height(canvas_h: u32, pw: u32, rw: u32, panel_y: i32, mon: &MonRect) ->
 /// 控制条停靠位（纯函数，单测锁定）：选区正下方居中（PixPin 样式），下方
 /// 放不下翻选区上方，均钳屏内。窗尺寸固定 (310,44)·scale，返回左上角与尺寸
 /// （显示器相对物理像素）
-fn bar_layout(sel: (i32, i32, i32, i32), mon: &MonRect) -> (i32, i32, u32, u32) {
+pub(crate) fn bar_layout(sel: (i32, i32, i32, i32), mon: &MonRect) -> (i32, i32, u32, u32) {
     let s = f64::from(mon.scale);
     let bw = (310.0 * s).round() as i32;
     let bh = (44.0 * s).round() as i32;
@@ -660,7 +660,12 @@ pub fn shot_scroll_begin(
     mx: i32,
     my: i32,
 ) -> Result<(), String> {
-    // 会话互斥：进行中拒绝（预览窗有完成/取消，Esc 也可取消）
+    // 会话互斥：进行中拒绝（预览窗有完成/取消，Esc 也可取消）；与 GIF
+    // 录制双向互斥（共享 shot-frame/shot-bar 窗与抓屏资源，不可并行）
+    if crate::commands::shot_gif::gif_active() {
+        log::error!("滚动截图开始被拒绝：GIF 录制进行中");
+        return Err("GIF 录制进行中".into());
+    }
     if SCROLL_ACTIVE.load(Ordering::Relaxed) {
         log::error!(
             "滚动截图开始被拒绝：会话进行中（flag={}）",
@@ -1510,15 +1515,22 @@ pub async fn shot_result_save(
     app: AppHandle,
     window: tauri::WebviewWindow,
     file: String,
+    kind: Option<String>,
 ) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
     tauri::async_runtime::spawn_blocking(move || {
-        let bytes = std::fs::read(&file).map_err(|e| format!("读取长图失败：{e}"))?;
+        let bytes = std::fs::read(&file).map_err(|e| format!("读取结果文件失败：{e}"))?;
+        // kind = png（滚动长图，缺省）/ gif（GIF 录制）：过滤器与默认名分域
+        let (filter, ext, base) = if kind.as_deref() == Some("gif") {
+            ("GIF 图片", "gif", "GIF录制")
+        } else {
+            ("PNG 图片", "png", "滚动截图")
+        };
         let picked = app
             .dialog()
             .file()
-            .add_filter("PNG 图片", &["png"])
-            .set_file_name(format!("滚动截图_{}.png", local_stamp()))
+            .add_filter(filter, &[ext])
+            .set_file_name(format!("{base}_{}.{}", local_stamp(), ext))
             .set_parent(&window)
             .blocking_save_file();
         let Some(p) = picked else {
@@ -1530,6 +1542,13 @@ pub async fn shot_result_save(
     })
     .await
     .map_err(|e| format!("保存线程失败：{e}"))?
+}
+
+/// 结果窗：在资源管理器中定位结果文件（GIF 录制结果窗「打开所在文件夹」；
+/// opener 插件 reveal 直达，open_config_folder 同款 API）
+#[tauri::command]
+pub async fn shot_result_reveal(file: String) -> Result<(), String> {
+    tauri_plugin_opener::reveal_item_in_dir(Path::new(&file)).map_err(|e| format!("打开失败：{e}"))
 }
 
 /// 结果窗：长图贴到屏幕（复制专属副本，pin 窗销毁即清；初始按 80% 屏幅适配）

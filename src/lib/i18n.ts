@@ -1725,6 +1725,7 @@ export const EN: Record<string, string> = {
   "WASD / 方向键": "WASD / arrow keys",
   "截图：微调十字准星 / 平移选区框（Shift = 10px 大步）": "Screenshot: nudge the crosshair / pan the selection (Shift = 10px steps)",
   "滚动截图浮条：完成出图 / 取消丢弃": "Scrolling-capture bar: finish / cancel & discard",
+  "GIF 录制浮条：完成出结果 / 取消丢弃（录制中）": "GIF recording bar: finish / cancel & discard (while recording)",
   "滚轮 / Alt+滚轮": "Wheel / Alt+wheel",
   "贴图：缩放 / 调整不透明度": "Pin: zoom / adjust opacity",
   "左键拖动": "Left-drag",

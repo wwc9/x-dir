@@ -21,6 +21,7 @@
 | 剪贴板历史 | Ditto / CopyQ | GPL-3.0 | 自研（clipboard-rs 监听 + clip.rs 读写 + rusqlite 存储） |
 | 剪贴板历史 | PasteBar | CC BY-NC（非宽松） | 同上 |
 | 截图 | GPL 系截图应用（Flameshot / ShareX 等） | GPL 红线 | xcap 截屏引擎 + 交互自研 |
+| GIF 录制编码 | gifski | AGPL-3.0 硬红线（转档质量标杆但协议不可再分发） | gif crate 流式编码 + color_quant 逐帧调色板（均在依赖树，2026-11-19） |
 | Office 转 PDF | 打包转换引擎 | AGPL 系 | PowerShell COM 派发本机已装 Office/WPS（引擎不打包） |
 
 ## 3. 依赖选型台账（宽松协议白名单）
@@ -83,6 +84,7 @@
 | webview2-com | MIT OR Apache-2.0 | 关闭 WebView2 浏览器加速键（快捷键由前端全权路由） |
 | clipboard-rs | MIT | 剪贴板变化监听信号源（Windows 内部走 AddClipboardFormatListener 真事件） |
 | rusqlite | MIT | 剪贴板历史 SQLite 存储（bundled，项目首个数据库） |
+| gif | MIT OR Apache-2.0 | GIF 录制流式编码（原为 image gif feature 的传递依赖，2026-11-19 转直接声明复用同版本 0.14；weezl LZW 后端随行，同协议） |
 
 ## 4. 例外资产备案
 

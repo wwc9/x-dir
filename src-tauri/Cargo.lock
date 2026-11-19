@@ -7629,6 +7629,7 @@ dependencies = [
  "encoding_rs",
  "filetime",
  "flate2",
+ "gif",
  "image",
  "jpeg-decoder",
  "kamadak-exif",

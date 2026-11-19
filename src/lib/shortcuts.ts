@@ -185,6 +185,12 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
         label: "滚动截图浮条：完成出图 / 取消丢弃",
         scope: "system",
       },
+      {
+        id: "shot-gif-keys",
+        keys: ["Enter / Esc"],
+        label: "GIF 录制浮条：完成出结果 / 取消丢弃（录制中）",
+        scope: "system",
+      },
       { id: "pin-wheel", keys: ["滚轮 / Alt+滚轮"], label: "贴图：缩放 / 调整不透明度", scope: "system" },
       { id: "pin-move", keys: ["左键拖动"], label: "贴图：移动位置", scope: "system" },
       { id: "pin-close", keys: ["双击 / Esc"], label: "贴图：关闭", scope: "system" },

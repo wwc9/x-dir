@@ -94,6 +94,8 @@ image = { version = "0.25", default-features = false, features = [
 ] }
 oxipng = "9"
 color_quant = "1"
+# GIF 录制编码（流式写盘；随 image gif feature 同版本已在依赖树，2026-11-19）
+gif = "0.14"
 kamadak-exif = "0.6"
 rust_xlsxwriter = "0.99.1"
 # Excel 合并/拆分格式保真通道（2026-11-12）：umya MIT 读+写 xlsx（整档建模，

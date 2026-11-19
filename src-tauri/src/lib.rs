@@ -339,6 +339,9 @@ pub fn run() {
             commands::shot::shot_copy_crop,
             commands::shot::shot_copy_raw,
             commands::shot::shot_frame,
+            commands::shot_gif::shot_gif_begin,
+            commands::shot_gif::shot_gif_control,
+            commands::shot_gif::shot_gif_launch,
             commands::shot::shot_nudge_cursor,
             commands::shot::shot_ocr,
             commands::shot::shot_pin_drag_start,
@@ -377,6 +380,7 @@ pub fn run() {
             commands::shot_scroll::shot_scroll_chunk,
             commands::shot_scroll::shot_scroll_control,
             commands::shot_scroll::shot_result_copy,
+            commands::shot_scroll::shot_result_reveal,
             commands::shot_scroll::shot_result_save,
             commands::shot_scroll::shot_pin_file,
         ])

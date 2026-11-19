@@ -1533,11 +1533,24 @@ export const api = {
   /** 滚动预览窗操作：finish = 用已拼内容出结果；cancel = 丢弃 */
   shotScrollControl: (action: "finish" | "cancel") =>
     cmd<void>("shot_scroll_control", { action }),
+  /** GIF 录制第一段：选区整数矩形（显示器相对物理坐标）+ 显示器原点。
+   *  校验/互斥（与滚动会话双向拒绝）后停靠覆盖窗，载荷待 launch 消费 */
+  shotGifBegin: (rx: number, ry: number, w: number, h: number, mx: number, my: number) =>
+    cmd<void>("shot_gif_begin", { rx, ry, rw: w, rh: h, mx, my }),
+  /** GIF 录制第二段：等蒙层停靠 → 复用 shot-bar 窗换装 gifbar 浮条 → 起录制循环 */
+  shotGifLaunch: () => cmd<void>("shot_gif_launch"),
+  /** 录制浮条操作：finish = 用已录内容出结果；cancel = 丢弃并删临时文件；
+   *  fps:N = 切换帧率档（8/12/15，下一帧起生效） */
+  shotGifControl: (action: "finish" | "cancel" | `fps:${8 | 12 | 15}`) =>
+    cmd<void>("shot_gif_control", { action }),
   /** 滚动结果窗：长图（临时 PNG 路径）写入剪贴板 */
   shotResultCopy: (file: string) => cmd<void>("shot_result_copy", { file }),
-  /** 滚动结果窗：长图另存（原生对话框；用户取消 = null） */
-  shotResultSave: (file: string) =>
-    cmd<string | null>("shot_result_save", { file }),
+  /** 结果窗：另存（原生对话框；kind = png 滚动长图（缺省）/ gif GIF 录制，
+   *  过滤器与默认名分域；用户取消 = null） */
+  shotResultSave: (file: string, kind?: "png" | "gif") =>
+    cmd<string | null>("shot_result_save", { file, kind }),
+  /** 结果窗：在资源管理器中定位结果文件（GIF 录制「打开所在文件夹」） */
+  shotResultReveal: (file: string) => cmd<void>("shot_result_reveal", { file }),
   /** 长图贴图：以临时 PNG 路径钉成置顶窗（cx/cy = 窗中心全局物理坐标） */
   shotPinFile: (file: string, cx: number, cy: number) =>
     cmd<void>("shot_pin_file", { file, cx, cy }),

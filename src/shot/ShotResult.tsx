@@ -4,10 +4,13 @@
 // 底部工具条缩放 / 贴图 / 复制 / 保存 / 关闭。截断（动态内容中断或高度上限）
 // 时顶部提示条说明。长图文件由 Rust 侧在本窗销毁时清理；贴图会先在 Rust 侧
 // 复制专属副本，不受本窗清理影响。
+// GIF 录制分支（2026-11-19，boot.kind = "gif"）：img 原生播放动画；复制
+// （动画无位图语义）/ 贴图（静态窗）不适用 → 按钮组换「打开所在文件夹 +
+// 保存（.gif 过滤器）」；保存传 kind="gif" 走 GIF 过滤器与默认名。
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Check, Copy, Maximize, Pin, Save, X, ZoomIn, ZoomOut } from "lucide-react";
+import { Check, Copy, FolderOpen, Maximize, Pin, Save, X, ZoomIn, ZoomOut } from "lucide-react";
 
 import { api } from "../lib/ipc";
 import { AppIcon } from "../components/AppIcon";
@@ -20,6 +23,8 @@ export interface ResultBoot {
   h: number;
   /** true = 因动态内容 / 高度上限中途截断 */
   truncated: boolean;
+  /** "gif" = GIF 录制结果（动画播放 + 保存/打开文件夹按钮组）；缺省 = 滚动长图 */
+  kind?: "gif";
 }
 
 const ZOOM_MIN = 0.05;
@@ -27,7 +32,9 @@ const ZOOM_MAX = 5;
 
 export function ShotResult({ boot }: { boot: ResultBoot }) {
   const win = getCurrentWindow();
-  const [busy, setBusy] = useState<"" | "copy" | "save" | "pin">("");
+  /** GIF 录制结果：动画无复制/贴图语义，按钮组换打开文件夹 + 保存 */
+  const isGif = boot.kind === "gif";
+  const [busy, setBusy] = useState<"" | "copy" | "save" | "pin" | "reveal">("");
   const [tip, setTip] = useState<string | null>(null);
   /** 缩放倍率（1 = 物理像素 1:1 的 CSS 观感尺寸）；null = 待首帧量视口 */
   const [zoom, setZoom] = useState<number | null>(null);
@@ -71,7 +78,7 @@ export function ShotResult({ boot }: { boot: ResultBoot }) {
   }, [naturalCss]);
 
   const run = useCallback(
-    async (action: "copy" | "save" | "pin") => {
+    async (action: "copy" | "save" | "pin" | "reveal") => {
       if (busy) return;
       setBusy(action);
       try {
@@ -79,7 +86,7 @@ export function ShotResult({ boot }: { boot: ResultBoot }) {
           await api.shotResultCopy(boot.file);
           void win.close().catch(() => undefined);
         } else if (action === "save") {
-          const saved = await api.shotResultSave(boot.file);
+          const saved = await api.shotResultSave(boot.file, isGif ? "gif" : undefined);
           if (saved) {
             setTip(`已保存 ${saved.split(/[\\/]/).pop()}`);
             setBusy("");
@@ -87,6 +94,9 @@ export function ShotResult({ boot }: { boot: ResultBoot }) {
           } else {
             setBusy(""); // 取消保存对话框
           }
+        } else if (action === "reveal") {
+          await api.shotResultReveal(boot.file);
+          setBusy(""); // 文件夹打开后结果窗保留（用户可能回来删除/再保存）
         } else {
           // 贴图出现在结果窗中心（窗口物理位置 + 物理尺寸）
           const [pos, size] = await Promise.all([win.outerPosition(), win.outerSize()]);
@@ -99,7 +109,7 @@ export function ShotResult({ boot }: { boot: ResultBoot }) {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [busy, boot.file],
+    [busy, boot.file, isGif],
   );
 
   return (
@@ -113,7 +123,7 @@ export function ShotResult({ boot }: { boot: ResultBoot }) {
         <img
           src={convertFileSrc(boot.file)}
           crossOrigin="anonymous"
-          alt="滚动长图"
+          alt={isGif ? "GIF 录制" : "滚动长图"}
           draggable={false}
           // 首帧就绪回执：Rust 此时才 show（提前 show 闪黑屏）
           onLoad={() => void api.shotReady().catch(() => undefined)}
@@ -156,18 +166,32 @@ export function ShotResult({ boot }: { boot: ResultBoot }) {
         ) : (
           <span className="np-shot-result-tip">Esc 关闭 · Ctrl+滚轮缩放</span>
         )}
-        <button className="np-shot-btn" disabled={busy !== ""} onClick={() => void run("pin")}>
-          <AppIcon icon={Pin} />
-          贴图
-        </button>
-        <button
-          className="np-shot-btn primary"
-          disabled={busy !== ""}
-          onClick={() => void run("copy")}
-        >
-          <AppIcon icon={Copy} />
-          复制
-        </button>
+        {isGif ? (
+          <button
+            className="np-shot-btn"
+            data-tip="在资源管理器中定位 GIF 文件"
+            disabled={busy !== ""}
+            onClick={() => void run("reveal")}
+          >
+            <AppIcon icon={FolderOpen} />
+            打开文件夹
+          </button>
+        ) : (
+          <button className="np-shot-btn" disabled={busy !== ""} onClick={() => void run("pin")}>
+            <AppIcon icon={Pin} />
+            贴图
+          </button>
+        )}
+        {!isGif && (
+          <button
+            className="np-shot-btn primary"
+            disabled={busy !== ""}
+            onClick={() => void run("copy")}
+          >
+            <AppIcon icon={Copy} />
+            复制
+          </button>
+        )}
         <button className="np-shot-btn" disabled={busy !== ""} onClick={() => void run("save")}>
           <AppIcon icon={busy === "save" ? Check : Save} />
           保存

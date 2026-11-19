@@ -7349,6 +7349,30 @@ body.np-col-resizing * {
   animation: np-shot-pulse 1.1s ease-in-out infinite;
   flex: none;
 }
+/* GIF 录制浮条（复用 np-shot-sbar 布局基座）：录制红点惯例 + fps 切档钮 */
+.np-shot-gbar-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-danger);
+  animation: np-shot-pulse 1.1s ease-in-out infinite;
+  flex: none;
+}
+.np-shot-gbar-fps {
+  flex: none;
+  padding: 3px 8px;
+  border: 1px solid var(--np-border);
+  border-radius: var(--np-radius);
+  background: var(--np-surface-2);
+  color: var(--np-fg);
+  font-size: var(--np-font-sm);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.np-shot-gbar-fps:hover:not(:disabled) {
+  background: var(--np-hover);
+}
 @keyframes np-shot-pulse {
   50% {
     opacity: 0.25;
