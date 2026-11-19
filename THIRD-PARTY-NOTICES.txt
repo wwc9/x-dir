@@ -1,7 +1,7 @@
 THIRD-PARTY NOTICES FOR X-Dir
 ========================================================================================================================
 
-X-Dir v0.2.0 · Copyright (c) 2026 wwwwwc · 本软件以 MIT 许可证发布（全文见附录）。
+X-Dir v0.3.0 · Copyright (c) 2026 wwwwwc · 本软件以 MIT 许可证发布（全文见附录）。
 
 本文件汇总随 X-Dir 一并再分发的全部第三方组件的归属与许可信息：
   · Rust crates —— 编译进 x-dir.exe（含传递依赖，已按 Windows x64 目标过滤）
@@ -9,10 +9,10 @@ X-Dir v0.2.0 · Copyright (c) 2026 wwwwwc · 本软件以 MIT 许可证发布（
 各条目按「名称 版本 — 许可证 — 仓库 — 版权人」列出；标准许可证全文统一收录于附录，
 条目不再逐个内嵌。非标准许可证（或未识别 SPDX）的条目在其下方内嵌原文。
 
-由 tools/gen-third-party-notices.mjs 生成于 2026-11-14；依赖变更后请重新生成。
+由 tools/gen-third-party-notices.mjs 生成于 2026-11-19；依赖变更后请重新生成。
 
 
-RUST CRATES（编译进 x-dir.exe）（472 项）
+RUST CRATES（编译进 x-dir.exe）（475 项）
 ------------------------------------------------------------------------------------------------------------------------
 · ab_glyph 0.2.32 — Apache-2.0 — https://github.com/alexheretic/ab-glyph
   Copyright Alex Butler <alexheretic@gmail.com>
@@ -49,6 +49,8 @@ RUST CRATES（编译进 x-dir.exe）（472 项）
   Copyright 2022-NOW Dmitry Rodionov / Copyright (c) 2022 Dmitry Rodionov
 · atomic-waker 1.1.2 — Apache-2.0 OR MIT — https://github.com/smol-rs/atomic-waker
   Copyright (c) 2016 Alex Crichton / Copyright (c) 2017 The Tokio Authors
+· auto-launch 0.6.0 — MIT — https://github.com/zzzgydi/auto-launch.git
+  Copyright (c) 2022 zzzgydi
 · autocfg 1.5.1 — Apache-2.0 OR MIT — https://github.com/cuviper/autocfg
   Copyright (c) 2018 Josh Stone
 · base64 0.22.1 — MIT OR Apache-2.0 — https://github.com/marshallpierce/rust-base64
@@ -469,6 +471,8 @@ RUST CRATES（编译进 x-dir.exe）（472 项）
   Copyright Sebastian Thiel <byronimo@gmail.com>
 · option-ext 0.2.0 — MPL-2.0 — https://github.com/soc/option-ext.git
   Copyright Simon Ochsenreither <simon@ochsenreither.de>
+· os_info 3.15.0 — MIT — https://github.com/stanislav-tkach/os_info
+  Copyright (c) 2017 Stanislav Tkach
 · owned_ttf_parser 0.25.1 — Apache-2.0 — https://github.com/alexheretic/owned-ttf-parser
   Copyright Alex Butler <alexheretic@gmail.com>
 · oxipng 9.1.5 — MIT — https://github.com/shssoichiro/oxipng
@@ -679,6 +683,8 @@ RUST CRATES（编译进 x-dir.exe）（472 项）
   Copyright (c) 2017 - Present Tauri Apps Contributors
 · tauri-plugin 2.7.1 — Apache-2.0 OR MIT — https://github.com/tauri-apps/tauri
   Copyright Tauri Programme within The Commons Conservancy
+· tauri-plugin-autostart 2.7.0 — Apache-2.0 OR MIT — https://github.com/tauri-apps/plugins-workspace
+  Copyright (c) 2017 - Present Tauri Apps Contributors
 · tauri-plugin-clipboard-manager 2.5.0 — Apache-2.0 OR MIT — https://github.com/tauri-apps/plugins-workspace
   Copyright (c) 2017 - Present Tauri Apps Contributors
 · tauri-plugin-dialog 2.8.2 — Apache-2.0 OR MIT — https://github.com/tauri-apps/plugins-workspace
@@ -910,7 +916,7 @@ RUST CRATES（编译进 x-dir.exe）（472 项）
 · zune-jpeg 0.5.15 — MIT OR Apache-2.0 OR Zlib — https://github.com/etemesi254/zune-image/tree/dev/crates/zune-jpeg
   Copyright caleb <etemesicaleb@gmail.com>
 
-NPM PACKAGES（打包进前端资源）（61 项）
+NPM PACKAGES（打包进前端资源）（85 项）
 ------------------------------------------------------------------------------------------------------------------------
 · @babel/runtime 7.29.10 — MIT — https://github.com/babel/babel.git
   Copyright (c) 2014-present Sebastian McKenzie and other contributors
@@ -935,6 +941,8 @@ NPM PACKAGES（打包进前端资源）（61 项）
 · @napi-rs/canvas-win32-x64-msvc 1.0.11 — MIT — https://github.com/Brooooooklyn/canvas.git
 · @popperjs/core 2.11.8 — MIT — github:popperjs/popper-core
   Copyright Federico Zivolo <federico.zivolo@gmail.com>
+· @puppeteer/browsers 3.2.7 — Apache-2.0 — https://github.com/puppeteer/puppeteer/tree/main/packages/browsers
+  Copyright The Chromium Authors
 · @tanstack/react-virtual 3.14.14 — MIT — https://github.com/TanStack/virtual.git
   Copyright (c) 2021-present Tanner Linsley
 · @tanstack/virtual-core 3.18.0 — MIT — https://github.com/TanStack/virtual.git
@@ -945,24 +953,42 @@ NPM PACKAGES（打包进前端资源）（61 项）
 · @tauri-apps/plugin-opener 2.7.0 — MIT OR Apache-2.0 — https://github.com/tauri-apps/plugins-workspace
 · @tauri-apps/plugin-process 2.4.0 — MIT OR Apache-2.0 — https://github.com/tauri-apps/plugins-workspace
 · @tauri-apps/plugin-updater 2.14.1 — MIT OR Apache-2.0 — https://github.com/tauri-apps/plugins-workspace
+· ansi-regex 6.6.0 — MIT — chalk/ansi-regex
+  Copyright Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
+· ansi-styles 6.2.3 — MIT — chalk/ansi-styles
+  Copyright Sindre Sorhus
 · camel-case 4.1.2 — MIT — git://github.com/blakeembrey/change-case.git
   Copyright (c) 2014 Blake Embrey (hello@blakeembrey.com)
 · capital-case 1.0.4 — MIT — git://github.com/blakeembrey/change-case.git
   Copyright (c) 2014 Blake Embrey (hello@blakeembrey.com)
 · change-case 4.1.2 — MIT — git://github.com/blakeembrey/change-case.git
   Copyright (c) 2014 Blake Embrey (hello@blakeembrey.com)
+· chromium-bidi 157.0.8090-0 — Apache-2.0 — https://github.com/GoogleChromeLabs/chromium-bidi.git
+  Copyright The Chromium Authors
 · classnames 2.5.1 — MIT — https://github.com/JedWatson/classnames.git
   Copyright (c) 2018 Jed Watson
+· cliui 9.0.1 — ISC — yargs/cliui
+  Copyright (c) 2015, Contributors
 · constant-case 3.0.4 — MIT — git://github.com/blakeembrey/change-case.git
   Copyright (c) 2014 Blake Embrey (hello@blakeembrey.com)
 · csstype 3.2.3 — MIT — https://github.com/frenic/csstype
   Copyright (c) 2017-2018 Fredrik Nicol
+· devtools-protocol 0.0.1717327 — BSD-3-Clause — https://github.com/ChromeDevTools/devtools-protocol
+  Copyright The Chromium Authors
 · dom-helpers 5.2.1 — MIT — https://github.com/react-bootstrap/dom-helpers.git
   Copyright (c) 2015 Jason Quense
 · dompurify 3.4.17 — (MPL-2.0 OR Apache-2.0) — git://github.com/cure53/DOMPurify.git
   Copyright Dr.-Ing. Mario Heiderich, Cure53 <mario@cure53.de> (https://cure53.de/)
 · dot-case 3.0.4 — MIT — git://github.com/blakeembrey/change-case.git
   Copyright (c) 2014 Blake Embrey (hello@blakeembrey.com)
+· emoji-regex 10.6.0 — MIT — https://github.com/mathiasbynens/emoji-regex.git
+  Copyright Mathias Bynens
+· escalade 3.2.0 — MIT — lukeed/escalade
+  Copyright Luke Edwards
+· get-caller-file 2.0.5 — ISC — https://github.com/stefanpenner/get-caller-file.git
+  Copyright Stefan Penner
+· get-east-asian-width 1.7.0 — MIT — sindresorhus/get-east-asian-width
+  Copyright Sindre Sorhus
 · header-case 2.0.4 — MIT — git://github.com/blakeembrey/change-case.git
   Copyright (c) 2014 Blake Embrey (hello@blakeembrey.com)
 · highlight.js 11.12.0 — BSD-3-Clause — git://github.com/highlightjs/highlight.js.git
@@ -977,6 +1003,10 @@ NPM PACKAGES（打包进前端资源）（61 项）
   Copyright (c) 2026 Lucide Icons and Contributors / Copyright (c) 2013-present Cole Bemis
 · marked 18.1.1 — MIT — https://github.com/markedjs/marked.git
   Copyright (c) 2018+, MarkedJS (https://github.com/markedjs/) / Copyright (c) 2011-2018, Christopher Jeffrey (https://github.com/chjj/)
+· mitt 3.0.1 — MIT — developit/mitt
+  Copyright (c) 2021 Jason Miller
+· modern-tar 0.8.6 — MIT — https://github.com/ayuhito/modern-tar.git
+  Copyright (c) 2025 Ayuhito
 · no-case 3.0.4 — MIT — git://github.com/blakeembrey/change-case.git
   Copyright (c) 2014 Blake Embrey (hello@blakeembrey.com)
 · normalize.css 8.0.1 — MIT — necolas/normalize.css
@@ -995,6 +1025,8 @@ NPM PACKAGES（打包进前端资源）（61 项）
   Copyright (c) 2022-present zh-lx
 · prop-types 15.8.1 — MIT — facebook/prop-types
   Copyright (c) 2013-present, Facebook, Inc.
+· puppeteer-core 25.17.0 — Apache-2.0 — https://github.com/puppeteer/puppeteer/tree/main/packages/puppeteer-core
+  Copyright The Chromium Authors
 · react 19.3.0 — MIT — https://github.com/react/react.git
 · react-dom 19.3.0 — MIT — https://github.com/react/react.git
 · react-fast-compare 3.2.2 — MIT — https://github.com/FormidableLabs/react-fast-compare
@@ -1011,16 +1043,38 @@ NPM PACKAGES（打包进前端资源）（61 项）
   Copyright (c) 2014 Blake Embrey (hello@blakeembrey.com)
 · solarlunar 3.1.0 — ISC — https://github.com/yize/solarlunar.git
   Copyright (c) 2015, yize
+· string-width 7.2.0 — MIT — sindresorhus/string-width
+  Copyright Sindre Sorhus
+· string-width 8.3.0 — MIT — sindresorhus/string-width
+  Copyright Sindre Sorhus
+· strip-ansi 7.2.0 — MIT — chalk/strip-ansi
+  Copyright Sindre Sorhus
 · tabbable 6.5.0 — MIT — https://github.com/focus-trap/tabbable.git
   Copyright (c) 2015 David Clark
 · tslib 2.6.3 — 0BSD — https://github.com/Microsoft/tslib.git
   Copyright Microsoft Corp.
+· typed-query-selector 2.12.4 — MIT — g-plane/typed-query-selector
+  Copyright (c) 2020-present Pig Fang
 · upper-case 2.0.2 — MIT — git://github.com/blakeembrey/change-case.git
   Copyright Blake Embrey
 · upper-case-first 2.0.2 — MIT — git://github.com/blakeembrey/change-case.git
   Copyright (c) 2014 Blake Embrey (hello@blakeembrey.com)
 · warning 4.0.3 — MIT — https://github.com/BerkeleyTrue/warning.git
   Copyright Berkeley Martinez <berkeley@berkeleytrue.com> (http://www.berkeleytrue.com)
+· webdriver-bidi-protocol 1.0.2 — Apache-2.0 — https://github.com/GoogleChromeLabs/webdriver-bidi-protocol.git
+  Copyright 2024 Google Inc.
+· wrap-ansi 9.0.2 — MIT — chalk/wrap-ansi
+  Copyright Sindre Sorhus
+· ws 8.23.0 — MIT — https://github.com/websockets/ws.git
+  Copyright (c) 2011 Einar Otto Stangvik <einaros@gmail.com> / Copyright (c) 2013 Arnout Kazemier and contributors / Copyright (c) 2016 Luigi Pinca and contributors
+· y18n 5.0.8 — ISC — yargs/y18n
+  Copyright (c) 2015, Contributors
+· yargs 18.2.0 — MIT — https://github.com/yargs/yargs.git
+  Copyright 2010 James Halliday (mail@substack.net); Modified work Copyright 2014 Contributors (ben@npmjs.com)
+· yargs-parser 22.0.0 — ISC — https://github.com/yargs/yargs-parser.git
+  Copyright (c) 2016, Contributors
+· zod 4.6.7 — MIT — https://github.com/colinhacks/zod.git
+  Copyright (c) 2025 Colin McDonnell
 · zustand 5.0.15 — MIT — https://github.com/pmndrs/zustand.git
   Copyright (c) 2019 Paul Henschel
 

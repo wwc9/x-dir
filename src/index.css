@@ -6955,6 +6955,85 @@ body.np-col-resizing * {
   opacity: 0.35;
   cursor: default;
 }
+/* OCR 结果面板（2026-11-19 新功能）：锚定工具栏正下方的可编辑浮层卡片，
+ * 视觉语言与 np-shot-palette 弹层同源（surface 底 + border + 阴影 + 小圆角） */
+.np-shot-ocrpanel {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  width: 400px;
+  max-width: calc(100vw - 16px);
+  background: var(--np-surface);
+  border: 1px solid var(--np-border);
+  border-radius: var(--np-radius-lg);
+  box-shadow: var(--np-shadow);
+  z-index: 11; /* 工具栏（10）之上：翻转避让前的过渡帧也不被工具栏盖住 */
+  cursor: default;
+  overflow: hidden;
+}
+.np-shot-ocrpanel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 6px 12px;
+}
+.np-shot-ocrpanel-title {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-shot-ocrpanel-text {
+  height: 150px;
+  margin: 0 10px;
+  padding: 8px 10px;
+  resize: vertical;
+  border: 1px solid var(--np-border);
+  border-radius: var(--np-radius);
+  background: var(--np-surface-2);
+  color: var(--np-fg);
+  font-size: var(--np-font-ui);
+  line-height: 1.5;
+  outline: none;
+  user-select: text;
+}
+.np-shot-ocrpanel-text:focus {
+  border-color: var(--np-accent);
+}
+.np-shot-ocrpanel-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px 10px 12px;
+}
+.np-shot-ocrpanel-hint {
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+}
+.np-shot-ocrbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: var(--np-radius);
+  background: transparent;
+  color: var(--np-fg);
+  font-size: var(--np-font-ui);
+  cursor: pointer;
+}
+.np-shot-ocrbtn:hover {
+  background: var(--np-hover);
+}
+.np-shot-ocrbtn-icon {
+  padding: 4px 6px;
+}
+.np-shot-ocrbtn-ok {
+  background: var(--np-accent);
+  color: var(--np-accent-fg);
+}
+.np-shot-ocrbtn-ok:hover {
+  filter: brightness(1.08);
+}
 .np-shot-tool.np-shot-primary {
   color: var(--np-accent);
 }

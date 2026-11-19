@@ -166,6 +166,12 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       },
       { id: "shot-copy", keys: ["Enter / 双击"], label: "截图：复制到剪贴板", scope: "system" },
       { id: "shot-pin", keys: ["Ctrl+P"], label: "截图：贴图（钉在屏幕上）", scope: "system" },
+      {
+        id: "shot-ocr",
+        keys: ["Ctrl+O"],
+        label: "截图：识别选区文字（Windows 系统引擎，结果面板可编辑后复制）",
+        scope: "system",
+      },
       { id: "shot-undo", keys: ["Ctrl+Z"], label: "截图：撤销标注", scope: "system" },
       {
         id: "shot-nudge",

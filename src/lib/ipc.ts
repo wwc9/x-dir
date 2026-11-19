@@ -1393,6 +1393,12 @@ export const api = {
    *  Err（无会话/矩形不合法）时前端回落 shotCopyRaw */
   shotCopyCrop: (x: number, y: number, w: number, h: number): Promise<void> =>
     cmd<void>("shot_copy_crop", { x, y, w, h }),
+  /** 选区 OCR 文字识别（Windows.Media.Ocr，系统组件）：入参与 shotCopyCrop
+   *  同口径（显示器相对物理像素整数矩形），Rust 进程内裁剪会话定格帧后
+   *  在 blocking 线程纯识别——不写剪贴板（结果面板由用户编辑后自行复制）；
+   *  Err（无会话/矩形不合法/未识别出文字/无引擎）由前端 HUD 呈现 */
+  shotOcr: (x: number, y: number, w: number, h: number): Promise<string> =>
+    cmd<string>("shot_ocr", { x, y, w, h }),
   /** 贴图：PNG dataURL 钉成置顶窗（x/y/w/h = 虚拟桌面物理坐标） */
   shotPin: (dataUrl: string, x: number, y: number, w: number, h: number) =>
     cmd<void>("shot_pin", { dataUrl, x, y, w, h }),

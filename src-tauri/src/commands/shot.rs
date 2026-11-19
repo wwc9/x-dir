@@ -890,6 +890,48 @@ pub async fn shot_copy_crop(app: AppHandle, x: i32, y: i32, w: i32, h: i32) -> R
     Ok(())
 }
 
+/// 选区 OCR 文字识别：Rust 进程内从 SESSION_FRAME 裁剪选区（与 shot_copy_crop
+/// 同一套物理像素整数矩形口径），PNG 快速编码后交 Windows.Media.Ocr 纯识别
+///（cliphist::ocr_png_text，不写剪贴板——结果面板由用户编辑后自行复制）。
+/// 裁剪在主线程（行拷贝毫秒级），OCR（秒级重活）在 blocking 线程——
+/// 同步命令留在主线程会卡住所有窗口的窗口管理操作（本仓库既定约定）
+#[tauri::command]
+pub async fn shot_ocr(x: i32, y: i32, w: i32, h: i32) -> Result<String, String> {
+    #[cfg(not(windows))]
+    {
+        let _ = (x, y, w, h);
+        return Err("OCR 仅 Windows 支持".into());
+    }
+    #[cfg(windows)]
+    {
+        let png = {
+            let g = SESSION_FRAME.lock().unwrap_or_else(|p| p.into_inner());
+            let Some(f) = g.as_ref() else {
+                return Err("无会话定格帧".into());
+            };
+            let cropped = match crop_rgba_rows(f.mw, f.mh, &f.rgba, x, y, w, h) {
+                Some(c) => c,
+                None => {
+                    log::warn!(
+                        "OCR 失败：裁剪矩形不合法（帧 {}×{}，请求 {},{} {}×{}）",
+                        f.mw,
+                        f.mh,
+                        x,
+                        y,
+                        w,
+                        h
+                    );
+                    return Err("OCR 裁剪矩形不合法".into());
+                }
+            };
+            encode_png_fast(cropped.mw, cropped.mh, cropped.rgba)?
+        };
+        tauri::async_runtime::spawn_blocking(move || crate::cliphist::ocr_png_text(&png))
+            .await
+            .map_err(|e| format!("OCR 线程失败：{e}"))?
+    }
+}
+
 /// 暂存选区帧（保存/贴图第一步）：RGBA 原始字节进内存，随后 shot_save_raw
 /// 开对话框 / shot_pin_raw 建贴图窗——把「PNG 编码 + base64 传输」从点击到
 /// 对话框的关键路径上整体移除
@@ -1507,6 +1549,14 @@ mod tests {
     fn 无候选时仅桌面兜底() {
         let v = visible_shot_targets(&[], MON);
         assert_eq!(rects(&v), vec![(0, 0, 1920, 1080)]);
+    }
+
+    #[test]
+    fn ocr无会话帧时报错不panic() {
+        // 测试进程不产生截图会话，SESSION_FRAME 恒空：命令应报「无会话定格帧」。
+        // 裁剪数学由 crop_rows_tests 锁定、OCR 识别本体由 cliphist 真机测试锁定
+        let err = tauri::async_runtime::block_on(super::shot_ocr(10, 10, 200, 100)).unwrap_err();
+        assert_eq!(err, "无会话定格帧");
     }
 
     #[test]

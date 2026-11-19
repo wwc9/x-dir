@@ -1720,6 +1720,7 @@ export const EN: Record<string, string> = {
   "Enter / 双击": "Enter / double-click",
   "截图：复制到剪贴板": "Screenshot: copy to clipboard",
   "截图：贴图（钉在屏幕上）": "Screenshot: pin to screen",
+  "截图：识别选区文字（Windows 系统引擎，结果面板可编辑后复制）": "Screenshot: OCR the selection (Windows system engine, editable result panel, copy when ready)",
   "截图：撤销标注": "Screenshot: undo annotation",
   "WASD / 方向键": "WASD / arrow keys",
   "截图：微调十字准星 / 平移选区框（Shift = 10px 大步）": "Screenshot: nudge the crosshair / pan the selection (Shift = 10px steps)",

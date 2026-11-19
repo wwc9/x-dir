@@ -344,7 +344,8 @@
 - **工具栏定案：设置类一律点击即弹面板，不做图标随动切换**；画笔/马克笔合并一钮（点击 = 激活笔族并弹 pen 面板）；**马赛克/模糊合并为一钮**（点击 = 激活打码族 + mask 面板：首行类型 + 次行区域形状）；箭头样式 = `Shape.head`（line/solid/hollow）× `Shape.line`（solid/dashed/curve），ArrowGlyph SVG 预览与 drawShape 几何同源（arrowWingsAt/arrowCurveCtrl 纯函数配 vitest）。
 - **空心箭头**：杆止于翼基线（`arrowBaseAt` = 尖沿轴回退 headLen×cos25°）、两翼开放描边不画底边（旧画法空腔被底边闭合填满看不出空心）；面板预览同口径。
 - 图标定案：滚动截图 = 自绘 `ScrollShotGlyph`（「竖屏圆角矩形 + 内嵌上下双向箭头」，lucide 无此组合）；序号 = 自绘 `StepMarkGlyph`（居中纯单徽①，无 + 号）；箭头工具 ArrowUpRight→MoveUpRight（视觉尺寸一致性）——自绘均按 lucide 风格（24 viewBox/stroke 2/圆角端点/currentColor），先例非 lucide 不走 AppIcon。
-- 行 2 顺序 = 颜色/线宽/阴影/边框/贴图/滚动 + 行尾三钮 = 保存→关闭（红 X 常显 np-shot-danger）→复制并关闭（Enter/双击同效）。
+- 行 2 顺序 = 颜色/线宽/阴影/边框/贴图/滚动/OCR + 行尾三钮 = 保存→关闭（红 X 常显 np-shot-danger）→复制并关闭（Enter/双击同效）。
+- **选区 OCR 文字识别（2026-11-19 新功能）**：`shot_ocr(x,y,w,h)` 命令（与 shotCopyCrop 同口径 = 选区整数物理矩形）从 SESSION_FRAME 进程内裁剪 → `encode_png_fast` → `spawn_blocking` 跑 `cliphist::ocr_png_text`（Windows.Media.Ocr 系统组件零新依赖；纯识别**不写剪贴板**）；**结果面板可编辑**（2026-11-19 用户定案）：识别完成弹出浮层卡片锚定工具栏正下方（渲染后钳屏，下方放不下翻上方），textarea 自动聚焦可编辑，「复制全文」经 navigator.clipboard 写入 + HUD「已复制 N 字」，Esc 收面板不退出截图；快捷键 Ctrl+O（shortcuts.ts `shot-ocr` scope=system）；识别中按钮 Loader2 转圈（复用 `np-spin`）disabled 防重复；错误 HUD 2.5s（无会话/矩形不合法/未识别出文字/无引擎——无引擎提示加语言包指引）；面板开着 Esc 优先收面板。无帧路径 cargo test 锁定（`ocr无会话帧时报错不panic`），识别本体真机测试 `ocr_recognizes_rendered_text` 门闸。
 - **十字辅助线开关** `shotCrosshair`（默认开，设置 → 截图区 Switch；关闭时两条 DOM 跟随线整体不渲染，零元素零合成层；放大镜/取色不受影响）。
 - **WASD/方向键微调**：跟随态/拖拽中 = Rust `shot_nudge_cursor`（GetCursorPos+SetCursorPos 移动真实光标，生成的 WM_MOUSEMOVE 由覆盖窗 pointermove 自然接管，前端零手动重绘）；已确认选区 = 前端整体平移选区框；Shift=10 物理像素大步，带修饰键组合不劫持；清单入 shortcuts.ts（scope system）。
 

@@ -26,6 +26,7 @@ import {
   GripVertical,
   Highlighter,
   Layers,
+  Loader2,
   MousePointer2,
   MoveUpRight,
   Palette,
@@ -33,6 +34,7 @@ import {
   PenLine,
   Pin,
   Save,
+  ScanText,
   Square,
   Type,
   Undo2,
@@ -170,6 +172,7 @@ const KEY_HINTS: [string, string][] = [
   ["Esc", "取消截图"],
   ["Enter", "复制并关闭"],
   ["Ctrl+P", "贴图"],
+  ["Ctrl+O", "识别文字"],
   ["Ctrl+Z", "撤销"],
   ["Del", "删除标记"],
   ["Tab", "按住隐藏标注"],
@@ -478,7 +481,85 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const [savedTip, setSavedTip] = useState<string | null>(null);
   /** 拖拽尺寸 HUD 的自动清除定时器（pointermove 高频更新，到达静止后收起） */
   const hudDragTimer = useRef<number | null>(null);
+  /** 瞬时 HUD 共用清除定时器（滚轮调值 / 取色 / OCR 反馈；到期收起） */
+  const hudTimer = useRef<number | null>(null);
   const [busy, setBusy] = useState(false);
+  /** OCR 识别中（秒级重活）：按钮转圈防重复触发。与 finish 的整窗 busy
+   *  语义区分——OCR 不收窗，工具栏保持在场，其余按钮不受影响 */
+  const [ocrBusy, setOcrBusy] = useState(false);
+  /** OCR 结果面板（可编辑）：null = 收起；识别完成以识别文本为初值，用户
+   *  可改后复制。组件卸载守卫：OCR 返回时窗口已收场则丢弃结果不 setState */
+  const [ocrText, setOcrText] = useState<string | null>(null);
+  /** 面板打开位（打开时按工具栏矩形锚定：top = 工具栏下方 8px，
+   *  flipTop = 工具栏 top，下方放不下整体翻到工具栏上方；渲染后钳屏） */
+  const [ocrPos, setOcrPos] = useState<{ left: number; top: number; flipTop: number } | null>(null);
+  const ocrAliveRef = useRef(true);
+  const ocrTextRef = useRef<string | null>(null);
+  const ocrPanelRef = useRef<HTMLDivElement>(null);
+  ocrTextRef.current = ocrText;
+  useEffect(() => () => { ocrAliveRef.current = false; }, []);
+
+  // ── 选区 OCR（2026-11-19 新功能）：Ctrl+O / 工具栏钮触发 ─────────────────
+  /** 选区文字识别：选区整数矩形（物理像素，与 shotCopyCrop 同口径）发
+   *  shot_ocr，Rust 裁剪定格帧交系统引擎。识别中按钮转圈防重复触发；
+   *  结果进可编辑面板（复制才入剪贴板，2026-11-19 用户定案），面板锚定
+   *  工具栏正下方、渲染后按实际尺寸钳屏 */
+  const runOcr = useCallback(async () => {
+    const s = selRef.current;
+    if (!s || ocrBusy || busy) return;
+    const tb = toolbarRef.current;
+    if (tb) {
+      const r = tb.getBoundingClientRect();
+      setOcrPos({ left: r.left, top: r.bottom + 8, flipTop: r.top });
+    }
+    setOcrBusy(true);
+    const rx = Math.round(s.x);
+    const ry = Math.round(s.y);
+    const rw = Math.max(1, Math.round(s.w));
+    const rh = Math.max(1, Math.round(s.h));
+    try {
+      const text = await api.shotOcr(rx, ry, rw, rh);
+      if (!ocrAliveRef.current) return;
+      setOcrText(text);
+    } catch (e) {
+      if (!ocrAliveRef.current) return;
+      setSavedTip(`OCR 失败：${String(e)}`);
+      if (hudTimer.current !== null) window.clearTimeout(hudTimer.current);
+      hudTimer.current = window.setTimeout(() => setSavedTip(null), 2500);
+    } finally {
+      if (ocrAliveRef.current) setOcrBusy(false);
+    }
+  }, [ocrBusy, busy]);
+
+  // 面板实际尺寸渲染后钳入视口：下方放不下整体翻到工具栏**上方**
+  //（flipTop = 工具栏 top，翻转位移含工具栏自身高度，避免压住工具栏）
+  useLayoutEffect(() => {
+    const el = ocrPanelRef.current;
+    if (!el || ocrText === null || !ocrPos) return;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const left = Math.max(8, Math.min(ocrPos.left, window.innerWidth - w - 8));
+    const top =
+      ocrPos.top + h <= window.innerHeight - 8
+        ? ocrPos.top
+        : Math.max(8, ocrPos.flipTop - h - 8);
+    if (left !== ocrPos.left || top !== ocrPos.top) setOcrPos({ left, top, flipTop: ocrPos.flipTop });
+  }, [ocrText, ocrPos]);
+
+  /** 复制面板文本进剪贴板（与放大镜复制色值同款 navigator.clipboard 路径） */
+  const copyOcr = useCallback(() => {
+    const text = ocrTextRef.current;
+    if (text === null) return;
+    const done = (tip: string) => {
+      setSavedTip(tip);
+      if (hudTimer.current !== null) window.clearTimeout(hudTimer.current);
+      hudTimer.current = window.setTimeout(() => setSavedTip(null), 1500);
+    };
+    void navigator.clipboard
+      ?.writeText(text)
+      .then(() => done(`已复制 ${text.length} 字`))
+      .catch(() => done("复制失败"));
+  }, []);
   const [ready, setReady] = useState(false);
   /** 选区几何拖拽进行中（边界手柄 resize / select 工具整体移动）：标记条/
    *  快捷键清单暂隐（2026-11-06 用户定案——拖拽中两面板停在旧位置遮视线，
@@ -1913,6 +1994,11 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
+        // OCR 结果面板开着先收面板（不退出截图，Esc 优先级高于退出会话）
+        if (ocrTextRef.current !== null) {
+          setOcrText(null);
+          return;
+        }
         exitShot();
         return;
       }
@@ -2039,6 +2125,11 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         e.preventDefault();
         void finish("pin");
       }
+      // Ctrl+O = 选区 OCR 文字识别（重复触发由 runOcr 内 ocrBusy 挡掉）
+      if (ctrl && e.key.toLowerCase() === "o" && selRef.current) {
+        e.preventDefault();
+        void runOcr();
+      }
     };
     window.addEventListener("keydown", onKey);
     // Tab 按住制的释放半边：抬起即恢复标注（busy/编辑态也无条件恢复，
@@ -2052,7 +2143,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       window.removeEventListener("keyup", onKeyUp);
       if (hiddenRef.current) hiddenRef.current = false; // 组件卸载兜底
     };
-  }, [exitShot, commitText, undo, finish, redrawLive, busy, setAnnotHidden, delMark, recolorMark]);
+  }, [exitShot, commitText, undo, finish, redrawLive, busy, setAnnotHidden, delMark, recolorMark, runOcr]);
 
   // ── 滚轮调节标记（2026-10-30 定案：悬停指哪调哪）────────────────────────
   // 光标悬停在哪个标记上滚轮就调哪个（shapeAt 线形命中描边带、面形命中包围
@@ -2060,7 +2151,6 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   // 马赛克格子 / 模糊不透明度；HUD 显示当前值，600ms 连滚合为一阵撤销。
   // 原生监听（passive:false）——React 合成 wheel 在部分环境按 passive 挂载，
   // preventDefault 无效会带着页面滚（覆盖层虽无滚动条，防御性收掉）
-  const hudTimer = useRef<number | null>(null);
   useEffect(() => {
     const onWheel = (e: WheelEvent) => {
       if (busy || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -2541,6 +2631,19 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             >
               <ScrollShotGlyph />
             </button>
+            <button
+              className="np-shot-tool"
+              data-tip="识别文字（OCR）"
+              data-kbd="Ctrl+O"
+              disabled={ocrBusy}
+              onClick={() => void runOcr()}
+            >
+              <AppIcon
+                icon={ocrBusy ? Loader2 : ScanText}
+                size={DENSITY.iconLg}
+                className={ocrBusy ? "np-spin" : undefined}
+              />
+            </button>
             {/* 行尾三钮（2026-10-30 定案）：保存 → 关闭 → 复制并关闭 */}
             <button
               className="np-shot-tool np-shot-primary"
@@ -2906,6 +3009,44 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               </div>
             </div>
           )}
+        </div>
+      )}
+      {/* OCR 结果面板（可编辑，2026-11-19 用户定案）：识别完成弹出，锚定
+          工具栏正下方（渲染后钳屏）；文本可编辑，「复制」才入剪贴板。
+          指针事件与工具栏同款 stopPropagation——不透传给画布选区 */}
+      {ocrText !== null && (
+        <div
+          ref={ocrPanelRef}
+          className="np-shot-ocrpanel"
+          style={{ left: ocrPos?.left ?? -9999, top: ocrPos?.top ?? -9999 }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <div className="np-shot-ocrpanel-head">
+            <span className="np-shot-ocrpanel-title">识别结果 · {ocrText.length} 字</span>
+            <button
+              className="np-shot-ocrbtn np-shot-ocrbtn-icon"
+              data-tip="收起面板"
+              data-kbd="Esc"
+              onClick={() => setOcrText(null)}
+            >
+              <AppIcon icon={X} size={DENSITY.iconSm} />
+            </button>
+          </div>
+          <textarea
+            className="np-shot-ocrpanel-text"
+            value={ocrText}
+            autoFocus
+            spellCheck={false}
+            onChange={(e) => setOcrText(e.target.value)}
+            onPointerDown={(e) => e.stopPropagation()}
+          />
+          <div className="np-shot-ocrpanel-foot">
+            <span className="np-shot-ocrpanel-hint">可编辑后复制 · Esc 收起</span>
+            <button className="np-shot-ocrbtn np-shot-ocrbtn-ok" onClick={copyOcr}>
+              <AppIcon icon={Check} size={DENSITY.iconSm} />
+              复制全文
+            </button>
+          </div>
         </div>
       )}
       {/* HUD（滚轮调节当前值 / 保存提示）：选区存在时锚定选区内顶部居中
