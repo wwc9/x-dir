@@ -460,11 +460,12 @@ export function SettingsPanel() {
                       desc={t("选择本机图片作为毛玻璃画布；路径持久化，移动原文件后需重新选择")}
                     >
                       <div className="np-set-pathline">
-                        <span
-                          className="np-set-path"
-                          data-tip={s.glassBgCustom || undefined}
-                        >
-                          {s.glassBgCustom || t("未选择图片")}
+                        <span className="np-set-path">
+                          {/* 反斜杠后插零宽空格：换行优先发生在路径分隔处，
+                             扩展名不被截断（jpg 不再切成 j/pg） */}
+                          {s.glassBgCustom
+                            ? s.glassBgCustom.split("\\").join("\\\u200b")
+                            : t("未选择图片")}
                         </span>
                         <Button
                           minimal

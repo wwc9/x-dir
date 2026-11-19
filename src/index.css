@@ -2283,10 +2283,10 @@ body.np-col-resizing .np-menued-grip::after {
   padding: 7px 0;
   border-bottom: 1px solid var(--np-hairline);
 }
-/* 设置行路径展示（2026-11-19 用户需求「自定义图片时显示路径」）：行尾路径
-   文本 + 按钮并排；路径弹性收缩出省略号（flex 0 1 auto + min-width 0），
-   data-tip 悬停全文；按钮 flex:none + nowrap——文案永不被路径挤成竖排
-   （2026-11-19 用户反馈「路径和选择图片的排版优化」实测竖排病） */
+/* 设置行路径展示（2026-11-19 用户需求「自定义图片时显示路径」→ 同日反馈
+   「路径没有展示完整，可以自动换行」）：行尾路径完整展示、超宽自动换行
+   （word-break: break-all 适配无空格路径），flex:1 吃满按钮左侧可用宽；
+   按钮 flex:none + nowrap——文案不被挤竖排 */
 .np-set-pathline {
   display: flex;
   align-items: center;
@@ -2295,11 +2295,11 @@ body.np-col-resizing .np-menued-grip::after {
   min-width: 0;
 }
 .np-set-path {
-  flex: 0 1 auto;
+  flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* 断行走 ZWSP（渲染串在路径分隔符后插零宽空格，见 SettingsPanel）；
+     overflow-wrap:anywhere 兜底超长单段（无分隔符的深层目录名） */
+  overflow-wrap: anywhere;
   font-size: var(--np-font-aux);
   color: var(--np-muted);
 }
