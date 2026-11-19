@@ -2284,21 +2284,28 @@ body.np-col-resizing .np-menued-grip::after {
   border-bottom: 1px solid var(--np-hairline);
 }
 /* 设置行路径展示（2026-11-19 用户需求「自定义图片时显示路径」）：行尾路径
-   文本 + 按钮并排；长路径省略号截断，data-tip 悬停全文；空态灰字占位 */
+   文本 + 按钮并排；路径弹性收缩出省略号（flex 0 1 auto + min-width 0），
+   data-tip 悬停全文；按钮 flex:none + nowrap——文案永不被路径挤成竖排
+   （2026-11-19 用户反馈「路径和选择图片的排版优化」实测竖排病） */
 .np-set-pathline {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   min-width: 0;
 }
 .np-set-path {
+  flex: 0 1 auto;
   min-width: 0;
-  max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--np-font-aux);
   color: var(--np-muted);
+}
+.np-set-pathline .bp6-button {
+  flex: none;
+  white-space: nowrap;
 }
 .np-set-info {
   display: flex;
