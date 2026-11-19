@@ -2184,6 +2184,14 @@ body.np-col-resizing .np-menued-grip::after {
   height: var(--np-nav-h);
   padding: 0 6px 0 16px;
   border-bottom: 1px solid var(--np-hairline);
+  /* 头部收纳梯度容器（2026-11-19 用户反馈「日历顶栏挤成两行」——头部内容
+     总宽 > 容器时全体 flex 子项等比压窄、文本竖排。container-type 挂头部，
+     子项按下方 @container 梯度收纳，同顶栏 np-tb 范式） */
+  container-type: inline-size;
+}
+/* 头部按钮文案一律禁竖排（窄幅宁可收纳元素也不逐字换行） */
+.np-menupage-head button {
+  white-space: nowrap;
 }
 /* 返回钮：两个整页（定制/全盘搜索）共用，加大命中区方便点击（2026-10-16 定案）。
    2026-10-22 定稿「方案 A 淡染胶囊」（design/back-button-preview.html）：sel 淡染底 +
@@ -2208,6 +2216,8 @@ body.np-col-resizing .np-menued-grip::after {
 .np-menupage-title {
   font-size: var(--np-font-ui);
   color: var(--np-muted);
+  white-space: nowrap;
+  flex: none;
 }
 .np-menupage-body {
   flex: 1;
@@ -8081,12 +8091,41 @@ body.np-col-resizing * {
   display: flex;
   align-items: center;
   gap: var(--np-gap);
+  flex: none;
+}
+/* 头部收纳梯度（2026-11-19 用户反馈「日历顶栏挤成两行」；容器 =
+   .np-menupage-head，container queries 同顶栏 np-tb 范式）：
+   ≤1200 收键盘提示文案（tooltip/帮助无损失）→ ≤1000 返回钮退化图标
+   （data-tip 保留）→ ≤860 搜索缩窄 → ≤760 收搜索（输入框有 Esc 失焦
+   与跳转面板兜底）。导航簇（月/年·年月·今天·导出）任何宽度不收 */
+@container (max-width: 1200px) {
+  .np-menupage-head .np-cal-hint {
+    display: none;
+  }
+}
+@container (max-width: 1000px) {
+  .np-menupage-head .np-menupage-back span {
+    display: none;
+  }
+}
+@container (max-width: 860px) {
+  /* ⚠ 须带 .np-menupage-head 前缀压过文件后部基础规则（同特异性后者胜） */
+  .np-menupage-head .np-cal-search {
+    width: 130px;
+  }
+}
+@container (max-width: 760px) {
+  .np-menupage-head .np-cal-searchwrap {
+    display: none;
+  }
 }
 .np-cal-ym {
   min-width: 92px;
   text-align: center;
   font-size: var(--np-font-ui);
   font-weight: 600;
+  white-space: nowrap;
+  flex: none;
 }
 .np-cal-todaybtn {
   color: var(--np-accent);
