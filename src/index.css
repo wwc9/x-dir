@@ -433,6 +433,14 @@ html.glasswin.bp6-dark > body {
   --np-surface: rgba(40, 38, 66, var(--np-glass-alpha, 0.4));
   --np-surface-2: rgba(255, 255, 255, 0.07);
   --np-surface-glass-strong: rgba(30, 35, 50, var(--np-glass-pop-alpha, 0.5));
+  /* 文字提亮（2026-11-19 用户反馈「深色主题磨玻璃字体颜色要阅读清晰」）：
+     毛玻璃下霜面半透（用户霜面浓度可调至 40%），画布渐变的紫晕/绯红与
+     custom 模式亮壁纸透出，实底深色的 fg #d4d4d4 / muted #8f8f8f 对比度
+     跌到 ~2.8:1 / ~1.8:1 → 玻璃深色作用域内整体提亮两档（冷调白与浅蓝灰
+     随 navy 画布色温），非玻璃深色实底不受影响。本块含 > body 直声明
+     （双锚点陷阱：.dark 挂 body 直声明压过 html 继承） */
+  --np-fg: #f0f3fa;
+  --np-muted: #b6bccb;
   /* 弹窗染色极光玻璃深色映射：navy 顶 / 紫晕中 / 绯红底；各档 alpha 按
      弹层浓度参数比例缩放（calc 系数 = 2026-11-18 原档 ÷ 当日 0.78 基准；
      现默认浓度 0.5〔2026-11-19 用户定档〕下呈轻透版，调回 0.78 即原档） */
@@ -505,6 +513,10 @@ html.glasswin[data-glassbg="custom"] > body {
 html.glasswin[data-glassbg="custom"].bp6-dark,
 html.glasswin[data-glassbg="custom"].bp6-dark > body {
   --np-glass-ring: rgba(255, 255, 255, 0.16);
+  /* 文字提亮同极光深色块：custom 亮壁纸 + 蒙版后画布中等亮度，实底深色
+     文字色对比度不足（双锚点陷阱同前，本块含 body 直声明） */
+  --np-fg: #f0f3fa;
+  --np-muted: #b6bccb;
   --np-dialog-glass: linear-gradient(
     165deg,
     rgba(30 35 50 / calc(var(--np-glass-pop-alpha, 0.5) * 1.09)),
