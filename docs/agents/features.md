@@ -224,6 +224,7 @@
 
 **组件与模块**：QuickPreview 头部搜索条 + CSS Custom Highlight API + pdf.js TextLayer。
 
+- **窗口可调 + 尺寸记忆（2026-11-19 用户需求「快速预览窗口要支持调整窗口高度和宽度」）**：`.np-pv` 开 `resize: both`（CSS 原生右下 grip，overflow:hidden 满足前置；min 480×360 / max 94vw·94vh 钳制防塌缩防溢出）；尺寸记忆走 dialogPrefs `quickPreview` 档——开窗 `loadDialogPrefs` 读档（缺省回落 `--np-pv-w/h` 响应式 var），拖拽结束 `saveDialogPrefs` 写档（随 settings.json 持久化/迁移）。实现要点（两代方案教训）：① **监听必须全 window 捕获层委托 + `closest` 现场锚定**——开窗 effect 时 portal 元素未必可查，一次性 querySelector 会空手而归致监听落空（实测拖拽生效但永不落盘的根因）；② 尺寸提交 = grip 角（右下 20px）pointerdown 记起点 → pointerup / 1s 兜底采样，尺寸变了才 `setPvSize`+写档——弃 ResizeObserver（挂载首帧观察回调拿到 CSS var 默认尺寸会把记忆值覆盖回默认）；③ **`loadDialogPrefs` 的 fallback 必须含键**（merge 只拷 fallback 已有键，空对象静默吞掉全部保存值）；④ 导航换文件尺寸保持（跟随会话），关窗重开 = 上次尺寸。CDP 全链路：开窗恢复记忆值 ✓ / 拖拽缩放 ✓ / 落盘 ✓ / 重开精确恢复 ✓ / 宽度顶 94vw 钳制 ✓。
 - **预览内查找**（Ctrl+F 经 keyboard pv 分支唤起；shortcuts 清单 preview-search）：高亮走 CSS Custom Highlight API 分组注册（PDF 每页一组）；PDF = 整册文本抽取（≤400 页）命中列表滚页 + textLayer 页内高亮；表格 = 命中格高亮 + scrollToIndex 居中。
 - **PDF 文本层**（pdf.js TextLayer，文字可选中复制）+ 页码跳转输入；文本预览换行开关（关 = nowrap + 行号 ≤2 万行）+ 代码语法高亮（highlight.js 懒加载，22 扩展名映射；token 化双主题色板 `--np-code-*` 浅=GitHub Light/深=GitHub Dark）。
 - **压缩 JSON 自动排版**：`lib/jsonPretty.ts` 纯函数（整串一行 + 可 parse 的对象/数组 → 2 空格缩进重排；已含换行/纯量/非法/超长/膨胀 >1.5× 一律不动），展示层提示"已自动排版（磁盘内容不变）"。

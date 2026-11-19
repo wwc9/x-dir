@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import { api, type FileEntry } from "../lib/ipc";
+import { loadDialogPrefs, saveDialogPrefs } from "../lib/dialogPrefs";
 import { parentPath } from "../lib/path";
 import { getList } from "../lib/listRegistry";
 import { fileIcon } from "../lib/fileIcons";
@@ -79,6 +80,71 @@ export function QuickPreviewHost() {
     setTextWrap(!(entry && !entry.isDir && codeLangOf(entry.name)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entryKey]);
+
+  // ── 窗口化尺寸（2026-11-19 用户需求「快速预览窗口要支持调整高度和宽度」）：
+  // CSS 原生 resize:both 手柄（右下角 grip，见 .np-pv），尺寸经 dialogPrefs
+  // 记忆——开窗读 quickPreview 档（缺省走 CSS var 响应式默认），用户拖拽
+  // （pointerdown 落在右下 grip 角）触发的尺寸变化防抖写档；浏览器拖拽会直写
+  // element.style，React 侧经 ResizeObserver 同步 state 保持一致，导航换文件
+  // 不重置（窗口尺寸跟随会话），关窗重开 = 上次尺寸
+  const [pvSize, setPvSize] = useState<{ w?: number; h?: number }>({});
+  const pvOpenRef = useRef(false);
+  useEffect(() => {
+    const isOpen = !!entry;
+    if (isOpen && !pvOpenRef.current) {
+      // ⚠ fallback 必须含键（mergeDialogPrefs 只拷 fallback 已有的键），
+      // 空对象会静默吞掉全部保存值；0 由下方映射回 undefined 走响应式默认
+      const p = loadDialogPrefs<{ w: number; h: number }>("quickPreview", {
+        w: 0,
+        h: 0,
+      });
+      setPvSize({
+        w: p.w > 0 ? p.w : undefined,
+        h: p.h > 0 ? p.h : undefined,
+      });
+    }
+    pvOpenRef.current = isOpen;
+  }, [entry]);
+
+  useEffect(() => {
+    if (!entry) return;
+    // 机制（全 window 捕获层委托，无元素预解析——开窗 effect 时 portal 元素
+    // 未必可查，一次性 querySelector 会空手而归致监听落空 2026-11-19 实测）：
+    // pointerdown 落在 .np-pv 右下 20px grip 角 → 记起点尺寸置 pending；
+    // pointerup / 1s 兜底采样提交——尺寸变了才 setPvSize + saveDialogPrefs
+    let pending = false;
+    let w0 = 0;
+    let h0 = 0;
+    const onDown = (e: PointerEvent) => {
+      const box = (e.target as HTMLElement | null)
+        ?.closest?.(".np-dialog.np-pv") as HTMLElement | null;
+      if (!box) return;
+      const r = box.getBoundingClientRect();
+      if (r.right - e.clientX > 20 || r.bottom - e.clientY > 20) return;
+      pending = true;
+      w0 = Math.round(box.clientWidth);
+      h0 = Math.round(box.clientHeight);
+    };
+    const commit = () => {
+      if (!pending) return;
+      const box = document.querySelector<HTMLElement>(".np-dialog.np-pv");
+      if (!box) return;
+      const w = Math.round(box.clientWidth);
+      const h = Math.round(box.clientHeight);
+      if (w === w0 && h === h0) return;
+      pending = false;
+      setPvSize({ w, h });
+      saveDialogPrefs("quickPreview", { w, h });
+    };
+    window.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("pointerup", commit, true);
+    const t = window.setInterval(commit, 1000);
+    return () => {
+      window.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("pointerup", commit, true);
+      window.clearInterval(t);
+    };
+  }, [entry !== null]);
 
   // Ctrl+F（keyboard 路由）唤起后聚焦输入框
   useEffect(() => {
@@ -216,7 +282,10 @@ export function QuickPreviewHost() {
       isOpen={!!entry}
       onClose={close}
       className="np-dialog np-pv"
-      style={{ width: "var(--np-pv-w)", height: "var(--np-pv-h)" }}
+      style={{
+        width: pvSize.w ? `${pvSize.w}px` : "var(--np-pv-w)",
+        height: pvSize.h ? `${pvSize.h}px` : "var(--np-pv-h)",
+      }}
       canOutsideClickClose
       canEscapeKeyClose={false}
       isCloseButtonShown={false}
