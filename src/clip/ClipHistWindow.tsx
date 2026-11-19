@@ -147,9 +147,14 @@ export function ClipHistWindow() {
     // 最近一次已应用的毛玻璃档（onScheme 重放主题时无需重取设置）
     const lastGlass = { current: "off" as Settings["windowGlass"] };
     // 玻璃参数跟随（2026-11-19 外观可调）：浮窗 .np-clip 在卡片家族内，
-    // blur/frost 与主窗同源——两取值路径（getSettings/config-imported）写 ref
+    // 四参数与主窗同源——两取值路径（getSettings/config-imported）写 ref
     const lastTune = {
-      current: { blur: DEFAULT_SETTINGS.glassBlur, frost: DEFAULT_SETTINGS.glassFrost },
+      current: {
+        blur: DEFAULT_SETTINGS.glassBlur,
+        frost: DEFAULT_SETTINGS.glassFrost,
+        popBlur: DEFAULT_SETTINGS.glassPopBlur,
+        popFrost: DEFAULT_SETTINGS.glassPopFrost,
+      },
     };
     const applyTheme = (theme: Settings["theme"]) => {
       const dark =
@@ -161,7 +166,8 @@ export function ClipHistWindow() {
       document.body.classList.toggle("dark", dark);
       document.body.classList.toggle("bp6-dark", dark);
       applyWindowGlass(lastGlass.current);
-      applyGlassParams(lastTune.current.blur, lastTune.current.frost);
+      const t = lastTune.current;
+      applyGlassParams(t.blur, t.frost, t.popBlur, t.popFrost);
     };
     const onScheme = () => applyTheme("system");
     void api
@@ -173,6 +179,8 @@ export function ClipHistWindow() {
         lastTune.current = {
           blur: st?.glassBlur ?? DEFAULT_SETTINGS.glassBlur,
           frost: st?.glassFrost ?? DEFAULT_SETTINGS.glassFrost,
+          popBlur: st?.glassPopBlur ?? DEFAULT_SETTINGS.glassPopBlur,
+          popFrost: st?.glassPopFrost ?? DEFAULT_SETTINGS.glassPopFrost,
         };
         applyTheme(theme);
         if (theme === "system") {
@@ -203,6 +211,8 @@ export function ClipHistWindow() {
           lastTune.current = {
             blur: st?.glassBlur ?? DEFAULT_SETTINGS.glassBlur,
             frost: st?.glassFrost ?? DEFAULT_SETTINGS.glassFrost,
+            popBlur: st?.glassPopBlur ?? DEFAULT_SETTINGS.glassPopBlur,
+            popFrost: st?.glassPopFrost ?? DEFAULT_SETTINGS.glassPopFrost,
           };
           applyTheme(st?.theme ?? "system");
         })

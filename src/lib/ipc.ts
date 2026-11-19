@@ -403,12 +403,20 @@ export interface Settings {
   glassBgCustom: string;
   /** 蒙版浓度 0-60（百分比；浅色蒙白雾/深色蒙夜幕） */
   glassBgVeil: number;
-  /** 模糊强度 0-48 px（2026-11-19 外观可调）：卡片家族与强霜浮层的
-   *  backdrop-filter 半径，经 --np-glass-blur 下发；弹窗恒 40 不随 */
+  /** 模糊强度 0-48 px（2026-11-19 外观可调）：主界面卡片家族的
+   *  backdrop-filter 半径，经 --np-glass-blur 下发；弹窗/浮层走弹层模糊 */
   glassBlur: number;
   /** 霜面浓度 20-80 %（2026-11-19 外观可调）：卡片霜面 --np-surface 的
    *  不透明度，经 --np-glass-alpha 下发；强霜 0.78/弹窗染色不随 */
   glassFrost: number;
+  /** 弹层模糊 0-64 px（2026-11-19 外观可调 = 二级弹窗独立参数）：弹窗三
+   *  载体直接随（8px 下限），强霜浮层按 0.55 比例联动——默认 40 时菜单
+   *  22 = 既有定档，经 --np-glass-pop-blur 下发 */
+  glassPopBlur: number;
+  /** 弹层浓度 40-95 %（2026-11-19 外观可调 = 二级弹窗独立参数）：强霜面
+   *  alpha 直接随（默认 78 = 既有定档），弹窗染色渐变各档按原比例
+   *  （÷0.78）缩放，经 --np-glass-pop-alpha 下发 */
+  glassPopFrost: number;
   restoreLastSession: boolean;
   /** 开机自启（2026-11-15）：单一事实源在 settings.json，注册表 Run 键为派生态
    *  （Rust 启动回放 apply_autostart_pref；切换经 api.autostartSet 刷注册表） */
@@ -612,10 +620,12 @@ export const DEFAULT_SETTINGS: Settings = {
   glassBg: "aurora",
   glassBgCustom: "",
   glassBgVeil: 35,
-  // 玻璃参数默认 = 既有定档（2026-11-19 参数化：blur 22 为卡片家族原值，
-  // frost 55 为霜面 alpha 原值；设置 → 外观可调）
+  // 玻璃参数默认 = 既有定档（2026-11-19 参数化：blur 22/frost 55 为卡片家族
+  // 原值；popBlur 40/popFrost 78 为弹窗三载体与强霜面原值；设置 → 外观可调）
   glassBlur: 22,
   glassFrost: 55,
+  glassPopBlur: 40,
+  glassPopFrost: 78,
   toolbarEntries: [],
   restoreLastSession: true,
   // 开机自启默认关（2026-11-15）：自启属显式选择，不替用户决定

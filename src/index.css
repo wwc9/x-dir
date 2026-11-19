@@ -398,21 +398,22 @@ html.glasswin > body {
     linear-gradient(160deg, #f7f1f4, #f2eaef 50%, #e7ecf5);
   --np-surface: rgba(255, 255, 255, var(--np-glass-alpha, 0.55));
   /* ↑ 霜面浓度可调（2026-11-19 外观 tab）：alpha 由 applyGlassParams 内联
-     下发 --np-glass-alpha（0.2-0.8），默认 0.55 = 既有定档；强霜 0.78/
-     弹窗染色为可读性锚点不随参数 */
+     下发 --np-glass-alpha（0.2-0.8），默认 0.55 = 既有定档；强霜/弹窗染色
+     随弹层浓度参数（--np-glass-pop-alpha），与本参数解耦 */
   /* 弹窗染色极光玻璃（2026-11-18 用户定案 = 方案 C，design/dialog-glass-proposal-c-tinted.html）：
      霜面染极光色相——顶天空蓝、底珊瑚粉，弹窗成为画布的一部分而非贴上去的白片 */
   --np-dialog-glass: linear-gradient(
     165deg,
-    rgba(255, 255, 255, 0.8),
-    rgba(238, 244, 250, 0.68) 45%,
-    rgba(255, 236, 228, 0.62)
+    rgba(255 255 255 / calc(var(--np-glass-pop-alpha, 0.78) * 1.03)),
+    rgba(238 244 250 / calc(var(--np-glass-pop-alpha, 0.78) * 0.87)) 45%,
+    rgba(255 236 228 / calc(var(--np-glass-pop-alpha, 0.78) * 0.8))
   );
   /* 玻璃子面（地址 pill/缩放钮/chip/空态徽标等 surface-2 消费方）：半透明白，
      叠在已模糊的卡片面上透出柔化色——子面无文字穿透风险（背后是霜面非裸列表） */
   --np-surface-2: rgba(255, 255, 255, 0.45);
-  /* 强霜面（Dialog 可读性优先，比卡片 0.55 霜更实） */
-  --np-surface-glass-strong: rgba(255, 255, 255, 0.78);
+  /* 强霜面（Dialog 可读性优先，比卡片霜更实）：alpha 随弹层浓度参数
+     （2026-11-19 外观可调 --np-glass-pop-alpha，默认 0.78 = 既有定档） */
+  --np-surface-glass-strong: rgba(255, 255, 255, var(--np-glass-pop-alpha, 0.78));
 }
 html.glasswin.bp6-dark,
 html.glasswin.bp6-dark > body {
@@ -430,13 +431,14 @@ html.glasswin.bp6-dark > body {
      极光画布紫/绯红 → 卡片紫灰，与弹窗染色同语言；alpha 可调同浅色（--np-glass-alpha） */
   --np-surface: rgba(40, 38, 66, var(--np-glass-alpha, 0.55));
   --np-surface-2: rgba(255, 255, 255, 0.07);
-  --np-surface-glass-strong: rgba(30, 35, 50, 0.78);
-  /* 弹窗染色极光玻璃深色映射：navy 顶 / 紫晕中 / 绯红底 */
+  --np-surface-glass-strong: rgba(30, 35, 50, var(--np-glass-pop-alpha, 0.78));
+  /* 弹窗染色极光玻璃深色映射：navy 顶 / 紫晕中 / 绯红底；各档 alpha 按
+     弹层浓度参数比例缩放（calc 系数 = 原档 ÷ 0.78 基准，默认档逐点还原） */
   --np-dialog-glass: linear-gradient(
     165deg,
-    rgba(30, 35, 50, 0.82),
-    rgba(40, 34, 58, 0.7) 45%,
-    rgba(52, 26, 40, 0.62)
+    rgba(30 35 50 / calc(var(--np-glass-pop-alpha, 0.78) * 1.05)),
+    rgba(40 34 58 / calc(var(--np-glass-pop-alpha, 0.78) * 0.9)) 45%,
+    rgba(52 26 40 / calc(var(--np-glass-pop-alpha, 0.78) * 0.8))
   );
 }
 /* ═══ 玻璃背景图案（2026-11-18 收敛定案：六案比选后用户拍板「除极光外全删」——
@@ -494,8 +496,8 @@ html.glasswin[data-glassbg="custom"] > body {
   --np-glass-ring: rgba(255, 255, 255, 0.35);
   --np-dialog-glass: linear-gradient(
     165deg,
-    rgba(255, 255, 255, 0.85),
-    rgba(255, 255, 255, 0.72)
+    rgba(255 255 255 / calc(var(--np-glass-pop-alpha, 0.78) * 1.09)),
+    rgba(255 255 255 / calc(var(--np-glass-pop-alpha, 0.78) * 0.92))
   );
 }
 html.glasswin[data-glassbg="custom"].bp6-dark,
@@ -503,8 +505,8 @@ html.glasswin[data-glassbg="custom"].bp6-dark > body {
   --np-glass-ring: rgba(255, 255, 255, 0.16);
   --np-dialog-glass: linear-gradient(
     165deg,
-    rgba(30, 35, 50, 0.85),
-    rgba(36, 41, 55, 0.72)
+    rgba(30 35 50 / calc(var(--np-glass-pop-alpha, 0.78) * 1.09)),
+    rgba(36 41 55 / calc(var(--np-glass-pop-alpha, 0.78) * 0.92))
   );
 }
 
@@ -574,10 +576,11 @@ html.glasswin .np-cal-hits {
   background: var(--np-surface-glass-strong);
   border-color: var(--np-glass-ring);
   box-shadow: var(--np-glass-shadow);
-  /* 模糊随参数但保 8px 可读性下限（max() 钳制）：强霜浮层透底文字不可锐利
-     穿透（穿透病审计口径），参数低于 8 时浮层仍 8 */
-  -webkit-backdrop-filter: blur(max(var(--np-glass-blur, 22px), 8px)) saturate(1.4);
-  backdrop-filter: blur(max(var(--np-glass-blur, 22px), 8px)) saturate(1.4);
+  /* 模糊随弹层参数按 0.55 比例联动（默认 40 → 22 = 既有定档）+ 8px 可读性
+     下限（max() 钳制）：强霜浮层透底文字不可锐利穿透（穿透病审计口径），
+     参数低于 ~15 时浮层仍 8 */
+  -webkit-backdrop-filter: blur(max(calc(var(--np-glass-pop-blur, 40px) * 0.55), 8px)) saturate(1.4);
+  backdrop-filter: blur(max(calc(var(--np-glass-pop-blur, 40px) * 0.55), 8px)) saturate(1.4);
 }
 /* 弹窗染色极光玻璃（2026-11-18 用户定案 = 方案 C，design/dialog-glass-proposal-c-tinted.html）：
    background = --np-dialog-glass 主题化极光染色渐变；顶缘受光内高光补边界
@@ -606,7 +609,8 @@ html.glasswin.bp6-dark .np-dialog {
    backdrop-filter + 内嵌滚动容器」采样失效返回白色（2026-11-17 实测白板
    穿透，CDP 截图定位），滚动容器自身挂 blur 采样正常（右键菜单同模式已
    验证）；根节点保持无 blur + 染色玻璃面。blur 值与上方弹窗规则同源同值
-   （2026-11-18 方案 C：22→40 / 1.4→1.8），改一处必须改另一处。
+   （2026-11-18 方案 C：22→40 / 1.4→1.8；2026-11-19 起随弹层模糊参数
+   --np-glass-pop-blur，8px 下限），改一处必须改另一处。
    ⚠ 头/尾两段同样必须自挂 blur（2026-11-18 用户反馈「弹窗顶部和底部不需要
    单独的颜色，统一颜色」）：透明头/尾底下正是根节点白板基底 → 染色渐变
    盖出灰白条带；两段不含滚动容器、采样正常，自挂同值 blur 后 = 模糊画布 +
@@ -618,8 +622,8 @@ html.glasswin.bp6-dark .np-dialog {
 html.glasswin .np-dialog .bp6-dialog-body-scroll-container,
 html.glasswin .np-dialog .bp6-dialog-header,
 html.glasswin .np-dialog .bp6-dialog-footer {
-  -webkit-backdrop-filter: blur(40px) saturate(1.8);
-  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(max(var(--np-glass-pop-blur, 40px), 8px)) saturate(1.8);
+  backdrop-filter: blur(max(var(--np-glass-pop-blur, 40px), 8px)) saturate(1.8);
   transform: translateZ(0);
 }
 /* 快速预览为定高弹窗（78vh）：Blueprint 给载体自带 max-height:70vh + padding，

@@ -421,6 +421,38 @@ export function SettingsPanel() {
                     <span className="np-set-slider-val">{s.glassFrost} %</span>
                   </div>
                 </SetRow>
+                <SetRow
+                  label={t("弹层模糊")}
+                  desc={t("弹窗与菜单等浮层的模糊半径；菜单随弹窗按比例联动，8px 下限保可读")}
+                >
+                  <div className="np-set-slider">
+                    <Slider
+                      min={0}
+                      max={64}
+                      stepSize={1}
+                      labelValues={[]}
+                      value={s.glassPopBlur}
+                      onChange={(v) => s.update({ glassPopBlur: Array.isArray(v) ? v[0] : v })}
+                    />
+                    <span className="np-set-slider-val">{s.glassPopBlur} px</span>
+                  </div>
+                </SetRow>
+                <SetRow
+                  label={t("弹层浓度")}
+                  desc={t("弹窗与菜单等浮层的霜面浓度，越高越实；弹窗染色渐变按比例缩放")}
+                >
+                  <div className="np-set-slider">
+                    <Slider
+                      min={40}
+                      max={95}
+                      stepSize={1}
+                      labelValues={[]}
+                      value={s.glassPopFrost}
+                      onChange={(v) => s.update({ glassPopFrost: Array.isArray(v) ? v[0] : v })}
+                    />
+                    <span className="np-set-slider-val">{s.glassPopFrost} %</span>
+                  </div>
+                </SetRow>
                 {s.glassBg === "custom" && (
                   <>
                     <SetRow

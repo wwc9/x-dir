@@ -87,6 +87,8 @@ function toPlain(s: SettingsStore): Settings {  return {
     glassBgVeil: s.glassBgVeil,
     glassBlur: s.glassBlur,
     glassFrost: s.glassFrost,
+    glassPopBlur: s.glassPopBlur,
+    glassPopFrost: s.glassPopFrost,
     autostart: s.autostart,
     toolbarEntries: s.toolbarEntries,
     restoreLastSession: s.restoreLastSession,
@@ -294,14 +296,24 @@ export function applyGlassBg(bg: GlassBg, custom: string, veil: number) {
   }
 }
 
-/** 玻璃参数下发（2026-11-19 外观 tab 可调 = 模糊强度/霜面浓度）：html 内联
- *  写 --np-glass-blur（卡片家族与强霜浮层 backdrop-filter 半径，弹窗恒 40
- *  不随）与 --np-glass-alpha（卡片霜面 --np-surface 不透明度，强霜 0.78/
- *  弹窗染色不随）。两 token 仅 html.glasswin 作用域消费，非毛玻璃模式无效 */
-export function applyGlassParams(blur: number, frost: number) {
+/** 玻璃参数下发（2026-11-19 外观 tab 可调 = 模糊强度/霜面浓度/弹层模糊/
+ *  弹层浓度四参数，主界面卡片与二级弹窗解耦）：html 内联写四 token——
+ *  --np-glass-blur（卡片模糊）/ --np-glass-alpha（卡片霜面 alpha）/
+ *  --np-glass-pop-blur（弹窗直接随，强霜浮层按 0.55 比例联动，8px 下限）/
+ *  --np-glass-pop-alpha（强霜面直接随，弹窗染色渐变按原比例缩放）。
+ *  可读性锚点不随：surface-2/蒙版/窗缘盖板固定。四 token 仅 html.glasswin
+ *  作用域消费，非毛玻璃模式无效 */
+export function applyGlassParams(
+  blur: number,
+  frost: number,
+  popBlur: number,
+  popFrost: number,
+) {
   const root = document.documentElement;
   root.style.setProperty("--np-glass-blur", `${blur}px`);
   root.style.setProperty("--np-glass-alpha", String(frost / 100));
+  root.style.setProperty("--np-glass-pop-blur", `${popBlur}px`);
+  root.style.setProperty("--np-glass-pop-alpha", String(popFrost / 100));
 }
 
 export function applyTheme(theme: Settings["theme"]) {
@@ -452,10 +464,12 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     merged.glassBgCustom =
       typeof merged.glassBgCustom === "string" ? merged.glassBgCustom : "";
     merged.glassBgVeil = clampMetric(merged.glassBgVeil, 0, 60, DEFAULT_SETTINGS.glassBgVeil);
-    // 玻璃参数钳制（2026-11-19 参数化）：模糊 0-48 / 霜面 20-80（下限 20 保
-    // 卡片可读性下限，脏数据回落默认）
+    // 玻璃参数钳制（2026-11-19 参数化）：模糊 0-48 / 霜面 20-80 / 弹层模糊
+    // 0-64 / 弹层浓度 40-95（霜面下限 40 保浮层可读性下限，脏数据回落默认）
     merged.glassBlur = clampMetric(merged.glassBlur, 0, 48, DEFAULT_SETTINGS.glassBlur);
     merged.glassFrost = clampMetric(merged.glassFrost, 20, 80, DEFAULT_SETTINGS.glassFrost);
+    merged.glassPopBlur = clampMetric(merged.glassPopBlur, 0, 64, DEFAULT_SETTINGS.glassPopBlur);
+    merged.glassPopFrost = clampMetric(merged.glassPopFrost, 40, 95, DEFAULT_SETTINGS.glassPopFrost);
     // 图标视图已删除（2026-10-13）：旧档存过 icons 时回落详细信息
     if ((merged.defaultView as string) === "icons") merged.defaultView = "details";
     // 截图十字辅助线（2026-11-11）：脏数据（非布尔，旧档缺键由 DEFAULT 兜底）
@@ -556,7 +570,12 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
       get().glassBgCustom,
       get().glassBgVeil,
     );
-    applyGlassParams(get().glassBlur, get().glassFrost);
+    applyGlassParams(
+      get().glassBlur,
+      get().glassFrost,
+      get().glassPopBlur,
+      get().glassPopFrost,
+    );
   },
 
   update(p) {
@@ -577,8 +596,18 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
         get().glassBgCustom,
         get().glassBgVeil,
       );
-    if (p.glassBlur !== undefined || p.glassFrost !== undefined)
-      applyGlassParams(get().glassBlur, get().glassFrost);
+    if (
+      p.glassBlur !== undefined ||
+      p.glassFrost !== undefined ||
+      p.glassPopBlur !== undefined ||
+      p.glassPopFrost !== undefined
+    )
+      applyGlassParams(
+        get().glassBlur,
+        get().glassFrost,
+        get().glassPopBlur,
+        get().glassPopFrost,
+      );
     if (p.theme) applyTheme(p.theme);
     if (p.uiZoom !== undefined) applyZoom(p.uiZoom);
     if (p.uiRadius !== undefined || p.uiGap !== undefined)
