@@ -59,7 +59,15 @@ NSIS 首次打包需下载工具链，国内网络易超时——脚本会降级
    The clipboard search box no longer swallows list shortcuts like 1–9 and Space; Esc returns to list mode
 ```
 
-内容取材 = `update.json` notes + 本轮提交记录，按上述口径精炼改写。
+**内容口径（2026-11-19 用户定案）：发行说明永远相对上一个发布版本撰写。**
+基线 = 最近一个 git tag（`git tag --list` 取最新，`git log <上一tag>..HEAD` 即本版变更全集）
++ 上一版 `dist-release/v<上一版本>/release-notes.md`；✨新增/⚡改进/🐛修复 三段逐条回答
+「**相对上一版**新增了什么、改进了什么、修复了什么」。硬性约束：
+- 上一版发行说明已收录的条目**不得重复出现**（跨版本持续演进的功能写增量差异，不重述全貌）；
+- 取材 = 该 tag 区间提交记录 + `update.json` notes，按「用户可感知」口径精炼改写——
+  纯内部工程改动（CI/规范审计测试/docs/设计预览稿/重构过程）不单列，并入相关条目或省略；
+- 撰写前先通读上一版 notes 做去重对照，再按三段归类编号。
+
 历史版本（v0.1.7/0.1.8：单语短标题，英文行带独立粗标题）不回溯改写。
 
 > **update.json notes 前缀约定（2026-11-12）**：notes 每条以分类标签开头（`✨ 新增 ` /
