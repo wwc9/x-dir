@@ -53,12 +53,13 @@
 - `lib/layoutTree.ts` 改动必须带 vitest 用例；`lib/path.ts` 行为由 `path.test.ts` 锁定，改行为先改用例
 - 全局快捷键（`lib/keyboard.ts`）新增/改动必须同步 `lib/shortcuts.ts` 清单，且 `keyboard.test.ts` 覆盖对齐用例保持全绿
 - Rust `fs`/`jobs` 纯逻辑（排序/路径/冲突/分页）必须带 cargo test；图标映射（`lib/fileIcons.ts`）扩展时补映射断言
-- 五条规范审计测试（新代码违反即 CI 失败）：
+- 六条规范审计测试（新代码违反即 CI 失败）：
   - `iconRule.test.ts` = lucide 图标只许经 `AppIcon`/`ic()` 渲染（除 AppIcon.tsx 本体）
   - `apiBinding.test.ts` = `lib/ipc.ts` 的 api 方法必须有 UI 调用点（防死绑定滞留）
   - `cssClasses.test.ts` = TSX 引用的 `np-*` 类必须在 index.css 有定义或入白名单（白名单仅收 JS 查询钩子/语义标记类，新成员必须注释理由）
   - `i18nCoverage.test.ts` = 英文覆盖四合一审计：t()/t2() 字面量键（含 CJK）必须入 EN 词典或白名单（白名单仅收 Rust 写盘硬编码后缀等回落中文即正确的串，新成员必须注释理由）、typeName 全部输出已收录、数据文件功能名/描述/分类标签已收录、EN 词典无死词条。新增用户可见文案 = 中文源串入代码 + EN 词条入 `lib/i18n.ts`，缺一测试即红
   - `winedgePair.test.ts` = glasswin 画布 ↔ 顶缘盖板成对审计：index.css 中 glasswin 作用域凡 body 直铺画布背景的规则必须与 `.np-winedge-top` 同规则成对逐字同源（盖板靠克隆画布盖合成器毛刺，两套独立绘制必漂移——2026-11-18/19「顶栏白条」两次复发的根因）；custom 模式克隆必须含图片与蒙版浅深各一
+  - `frostFamily.test.ts` = 强霜浮层家族成员审计：glasswin 下凡浮离画布之上的浮层面板（菜单/Popover 内容面/气泡/自绘下拉/功能库面板）必须入强霜家族（弹层参数 + backdrop-filter），半透明面无模糊即「穿透病」；新浮层 = index.css 家族规则补选择器 + 测试名单补成员（须注理由）
 
 ## 7. 提交与自动同步
 

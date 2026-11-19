@@ -562,19 +562,24 @@ html.glasswin.bp6-dark .np-navtree,
 html.glasswin.bp6-dark .np-shelf {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
-/* 浮层强霜（0.78，浮层可读性优先）+ glass-shadow 光晕（浮离于画布之上才有
+/* 浮层强霜（弹层浓度参数，浮层可读性优先）+ glass-shadow 光晕（浮离于画布之上才有
    「浮」的资格）：菜单 / Popover 内容面（布局预设等自定义内容弹层
    ——半透明无模糊会背景文字穿透）/ 悬浮提示 / 地址补全（np-sugg）/
-   年月跳转（np-cal-jump）/ 日历命中（np-cal-hits）——后三者为 2026-11-18
-   全量审计扩员（旧版半透明面无模糊，背后内容锐利穿透同病）；ctx 子菜单
-   弹层外壳按定稿保持透明（菜单自带霜面），:not 排除防双重霜。弹窗已升级
-   染色极光玻璃（下方独立规则），不再共用本段 */
+   年月跳转（np-cal-jump）/ 日历命中（np-cal-hits）/ 功能库面板（np-palette，
+   2026-11-19 用户反馈「右键菜单点击功能库以后的磨玻璃效果和二级弹窗不一致，
+   应该要直接用二级弹窗的参数」——旧版走 --np-surface 卡片霜面且无 blur，
+   经 token 继承拿到半透明底即穿透病，收编入族随弹层模糊/弹层浓度参数）——
+   前三者为 2026-11-18 全量审计扩员（旧版半透明面无模糊，背后内容锐利穿透
+   同病）；ctx 子菜单弹层外壳按定稿保持透明（菜单自带霜面），:not 排除防
+   双重霜。弹窗已升级染色极光玻璃（下方独立规则），不再共用本段。
+   ⚠ 家族成员资格由 frostFamily.test.ts 锁定（新浮层必须入族） */
 html.glasswin .bp6-menu,
 html.glasswin .bp6-popover:not(.np-ctx-pop) .bp6-popover-content,
 html.glasswin .np-tip,
 html.glasswin .np-sugg,
 html.glasswin .np-cal-jump,
-html.glasswin .np-cal-hits {
+html.glasswin .np-cal-hits,
+html.glasswin .np-palette {
   background: var(--np-surface-glass-strong);
   border-color: var(--np-glass-ring);
   box-shadow: var(--np-glass-shadow);
