@@ -27,6 +27,8 @@ export const PALETTE_QUICK_KEYS = [
   "pdfToPng",
 ] as const;
 
+const QUICK_SET: Set<string> = new Set(PALETTE_QUICK_KEYS as readonly string[]);
+
 export interface PaletteItem {
   fn: BuiltinFn;
   /** 右键现场（选中条目/空白）下是否可执行；false = 置灰不可选 */
@@ -44,29 +46,64 @@ export function paletteAvailable(fn: BuiltinFn, sel: FileEntry[]): boolean {
   return fn.supportsBlank && entryVisible(fn.cond, "blank", null);
 }
 
-/** 面板全库清单：可用项稳定置顶 + 不可用项沉底（2026-11-12 用户定案；sort
- *  ES2019 起稳定，两块各自保持高频 12 项 → 注册表原序）；功能库入口自身
+/** 功能相关度分（2026-11-19 用户需求「可用置顶之外再按功能相关度排序」）：
+ *  越高 = 与当前右键现场越相关。仅对**可用项**计分（不可用项恒 0，沉底块
+ *  保持注册表原序不跳动）。分量：
+ *  - +2 作用于当前所选（supportsSel 且有选中）——操作对象就是这些文件
+ *  - +1 对象类型贴合（target file/dir；可用性已保证纯文件/纯文件夹场景）
+ *  - +3 扩展名专精（cond.exts 非空；可用性已保证全命中所选扩展名——
+ *    右键 PDF 时 PDF 工具族排到通用功能之前的主信号）
+ *  - +1 高频清单成员（同级内保 2026-11-11 高频 12 项置顶语义不打散）
+ *  空白现场：可用项全部 +1（supportsBlank）+ 高频项 +1 → 高频序保持，
+ *  其余按注册表原序（同分稳定序）。 */
+export function paletteRelevance(fn: BuiltinFn, sel: FileEntry[]): number {
+  let s = 0;
+  const cond = fn.cond;
+  if (sel.length) {
+    if (fn.supportsSel) s += 2;
+    if (cond.target === "file" || cond.target === "dir") s += 1;
+    if ((cond.exts ?? "").trim()) s += 3;
+  } else if (fn.supportsBlank) {
+    s += 1;
+  }
+  if (QUICK_SET.has(fn.key)) s += 1;
+  return s;
+}
+
+/** 面板全库清单：可用项稳定置顶 + 不可用项沉底（2026-11-12 用户定案），
+ *  两块内部按功能相关度降序（2026-11-19 用户需求，见 paletteRelevance），
+ *  同分按登记原序（显式 order 决胜，不依赖引擎稳定序）；功能库入口自身
  *  （builtin:palette，同日入库）与窗格工具（supportsSel/Blank 双 false，仅
  *  工具栏可用）不入面板——前者是面板自己的唤起入口（自列无意义），后者
  *  执行器不在 listRegistry，右键语境无执行路径 */
 export function paletteItems(sel: FileEntry[]): PaletteItem[] {
-  const quickSet = new Set<string>(PALETTE_QUICK_KEYS);
   const quick = PALETTE_QUICK_KEYS.map((k) => builtinByKey(k)).filter(
     (f): f is BuiltinFn => !!f,
   );
   const rest = BUILTIN_FNS.filter(
     (f) =>
       f.key !== "palette" &&
-      !quickSet.has(f.key) &&
+      !QUICK_SET.has(f.key) &&
       (f.supportsSel || f.supportsBlank),
   );
   return [...quick, ...rest]
-    .map((fn) => ({
-      fn,
-      available: paletteAvailable(fn, sel),
-      search: `${fn.label}${fn.desc}${fn.group}`.toLowerCase(),
-    }))
-    .sort((a, b) => Number(b.available) - Number(a.available));
+    .map((fn, order) => {
+      const available = paletteAvailable(fn, sel);
+      return {
+        fn,
+        available,
+        search: `${fn.label}${fn.desc}${fn.group}`.toLowerCase(),
+        order,
+        rel: available ? paletteRelevance(fn, sel) : 0,
+      };
+    })
+    .sort(
+      (a, b) =>
+        Number(b.available) - Number(a.available) ||
+        b.rel - a.rel ||
+        a.order - b.order,
+    )
+    .map(({ fn, available, search }) => ({ fn, available, search }));
 }
 
 /** 搜索过滤：search 针小写包含，query 按空格拆多词 AND（每词都须命中，

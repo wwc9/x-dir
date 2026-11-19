@@ -2283,6 +2283,23 @@ body.np-col-resizing .np-menued-grip::after {
   padding: 7px 0;
   border-bottom: 1px solid var(--np-hairline);
 }
+/* 设置行路径展示（2026-11-19 用户需求「自定义图片时显示路径」）：行尾路径
+   文本 + 按钮并排；长路径省略号截断，data-tip 悬停全文；空态灰字占位 */
+.np-set-pathline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.np-set-path {
+  min-width: 0;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--np-font-aux);
+  color: var(--np-muted);
+}
 .np-set-info {
   display: flex;
   flex-direction: column;

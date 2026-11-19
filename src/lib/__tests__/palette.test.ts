@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { FileEntry } from "../ipc";
-import { builtinByKey, BUILTIN_FNS } from "../menuCommands";
+import { builtinByKey } from "../menuCommands";
 import {
   clampPalettePos,
   filterPalette,
@@ -33,26 +33,39 @@ describe("PALETTE_QUICK_KEYS", () => {
 });
 
 describe("paletteItems", () => {
-  it("可用项稳定置顶、不可用沉底，两块各自保持高频 12 项 → 注册表原序", () => {
-    const sel = [fe("a.pdf", false)];
-    const quickSet = new Set<string>(PALETTE_QUICK_KEYS);
-    const base = [
-      ...PALETTE_QUICK_KEYS.map((k) => builtinByKey(k)!),
-      ...BUILTIN_FNS.filter(
-        (f) =>
-          f.key !== "palette" &&
-          !quickSet.has(f.key) &&
-          (f.supportsSel || f.supportsBlank),
-      ),
-    ];
-    const avail = base
-      .filter((f) => paletteAvailable(f, sel))
-      .map((f) => f.key);
-    const off = base
-      .filter((f) => !paletteAvailable(f, sel))
-      .map((f) => f.key);
-    expect(off.length).toBeGreaterThan(0);
-    expect(paletteItems(sel).map((i) => i.fn.key)).toEqual([...avail, ...off]);
+  it("可用项稳定置顶、不可用沉底（相关度只重排块内部）", () => {
+    const sel = [fe("a.pdf", false), fe("b.txt", false)];
+    const items = paletteItems(sel).map((i) => i.available);
+    const firstOff = items.indexOf(false);
+    expect(firstOff).toBeGreaterThan(0);
+    expect(items.slice(0, firstOff).every(Boolean)).toBe(true);
+    expect(items.slice(firstOff).every((v) => !v)).toBe(true);
+  });
+  it("相关度：右键 PDF 时扩展名专精功能升到通用功能之前（2026-11-19 需求）", () => {
+    const sel = [fe("doc.pdf", false)];
+    const keys = paletteItems(sel).map((i) => i.fn.key);
+    const idx = (k: string) => keys.indexOf(k);
+    // pdfToPng（exts=pdf，相关度 7）原在高频清单末位（注册表序在 copyPath 之后），
+    // 相关度排序后应越过通用功能 copyPath（cond 空，相关度 3）
+    expect(idx("pdfToPng")).toBeLessThan(idx("copyPath"));
+    // 非高频的 PDF 专精功能同样前移到通用 sel 功能之前
+    expect(idx("pdfSplit")).toBeLessThan(idx("moveToPane"));
+  });
+  it("相关度：空白现场高频清单序保持（quick 同分稳定序，非高频靠后）", () => {
+    const blank = paletteItems([]).filter((i) => i.available);
+    const keys = blank.map((i) => i.fn.key);
+    // 空白可用的 quick 成员彼此同分（2 分），保持高频清单相对序
+    const quickIdx = keys
+      .map((k, i) => ({ k, i }))
+      .filter(({ k }) => (PALETTE_QUICK_KEYS as readonly string[]).includes(k));
+    const quickOrder = quickIdx.map(({ k }) =>
+      (PALETTE_QUICK_KEYS as readonly string[]).indexOf(k),
+    );
+    expect([...quickOrder].sort((a, b) => a - b)).toEqual(quickOrder);
+    // 非高频空白功能（newFolder 1 分）排在全部 quick 空白成员（2 分）之后
+    expect(keys.indexOf("newFolder")).toBeGreaterThan(
+      quickIdx[quickIdx.length - 1].i,
+    );
   });
   it("窗格工具（双能力位皆 false）不入面板", () => {
     const keys = paletteItems([]).map((i) => i.fn.key);

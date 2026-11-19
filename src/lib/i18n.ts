@@ -1418,6 +1418,7 @@ export const EN: Record<string, string> = {
   "弹窗与菜单等浮层的模糊半径；菜单随弹窗按比例联动，8px 下限保可读": "Blur radius for dialogs, menus and other popups; menus follow dialogs proportionally with an 8px readability floor",
   "弹层浓度": "Popup frost",
   "弹窗与菜单等浮层的霜面浓度，越高越实；弹窗染色渐变按比例缩放": "Frost density for dialogs, menus and other popups — higher is more solid; dialog tint gradients scale proportionally",
+  "未选择图片": "No image selected",
   "第 {a}–{b} 项": "items {a}–{b}",
   "系统": "System",
   "系统级全局热键，X-Dir 运行时任意界面可按（含游戏等全屏应用除外）": "System-wide hotkey — works anywhere while X-Dir runs (fullscreen games etc. excluded)",

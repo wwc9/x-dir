@@ -459,29 +459,37 @@ export function SettingsPanel() {
                       label={t("自定义图片")}
                       desc={t("选择本机图片作为毛玻璃画布；路径持久化，移动原文件后需重新选择")}
                     >
-                      <Button
-                        minimal
-                        size="small"
-                        icon={ic(ImagePlus)}
-                        data-tip={t("选择背景图片")}
-                        onClick={async () => {
-                          const sel = await openFileDialog({
-                            title: t("选择背景图片"),
-                            multiple: false,
-                            directory: false,
-                            filters: [
-                              {
-                                name: t("图片"),
-                                extensions: ["png", "jpg", "jpeg", "webp", "bmp", "gif"],
-                              },
-                            ],
-                          });
-                          if (typeof sel === "string")
-                            s.update({ glassBgCustom: sel, glassBgVeil: s.glassBgVeil });
-                        }}
-                      >
-                        {t("选择图片")}
-                      </Button>
+                      <div className="np-set-pathline">
+                        <span
+                          className="np-set-path"
+                          data-tip={s.glassBgCustom || undefined}
+                        >
+                          {s.glassBgCustom || t("未选择图片")}
+                        </span>
+                        <Button
+                          minimal
+                          size="small"
+                          icon={ic(ImagePlus)}
+                          data-tip={t("选择背景图片")}
+                          onClick={async () => {
+                            const sel = await openFileDialog({
+                              title: t("选择背景图片"),
+                              multiple: false,
+                              directory: false,
+                              filters: [
+                                {
+                                  name: t("图片"),
+                                  extensions: ["png", "jpg", "jpeg", "webp", "bmp", "gif"],
+                                },
+                              ],
+                            });
+                            if (typeof sel === "string")
+                              s.update({ glassBgCustom: sel, glassBgVeil: s.glassBgVeil });
+                          }}
+                        >
+                          {t("选择图片")}
+                        </Button>
+                      </div>
                     </SetRow>
                     <SetRow
                       label={t("蒙版浓度")}
