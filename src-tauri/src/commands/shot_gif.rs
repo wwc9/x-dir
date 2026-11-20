@@ -385,6 +385,137 @@ impl<W: std::io::Write> DeltaEncoder<W> {
     }
 }
 
+// ── 静止段压缩（2026-11-20 用户定案语义澄清「重复帧延迟 1 秒，其他重复
+// 帧删除」= 静止段整体呈现 ≤1s）─────────────────────────────────────────────
+// 录制期 keepalive（1×1 + 100cs）按每秒一拍落盘，是「静止段仍在录」的标记；
+// 但回放语义应为静止段整体停滞 ≤1s——初版每帧 1s 口径下 10s 静止会拖 11s
+//（用户以保存文件实测反馈「不止 1 秒延迟」）。收尾在临时盘上做块级重写：
+// 连续 keepalive 段压成段首单帧（段首延迟 ≤100cs 即段呈现 ≤1s），内容帧与
+// 其余字节原样保留。字节级操作不解码像素——零量化损失、毫秒级完成、体积
+// 同步缩小（删掉的帧字节直接消失）。
+
+/// GIF 块结构中的帧记录（字节范围 = GCE 起始到图像数据终止块之后）
+struct RawFrameBlock {
+    start: usize,
+    end: usize,
+    is_keepalive: bool,
+}
+
+/// 块级扫描（不解码像素）：1×1 + KEEPALIVE_DELAY_CS 双条件识别兜底帧。
+/// 解析异常 = None（调用方保守原样保留文件，同进度条失败策略）
+fn scan_gif_frames(data: &[u8]) -> Option<Vec<RawFrameBlock>> {
+    if data.len() < 14 || &data[0..3] != b"GIF" {
+        return None;
+    }
+    let mut i = 6usize;
+    let lsd_flags = data[10];
+    i += 7; // 逻辑屏描述符
+    if lsd_flags & 0x80 != 0 {
+        i += 3 * (1usize << ((lsd_flags & 7) + 1)); // 全局色表
+    }
+    let mut frames = Vec::new();
+    let mut pending_gce: Option<(usize, u16)> = None; // (GCE 起始, delay)
+    loop {
+        let Some(&b) = data.get(i) else {
+            return None; // 缺 trailer
+        };
+        match b {
+            0x3B => return Some(frames), // trailer
+            0x21 => {
+                let ext_start = i; // 帧范围须含 0x21 0xF9 两字节引导
+                let &label = data.get(i + 1)?;
+                i += 2;
+                if label == 0xF9 {
+                    let gce_data = i;
+                    i += 5; // 子块长度(1) + 4B 数据
+                    if data.get(i) != Some(&0) {
+                        return None;
+                    }
+                    i += 1;
+                    let delay_lo = data.get(gce_data + 2)?;
+                    let delay_hi = data.get(gce_data + 3)?;
+                    pending_gce = Some((
+                        ext_start,
+                        u16::from(*delay_lo) | (u16::from(*delay_hi) << 8),
+                    ));
+                } else {
+                    // 其他扩展：逐子块跳过
+                    loop {
+                        let &sz = data.get(i)?;
+                        i += 1 + sz as usize;
+                        if sz == 0 {
+                            break;
+                        }
+                    }
+                }
+            }
+            0x2C => {
+                let &iflags = data.get(i + 9)?;
+                let w = u16::from(data[i + 5]) | (u16::from(data[i + 6]) << 8);
+                let h = u16::from(data[i + 7]) | (u16::from(data[i + 8]) << 8);
+                let img_start = i;
+                i += 10; // 图像描述符
+                if iflags & 0x80 != 0 {
+                    i += 3 * (1usize << ((iflags & 7) + 1)); // 局部色表
+                }
+                i += 1; // LZW 最小码长
+                loop {
+                    let &sz = data.get(i)?;
+                    i += 1 + sz as usize;
+                    if sz == 0 {
+                        break;
+                    }
+                }
+                let (gce_start, _delay) = pending_gce.take().unwrap_or((img_start, 0));
+                frames.push(RawFrameBlock {
+                    start: gce_start,
+                    end: i,
+                    // 1×1 = 兜底帧唯一特征（尾巴分段帧延迟可能是尾段值而非
+                    // 100cs，不能用延迟双条件；内容子帧盒最小也有数像素，
+                    // 1×1 误判的最坏代价 = 丢一个单像素 ε 变化帧，可忽略）
+                    is_keepalive: w == 1 && h == 1,
+                });
+            }
+            _ => return None, // 未知块 = 保守原样
+        }
+    }
+}
+
+/// 连续 keepalive 段压缩为段首单帧（段首延迟 ≤100cs → 段呈现 ≤1s），
+/// 其余字节原样。解析异常 = 原样返回
+fn compress_keepalive_runs(data: &[u8]) -> Vec<u8> {
+    let Some(frames) = scan_gif_frames(data) else {
+        return data.to_vec();
+    };
+    let head_end = frames
+        .first()
+        .map(|f| f.start)
+        .unwrap_or_else(|| data.len().saturating_sub(1));
+    let mut out = Vec::with_capacity(data.len());
+    out.extend_from_slice(&data[..head_end]);
+    let mut idx = 0usize;
+    while idx < frames.len() {
+        let f = &frames[idx];
+        out.extend_from_slice(&data[f.start..f.end]);
+        if f.is_keepalive {
+            // 段内其余兜底帧跳过（下一个内容帧终止段）
+            let mut run = idx + 1;
+            while run < frames.len() && frames[run].is_keepalive {
+                run += 1;
+            }
+            idx = run;
+        } else {
+            idx += 1;
+        }
+    }
+    let tail_start = frames
+        .last()
+        .map(|f| f.end)
+        .unwrap_or_else(|| data.len().saturating_sub(1));
+    out.extend_from_slice(&data[tail_start.min(data.len())..]);
+    out
+}
+
 /// 会话开始：rx/ry/rw/rh = 选区显示器相对物理坐标；mx/my = 显示器原点。
 /// 录的是覆盖窗停靠后的实时屏幕（与滚动截图首帧定格、后续实时同口径）
 #[tauri::command]
@@ -853,6 +984,27 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
     drop(delta);
     let flush = std::io::Write::flush(&mut writer);
     drop(writer);
+    // 静止段压缩（2026-11-20 用户定案语义澄清）：连续兜底帧段压成段首单帧
+    // ——静止段回放停滞 ≤1s 节奏连贯；解析异常保守保留原文件（进度条合成
+    // 以压缩后文件为输入，帧数/进度语义自洽）
+    if !cancelled && !aborted {
+        match std::fs::read(&path) {
+            Ok(data) => {
+                let compressed = compress_keepalive_runs(&data);
+                if compressed.len() < data.len() {
+                    match std::fs::write(&path, &compressed) {
+                        Ok(()) => log::info!(
+                            "GIF 录制：静止段压缩完成 {}→{} KB",
+                            data.len() / 1024,
+                            compressed.len() / 1024
+                        ),
+                        Err(e) => log::warn!("GIF 录制：静止段压缩写回失败（保留原文件）：{e}"),
+                    }
+                }
+            }
+            Err(e) => log::warn!("GIF 录制：静止段压缩读取失败（保留原文件）：{e}"),
+        }
+    }
     GIF_ACTIVE.store(false, Ordering::Relaxed);
     // 窗口收场延后到出结果窗之前：进度条合成期间浮条保持「生成中」可见
     if cancelled || (aborted && frames == 0) {
@@ -1649,6 +1801,46 @@ mod tests {
     }
 
     #[test]
+    fn compress_keepalive_runs_collapses_static_runs() {
+        // 帧序列：全帧(8cs) + 兜底(100cs)×3 + 全帧(5cs) + 兜底(100cs)+(100cs)
+        // +(50cs 尾段) → 压缩后：全帧(8) + 兜底(100) + 全帧(5) + 兜底(100)
+        // ——每个静止段只留段首一帧（段呈现 ≤1s），内容帧原样保留
+        let mut buf: Vec<u8> = Vec::new();
+        let enc = gif::Encoder::new(&mut buf, 4, 4, &[]).unwrap();
+        let mut d = DeltaEncoder::new(enc, 4, 4);
+        let mut f = vec![0u8; 4 * 4 * 4];
+        for px in f.as_mut_slice().as_chunks_mut::<4>().0 {
+            px.copy_from_slice(&[10, 20, 30, 255]);
+        }
+        let cs = |v: u16| gif_delay_cs(u64::from(v) * 10);
+        d.push(&mut f, cs(8)).unwrap();
+        for delay in [100u16, 100, 100] {
+            d.push_keepalive(cs(delay)).unwrap();
+        }
+        for px in f.as_mut_slice().as_chunks_mut::<4>().0.iter_mut().take(4) {
+            px.copy_from_slice(&[240, 240, 10, 255]);
+        }
+        d.push(&mut f, cs(5)).unwrap();
+        d.push_keepalive(cs(100)).unwrap();
+        d.push_keepalive(cs(100)).unwrap();
+        d.push_keepalive(cs(50)).unwrap();
+        drop(d);
+        let compressed = compress_keepalive_runs(&buf);
+        println!("原始 {} B → 压缩 {} B", buf.len(), compressed.len());
+        assert!(compressed.len() < buf.len(), "应删掉段内兜底帧字节");
+        let mut dec = gif::Decoder::new(&compressed[..]).unwrap();
+        let mut delays: Vec<u16> = Vec::new();
+        while let Some(frame) = dec.read_next_frame().unwrap() {
+            delays.push(frame.delay);
+        }
+        assert_eq!(
+            delays,
+            vec![cs(8), cs(100), cs(5), cs(100)],
+            "每段只留段首兜底帧"
+        );
+    }
+
+    #[test]
     fn delta_encoder_palette_stale_falls_back_full() {
         // 远色大改：平均平方距离超阈 → 调色板陈旧回退全帧（而非硬套旧色板）
         let mut buf: Vec<u8> = Vec::new();
@@ -1713,6 +1905,55 @@ mod tests {
             }
             None => println!("decode_cursor 返回 None ← 断点在此"),
         }
+    }
+
+    /// 用户 GIF 文件权威解析（#[ignore] 手跑：`GIF_DUMP=<路径> cargo test
+    /// --lib dump_user_gif -- --ignored --nocapture`）：帧数/延迟表/帧几何/
+    /// disposal 全量打印，定位「保存结果延迟不符」「指针缺失」类反馈
+    #[test]
+    #[ignore = "用户文件诊断（路径经 GIF_DUMP 环境变量）"]
+    fn dump_user_gif() {
+        let path = std::env::var("GIF_DUMP").unwrap_or_default();
+        if path.is_empty() {
+            panic!("请设置 GIF_DUMP 环境变量指向 GIF 文件");
+        }
+        let mut options = gif::DecodeOptions::new();
+        options.set_color_output(gif::ColorOutput::RGBA);
+        let mut dec = options
+            .read_info(std::fs::File::open(&path).unwrap_or_else(|e| panic!("打开失败：{e}")))
+            .unwrap_or_else(|e| panic!("解析失败：{e}"));
+        println!("画布 = {}×{}", dec.width(), dec.height());
+        let mut total_ms = 0u64;
+        let mut idx = 0u32;
+        while let Some(frame) = dec.read_next_frame().unwrap() {
+            total_ms += u64::from(frame.delay) * 10;
+            println!(
+                "帧 {:>3}: delay={}ms 几何=({},{}) {}×{} dispose={:?} buffer={}B",
+                idx,
+                u32::from(frame.delay) * 10,
+                frame.left,
+                frame.top,
+                frame.width,
+                frame.height,
+                frame.dispose,
+                frame.buffer.len()
+            );
+            idx += 1;
+        }
+        println!("总帧数 {idx}，总时长 {total_ms}ms");
+        // 静止段压缩预览（只统计不写回）：帧数与总时长变化
+        let data = std::fs::read(&path).unwrap_or_else(|e| panic!("读取失败：{e}"));
+        let compressed = compress_keepalive_runs(&data);
+        println!(
+            "静止段压缩：{} → {} B（-{}%）",
+            data.len(),
+            compressed.len(),
+            if data.len() > 0 {
+                (data.len() - compressed.len()) * 100 / data.len()
+            } else {
+                0
+            }
+        );
     }
 
     /// 指针端到端本机诊断（#[ignore] 手跑）：移动真实光标到已知点 → 真实
