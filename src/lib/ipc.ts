@@ -1541,6 +1541,7 @@ export const api = {
   shotGifLaunch: () => cmd<void>("shot_gif_launch"),
   /** 录制浮条操作：start = 待命态开始录制（点开始才录，2026-11-19 定案）；
    *  finish = 录制中完成出结果；cancel = 丢弃并删临时文件（待命/录制均可）；
+   *  pause/resume = 录制中暂停/继续（不抓帧计时冻结，2026-11-20）；
    *  fps:N = 切换帧率档（8/12/15，下一帧起生效）；
    *  bar:on|off = 底部进度条开关（待命态可切，控制导出后是否合成） */
   shotGifControl: (
@@ -1548,6 +1549,8 @@ export const api = {
       | "start"
       | "finish"
       | "cancel"
+      | "pause"
+      | "resume"
       | `fps:${8 | 12 | 15}`
       | `bar:${"on" | "off"}`,
   ) => cmd<void>("shot_gif_control", { action }),

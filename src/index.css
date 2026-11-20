@@ -7349,7 +7349,8 @@ body.np-col-resizing * {
   animation: np-shot-pulse 1.1s ease-in-out infinite;
   flex: none;
 }
-/* GIF 录制浮条（复用 np-shot-sbar 布局基座）：录制红点惯例 + fps 切档钮 */
+/* GIF 录制浮条（复用 np-shot-sbar 布局基座）：录制红点惯例 + fps 切档钮；
+   暂停态 = 红点静止降透明（脉冲停 = 录制停，2026-11-20 暂停功能） */
 .np-shot-gbar-dot {
   width: 8px;
   height: 8px;
@@ -7357,6 +7358,10 @@ body.np-col-resizing * {
   background: var(--np-danger);
   animation: np-shot-pulse 1.1s ease-in-out infinite;
   flex: none;
+}
+.np-shot-gbar-dot.is-paused {
+  animation: none;
+  opacity: 0.55;
 }
 .np-shot-gbar-fps {
   flex: none;

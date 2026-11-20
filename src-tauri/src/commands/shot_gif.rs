@@ -44,6 +44,9 @@ const MIN_REGION: (u32, u32) = (96, 80);
 static GIF_FLAG: AtomicU8 = AtomicU8::new(0);
 /// 会话进行中（begin 到收尾全程）：热键叠加截图 / 滚动会话的互斥依据
 static GIF_ACTIVE: AtomicBool = AtomicBool::new(false);
+/// 录制态暂停（2026-11-20 用户需求「增加暂停按钮」）：暂停期间跳过抓帧，
+/// 时长上限与浮条计时都停摆（只计真实录制时间）；待命态忽略
+static GIF_PAUSED: AtomicBool = AtomicBool::new(false);
 /// 当前帧率档（待命/录制中均可切，下一帧起生效）
 static GIF_FPS: AtomicU32 = AtomicU32::new(FPS_DEFAULT);
 /// 底部进度条开关（2026-11-19 用户定案：待命态可选，开启则导出后对 GIF
@@ -161,6 +164,7 @@ pub fn shot_gif_begin(
     GIF_FLAG.store(0, Ordering::Relaxed);
     GIF_FPS.store(FPS_DEFAULT, Ordering::Relaxed);
     GIF_BAR.store(true, Ordering::Relaxed);
+    GIF_PAUSED.store(false, Ordering::Relaxed);
     GIF_ACTIVE.store(true, Ordering::Relaxed);
     // 覆盖窗停靠（异步消息，必须等真正摘屏才能建窗——蒙层在场时 build()
     // 泵消息永久卡死，滚动截图同款坑在案），拆两段命令由前端顺序调用
@@ -315,7 +319,11 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
     let mut last_emit = Instant::now();
     let mut cancelled = false;
     let mut aborted = false;
-    let mut record_started = Instant::now(); // 待命期不计入时长上限
+    // 录制计时口径（2026-11-20 暂停支持）：已落账时长 + 当前段起点——暂停
+    // 时把当前段落账，恢复时重开一段，120s 上限只计真实录制时间
+    let mut segment_start = Instant::now(); // 待命期不计入时长上限
+    let mut recorded = Duration::ZERO;
+    let mut was_paused = false;
     log::info!(
         "GIF 录制循环进场（待命态）：选区 ({rx},{ry}) {rw}×{rh}，fps {}",
         GIF_FPS.load(Ordering::Relaxed)
@@ -326,7 +334,7 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
         match GIF_FLAG.load(Ordering::Relaxed) {
             0 => std::thread::sleep(Duration::from_millis(50)),
             1 => {
-                record_started = Instant::now();
+                segment_start = Instant::now();
                 let _ = app.emit_to(
                     "shot-bar",
                     "shot-gif-phase",
@@ -347,16 +355,68 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
         loop {
             // 控制与时长上限（先于本帧捕获：停止请求即刻生效）
             let flag = GIF_FLAG.load(Ordering::Relaxed);
-            let secs = record_started.elapsed().as_secs();
             if flag == 3 {
                 cancelled = true;
                 break;
             }
+            // 暂停/恢复跃迁（2026-11-20 用户需求）：暂停期间不抓帧、不推进
+            // 帧节奏，完成/取消仍即时生效；跃迁即时发进度事件供浮条换面
+            let paused = GIF_PAUSED.load(Ordering::Relaxed);
+            if paused && !was_paused {
+                recorded += segment_start.elapsed();
+                was_paused = true;
+                log::info!(
+                    "GIF 录制：暂停（已录 {}s / {frames} 帧）",
+                    recorded.as_secs()
+                );
+                let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+                let _ = app.emit_to(
+                    "shot-bar",
+                    "shot-gif-progress",
+                    serde_json::json!({
+                        "secs": recorded.as_secs(),
+                        "frames": frames,
+                        "bytes": bytes,
+                        "fps": GIF_FPS.load(Ordering::Relaxed),
+                        "paused": true,
+                    }),
+                );
+            } else if !paused && was_paused {
+                was_paused = false;
+                segment_start = Instant::now();
+                // 恢复首帧用目标间隔：暂停时长不得计进帧延迟（回放会卡一大拍）
+                last_cap = None;
+                next_tick = Instant::now();
+                log::info!("GIF 录制：继续录制");
+                let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+                let _ = app.emit_to(
+                    "shot-bar",
+                    "shot-gif-progress",
+                    serde_json::json!({
+                        "secs": recorded.as_secs(),
+                        "frames": frames,
+                        "bytes": bytes,
+                        "fps": GIF_FPS.load(Ordering::Relaxed),
+                        "paused": false,
+                    }),
+                );
+            }
+            // 完成判定计时：录制中 = 已落账 + 当前段；暂停中 = 已落账（冻结）
+            let secs = if paused {
+                recorded
+            } else {
+                recorded + segment_start.elapsed()
+            }
+            .as_secs();
             if flag == 2 || secs >= GIF_MAX_SECS {
                 if secs >= GIF_MAX_SECS {
                     log::info!("GIF 录制：达到 {GIF_MAX_SECS}s 上限，自动收场");
                 }
                 break;
+            }
+            if paused {
+                std::thread::sleep(Duration::from_millis(50));
+                continue;
             }
             let fps = normalize_fps(GIF_FPS.load(Ordering::Relaxed));
             match monitor.capture_region(rx, ry, rw, rh) {
@@ -398,7 +458,8 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
                     }
                 }
             }
-            // 进度事件（≥1s 间隔；浮条显示秒数/帧数/字节）
+            // 进度事件（≥1s 间隔；浮条显示秒数/帧数/字节；paused 恒 false——
+            // 暂停跃迁各自即时发）
             if last_emit.elapsed() >= Duration::from_secs(1) {
                 last_emit = Instant::now();
                 let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
@@ -406,10 +467,11 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
                     "shot-bar",
                     "shot-gif-progress",
                     serde_json::json!({
-                        "secs": record_started.elapsed().as_secs(),
+                        "secs": (recorded + segment_start.elapsed()).as_secs(),
                         "frames": frames,
                         "bytes": bytes,
                         "fps": GIF_FPS.load(Ordering::Relaxed),
+                        "paused": false,
                     }),
                 );
             }
@@ -449,7 +511,12 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
     }
     log::info!(
         "GIF 录制完成：{frames} 帧 / {}s / {} KB → {}",
-        record_started.elapsed().as_secs(),
+        if was_paused {
+            recorded
+        } else {
+            recorded + segment_start.elapsed()
+        }
+        .as_secs(),
         std::fs::metadata(&path)
             .map(|m| m.len() / 1024)
             .unwrap_or(0),
@@ -584,7 +651,7 @@ fn encode_with_bar(
 }
 
 /// 浮条按钮/键盘：finish = 用已录内容出结果；cancel = 丢弃结束；
-/// fps:N = 切换帧率档（下一帧起生效）
+/// fps:N = 切换帧率档（下一帧起生效）；pause/resume = 录制中暂停/继续
 #[tauri::command]
 pub fn shot_gif_control(action: String) -> Result<(), String> {
     if let Some(fps) = action
@@ -606,6 +673,9 @@ pub fn shot_gif_control(action: String) -> Result<(), String> {
         "finish" => GIF_FLAG.store(2, Ordering::Relaxed),
         // 任意态 → 取消丢弃
         "cancel" => GIF_FLAG.store(3, Ordering::Relaxed),
+        // 录制中暂停/继续（2026-11-20 用户需求；暂停期间不抓帧不计时长）
+        "pause" => GIF_PAUSED.store(true, Ordering::Relaxed),
+        "resume" => GIF_PAUSED.store(false, Ordering::Relaxed),
         _ => return Err("未知操作".into()),
     }
     Ok(())
@@ -654,13 +724,17 @@ fn show_mask_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
     win.show().map_err(|e| e.to_string())
 }
 
-/// 录制浮条：停靠选区正下方（bar_layout 定位同滚动），持有焦点使
-/// Enter/Esc 生效；boot 换装 gifbar（常驻窗复用同款）
+/// 录制浮条：停靠选区正下方（bar_layout_sized 定位同滚动；宽度 480——
+/// GIF 按钮组比滚动控制条宽，固定 310 时「开始录制」被窗缘裁掉，2026-11-20
+/// 用户反馈），持有焦点使 Enter/Esc 生效；boot 换装 gifbar（常驻窗复用同款）
 fn show_gif_bar_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
     let mon = &geo.mon;
-    let (bx, by, bw, bh) = super::shot_scroll::bar_layout(
+    let s = f64::from(mon.scale);
+    let (bx, by, bw, bh) = super::shot_scroll::bar_layout_sized(
         (geo.rx as i32, geo.ry as i32, geo.rw as i32, geo.rh as i32),
         mon,
+        (480.0 * s).round() as i32,
+        (44.0 * s).round() as i32,
     );
     let boot = serde_json::json!({ "window": "gifbar", "fps": GIF_FPS.load(Ordering::Relaxed), "barOn": GIF_BAR.load(Ordering::Relaxed) });
     let win = match app.get_webview_window("shot-bar") {

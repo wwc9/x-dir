@@ -85,6 +85,10 @@ function position(target: Element) {
     if (x + w > window.innerWidth - EDGE) x = ax - w - SIDE;
   }
   x = Math.max(EDGE, Math.min(x, window.innerWidth - w - EDGE));
+  // 视口终钳（2026-11-20 GIF 浮条教训）：截图浮条等小窗（44px 高）上下都
+  // 翻转不出空间，钳制后悬浮于条面之上保持完整——溢出窗界即被物理裁剪；
+  // 主窗口视口充裕时此钳不触发
+  y = Math.max(EDGE, Math.min(y, window.innerHeight - h - EDGE));
   el.style.left = `${x}px`;
   el.style.top = `${y}px`;
 }

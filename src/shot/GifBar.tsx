@@ -1,13 +1,19 @@
 // GIF 录制浮条（2026-11-19 新功能；label shot-bar 复用，boot 换装 gifbar，
-// 与滚动控制条共用常驻窗生命周期）。三态（2026-11-19 用户定案「点开始才录」）：
-// 待命 = 选区已框定（遮罩窗标示）但不抓帧，可切 fps / 进度条开关，点「开始
-// 录制」才进录制态；录制 = 红点 + 时长/帧数/实时体积 + fps 切档 + 完成/取消；
-// 生成中 = 完成后若开启进度条，逐帧合成期间禁操作，结束后结果窗接管。
-// 进度经 shot-gif-progress 事件（≥1s 一发）实时刷新；状态跃迁经 shot-gif-phase
-// 事件（Rust 侧 start 处理/后处理开始时下发）。窗口几何由 Rust 侧决定。
+// 与滚动控制条共用常驻窗生命周期）。四态（2026-11-19/20 用户定案）：待命 =
+// 选区已框定（遮罩窗标示）但不抓帧，可切 fps / 进度条开关，点「开始录制」
+// 才进录制态；录制 = 红点 + 时长/帧数/实时体积 + 暂停/保存/取消（2026-11-20
+// 用户需求「增加暂停、取消、保存按钮」）；暂停 = 计时冻结不抓帧，可继续/
+// 保存/取消；生成中 = 完成后若开启进度条，逐帧合成期间禁操作，结束后结果窗
+// 接管。进度经 shot-gif-progress 事件（≥1s 一发，paused 字段同步暂停态）
+// 实时刷新；状态跃迁经 shot-gif-phase 事件（Rust 侧 start 处理/后处理开始
+// 时下发）。窗口几何由 Rust 侧决定（宽 480 容按钮组，2026-11-20 反馈
+// 310 时「开始录制」被窗缘裁掉）。
+// ⚠ busy 只作防双击：命令回执即复位（2026-11-20 用户反馈「点开始后无法
+// 退出」根因——start 成功后 busy 恒 true，录制态按钮全 disabled 且键盘
+// 通路被拦）。真正的状态权威是 Rust 侧 phase/progress 事件。
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { Check, Loader2, Play, X } from "lucide-react";
+import { Loader2, Pause, Play, Save, X } from "lucide-react";
 
 import { api } from "../lib/ipc";
 import { initTooltip } from "../lib/tooltip";
@@ -33,12 +39,15 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
   const [fps, setFps] = useState(boot.fps);
   const [barOn, setBarOn] = useState(boot.barOn);
   const [phase, setPhase] = useState<GifPhase>("ready");
+  const [paused, setPaused] = useState(false);
   const [secs, setSecs] = useState(0);
   const [frames, setFrames] = useState(0);
   const [bytes, setBytes] = useState(0);
   const [busy, setBusy] = useState(false);
   const fpsRef = useRef(fps);
   fpsRef.current = fps;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
 
   // Rust 侧状态跃迁（start 被处理 / 进度条后处理开始）→ 浮条换面
   useEffect(() => {
@@ -55,6 +64,7 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
       setFps(e.payload.fps);
       if (typeof e.payload.barOn === "boolean") setBarOn(e.payload.barOn);
       setPhase("ready");
+      setPaused(false);
       setSecs(0);
       setFrames(0);
       setBytes(0);
@@ -68,13 +78,14 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
   useEffect(() => initTooltip(), []);
 
   useEffect(() => {
-    const un = listen<{ secs: number; frames: number; bytes: number; fps: number }>(
+    const un = listen<{ secs: number; frames: number; bytes: number; fps: number; paused?: boolean }>(
       "shot-gif-progress",
       (e) => {
         setSecs(e.payload.secs);
         setFrames(e.payload.frames);
         setBytes(e.payload.bytes);
         setFps(e.payload.fps);
+        if (typeof e.payload.paused === "boolean") setPaused(e.payload.paused);
       },
     );
     return () => {
@@ -83,10 +94,22 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
   }, []);
 
   const act = useCallback(
-    (action: "start" | "finish" | "cancel" | `fps:${8 | 12 | 15}` | `bar:${"on" | "off"}`) => {
+    (
+      action:
+        | "start"
+        | "finish"
+        | "cancel"
+        | "pause"
+        | "resume"
+        | `fps:${8 | 12 | 15}`
+        | `bar:${"on" | "off"}`,
+    ) => {
       if (busy) return;
       if (action === "start" || action === "finish" || action === "cancel") setBusy(true);
-      void api.shotGifControl(action).catch(() => setBusy(false));
+      void api
+        .shotGifControl(action)
+        .catch(() => setBusy(false))
+        .finally(() => setBusy(false));
     },
     [busy],
   );
@@ -104,6 +127,14 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
     setBarOn(next);
     void api.shotGifControl(`bar:${next ? "on" : "off"}`).catch(() => undefined);
   }, [barOn]);
+
+  /** 暂停/继续（录制中即时生效：暂停不抓帧、计时冻结；本地先换面，
+   *  Rust 跃迁进度事件回填权威态） */
+  const togglePause = useCallback(() => {
+    const next = !pausedRef.current;
+    setPaused(next);
+    void api.shotGifControl(next ? "pause" : "resume").catch(() => setPaused(!next));
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -123,7 +154,7 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
   return (
     <div className="np-shot-sbar">
       {phase === "recording" ? (
-        <span className="np-shot-gbar-dot" />
+        <span className={paused ? "np-shot-gbar-dot is-paused" : "np-shot-gbar-dot"} />
       ) : (
         <span className="np-shot-sbar-dot" />
       )}
@@ -140,6 +171,7 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
           <span className="np-shot-sbar-dim">
             {frames} 帧 · {fmtBytes(bytes)}
           </span>
+          {paused && <span className="np-shot-sbar-warn">已暂停</span>}
         </>
       )}
       {phase !== "processing" && (
@@ -183,14 +215,23 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
       ) : phase === "recording" ? (
         <>
           <button
+            className="np-shot-btn"
+            data-tip={paused ? "继续录制（计时恢复累计）" : "暂停录制（已录内容保留，计时冻结）"}
+            disabled={busy}
+            onClick={togglePause}
+          >
+            <AppIcon icon={paused ? Play : Pause} />
+            {paused ? "继续" : "暂停"}
+          </button>
+          <button
             className="np-shot-btn primary"
-            data-tip="用已录内容出结果"
+            data-tip="结束录制并生成 GIF"
             data-kbd="Enter"
             disabled={busy}
             onClick={() => act("finish")}
           >
-            <AppIcon icon={Check} />
-            完成
+            <AppIcon icon={Save} />
+            保存
           </button>
           <button
             className="np-shot-btn"

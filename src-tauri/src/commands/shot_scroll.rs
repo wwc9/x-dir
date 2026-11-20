@@ -628,15 +628,30 @@ fn panel_height(canvas_h: u32, pw: u32, rw: u32, panel_y: i32, mon: &MonRect) ->
 }
 
 /// 控制条停靠位（纯函数，单测锁定）：选区正下方居中（PixPin 样式），下方
-/// 放不下翻选区上方，均钳屏内。窗尺寸固定 (310,44)·scale，返回左上角与尺寸
-/// （显示器相对物理像素）
+/// 放不下翻选区上方，均钳屏内。滚动控制条尺寸固定 (310,44)·scale，返回
+/// 左上角与尺寸（显示器相对物理像素）
 pub(crate) fn bar_layout(sel: (i32, i32, i32, i32), mon: &MonRect) -> (i32, i32, u32, u32) {
     let s = f64::from(mon.scale);
-    let bw = (310.0 * s).round() as i32;
-    let bh = (44.0 * s).round() as i32;
+    bar_layout_sized(
+        sel,
+        mon,
+        (310.0 * s).round() as i32,
+        (44.0 * s).round() as i32,
+    )
+}
+
+/// 条窗布局（尺寸参数化 2026-11-20）：GIF 浮条按钮组更宽（待命/录制态 =
+/// 状态区 + fps/进度条 chip + 开始/暂停/保存/取消），固定 310 装不下导致
+/// 「开始按钮被遮挡」（用户反馈），按会话传自有尺寸；定位算法单一来源
+pub(crate) fn bar_layout_sized(
+    sel: (i32, i32, i32, i32),
+    mon: &MonRect,
+    bw: i32,
+    bh: i32,
+) -> (i32, i32, u32, u32) {
     let (gx, gy, gw, gh) = sel;
     let x = (gx + (gw - bw) / 2).clamp(8, (mon.w as i32 - bw - 8).max(8));
-    let gap = (10.0 * s).round() as i32;
+    let gap = (10.0 * f64::from(mon.scale)).round() as i32;
     let mut y = gy + gh + gap;
     if y + bh > mon.h as i32 - 8 {
         y = gy - gap - bh;
