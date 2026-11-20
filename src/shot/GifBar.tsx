@@ -28,6 +28,8 @@ export interface GifBarBoot {
   fps: number;
   /** 底部进度条开关初值（待命态可切；开启 = 导出后逐帧合成底部进度条） */
   barOn: boolean;
+  /** 底条步进档位初值（平滑 40 / 跳进 10，bar:on|low|off 三态） */
+  barSteps: number;
   /** 鼠标指针叠画开关初值（待命/录制中可切，下一帧起生效） */
   cursorOn: boolean;
   /** 静止段保留秒数初值（待命/录制中可设，收尾压缩时生效） */
@@ -48,6 +50,7 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
   /** 常驻窗复用：boot 事件换装并整体重置 */
   const [fps, setFps] = useState(boot.fps);
   const [barOn, setBarOn] = useState(boot.barOn);
+  const [barSteps, setBarSteps] = useState(boot.barSteps);
   const [cursorOn, setCursorOn] = useState(boot.cursorOn);
   const [staticKeep, setStaticKeep] = useState(boot.staticKeep);
   const [phase, setPhase] = useState<GifPhase>("ready");
@@ -72,11 +75,12 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
   }, []);
 
   useEffect(() => {
-    const un = listen<{ fps: number; barOn?: boolean; cursorOn?: boolean; staticKeep?: number }>(
+    const un = listen<{ fps: number; barOn?: boolean; barSteps?: number; cursorOn?: boolean; staticKeep?: number }>(
       "shot-gif-bar-boot",
       (e) => {
         setFps(e.payload.fps);
         if (typeof e.payload.barOn === "boolean") setBarOn(e.payload.barOn);
+        if (typeof e.payload.barSteps === "number") setBarSteps(e.payload.barSteps);
         if (typeof e.payload.cursorOn === "boolean") setCursorOn(e.payload.cursorOn);
         if (typeof e.payload.staticKeep === "number") setStaticKeep(e.payload.staticKeep);
         setPhase("ready");
@@ -140,12 +144,23 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
     void api.shotGifControl(`fps:${next}`).catch(() => undefined);
   }, []);
 
-  /** 进度条开关（仅待命态可切，控制导出后是否合成底部进度条） */
-  const toggleBar = useCallback(() => {
-    const next = !barOn;
-    setBarOn(next);
-    void api.shotGifControl(`bar:${next ? "on" : "off"}`).catch(() => undefined);
-  }, [barOn]);
+  /** 底条三态循环：平滑(40 级) → 跳进(10 级) → 关闭 → 平滑 */
+  const cycleBar = useCallback(() => {
+    if (!barOn) {
+      setBarOn(true);
+      setBarSteps(40);
+      void api.shotGifControl("bar:on").catch(() => undefined);
+      return;
+    }
+    if (barSteps >= 40) {
+      setBarOn(true);
+      setBarSteps(10);
+      void api.shotGifControl("bar:low").catch(() => undefined);
+      return;
+    }
+    setBarOn(false);
+    void api.shotGifControl("bar:off").catch(() => undefined);
+  }, [barOn, barSteps]);
 
   /** 指针叠画开关（待命/录制中可切，下一帧起生效） */
   const toggleCursor = useCallback(() => {
@@ -217,10 +232,10 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
       {phase === "ready" && (
         <button
           className="np-shot-gbar-fps"
-          data-tip="导出 GIF 末尾合成底部进度条（随回放填充）"
-          onClick={toggleBar}
+          data-tip="底部进度条：平滑（40 级增量）/跳进（10 级，填充呈阶梯）/关闭，点击切换"
+          onClick={cycleBar}
         >
-          进度条 {barOn ? "开" : "关"}
+          进度条 {!barOn ? "关" : barSteps >= 40 ? "平滑" : "跳进"}
         </button>
       )}
       {phase !== "processing" && (

@@ -70,6 +70,10 @@ static GIF_FPS: AtomicU32 = AtomicU32::new(FPS_DEFAULT);
 /// 底部进度条开关（2026-11-19 用户定案：待命态可选，开启则导出后对 GIF
 /// 逐帧合成底部进度条——随回放填充到 100%，标示「看到全程的多少处」）
 static GIF_BAR: AtomicBool = AtomicBool::new(true);
+/// 底条填充离散步进数（2026-11-20 用户需求「进度条平滑度可设」）：平滑 40
+/// 级（默认）/跳进 10 级（增量条 4 倍宽，填充呈阶梯——实测体积影响 ±0.4%，档位价值 = 视觉平滑度选择）；
+/// bar:on|low|off 三态控制动作
+static GIF_BAR_STEPS: AtomicU32 = AtomicU32::new(BAR_STEPS_SMOOTH);
 /// begin 与 launch 两段间的会话载荷，launch 取走即清；重入未消费即拒绝
 static GIF_PENDING: Mutex<Option<GifGeo>> = Mutex::new(None);
 
@@ -243,8 +247,8 @@ impl<W: std::io::Write> DeltaEncoder<W> {
             .map_err(|e| format!("GIF 录制帧写入失败：{e}"))?;
         self.canvas_idx = g.buffer.to_vec();
         let mut rgb = Vec::with_capacity(self.canvas_idx.len() * 3);
-        for idx in &self.canvas_idx {
-            let at = usize::from(*idx) * 3;
+        for v in &self.canvas_idx {
+            let at = usize::from(*v) * 3;
             rgb.extend_from_slice(&self.palette[at..at + 3]);
         }
         self.canvas_rgb = rgb;
@@ -610,6 +614,7 @@ pub fn shot_gif_begin(
     GIF_FLAG.store(0, Ordering::Relaxed);
     GIF_FPS.store(FPS_DEFAULT, Ordering::Relaxed);
     GIF_BAR.store(true, Ordering::Relaxed);
+    GIF_BAR_STEPS.store(BAR_STEPS_SMOOTH, Ordering::Relaxed);
     GIF_PAUSED.store(false, Ordering::Relaxed);
     GIF_CURSOR.store(true, Ordering::Relaxed);
     GIF_STATIC_KEEP.store(DEFAULT_STATIC_KEEP, Ordering::Relaxed);
@@ -678,6 +683,7 @@ pub fn shot_gif_launch(app: AppHandle) -> Result<(), String> {
                 "barOn": GIF_BAR.load(Ordering::Relaxed),
                 "cursorOn": GIF_CURSOR.load(Ordering::Relaxed),
                 "staticKeep": GIF_STATIC_KEEP.load(Ordering::Relaxed),
+                "barSteps": GIF_BAR_STEPS.load(Ordering::Relaxed),
             }),
         );
         let reuse = app2.get_webview_window("shot-frame").is_some()
@@ -1093,10 +1099,11 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
 
 /// 进度条高度（物理像素）：细条不遮挡内容，原始尺寸下清晰可辨
 const PROGRESS_BAR_H: u32 = 8;
-/// 底条填充离散步进数：合成期底条按步画增量（填充增量条 ≤ gw/40 宽），
-/// 无增量帧保持纯内容子帧——连续微增量会把每帧变化盒拖成「全宽 × 到底」
-/// 全幅，是合成产物体积的支配项；40 步对回放视觉足够平滑
-const BAR_QUANT_STEPS: u32 = 40;
+/// 底条步进档位（bar:on = 平滑档）
+const BAR_STEPS_SMOOTH: u32 = 40;
+/// 底条步进档位（bar:low = 跳进档：增量条 4 倍宽、底条更新帧减少 →
+/// 合成产物体积再降，填充呈阶梯跳进）
+const BAR_STEPS_LOW: u32 = 10;
 
 /// 逐帧合成底部进度条：解码原 GIF 全部帧，画布向下扩 PROGRESS_BAR_H——
 /// 第 i 帧（1 起）的填充宽 = w×i/total（回放到最后一帧恰好填满），随帧
@@ -1104,6 +1111,12 @@ const BAR_QUANT_STEPS: u32 = 40;
 ///（skip_frame_decoding 零 LZW 开销），再 RGBA 解码逐帧合成流式写新文件
 /// 后原子替换。线程阻塞型：由录制线程在收尾阶段调用，浮条已切「生成中」
 fn append_progress_bar(path: &Path) -> Result<(), String> {
+    append_progress_bar_with_steps(path, GIF_BAR_STEPS.load(Ordering::Relaxed))
+}
+
+/// 带步进参数的合成主体（浮条「进度条 平滑/跳进」档位经 GIF_BAR_STEPS
+/// 下发）
+fn append_progress_bar_with_steps(path: &Path, bar_steps: u32) -> Result<(), String> {
     // pass 1：帧数计数（不解码像素）
     let total = {
         let file = std::fs::File::open(path).map_err(|e| format!("打开 GIF 失败：{e}"))?;
@@ -1129,7 +1142,7 @@ fn append_progress_bar(path: &Path) -> Result<(), String> {
     let tmp_path = path.with_extension("gif.tmp");
     let out = std::fs::File::create(&tmp_path).map_err(|e| format!("进度条写盘失败：{e}"))?;
     let mut writer = std::io::BufWriter::new(out);
-    let encode = encode_with_bar(path, &mut writer, total);
+    let encode = encode_with_bar(path, &mut writer, total, bar_steps);
     drop(writer);
     match encode {
         Ok(()) => {
@@ -1145,11 +1158,12 @@ fn append_progress_bar(path: &Path) -> Result<(), String> {
 }
 
 /// 进度条合成主体（&mut writer 借用收敛在函数边界）：RGBA 解码逐帧 →
-/// 画布扩底条 → 重编码流式写 writer
+/// 画布扩底条 → 重编码流式写 writer；bar_steps = 底条步进档位
 fn encode_with_bar(
     path: &Path,
     writer: &mut std::io::BufWriter<std::fs::File>,
     total: u32,
+    bar_steps: u32,
 ) -> Result<(), String> {
     {
         use gif::{ColorOutput, DisposalMethod};
@@ -1179,7 +1193,7 @@ fn encode_with_bar(
         let mut work = vec![0u8; gw_u * (gh_u + usize::from(bar_h)) * 4];
         let mut prev_dispose = DisposalMethod::Any;
         let mut prev_rect = (0u16, 0u16, 0u16, 0u16);
-        // 底条 = 深色轨道 + accent 填充，按 BAR_QUANT_STEPS 离散步进（每步
+        // 底条 = 深色轨道 + accent 填充，按 bar_steps 离散步进（每步
         // 只画增量段——不量化的连续微增量会把每帧变化盒拖成「全宽 × 到底」
         // 全幅；步进让无增量帧保持纯内容子帧）。回放到最后一帧恰好满格
         let mut step_prev = 0u32;
@@ -1213,8 +1227,8 @@ fn encode_with_bar(
             // work = 组合画布 + 底条行（跨帧复用：底条只画增量，历史像素保留）
             work[..canvas.len()].copy_from_slice(&canvas);
             let bar_base = gh_u * gw_u * 4;
-            let step_now = i * BAR_QUANT_STEPS / total.max(1);
-            let fill_x = |step: u32| (gw_u as u32 * step / BAR_QUANT_STEPS) as usize;
+            let step_now = i * bar_steps / total.max(1);
+            let fill_x = |step: u32| (gw_u as u32 * step / bar_steps) as usize;
             if i == 1 {
                 // 首帧：全宽轨道 + 当前步之前的填充段
                 for x in 0..gw_u {
@@ -1260,9 +1274,20 @@ pub fn shot_gif_control(action: String) -> Result<(), String> {
         GIF_FPS.store(normalize_fps(fps), Ordering::Relaxed);
         return Ok(());
     }
-    // 底部进度条开关（待命态可切）
-    if let Some(on) = action.strip_prefix("bar:") {
-        GIF_BAR.store(on == "on", Ordering::Relaxed);
+    // 底条开关 + 步进档位（2026-11-20 用户需求「进度条平滑度可设」）：
+    // on = 平滑 40 级 / low = 跳进 10 级 / off = 关闭
+    if let Some(mode) = action.strip_prefix("bar:") {
+        match mode {
+            "on" => {
+                GIF_BAR.store(true, Ordering::Relaxed);
+                GIF_BAR_STEPS.store(BAR_STEPS_SMOOTH, Ordering::Relaxed);
+            }
+            "low" => {
+                GIF_BAR.store(true, Ordering::Relaxed);
+                GIF_BAR_STEPS.store(BAR_STEPS_LOW, Ordering::Relaxed);
+            }
+            _ => GIF_BAR.store(false, Ordering::Relaxed),
+        }
         return Ok(());
     }
     // 鼠标指针叠画开关（待命/录制中可切，下一帧起生效）
@@ -1623,7 +1648,7 @@ fn show_gif_bar_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
         (640.0 * s).round() as i32,
         (44.0 * s).round() as i32,
     );
-    let boot = serde_json::json!({ "window": "gifbar", "fps": GIF_FPS.load(Ordering::Relaxed), "barOn": GIF_BAR.load(Ordering::Relaxed), "cursorOn": GIF_CURSOR.load(Ordering::Relaxed), "staticKeep": GIF_STATIC_KEEP.load(Ordering::Relaxed) });
+    let boot = serde_json::json!({ "window": "gifbar", "fps": GIF_FPS.load(Ordering::Relaxed), "barOn": GIF_BAR.load(Ordering::Relaxed), "cursorOn": GIF_CURSOR.load(Ordering::Relaxed), "staticKeep": GIF_STATIC_KEEP.load(Ordering::Relaxed), "barSteps": GIF_BAR_STEPS.load(Ordering::Relaxed) });
     let win = match app.get_webview_window("shot-bar") {
         Some(w) => w,
         None => WebviewWindowBuilder::new(app, "shot-bar", WebviewUrl::App("shot.html".into()))
@@ -1865,6 +1890,45 @@ mod tests {
         assert_eq!(composed[15], first[15], "右半像素应逐位保持全帧色");
     }
 
+    /// 探针：color_quant（NeuQuant + 精确两路）产物色表是否本已亮度有序
+    ///（#[ignore] 手跑）
+    #[test]
+    #[ignore = "色表顺序探针"]
+    fn probe_color_quant_palette_order() {
+        // >256 色随机帧 → NeuQuant 路径
+        let mut px = vec![0u8; 64 * 64 * 4];
+        let mut seed = 123456789u64;
+        for chunk in px.as_mut_slice().as_chunks_mut::<4>().0 {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            chunk[0] = (seed >> 33) as u8;
+            chunk[1] = (seed >> 20) as u8;
+            chunk[2] = (seed >> 7) as u8;
+            chunk[3] = 255;
+        }
+        let frame = gif::Frame::from_rgba_speed(64, 64, &mut px, 10);
+        let pal = frame.palette.expect("NeuQuant 路径应有色表");
+        let n = pal.len() / 3;
+        let inv = |p: &[u8]| -> usize {
+            let lum: Vec<u32> = (0..n)
+                .map(|i| {
+                    u32::from(p[i * 3]) * 299
+                        + u32::from(p[i * 3 + 1]) * 587
+                        + u32::from(p[i * 3 + 2]) * 114
+                })
+                .collect();
+            lum.windows(2).filter(|w| w[0] > w[1]).count()
+        };
+        println!(
+            "NeuQuant 路径：色表 {n} 项，亮度逆序对 {}/{}（0 = 已有序）",
+            inv(&pal),
+            n - 1
+        );
+        // 重排对照：NeuQuant 色表按 g 通道有序（build_netindex），亮度重排
+        // 近似恒等——保留本探针记录实测结论（LZW 长度零收益）
+    }
+
     #[test]
     fn compress_keepalive_runs_collapses_static_runs() {
         // 帧序列：全帧(8cs) + 兜底(100cs)×3 + 全帧(5cs) + 兜底(100cs)+(100cs)
@@ -2054,12 +2118,25 @@ mod tests {
         std::fs::copy(&path, &tmp).unwrap_or_else(|e| panic!("副本失败：{e}"));
         append_progress_bar(&tmp).unwrap_or_else(|e| panic!("重合成失败：{e}"));
         let resynth = std::fs::metadata(&tmp).map(|m| m.len()).unwrap_or(0) as usize;
+        let rb = std::fs::read(&tmp).unwrap_or_default();
+        let mut hash = 0xcbf29ce484222325u64;
+        for b in &rb {
+            hash ^= u64::from(*b);
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
         println!(
-            "新合成管线：{} → {} B（-{}%）",
-            data.len(),
-            resynth,
-            if data.len() > 0 && resynth < data.len() {
-                (data.len() - resynth) * 100 / data.len()
+            "DBG resynth len={resynth} fnv={hash:016x} 头16B={:?}",
+            &rb[..16.min(rb.len())]
+        );
+        // 跳进档（10 级步进）对比
+        GIF_BAR_STEPS.store(BAR_STEPS_LOW, Ordering::Relaxed);
+        std::fs::copy(&path, &tmp).unwrap_or_else(|e| panic!("副本失败：{e}"));
+        append_progress_bar(&tmp).unwrap_or_else(|e| panic!("低档重合成失败：{e}"));
+        let low = std::fs::metadata(&tmp).map(|m| m.len()).unwrap_or(0) as usize;
+        println!(
+            "跳进档(10 级)：{low} B（较平滑档 -{}%）",
+            if resynth > 0 && low < resynth {
+                (resynth - low) * 100 / resynth
             } else {
                 0
             }

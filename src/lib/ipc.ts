@@ -1543,7 +1543,8 @@ export const api = {
    *  finish = 录制中完成出结果；cancel = 丢弃并删临时文件（待命/录制均可）；
    *  pause/resume = 录制中暂停/继续（不抓帧计时冻结，2026-11-20）；
    *  fps:N = 切换帧率档（8/12/15，下一帧起生效）；
-   *  bar:on|off = 底部进度条开关（待命态可切，控制导出后是否合成）；
+   *  bar:on|low|off = 底部进度条三态（平滑 40 级 / 省体积 10 级 / 关闭，
+   *  2026-11-20 用户需求「进度条平滑度可设」）；
    *  cursor:on|off = 鼠标指针叠画开关（待命/录制可切，下一帧起生效，2026-11-20）；
    *  keep:N = 静止段保留秒数（1-60，每秒一拍兜底帧下保留 N 帧 = 停顿回放
    *  最多 N 秒，收尾压缩时生效，2026-11-20） */
@@ -1555,7 +1556,7 @@ export const api = {
       | "pause"
       | "resume"
       | `fps:${8 | 12 | 15}`
-      | `bar:${"on" | "off"}`
+      | `bar:${"on" | "low" | "off"}`
       | `cursor:${"on" | "off"}`
       | `keep:${number}`,
   ) => cmd<void>("shot_gif_control", { action }),
