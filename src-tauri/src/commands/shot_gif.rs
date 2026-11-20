@@ -1,9 +1,10 @@
 // GIF 录制（2026-11-19 新功能，§3.6 截图域增强）：框选区 → 覆盖窗停靠、
 // 弹录制浮条（label "shot-bar" 复用，boot 换装 gifbar）→ 循环线程按当前
-// fps 间隔 capture_region 实时抓选区 → 智能剔除重复帧（2026-11-20：静止
-// 帧不写盘、时长并入下一变化帧延迟，2s 兜底补帧防超长延迟兼容问题，体积
-// 大降）→ 逐帧 NeuQuant 量化（gif crate Frame::from_rgba_speed，palette
-// 逐帧独立）→ gif::Encoder 流式写临时盘（内存只持一帧，不囤整段）→ 完成
+// fps 间隔 capture_region 实时抓选区 → DeltaEncoder 帧间差异编码（2026-11-20
+// 用户需求）：时间维剔除（静止帧不写盘时长合并 + 2s 兜底 1×1 keepalive）
+// + 空间维子帧（变化盒小则只写子矩形帧 disposal=Keep，盒内未变像素复用画
+// 布索引零闪烁，真变像素最近邻旧调色板，盒 ≥70% 画幅或调色板陈旧回退全帧
+// NeuQuant）→ gif::Encoder 流式写临时盘（内存只持画布基线不囤整段）→ 完成
 // （浮条/Enter/120s 上限）出结果窗（保存 .gif / 打开所在文件夹），取消
 // 丢弃并删临时文件。
 //
@@ -122,6 +123,263 @@ fn quant_speed(px: u32) -> i32 {
         20
     } else {
         10
+    }
+}
+
+// ── 帧间差异编码（2026-11-20 用户需求；gifsicle -O 同源思路）────────────────
+// 「空间维度去重」，与重复帧剔除（时间维度）共享一套画布状态：帧内容与
+// 观看画布（上一写入帧的量化结果 = 解码器实际呈现的颜色）的差异落在小矩形
+// 内时只写子矩形帧（GIF 标准 left/top/width/height + disposal=Keep 保留画
+// 布），跳过全帧量化与全帧 LZW——光标/菜单/局部操作场景帧体降一个数量级，
+// CPU 同步省掉 NeuQuant。回退口径：变化盒 ≥70% 画幅或真变像素与旧调色板
+// 平均色距超阈（调色板陈旧）→ 全帧重建。静止兜底帧/录制尾巴改 1×1 画布同
+// 色帧（近零体积，播放不可见）。三层跳帧分工：
+// · raw == last_raw（逐字节）→ 屏幕真静止 → 剔除（dedup_delay 时长合并）
+// · raw ≠ last_raw 但观看画布无差（量化 ε 内变化）→ ViewerIdentical 剔除
+// · 子矩形：盒内未变像素复用画布索引（逐位同画布零闪烁），真变像素最近邻
+//   旧调色板（屏幕内容色彩连续，视觉无损）
+
+/// 子矩形回退阈值：变化盒面积占画幅比例 ≥ 此值时写全帧（盒逼近全幅时子帧
+/// 无收益且调色板陈旧风险高）
+const DELTA_FULL_BOX_RATIO: f64 = 0.7;
+/// 子帧调色板匹配质量阈值：真变像素到旧调色板的平均平方距离（3 通道平方
+/// 和，≈每通道均差 24）超过即视为调色板陈旧 → 回退全帧重建
+const DELTA_MAX_MEAN_DIST2: u64 = 1728;
+
+/// 写入帧类别（循环据此计帧/合并延迟；基准测试与单测同口径断言）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FrameKind {
+    /// 全帧（NeuQuant 重建调色板）
+    Full,
+    /// 子矩形帧（复用上一全帧调色板）
+    Sub,
+    /// 1×1 画布同色帧（静止兜底/录制尾巴，播放不可见）
+    Keepalive,
+    /// 观看无差跳过（时长并入后续写入帧）
+    ViewerIdentical,
+}
+
+impl FrameKind {
+    fn is_written(self) -> bool {
+        !matches!(self, FrameKind::ViewerIdentical)
+    }
+}
+
+/// 帧间差异编码器（线程封闭于录制循环；体积基准测试复用同管线）
+struct DeltaEncoder<W: std::io::Write> {
+    enc: gif::Encoder<W>,
+    w: u16,
+    h: u16,
+    /// 观看画布：上一写入帧的量化 RGB（3 字节/像素 = 解码呈现色），
+    /// 与捕获帧比对即「观看差异」口径（量化 ε 内的变化不再重编码）
+    canvas_rgb: Vec<u8>,
+    /// 画布像素所属调色板索引（盒内未变像素直接复用，逐位同画布零闪烁）
+    canvas_idx: Vec<u8>,
+    /// 当前调色板（上一全帧产物，RGB 平铺 3 字节/项；连续子帧沿用直至
+    /// 下次全帧）
+    palette: Vec<u8>,
+    /// 上次捕获的 RGB（3 字节/像素）：真静止快速判定基线（免全帧 diff）
+    last_raw: Vec<u8>,
+}
+
+impl<W: std::io::Write> DeltaEncoder<W> {
+    fn new(enc: gif::Encoder<W>, w: u16, h: u16) -> Self {
+        Self {
+            enc,
+            w,
+            h,
+            canvas_rgb: Vec::new(),
+            canvas_idx: Vec::new(),
+            palette: Vec::new(),
+            last_raw: Vec::new(),
+        }
+    }
+
+    /// 快路径：与上次捕获逐字节等值（屏幕真静止，免 diff 扫描）
+    fn same_as_last(&self, rgba: &[u8]) -> bool {
+        if self.last_raw.len() != rgba.len() / 4 * 3 {
+            return false;
+        }
+        rgba.as_chunks::<4>()
+            .0
+            .iter()
+            .zip(self.last_raw.as_chunks::<3>().0)
+            .all(|(p, c)| p[0] == c[0] && p[1] == c[1] && p[2] == c[2])
+    }
+
+    fn set_last_raw(&mut self, rgba: &[u8]) {
+        self.last_raw = rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .flat_map(|p| [p[0], p[1], p[2]])
+            .collect();
+    }
+
+    /// 全帧：NeuQuant 重建调色板 + 画布/索引全量推进
+    fn push_full(&mut self, rgba: &mut [u8], delay_cs: u16) -> Result<FrameKind, String> {
+        let (w, h) = (self.w, self.h);
+        let mut g =
+            gif::Frame::from_rgba_speed(w, h, rgba, quant_speed(u32::from(w) * u32::from(h)));
+        g.delay = delay_cs;
+        // 子帧依赖画布保留：全帧 disposal 同样 Keep（覆盖式全帧用 Keep 无害）
+        g.dispose = gif::DisposalMethod::Keep;
+        self.palette = g.palette.clone().unwrap_or_default();
+        self.enc
+            .write_frame(&g)
+            .map_err(|e| format!("GIF 录制帧写入失败：{e}"))?;
+        self.canvas_idx = g.buffer.to_vec();
+        let mut rgb = Vec::with_capacity(self.canvas_idx.len() * 3);
+        for idx in &self.canvas_idx {
+            let at = usize::from(*idx) * 3;
+            rgb.extend_from_slice(&self.palette[at..at + 3]);
+        }
+        self.canvas_rgb = rgb;
+        self.set_last_raw(rgba);
+        Ok(FrameKind::Full)
+    }
+
+    /// 写入一帧捕获：内部决策 全帧/子帧/观看无差跳过。`delay_cs` = 已并入
+    /// 静止时长的帧延迟；写盘失败 = Err（调用方按 aborted 收场）
+    fn push(&mut self, rgba: &mut [u8], delay_cs: u16) -> Result<FrameKind, String> {
+        let w = self.w as usize;
+        let h = self.h as usize;
+        if self.canvas_rgb.len() != w * h * 3 {
+            return self.push_full(rgba, delay_cs); // 首帧：画布未建，必全帧
+        }
+        // 双口径差异扫描：**内容变化**（raw vs last_raw = 真实屏幕变化，量化
+        // ε 不算）∧ **观看变化**（raw vs 画布量化色）的交集 = 需要重编码的
+        // 像素集。只用观看口径会让高熵内容的 ε 误差铺满全幅（子帧退化为
+        // 全帧）；只用内容口径会把画布已呈现的 ε 内变化也重写。交集即
+        // 「屏幕真变了且观看会不同」
+        let mut count = 0usize;
+        let (mut min_x, mut min_y) = (w, h);
+        let (mut max_x, mut max_y) = (0usize, 0usize);
+        let raw_px = rgba.as_chunks::<4>().0;
+        let last_px = self.last_raw.as_chunks::<3>().0;
+        let canv_px = self.canvas_rgb.as_chunks::<3>().0;
+        for (p, px) in raw_px.iter().enumerate() {
+            let prev = &last_px[p];
+            if px[0] == prev[0] && px[1] == prev[1] && px[2] == prev[2] {
+                continue; // 内容未变：画布已呈现（ε 内），无需重编码
+            }
+            let cv = &canv_px[p];
+            if px[0] != cv[0] || px[1] != cv[1] || px[2] != cv[2] {
+                count += 1;
+                let (x, y) = (p % w, p / w);
+                min_x = min_x.min(x);
+                min_y = min_y.min(y);
+                max_x = max_x.max(x);
+                max_y = max_y.max(y);
+            }
+        }
+        if count == 0 {
+            // 屏幕变了但画布已呈现等效色（量化 ε 内）：观看无差 → 跳过
+            self.set_last_raw(rgba);
+            return Ok(FrameKind::ViewerIdentical);
+        }
+        let (bw, bh) = (max_x - min_x + 1, max_y - min_y + 1);
+        if self.palette.is_empty()
+            || f64::from(bw as u32) * f64::from(bh as u32)
+                >= f64::from(self.w) * f64::from(self.h) * DELTA_FULL_BOX_RATIO
+        {
+            return self.push_full(rgba, delay_cs);
+        }
+        // 子帧映射：未变像素复用画布索引（逐位同画布），真变像素最近邻旧
+        // 调色板；平均平方距离超阈 = 调色板陈旧 → 回退全帧
+        let mut box_idx = vec![0u8; bw * bh];
+        let mut dist2_sum = 0u64;
+        let mut changed_n = 0u64;
+        for row in 0..bh {
+            for col in 0..bw {
+                let p = (min_y + row) * w + min_x + col;
+                let (r, g, b) = (rgba[p * 4], rgba[p * 4 + 1], rgba[p * 4 + 2]);
+                let cv = &self.canvas_rgb[p * 3..p * 3 + 3];
+                let idx = if r == cv[0] && g == cv[1] && b == cv[2] {
+                    self.canvas_idx[p]
+                } else {
+                    changed_n += 1;
+                    let mut best = 0usize;
+                    let mut best_d = u64::MAX;
+                    for (pi, pc) in self.palette.as_chunks::<3>().0.iter().enumerate() {
+                        let (dr, dg, db) = (
+                            i64::from(r) - i64::from(pc[0]),
+                            i64::from(g) - i64::from(pc[1]),
+                            i64::from(b) - i64::from(pc[2]),
+                        );
+                        let d = (dr * dr + dg * dg + db * db) as u64;
+                        if d < best_d {
+                            best_d = d;
+                            best = pi;
+                        }
+                    }
+                    dist2_sum += best_d;
+                    best as u8
+                };
+                box_idx[row * bw + col] = idx;
+            }
+        }
+        if changed_n > 0 && dist2_sum / changed_n > DELTA_MAX_MEAN_DIST2 {
+            return self.push_full(rgba, delay_cs);
+        }
+        // 子帧调色板压缩：只收录实际用到的索引（按首次使用顺序重排），
+        // 256 项 768 字节 → 常见几色几十字节（光标级小盒的体积大头）
+        let mut used = vec![usize::MAX; self.palette.len() / 3];
+        let mut new_palette: Vec<u8> = Vec::new();
+        let mut out_idx = Vec::with_capacity(box_idx.len());
+        for old in &box_idx {
+            let o = usize::from(*old);
+            if used[o] == usize::MAX {
+                used[o] = new_palette.len() / 3;
+                new_palette.extend_from_slice(&self.palette[o * 3..o * 3 + 3]);
+            }
+            // u8 上限安全：old < 调色板项数 ≤ 256 → 新索引 < 已用项数 ≤ 256
+            out_idx.push(used[o] as u8);
+        }
+        let frame = gif::Frame {
+            delay: delay_cs,
+            left: min_x as u16,
+            top: min_y as u16,
+            width: bw as u16,
+            height: bh as u16,
+            palette: Some(new_palette),
+            buffer: std::borrow::Cow::Owned(out_idx),
+            // Default = disposal Keep / 无透明 / 不交错（子帧语义全部吻合）
+            ..Default::default()
+        };
+        self.enc
+            .write_frame(&frame)
+            .map_err(|e| format!("GIF 录制子帧写入失败：{e}"))?;
+        // 画布推进（盒内）：写入的调色板颜色 = 观看基线
+        for row in 0..bh {
+            for col in 0..bw {
+                let p = (min_y + row) * w + min_x + col;
+                let idx = usize::from(box_idx[row * bw + col]) * 3;
+                self.canvas_rgb[p * 3..p * 3 + 3].copy_from_slice(&self.palette[idx..idx + 3]);
+                self.canvas_idx[p] = box_idx[row * bw + col];
+            }
+        }
+        self.set_last_raw(rgba);
+        Ok(FrameKind::Sub)
+    }
+
+    /// 1×1 画布同色帧（静止兜底/录制尾巴）：画布左上原色原位重写，播放
+    /// 不可见、体积近零——替代旧口径的全帧重复量化
+    fn push_keepalive(&mut self, delay_cs: u16) -> Result<(), String> {
+        if self.canvas_rgb.len() < 3 {
+            return Ok(()); // 无画布（尚未写过帧）：调用方以 frames>0 守卫
+        }
+        let frame = gif::Frame {
+            delay: delay_cs,
+            width: 1,
+            height: 1,
+            palette: Some(self.canvas_rgb[..3].to_vec()),
+            buffer: std::borrow::Cow::Owned(vec![0]),
+            ..Default::default()
+        };
+        self.enc
+            .write_frame(&frame)
+            .map_err(|e| format!("GIF 录制静止帧写入失败：{e}"))
     }
 }
 
@@ -341,8 +599,8 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
     };
     let mut writer = std::io::BufWriter::new(file);
     // 借用经辅助函数收敛（NLL 对「调用结果直接 match」的借用跨臂限制）：
-    // encoder 持 &mut writer 直至收尾 drop，flush 在其后
-    let mut encoder = match init_encoder(&mut writer, w16, h16) {
+    // encoder 移入 DeltaEncoder 持 &mut writer 直至收尾 drop(delta)，flush 在其后
+    let encoder = match init_encoder(&mut writer, w16, h16) {
         Ok(e) => e,
         Err(msg) => {
             log::error!("GIF 录制：{msg}");
@@ -365,10 +623,10 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
     let mut recorded = Duration::ZERO;
     let mut was_paused = false;
     let mut paused_at: Option<Instant> = None;
-    // 重复帧剔除（2026-11-20 用户需求）：上一写入帧的原始 RGBA 供精确比对
-    // （from_rgba_speed 原地消费捕获缓冲，须先克隆）+ 上一写入帧时刻 =
+    // 帧间差异编码器（2026-11-20 用户需求）：画布基线 + 调色板 + 真静止
+    // 快判定，全帧/子矩形/观看无差跳过三类决策内聚；上一写入帧时刻 =
     // 延迟合并与兜底节奏的时间基线
-    let mut prev_frame: Option<Vec<u8>> = None;
+    let mut delta = DeltaEncoder::new(encoder, w16, h16);
     let mut last_written: Option<Instant> = None;
     // 指针位图缓存（线程封闭）：光标形状未变时免每帧 GetIconInfo/GetDIBits
     let mut cursor_cache: Option<CursorCache> = None;
@@ -478,46 +736,48 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
                 Ok(frame) => {
                     bad_streak = 0;
                     let now = Instant::now();
-                    let (fw, fh) = frame.dimensions();
+                    let (fw, _fh) = frame.dimensions();
                     let mut rgba = frame.into_raw();
-                    // 指针叠画先于重复帧判定（2026-11-20 用户需求）：光标
-                    // 参与比对——光标动 = 帧变化（语义正确），光标静止画面
-                    // 静止仍可剔除
+                    // 指针叠画先于差异判定（2026-11-20 用户需求）：光标参与
+                    // 比对——光标动 = 帧变化（语义正确），光标静止画面静止
+                    // 仍可剔除/子帧化
                     if GIF_CURSOR.load(Ordering::Relaxed) {
-                        overlay_cursor(&mut rgba, fw, fh, &geo, &mut cursor_cache);
+                        overlay_cursor(&mut rgba, fw, _fh, &geo, &mut cursor_cache);
                     }
-                    let (fw16, fh16) = (
-                        u16::try_from(fw).unwrap_or(w16),
-                        u16::try_from(fh).unwrap_or(h16),
-                    );
-                    // ── 智能剔除重复帧（2026-11-20 用户需求）：与上一写入帧
-                    // 精确等值 = 静止帧默认跳过（时长并入后续变化帧延迟，GIF
-                    // 静止 = 帧停留视觉完全一致），静止达兜底上限才补一帧重复
-                    // 帧。跳过帧照常落到循环底部节奏/进度段（continue 会丢帧拍）
-                    let is_dup = prev_frame.as_deref() == Some(rgba.as_slice());
+                    // ── 三层跳帧/帧间差异（时间维剔除 + 空间维子帧）：快判定
+                    // 真静止 → dedup_delay 决定剔除或兜底；变化帧交 DeltaEncoder
+                    // 决策全帧/子帧/观看无差。跳过帧照常落到循环底部节奏/进度
+                    // 段（continue 会丢帧拍）
+                    let is_dup = delta.same_as_last(&rgba);
                     let since_written =
                         last_written.map(|t| now.duration_since(t).as_millis() as u64);
                     if let Some(delay_ms) =
                         dedup_delay(is_dup, since_written, 1000 / u64::from(fps))
                     {
-                        // 变化帧先克隆原始 RGBA 供下一帧比对（量化原地消费缓冲）
-                        if !is_dup {
-                            prev_frame = Some(rgba.clone());
+                        let res = if is_dup {
+                            // 静止兜底（≥2s）：1×1 画布同色帧，近零体积
+                            delta
+                                .push_keepalive(gif_delay_cs(delay_ms))
+                                .map(|_| FrameKind::Keepalive)
+                        } else {
+                            delta.push(&mut rgba, gif_delay_cs(delay_ms))
+                        };
+                        match res {
+                            Ok(kind) => {
+                                // ViewerIdentical（量化 ε 内变化）= 观看无差
+                                // 跳过：不推进 last_written，时长自然并入下一
+                                // 写入帧延迟
+                                if kind.is_written() {
+                                    frames += 1;
+                                    last_written = Some(now);
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("GIF 录制：帧写入失败：{e}");
+                                aborted = true;
+                                break;
+                            }
                         }
-                        let mut gframe = gif::Frame::from_rgba_speed(
-                            fw16,
-                            fh16,
-                            &mut rgba,
-                            quant_speed(rw * rh),
-                        );
-                        gframe.delay = gif_delay_cs(delay_ms);
-                        if let Err(e) = encoder.write_frame(&gframe) {
-                            log::error!("GIF 录制：帧写入失败：{e}");
-                            aborted = true;
-                            break;
-                        }
-                        frames += 1;
-                        last_written = Some(now);
                     }
                 }
                 Err(e) => {
@@ -567,21 +827,22 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
     let tail = if cancelled || aborted || frames == 0 {
         None
     } else {
-        last_written.zip(prev_frame.take())
+        last_written
     };
-    if let Some((t, mut prev)) = tail.filter(|(t, _)| t.elapsed().as_millis() as u64 >= 100) {
+    if let Some(t) = tail.filter(|t| t.elapsed().as_millis() as u64 >= 100) {
         let trailing_ms = t.elapsed().as_millis() as u64;
-        let mut gframe = gif::Frame::from_rgba_speed(w16, h16, &mut prev, quant_speed(rw * rh));
-        gframe.delay = gif_delay_cs(trailing_ms);
-        match encoder.write_frame(&gframe) {
+        // 1×1 画布同色帧：尾巴时长并入其延迟（回放时长 = 录制所见），体积
+        // 近零（旧口径全帧重量化的开销与体积都省掉）
+        match delta.push_keepalive(gif_delay_cs(trailing_ms)) {
             Ok(()) => frames += 1,
             Err(e) => {
                 log::warn!("GIF 录制：静止尾巴补帧失败（按已有帧出结果）：{e}");
             }
         }
     }
-    // 收尾：drop 编码器冲刷缓冲（取消即丢弃整文件）
-    drop(encoder);
+    // 收尾：丢 delta（持 encoder，drop 即冲刷缓冲）再 flush writer（取消即
+    // 丢弃整文件）
+    drop(delta);
     let flush = std::io::Write::flush(&mut writer);
     drop(writer);
     GIF_ACTIVE.store(false, Ordering::Relaxed);
@@ -695,7 +956,7 @@ fn encode_with_bar(
     total: u32,
 ) -> Result<(), String> {
     {
-        use gif::ColorOutput;
+        use gif::{ColorOutput, DisposalMethod};
         let file = std::fs::File::open(path).map_err(|e| format!("打开 GIF 失败：{e}"))?;
         let mut options = gif::DecodeOptions::new();
         options.set_color_output(ColorOutput::RGBA);
@@ -710,33 +971,56 @@ fn encode_with_bar(
         encoder
             .set_repeat(gif::Repeat::Infinite)
             .map_err(|e| format!("进度条设置循环播放失败：{e}"))?;
+        // 组合画布（RGBA）：帧间差异编码产物含子矩形帧（disposal=Keep 保留
+        // 画布），逐帧叠画重建完整画面后再合成底条；全帧 (0,0) 覆盖整幅
+        let mut canvas = vec![0u8; usize::from(gw) * usize::from(gh) * 4];
+        let mut work = vec![0u8; usize::from(gw) * usize::from(gh + bar_h) * 4];
+        let mut prev_dispose = DisposalMethod::Any;
+        let mut prev_rect = (0u16, 0u16, 0u16, 0u16);
         let mut i: u32 = 0;
         while let Some(frame) = dec
             .read_next_frame()
             .map_err(|e| format!("GIF 解码失败：{e}"))?
         {
+            // 上一帧 disposal 处理（先于当前帧叠画）：本链路产物只有
+            // Keep/Any（画布保留）；Background 兜底清矩形（防御非本链路文件）
+            if prev_dispose == DisposalMethod::Background {
+                let (l, t, fw, fh) = prev_rect;
+                for row in u32::from(t)..u32::from(t) + u32::from(fh) {
+                    for col in u32::from(l)..u32::from(l) + u32::from(fw) {
+                        let off = (row as usize * gw as usize + col as usize) * 4;
+                        canvas[off..off + 4].copy_from_slice(&[0, 0, 0, 0]);
+                    }
+                }
+            }
+            let fw = usize::from(frame.width);
+            let (fl, ft) = (usize::from(frame.left), usize::from(frame.top));
+            for row in 0..usize::from(frame.height) {
+                let dst = (ft + row) * gw as usize * 4 + fl * 4;
+                let src = row * fw * 4;
+                canvas[dst..dst + fw * 4].copy_from_slice(&frame.buffer[src..src + fw * 4]);
+            }
+            prev_dispose = frame.dispose;
+            prev_rect = (frame.left, frame.top, frame.width, frame.height);
             i += 1;
-            let fw = u32::from(frame.width);
             let delay = frame.delay;
-            // RGBA 解码缓冲（read_next_frame 产物按 ColorOutput::RGBA 展平）
-            // 画布向下扩 bar_h：底条 = 深色轨道 + accent 填充（i/total，
-            // 回放到最后一帧恰好填满）。解码缓冲直接扩容复用
-            let mut rgba = frame.buffer.to_vec();
-            rgba.resize(usize::from(gw) * usize::from(gh + bar_h) * 4, 0);
+            // 全画布 + 底条：底条 = 深色轨道 + accent 填充（i/total，回放到
+            // 最后一帧恰好填满）；work 缓冲跨帧复用零分配
+            work[..canvas.len()].copy_from_slice(&canvas);
             let fill_w =
                 u32::try_from(u64::from(gw) * u64::from(i) / u64::from(total)).unwrap_or(0);
-            for y in (gh..gh + bar_h).rev() {
-                for x in 0..fw {
+            for y in gh..gh + bar_h {
+                for x in 0..gw {
                     let off = (y as usize) * (gw as usize) + x as usize;
-                    let (r, g, b) = if x < fill_w {
+                    let (r, g, b) = if u32::from(x) < fill_w {
                         (53, 116, 240)
                     } else {
                         (26, 26, 26)
                     };
-                    rgba[off * 4..off * 4 + 4].copy_from_slice(&[r, g, b, 255]);
+                    work[off * 4..off * 4 + 4].copy_from_slice(&[r, g, b, 255]);
                 }
             }
-            let mut out_frame = gif::Frame::from_rgba_speed(gw, gh + bar_h, &mut rgba, 10);
+            let mut out_frame = gif::Frame::from_rgba_speed(gw, gh + bar_h, &mut work, 10);
             out_frame.delay = delay;
             encoder
                 .write_frame(&out_frame)
@@ -1265,16 +1549,190 @@ mod tests {
         assert_eq!(cursor_clip(250, 0, 32, 32, 200, 100), None);
     }
 
-    /// 体积基准（#[ignore] 手跑：`cargo test --lib dedup_size_benchmark
-    /// -- --ignored --nocapture`）：合成典型录制内容对比剔除重复帧前后的
-    /// 产物体积。编码管线与真实录制完全同源——NeuQuant speed 档（
-    /// quant_speed）、帧延迟口径（gif_delay_cs）、剔除决策（dedup_delay）、
-    /// 尾巴收帧、循环块，差异只有帧内容来源（合成 vs 真实屏幕）
     #[test]
-    #[ignore = "体积基准手跑（约 15s 逐帧量化），日常 CI 不跑"]
+    fn delta_encoder_full_sub_skip_keepalive() {
+        // 全帧建画布 → 近色小改（子帧：复用调色板 + 索引压缩）→ 同帧重捕
+        //（真静止，剔除）→ 1×1 keepalive；解码回读校验几何与组合画布
+        let mut buf: Vec<u8> = Vec::new();
+        let enc = gif::Encoder::new(&mut buf, 4, 4, &[]).unwrap();
+        let mut d = DeltaEncoder::new(enc, 4, 4);
+        let mut f1 = vec![0u8; 4 * 4 * 4];
+        // 像素 0..8 暗色（含像素 0）/8..16 亮色：f2 对像素 0 做近色改动
+        for px in f1.as_mut_slice().as_chunks_mut::<4>().0 {
+            px.copy_from_slice(&[200, 210, 220, 255]);
+        }
+        for px in f1.as_mut_slice().as_chunks_mut::<4>().0.iter_mut().take(8) {
+            px.copy_from_slice(&[10, 20, 30, 255]);
+        }
+        assert_eq!(d.push(&mut f1, 8).unwrap(), FrameKind::Full);
+        // 近色小改 (0,0)：距旧调色板 [10,20,30] 平方距离 108 → 远小于回退阈
+        let mut f2 = f1.clone();
+        f2[0..4].copy_from_slice(&[16, 26, 36, 255]);
+        assert_eq!(d.push(&mut f2, 8).unwrap(), FrameKind::Sub);
+        // 同帧重捕：真静止 → 循环走 same_as_last 快路径剔除（dedup_delay None）
+        assert!(d.same_as_last(&f2));
+        // 观看无差跳过：raw ≠ 上次捕获，但落在画布量化色上（ε 内变化）→
+        // push 判 ViewerIdentical
+        let mut f3 = f2.clone();
+        f3[0..4].copy_from_slice(&[d.canvas_rgb[0], d.canvas_rgb[1], d.canvas_rgb[2], 255]);
+        assert!(!d.same_as_last(&f3));
+        assert_eq!(d.push(&mut f3, 8).unwrap(), FrameKind::ViewerIdentical);
+        d.push_keepalive(50).unwrap();
+        drop(d);
+        // 解码回读：全帧 + 子帧 + keepalive 三帧；子帧几何 = 变化盒
+        let mut dec = gif::Decoder::new(&buf[..]).unwrap();
+        let mut geo: Vec<(u16, u16, u16, u16)> = Vec::new();
+        let mut first = Vec::new();
+        let mut composed = vec![[0u8; 4]; 16];
+        while let Some(frame) = dec.read_next_frame().unwrap() {
+            geo.push((frame.left, frame.top, frame.width, frame.height));
+            let (fl, ft, fw) = (
+                frame.left as usize,
+                frame.top as usize,
+                frame.width as usize,
+            );
+            let pal = frame.palette.clone().unwrap_or_default();
+            for row in 0..frame.height as usize {
+                for col in 0..fw {
+                    let idx = frame.buffer[row * fw + col] as usize * 3;
+                    let px = [pal[idx], pal[idx + 1], pal[idx + 2], 255];
+                    composed[(ft + row) * 4 + fl + col] = px;
+                    if geo.len() == 1 {
+                        first.push(px);
+                    }
+                }
+            }
+        }
+        assert_eq!(
+            geo,
+            vec![(0, 0, 4, 4), (0, 0, 1, 1), (0, 0, 1, 1)],
+            "应为一全帧 + 一子帧 + 一 keepalive"
+        );
+        // 组合画布：子帧按最近邻落回旧调色板色（近色改动视觉零变化 = 零
+        // 闪烁语义），其余像素保持全帧内容逐位不变
+        assert_eq!(composed[0], first[0], "近色子帧应落回同调色板色（零闪烁）");
+        assert_eq!(composed[1], first[1], "右半像素应逐位保持全帧色");
+        assert_eq!(composed[15], first[15], "右半像素应逐位保持全帧色");
+    }
+
+    #[test]
+    fn delta_encoder_palette_stale_falls_back_full() {
+        // 远色大改：平均平方距离超阈 → 调色板陈旧回退全帧（而非硬套旧色板）
+        let mut buf: Vec<u8> = Vec::new();
+        let enc = gif::Encoder::new(&mut buf, 4, 4, &[]).unwrap();
+        let mut d = DeltaEncoder::new(enc, 4, 4);
+        let mut f1 = vec![0u8; 4 * 4 * 4];
+        for px in f1.as_mut_slice().as_chunks_mut::<4>().0 {
+            px.copy_from_slice(&[10, 20, 30, 255]);
+        }
+        assert_eq!(d.push(&mut f1, 8).unwrap(), FrameKind::Full);
+        let mut f2 = f1.clone();
+        for px in f2.as_mut_slice().as_chunks_mut::<4>().0.iter_mut().take(4) {
+            px.copy_from_slice(&[240, 240, 10, 255]);
+        }
+        assert_eq!(
+            d.push(&mut f2, 8).unwrap(),
+            FrameKind::Full,
+            "远色应回退全帧"
+        );
+    }
+
+    #[test]
+    fn progress_bar_composes_subframes() {
+        // 全帧（左红右蓝）+ 独立调色板子帧（(1,0) 改绿，disposal Keep）→
+        // 底条合成后解码：组合语义正确（其余像素保持首帧）+ 条行存在
+        let dir = std::env::temp_dir().join(format!("xdir-gifdelta-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("sub_test.gif");
+        {
+            let mut buf = std::io::BufWriter::new(std::fs::File::create(&path).unwrap());
+            let mut enc = gif::Encoder::new(&mut buf, 4, 2, &[]).unwrap();
+            enc.set_repeat(gif::Repeat::Infinite).unwrap();
+            let mut f1 = vec![0u8; 4 * 2 * 4];
+            for (i, px) in f1
+                .as_mut_slice()
+                .as_chunks_mut::<4>()
+                .0
+                .iter_mut()
+                .enumerate()
+            {
+                px.copy_from_slice(if i < 2 {
+                    &[255, 0, 0, 255]
+                } else {
+                    &[0, 0, 255, 255]
+                });
+            }
+            let full = gif::Frame::from_rgba_speed(4, 2, &mut f1, 10);
+            enc.write_frame(&full).unwrap();
+            let sub = gif::Frame {
+                delay: 5,
+                left: 1,
+                top: 0,
+                width: 1,
+                height: 1,
+                palette: Some(vec![0, 255, 0]),
+                buffer: std::borrow::Cow::Owned(vec![0]),
+                ..Default::default()
+            };
+            enc.write_frame(&sub).unwrap();
+        }
+        append_progress_bar(&path).unwrap();
+        let mut options = gif::DecodeOptions::new();
+        options.set_color_output(gif::ColorOutput::RGBA);
+        let mut dec = options
+            .read_info(std::fs::File::open(&path).unwrap())
+            .unwrap();
+        let mut colors: Vec<[u8; 3]> = Vec::new();
+        let mut heights = Vec::new();
+        // 输出经 from_rgba_speed 重量化（调色板为聚类中心非原色），按容差断言
+        let close = |a: [u8; 3], b: [u8; 3]| {
+            (0..3).all(|c| i32::from(a[c]) - i32::from(b[c]) <= 8)
+                && (0..3).all(|c| i32::from(b[c]) - i32::from(a[c]) <= 8)
+        };
+        while let Some(frame) = dec.read_next_frame().unwrap() {
+            heights.push(frame.height);
+            let n = heights.len();
+            colors.push([frame.buffer[0], frame.buffer[1], frame.buffer[2]]);
+            // (1,0)：帧 1 = 红全帧原色；帧 2 = 子帧绿（组合保留）。(2,0) 恒蓝
+            if n == 2 {
+                assert!(close(
+                    [frame.buffer[4], frame.buffer[5], frame.buffer[6]],
+                    [0, 255, 0]
+                ));
+            } else {
+                assert!(close(
+                    [frame.buffer[4], frame.buffer[5], frame.buffer[6]],
+                    [255, 0, 0]
+                ));
+            }
+            assert!(close(
+                [frame.buffer[8], frame.buffer[9], frame.buffer[10]],
+                [0, 0, 255]
+            ));
+        }
+        assert_eq!(
+            heights,
+            // 条高护栏 = min(PROGRESS_BAR_H, 帧高 2) → 输出高 = 2 + 2
+            vec![
+                2 + PROGRESS_BAR_H.min(2) as u16,
+                2 + PROGRESS_BAR_H.min(2) as u16
+            ]
+        );
+        assert!(close(colors[0], [255, 0, 0]), "首像素保持首帧红");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// 体积基准（#[ignore] 手跑：`cargo test --lib dedup_size_benchmark
+    /// -- --ignored --nocapture`）：合成典型录制内容对比 新管线（时间维
+    /// 剔除 + 空间维子帧，**生产 DeltaEncoder 原样**）与 旧管线（逐帧全写）
+    /// 的产物体积。编码口径与真实录制完全同源——NeuQuant speed 档、帧延迟、
+    /// dedup_delay、尾巴收帧、循环块，差异只有帧内容来源（合成 vs 真实屏幕）
+    #[test]
+    #[ignore = "体积基准手跑（约 20s 逐帧量化），日常 CI 不跑"]
     fn dedup_size_benchmark() {
         // 场景 = 480×300 选区 @12fps 录 10s（120 帧，间隔 83ms）：
-        // A 静止为主（教程典型：约每 7 帧一次变化） / B 全程动态（逐帧变化）
+        // A 静止为主（教程典型：每 7 帧一次变化）/ B 局部动态（色块逐帧
+        // 移动 = 光标/拖选语义）/ C 全帧动态（逐帧全幅重噪声 = 视频语义）
         let (w, h) = (480u16, 300u16);
         let interval = 1000 / 12u64;
         let total = 120usize;
@@ -1297,13 +1755,24 @@ mod tests {
             }
         }
         // 帧序列：every = 变化间隔帧数；变化帧 = 移动 24×24 色块（擦除式
-        // 重画，同光标/弹窗语义），其余帧与当前内容逐字节相同
-        let make_frames = |every: usize| -> Vec<Vec<u8>> {
+        // 重画）；renoise = 变化帧全幅重生成噪声（全帧动态语义）
+        let mut make_frames = |every: usize, renoise: bool| -> Vec<Vec<u8>> {
             let mut out = Vec::with_capacity(total);
             let mut cur = base.clone();
             for i in 0..total {
                 if i % every == 0 {
-                    let mut f = base.clone();
+                    let mut f = if renoise {
+                        let mut f = vec![0u8; w as usize * h as usize * 4];
+                        for px in f.as_mut_slice().as_chunks_mut::<4>().0 {
+                            px[0] = next_px();
+                            px[1] = next_px();
+                            px[2] = next_px();
+                            px[3] = 255;
+                        }
+                        f
+                    } else {
+                        base.clone()
+                    };
                     let bx = (i as u32 * 5) % (u32::from(w) - 48);
                     let by = (i as u32 * 3) % (u32::from(h) - 48);
                     for y in by..by + 24 {
@@ -1321,86 +1790,90 @@ mod tests {
             }
             out
         };
-        // 编码模拟（dedup = 新管线；否则旧管线逐帧全写）
-        let encode = |frames: &[Vec<u8>], dedup: bool| -> (usize, u32) {
+        // 旧管线：逐帧全写（2026-11-19 初版口径）
+        let encode_full = |frames: &[Vec<u8>]| -> (usize, u32) {
             let mut buf: Vec<u8> = Vec::new();
             let mut enc = gif::Encoder::new(&mut buf, w, h, &[]).unwrap();
             enc.set_repeat(gif::Repeat::Infinite).unwrap();
-            let mut prev: Option<Vec<u8>> = None;
-            let mut last_written = 0u64;
             let mut frames_n = 0u32;
-            for (i, f) in frames.iter().enumerate() {
-                let now = (i as u64 + 1) * interval;
+            for f in frames {
                 let mut rgba = f.clone();
-                let is_dup = prev.as_deref() == Some(rgba.as_slice());
-                let delay_ms = if dedup {
-                    match dedup_delay(is_dup, Some(now - last_written), interval) {
-                        Some(d) => d,
-                        None => continue, // 静止帧剔除
-                    }
-                } else {
-                    interval
-                };
-                if !is_dup {
-                    prev = Some(rgba.clone());
-                }
                 let mut g = gif::Frame::from_rgba_speed(
                     w,
                     h,
                     &mut rgba,
                     quant_speed(u32::from(w) * u32::from(h)),
                 );
-                g.delay = gif_delay_cs(delay_ms);
+                g.delay = gif_delay_cs(interval);
                 enc.write_frame(&g).unwrap();
                 frames_n += 1;
-                last_written = now;
-            }
-            // 尾巴收帧（新管线口径）
-            if dedup {
-                let tail = total as u64 * interval - last_written;
-                if tail >= 100 {
-                    if let Some(mut p) = prev.take() {
-                        let mut g = gif::Frame::from_rgba_speed(
-                            w,
-                            h,
-                            &mut p,
-                            quant_speed(u32::from(w) * u32::from(h)),
-                        );
-                        g.delay = gif_delay_cs(tail);
-                        enc.write_frame(&g).unwrap();
-                        frames_n += 1;
-                    }
-                }
             }
             drop(enc);
             (buf.len(), frames_n)
         };
-        let frames_a = make_frames(7);
-        let frames_b = make_frames(1);
-        let (old_a, fa) = encode(&frames_a, false);
-        let (new_a, na) = encode(&frames_a, true);
-        let (old_b, fb) = encode(&frames_b, false);
-        let (new_b, nb) = encode(&frames_b, true);
-        println!(
-            "场景 A 静止为主（10s@12fps，每 7 帧一变）：{} KB / {} 帧 → {} KB / {} 帧（体积 -{}%）",
-            old_a / 1024,
-            fa,
-            new_a / 1024,
-            na,
-            100 - (new_a * 100 / old_a)
-        );
-        println!(
-            "场景 B 全程动态（10s@12fps，逐帧变化）：{} KB / {} 帧 → {} KB / {} 帧（体积 {}{}%）",
-            old_b / 1024,
-            fb,
-            new_b / 1024,
-            nb,
-            if new_b <= old_b { "-" } else { "+" },
-            old_b.abs_diff(new_b) * 100 / old_b
-        );
-        // 断言：静止场景剔除收益过半；动态场景不劣化（>5% 即回归）
+        // 新管线：生产 DeltaEncoder 原样（三层跳帧 + 子矩形 + keepalive）
+        let encode_delta = |frames: &[Vec<u8>]| -> (usize, u32) {
+            let mut buf: Vec<u8> = Vec::new();
+            let enc = gif::Encoder::new(&mut buf, w, h, &[]).unwrap();
+            let mut delta = DeltaEncoder::new(enc, w, h);
+            let mut last_written = 0u64;
+            let mut frames_n = 0u32;
+            for (i, f) in frames.iter().enumerate() {
+                let now = (i as u64 + 1) * interval;
+                let mut rgba = f.clone();
+                let is_dup = delta.same_as_last(&rgba);
+                let since = Some(now.saturating_sub(last_written));
+                match dedup_delay(is_dup, since, interval) {
+                    Some(delay_ms) if is_dup => {
+                        delta.push_keepalive(gif_delay_cs(delay_ms)).unwrap();
+                        frames_n += 1;
+                        last_written = now;
+                    }
+                    Some(delay_ms) => {
+                        let kind = delta.push(&mut rgba, gif_delay_cs(delay_ms)).unwrap();
+                        if kind.is_written() {
+                            frames_n += 1;
+                            last_written = now;
+                        }
+                    }
+                    None => {}
+                }
+            }
+            let tail = total as u64 * interval - last_written;
+            if tail >= 100 {
+                delta.push_keepalive(gif_delay_cs(tail)).unwrap();
+                frames_n += 1;
+            }
+            drop(delta);
+            (buf.len(), frames_n)
+        };
+        let frames_a = make_frames(7, false);
+        let frames_b = make_frames(1, false);
+        let frames_c = make_frames(1, true);
+        let (old_a, fa) = encode_full(&frames_a);
+        let (new_a, na) = encode_delta(&frames_a);
+        let (old_b, fb) = encode_full(&frames_b);
+        let (new_b, nb) = encode_delta(&frames_b);
+        let (old_c, fc) = encode_full(&frames_c);
+        let (new_c, nc) = encode_delta(&frames_c);
+        let report = |name: &str, old: usize, fo: u32, new: usize, fnw: u32| {
+            println!(
+                "{name}（10s@12fps）：{} KB / {} 帧 → {} KB / {} 帧（体积 {}{}%）",
+                old / 1024,
+                fo,
+                new / 1024,
+                fnw,
+                if new <= old { "-" } else { "+" },
+                old.abs_diff(new) * 100 / old
+            );
+        };
+        report("场景 A 静止为主（每 7 帧一变）", old_a, fa, new_a, na);
+        report("场景 B 局部动态（色块逐帧移动）", old_b, fb, new_b, nb);
+        report("场景 C 全帧动态（逐帧重噪声）", old_c, fc, new_c, nc);
+        // 断言：静止/局部动态省过半；全帧动态不劣化（>5% 即回归）
         assert!(new_a < old_a / 2, "静止场景应省过半体积");
-        assert!(new_b * 20 < old_b * 21, "动态场景不应明显变大");
+        assert!(new_b < old_b / 2, "局部动态场景子帧应省过半体积");
+        assert!(new_c * 20 < old_c * 21, "全帧动态场景不应明显变大");
     }
 
     #[test]
