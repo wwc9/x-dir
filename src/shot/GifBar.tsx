@@ -6,10 +6,12 @@
 // 保存/取消；生成中 = 完成后若开启进度条，逐帧合成期间禁操作，结束后结果窗
 // 接管。进度经 shot-gif-progress 事件（≥1s 一发，paused 字段同步暂停态）
 // 实时刷新；状态跃迁经 shot-gif-phase 事件（Rust 侧 start 处理/后处理开始
-// 时下发）。窗口几何由 Rust 侧决定（宽 560 容按钮组：暂停/保存/取消 +
-// fps/进度条/指针 三 chip；2026-11-20 反馈 310 时「开始录制」被窗缘裁掉）。
-// 指针 chip = 录制画面叠加鼠标光标（Rust GetCursorInfo+GetDIBits 解码
-// SrcOver 叠画，待命/录制可切下一帧起生效，市场惯例默认开）。
+// 时下发）。窗口几何由 Rust 侧决定（宽 640 容按钮组：暂停/保存/取消 +
+// fps/进度条/指针/停顿 四 chip；2026-11-20 反馈 310 时「开始录制」被窗缘
+// 裁掉）。指针 chip = 录制画面叠加鼠标光标（Rust GetCursorInfo+GetDIBits
+// 解码 SrcOver 叠画，待命/录制可切下一帧起生效，市场惯例默认开）。
+// 停顿 chip = 静止段回放保留秒数（2026-11-20 用户需求「录制前可设置」，
+// Rust 收尾静止段压缩读取 GIF_STATIC_KEEP，keep:N 动作循环 1/2/3/5/10）。
 // ⚠ busy 只作防双击：命令回执即复位（2026-11-20 用户反馈「点开始后无法
 // 退出」根因——start 成功后 busy 恒 true，录制态按钮全 disabled 且键盘
 // 通路被拦）。真正的状态权威是 Rust 侧 phase/progress 事件。
@@ -28,11 +30,15 @@ export interface GifBarBoot {
   barOn: boolean;
   /** 鼠标指针叠画开关初值（待命/录制中可切，下一帧起生效） */
   cursorOn: boolean;
+  /** 静止段保留秒数初值（待命/录制中可设，收尾压缩时生效） */
+  staticKeep: number;
 }
 
 type GifPhase = "ready" | "recording" | "processing";
 
 const FPS_CYCLE = [8, 12, 15] as const;
+/** 静止段保留秒数循环档（停顿回放最多 N 秒） */
+const KEEP_CYCLE = [1, 2, 3, 5, 10] as const;
 const fmtBytes = (n: number) =>
   n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)}MB` : `${Math.max(1, Math.round(n / 1024))}KB`;
 const fmtSecs = (s: number) =>
@@ -43,6 +49,7 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
   const [fps, setFps] = useState(boot.fps);
   const [barOn, setBarOn] = useState(boot.barOn);
   const [cursorOn, setCursorOn] = useState(boot.cursorOn);
+  const [staticKeep, setStaticKeep] = useState(boot.staticKeep);
   const [phase, setPhase] = useState<GifPhase>("ready");
   const [paused, setPaused] = useState(false);
   const [secs, setSecs] = useState(0);
@@ -65,12 +72,13 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
   }, []);
 
   useEffect(() => {
-    const un = listen<{ fps: number; barOn?: boolean; cursorOn?: boolean }>(
+    const un = listen<{ fps: number; barOn?: boolean; cursorOn?: boolean; staticKeep?: number }>(
       "shot-gif-bar-boot",
       (e) => {
         setFps(e.payload.fps);
         if (typeof e.payload.barOn === "boolean") setBarOn(e.payload.barOn);
         if (typeof e.payload.cursorOn === "boolean") setCursorOn(e.payload.cursorOn);
+        if (typeof e.payload.staticKeep === "number") setStaticKeep(e.payload.staticKeep);
         setPhase("ready");
         setPaused(false);
         setSecs(0);
@@ -112,7 +120,8 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
         | "resume"
         | `fps:${8 | 12 | 15}`
         | `bar:${"on" | "off"}`
-        | `cursor:${"on" | "off"}`,
+        | `cursor:${"on" | "off"}`
+        | `keep:${number}`,
     ) => {
       if (busy) return;
       if (action === "start" || action === "finish" || action === "cancel") setBusy(true);
@@ -146,6 +155,13 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
       .shotGifControl(`cursor:${next ? "on" : "off"}`)
       .catch(() => setCursorOn(!next));
   }, [cursorOn]);
+
+  /** 静止段保留秒数（待命/录制中可设，收尾压缩时生效）：循环 1→2→3→5→10→1 */
+  const cycleKeep = useCallback(() => {
+    const next = KEEP_CYCLE[(KEEP_CYCLE.indexOf(staticKeep as 1 | 2 | 3 | 5 | 10) + 1) % KEEP_CYCLE.length];
+    setStaticKeep(next);
+    void api.shotGifControl(`keep:${next}`).catch(() => undefined);
+  }, [staticKeep]);
 
   /** 暂停/继续（录制中即时生效：暂停不抓帧、计时冻结；本地先换面，
    *  Rust 跃迁进度事件回填权威态） */
@@ -205,6 +221,15 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
           onClick={toggleBar}
         >
           进度条 {barOn ? "开" : "关"}
+        </button>
+      )}
+      {phase !== "processing" && (
+        <button
+          className="np-shot-gbar-fps"
+          data-tip="录制中的停顿回放最多保留的秒数（点击切换，保存时生效）"
+          onClick={cycleKeep}
+        >
+          停顿 {staticKeep}s
         </button>
       )}
       {phase !== "processing" && (

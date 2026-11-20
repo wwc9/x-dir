@@ -61,6 +61,10 @@ static GIF_PAUSED: AtomicBool = AtomicBool::new(false);
 /// 鼠标指针叠画开关（2026-11-20 用户需求「指针录制」，市场惯例默认开——
 /// ScreenToGif/ShareX 教程场景光标刚需）：待命/录制中可切，下一帧起生效
 static GIF_CURSOR: AtomicBool = AtomicBool::new(true);
+/// 静止段压缩保留秒数（2026-11-20 用户需求「录制前可设置」）：待命/录制中
+/// 浮条「停顿 Ns」chip 可设（keep:N 动作），收尾静止段压缩时读取——每帧
+/// 兜底帧 ≈1s 静止，保留 N 帧 = 停顿回放最多 N 秒
+static GIF_STATIC_KEEP: AtomicU32 = AtomicU32::new(DEFAULT_STATIC_KEEP);
 /// 当前帧率档（待命/录制中均可切，下一帧起生效）
 static GIF_FPS: AtomicU32 = AtomicU32::new(FPS_DEFAULT);
 /// 底部进度条开关（2026-11-19 用户定案：待命态可选，开启则导出后对 GIF
@@ -147,10 +151,13 @@ const DELTA_FULL_BOX_RATIO: f64 = 0.7;
 /// 子帧调色板匹配质量阈值：真变像素到旧调色板的平均平方距离（3 通道平方
 /// 和，≈每通道均差 24）超过即视为调色板陈旧 → 回退全帧重建
 const DELTA_MAX_MEAN_DIST2: u64 = 1728;
-/// 静止段压缩保留帧数（2026-11-20 用户第二轮定案「重复 2 帧以上才删除，
-/// 2 帧以内保留」）：连续兜底帧段 ≤2 = 完整保留真实时长；>2 = 保留段首
-/// 2 帧（段呈现 2s）删掉其余——短停顿节奏真实，长停顿不至于拖沓
-const STATIC_RUN_KEEP: usize = 2;
+/// 静止段压缩保留秒数默认值（2026-11-20 用户第二轮定案「重复 2 帧以上才
+/// 删除，2 帧以内保留」）：连续兜底帧段 ≤keep = 完整保留真实时长；>keep =
+/// 保留段首 keep 帧（段呈现 keep 秒）删掉其余。录制前浮条「停顿 Ns」chip
+/// 可设（keep:N 控制动作，GIF_STATIC_KEEP 会话原子，收尾压缩时读取）
+const DEFAULT_STATIC_KEEP: u32 = 2;
+/// 静止段压缩保留秒数上限（防误设超大值失去压缩意义）
+const STATIC_KEEP_MAX: u32 = 60;
 
 /// 写入帧类别（循环据此计帧/合并延迟；基准测试与单测同口径断言）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -484,10 +491,10 @@ fn scan_gif_frames(data: &[u8]) -> Option<Vec<RawFrameBlock>> {
 }
 
 /// 连续 keepalive 段压缩（2026-11-20 用户第二轮定案「重复 2 帧以上才删除，
-/// 2 帧以内保留」——初版段首单帧的 ≤1s 压缩把停顿压得太狠，回放显快进）：
-/// 段内兜底帧 ≤2 = 完整保留真实时长；>2 = 保留段首 2 帧（静止段呈现 2s）
+/// 2 帧以内保留」+ 第三轮「保留秒数录制前可设」）：段内兜底帧 ≤keep = 完整
+/// 保留真实时长；>keep = 保留段首 keep 帧（段呈现 keep 秒，每帧 ≈1s 静止）
 /// 删掉其余。其余字节原样。解析异常 = 原样返回
-fn compress_keepalive_runs(data: &[u8]) -> Vec<u8> {
+fn compress_keepalive_runs(data: &[u8], keep_frames: usize) -> Vec<u8> {
     let Some(frames) = scan_gif_frames(data) else {
         return data.to_vec();
     };
@@ -505,14 +512,14 @@ fn compress_keepalive_runs(data: &[u8]) -> Vec<u8> {
             idx += 1;
             continue;
         }
-        // keepalive 段：段内 ≤STATIC_RUN_KEEP 全保留（真实时长），>则保留段
-        // 首 STATIC_RUN_KEEP 帧删掉其余（段呈现 = 2s）
+        // keepalive 段：段内 ≤keep 帧全保留（真实时长），>则保留段首 keep 帧
+        // （段呈现 = keep 秒）；段尾不足 1s 的尾段帧同为兜底帧一并按段处理
         let mut run = idx + 1;
         while run < frames.len() && frames[run].is_keepalive {
             run += 1;
         }
         let run_len = run - idx;
-        let keep = run_len.min(STATIC_RUN_KEEP);
+        let keep = run_len.min(keep_frames.max(1));
         for k in 0..keep {
             let fr = &frames[idx + k];
             out.extend_from_slice(&data[fr.start..fr.end]);
@@ -595,6 +602,7 @@ pub fn shot_gif_begin(
     GIF_BAR.store(true, Ordering::Relaxed);
     GIF_PAUSED.store(false, Ordering::Relaxed);
     GIF_CURSOR.store(true, Ordering::Relaxed);
+    GIF_STATIC_KEEP.store(DEFAULT_STATIC_KEEP, Ordering::Relaxed);
     GIF_ACTIVE.store(true, Ordering::Relaxed);
     // 覆盖窗停靠（异步消息，必须等真正摘屏才能建窗——蒙层在场时 build()
     // 泵消息永久卡死，滚动截图同款坑在案），拆两段命令由前端顺序调用
@@ -654,10 +662,12 @@ pub fn shot_gif_launch(app: AppHandle) -> Result<(), String> {
             "shot-gif-bar-boot",
             serde_json::json!({
                 "fps": GIF_FPS.load(Ordering::Relaxed),
-                // barOn/cursorOn 全量随发：常驻窗复用时前端 chip 与 Rust 复位
-                // 值对齐（begin 已复位，事件缺省会让前端保留上一场切换值）
+                // barOn/cursorOn/staticKeep 全量随发：常驻窗复用时前端 chip 与
+                // Rust 复位值对齐（begin 已复位，事件缺省会让前端保留上一场
+                // 切换值）
                 "barOn": GIF_BAR.load(Ordering::Relaxed),
                 "cursorOn": GIF_CURSOR.load(Ordering::Relaxed),
+                "staticKeep": GIF_STATIC_KEEP.load(Ordering::Relaxed),
             }),
         );
         let reuse = app2.get_webview_window("shot-frame").is_some()
@@ -1001,7 +1011,10 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
     if !cancelled && !aborted {
         match std::fs::read(&path) {
             Ok(data) => {
-                let compressed = compress_keepalive_runs(&data);
+                let compressed = compress_keepalive_runs(
+                    &data,
+                    GIF_STATIC_KEEP.load(Ordering::Relaxed) as usize,
+                );
                 if compressed.len() < data.len() {
                     match std::fs::write(&path, &compressed) {
                         Ok(()) => log::info!(
@@ -1247,6 +1260,15 @@ pub fn shot_gif_control(action: String) -> Result<(), String> {
     // 鼠标指针叠画开关（待命/录制中可切，下一帧起生效）
     if let Some(on) = action.strip_prefix("cursor:") {
         GIF_CURSOR.store(on == "on", Ordering::Relaxed);
+        return Ok(());
+    }
+    // 静止段保留秒数（待命/录制中可设，收尾压缩时生效）：每秒一拍兜底帧
+    // 下保留 N 帧 = 停顿回放最多 N 秒
+    if let Some(keep) = action
+        .strip_prefix("keep:")
+        .and_then(|s| s.parse::<u32>().ok())
+    {
+        GIF_STATIC_KEEP.store(keep.clamp(1, STATIC_KEEP_MAX), Ordering::Relaxed);
         return Ok(());
     }
     match action.as_str() {
@@ -1579,21 +1601,21 @@ fn show_mask_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
     win.show().map_err(|e| e.to_string())
 }
 
-/// 录制浮条：停靠选区正下方（bar_layout_sized 定位同滚动；宽度 560——
-/// GIF 按钮组含 暂停/保存/取消 + fps/进度条/指针 三 chip，固定 310 时
-/// 「开始录制」被窗缘裁掉、480 时加指针 chip 后暂停态偏紧（2026-11-20
-/// 用户反馈），定位算法单一来源），持有焦点使 Enter/Esc 生效；boot 换装
-/// gifbar（常驻窗复用同款）
+/// 录制浮条：停靠选区正下方（bar_layout_sized 定位同滚动；宽度 640——
+/// GIF 按钮组含 暂停/保存/取消 + fps/进度条/指针/停顿 四 chip，560 时待命
+/// 态放不下（2026-11-20 用户需求「停顿保留秒数录制前可设」入列），定位算
+/// 法单一来源），持有焦点使 Enter/Esc 生效；boot 换装 gifbar（常驻窗复用
+/// 同款）
 fn show_gif_bar_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
     let mon = &geo.mon;
     let s = f64::from(mon.scale);
     let (bx, by, bw, bh) = super::shot_scroll::bar_layout_sized(
         (geo.rx as i32, geo.ry as i32, geo.rw as i32, geo.rh as i32),
         mon,
-        (560.0 * s).round() as i32,
+        (640.0 * s).round() as i32,
         (44.0 * s).round() as i32,
     );
-    let boot = serde_json::json!({ "window": "gifbar", "fps": GIF_FPS.load(Ordering::Relaxed), "barOn": GIF_BAR.load(Ordering::Relaxed), "cursorOn": GIF_CURSOR.load(Ordering::Relaxed) });
+    let boot = serde_json::json!({ "window": "gifbar", "fps": GIF_FPS.load(Ordering::Relaxed), "barOn": GIF_BAR.load(Ordering::Relaxed), "cursorOn": GIF_CURSOR.load(Ordering::Relaxed), "staticKeep": GIF_STATIC_KEEP.load(Ordering::Relaxed) });
     let win = match app.get_webview_window("shot-bar") {
         Some(w) => w,
         None => WebviewWindowBuilder::new(app, "shot-bar", WebviewUrl::App("shot.html".into()))
@@ -1861,7 +1883,7 @@ mod tests {
         d.push_keepalive(cs(100)).unwrap();
         d.push_keepalive(cs(50)).unwrap();
         drop(d);
-        let compressed = compress_keepalive_runs(&buf);
+        let compressed = compress_keepalive_runs(&buf, 2);
         println!("原始 {} B → 压缩 {} B", buf.len(), compressed.len());
         assert!(compressed.len() < buf.len(), "应删掉段内兜底帧字节");
         let mut dec = gif::Decoder::new(&compressed[..]).unwrap();
@@ -1887,7 +1909,7 @@ mod tests {
         d2.push_keepalive(cs(100)).unwrap();
         d2.push(&mut g, cs(5)).unwrap();
         drop(d2);
-        let compressed2 = compress_keepalive_runs(&buf2);
+        let compressed2 = compress_keepalive_runs(&buf2, 2);
         assert_eq!(compressed2.len(), buf2.len(), "2 帧以内的段应原样保留");
     }
 
@@ -1994,7 +2016,8 @@ mod tests {
         println!("总帧数 {idx}，总时长 {total_ms}ms");
         // 静止段压缩预览（只统计不写回）：帧数与总时长变化
         let data = std::fs::read(&path).unwrap_or_else(|e| panic!("读取失败：{e}"));
-        let compressed = compress_keepalive_runs(&data);
+        let compressed =
+            compress_keepalive_runs(&data, GIF_STATIC_KEEP.load(Ordering::Relaxed) as usize);
         println!(
             "静止段压缩：{} → {} B（-{}%）",
             data.len(),
