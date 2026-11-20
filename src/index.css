@@ -7545,8 +7545,10 @@ body.np-col-resizing * {
   box-sizing: border-box;
 }
 /* 宽度由缩放状态内联控制；窄于视口时 margin 居中、宽于视口时自然溢出滚动
-   （flex 居中会在溢出方向裁掉左侧，不能用） */
-.np-shot-result-view img {
+   （flex 居中会在溢出方向裁掉左侧，不能用）；canvas = GifPlayer 播放器
+   （属性宽高 = GIF 物理像素，CSS width 缩放，高度按内在比例自动） */
+.np-shot-result-view img,
+.np-shot-result-view canvas {
   display: block;
   margin: 0 auto;
   height: auto;

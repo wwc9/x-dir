@@ -296,7 +296,14 @@ fn init_encoder(
     h16: u16,
 ) -> Result<gif::Encoder<&mut std::io::BufWriter<std::fs::File>>, String> {
     // 全局调色板传空 = 逐帧局部调色板（from_rgba_speed 每帧独立 palette）
-    gif::Encoder::new(writer, w16, h16, &[]).map_err(|e| format!("GIF 录制编码器初始化失败：{e}"))
+    let mut encoder = gif::Encoder::new(writer, w16, h16, &[])
+        .map_err(|e| format!("GIF 录制编码器初始化失败：{e}"))?;
+    // NETSCAPE2.0 无限循环块（2026-11-20 用户反馈「预览要支持播放」根因：
+    // 缺省不写循环扩展 → 浏览器只播一遍，结果窗等合成弹出时已播完呈静止）
+    encoder
+        .set_repeat(gif::Repeat::Infinite)
+        .map_err(|e| format!("GIF 录制设置循环播放失败：{e}"))?;
+    Ok(encoder)
 }
 
 /// 录制循环：按当前 fps 节奏抓帧 → 量化 → 流式写盘；控制标志/时长上限/
@@ -699,6 +706,10 @@ fn encode_with_bar(
         let bar_h = u16::try_from(PROGRESS_BAR_H.min(u32::from(gh))).unwrap_or(0);
         let mut encoder = gif::Encoder::new(writer, gw, gh + bar_h, &[])
             .map_err(|e| format!("进度条编码器失败：{e}"))?;
+        // 循环块随合成重编码重写（漏写 = 合成后的 GIF 不循环，同上）
+        encoder
+            .set_repeat(gif::Repeat::Infinite)
+            .map_err(|e| format!("进度条设置循环播放失败：{e}"))?;
         let mut i: u32 = 0;
         while let Some(frame) = dec
             .read_next_frame()
@@ -1115,14 +1126,19 @@ fn show_gif_result_window(
     h: u32,
 ) -> Result<(), String> {
     let s = f64::from(mon.scale);
-    let pad = (24.0 * s).round();
-    // GIF 首帧宽 = 结果窗宽度依据（原始尺寸定案：窗宽钳 62% 屏宽）
-    let ww = ((f64::from(w) + pad * 2.0)
-        .min(f64::from(mon.w) * 0.62)
-        .max(520.0 * s))
-    .min(f64::from(mon.w) - 32.0)
-    .round() as i32;
-    let wh = (f64::from(mon.h) * 0.8).round() as i32;
+    // 适配 GIF 尺寸（2026-11-20 用户反馈「预览界面要适合 gif 尺寸」：旧版
+    // 高度恒取 80% 屏高，矮 GIF 留大片空白）。内容 = 图（CSS 像素 = 物理/
+    // scale）+ 视口 padding 24 + 状态条 ~43；宽钳 [520s, 屏宽-32]，高钳
+    // [160, 屏高-120]（含标题栏/任务栏余量）；钳小后靠前端初始缩放适配
+    let view_pad = 24.0; // .np-shot-result-view padding 12×2
+    let bar_h = 43.0; // .np-shot-result-bar 高（8×2 padding + 26 按钮 + 1 发丝线）
+    let css_w = f64::from(w) / s + view_pad + 2.0; // +2 滚动条余量
+    let css_h = f64::from(h) / s + view_pad + bar_h;
+    let ww = ((css_w * s).round() as i32).clamp(
+        (520.0 * s).round() as i32,
+        (mon.w as i32 - 32).max((520.0 * s) as i32),
+    );
+    let wh = ((css_h * s).round() as i32).clamp(160, (mon.h as i32 - 120).max(160));
     let boot = serde_json::json!({
         "window": "result",
         "file": file.to_string_lossy(),
@@ -1340,5 +1356,23 @@ mod tests {
         }
         assert_eq!(delays.len(), 2, "应有两帧");
         assert_eq!(delays, vec![8u16, 13u16], "帧延迟应逐帧保留");
+    }
+
+    #[test]
+    fn encoder_writes_netscape_loop_block() {
+        // 循环播放扩展（NETSCAPE2.0，2026-11-20「预览要支持播放」根因修复）：
+        // set_repeat(Infinite) 必须在写帧前调用 → 产物含循环块，浏览器无限
+        // 循环；漏写 = 只播一遍呈静止帧
+        let mut buf: Vec<u8> = Vec::new();
+        let mut enc = gif::Encoder::new(&mut buf, 4, 4, &[]).unwrap();
+        enc.set_repeat(gif::Repeat::Infinite).unwrap();
+        let mut rgba = vec![255u8; 4 * 4 * 4];
+        let frame = gif::Frame::from_rgba_speed(4, 4, &mut rgba, 10);
+        enc.write_frame(&frame).unwrap();
+        drop(enc);
+        assert!(
+            buf.windows(11).any(|w| w == b"NETSCAPE2.0"),
+            "GIF 应含 NETSCAPE2.0 循环块"
+        );
     }
 }

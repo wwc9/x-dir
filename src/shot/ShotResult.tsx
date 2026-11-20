@@ -4,16 +4,32 @@
 // 底部工具条缩放 / 贴图 / 复制 / 保存 / 关闭。截断（动态内容中断或高度上限）
 // 时顶部提示条说明。长图文件由 Rust 侧在本窗销毁时清理；贴图会先在 Rust 侧
 // 复制专属副本，不受本窗清理影响。
-// GIF 录制分支（2026-11-19，boot.kind = "gif"）：img 原生播放动画；复制
-// （动画无位图语义）/ 贴图（静态窗）不适用 → 按钮组换「打开所在文件夹 +
-// 保存（.gif 过滤器）」；保存传 kind="gif" 走 GIF 过滤器与默认名。
+// GIF 录制分支（2026-11-19，boot.kind = "gif"）：复制（动画无位图语义）/
+// 贴图（静态窗）不适用 → 按钮组换「打开所在文件夹 + 保存（.gif 过滤器）」；
+// 保存传 kind="gif" 走 GIF 过滤器与默认名。播放控制（2026-11-20 用户需求
+// 「预览支持播放」）：WebView2 有 ImageDecoder 时走 GifPlayer Canvas 播放器
+// （暂停/恢复不重头，空格或按钮），缺失回退 <img> 原生动画；初始缩放整体
+// 适配（高也进视口，配合 Rust 侧按 GIF 尺寸开窗），长图仍只适配宽（定案）。
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Check, Copy, FolderOpen, Maximize, Pin, Save, X, ZoomIn, ZoomOut } from "lucide-react";
+import {
+  Check,
+  Copy,
+  FolderOpen,
+  Maximize,
+  Pause,
+  Pin,
+  Play,
+  Save,
+  X,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 
 import { api } from "../lib/ipc";
 import { AppIcon } from "../components/AppIcon";
+import { GifPlayer } from "./GifPlayer";
 
 export interface ResultBoot {
   window: "result";
@@ -38,15 +54,28 @@ export function ShotResult({ boot }: { boot: ResultBoot }) {
   const [tip, setTip] = useState<string | null>(null);
   /** 缩放倍率（1 = 物理像素 1:1 的 CSS 观感尺寸）；null = 待首帧量视口 */
   const [zoom, setZoom] = useState<number | null>(null);
+  /** GIF 播放状态（GifPlayer Canvas 播放器；暂停停当前帧、恢复不重头） */
+  const [playing, setPlaying] = useState(true);
+  /** GIF 帧数（ImageDecoder tracks 回执，状态条展示） */
+  const [frameCount, setFrameCount] = useState<number | null>(null);
   const viewRef = useRef<HTMLDivElement>(null);
   /** 图的 CSS 自然宽 = 物理宽 / DPI（结果窗缩放随窗口所在显示器） */
   const naturalCss = boot.w / window.devicePixelRatio;
+  const naturalH = boot.h / window.devicePixelRatio;
+  /** WebView2 内置 GIF 逐帧解码器（缺失回退 img 原生动画） */
+  const hasDecoder = typeof window.ImageDecoder === "function";
+  const gifPlayable = isGif && hasDecoder;
 
-  // 初始 = min(100%, 适配视口宽)
+  // 初始 = min(100%, 适配视口宽)；GIF 分支整体适配（高也进视口，配合 Rust
+  // 按 GIF 尺寸开窗；钳小窗不滚动），长图保持只适配宽（2026-10-29 定案）
   useLayoutEffect(() => {
     const v = viewRef.current;
-    if (v) setZoom(Math.min(1, (v.clientWidth - 24) / naturalCss));
-  }, [naturalCss]);
+    if (v) {
+      const fitW = (v.clientWidth - 24) / naturalCss;
+      const fitH = gifPlayable ? (v.clientHeight - 24) / naturalH : Infinity;
+      setZoom(Math.min(1, fitW, fitH));
+    }
+  }, [naturalCss, naturalH, gifPlayable]);
 
   // Ctrl+滚轮缩放（视口层非被动监听才能 preventDefault 拦下浏览器整页缩放）
   useEffect(() => {
@@ -65,11 +94,21 @@ export function ShotResult({ boot }: { boot: ResultBoot }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") void win.close().catch(() => undefined);
+      if (e.key === "Escape") {
+        void win.close().catch(() => undefined);
+      } else if (gifPlayable && e.key === " ") {
+        e.preventDefault();
+        setPlaying((p) => !p);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gifPlayable]);
+
+  /** 首帧/加载就绪回执：Rust 此时才 show（提前 show 闪黑屏） */
+  const handleReady = useCallback(() => {
+    void api.shotReady().catch(() => undefined);
   }, []);
 
   const fitWidth = useCallback(() => {
@@ -120,20 +159,46 @@ export function ShotResult({ boot }: { boot: ResultBoot }) {
         </div>
       )}
       <div ref={viewRef} className="np-shot-result-view">
-        <img
-          src={convertFileSrc(boot.file)}
-          crossOrigin="anonymous"
-          alt={isGif ? "GIF 录制" : "滚动长图"}
-          draggable={false}
-          // 首帧就绪回执：Rust 此时才 show（提前 show 闪黑屏）
-          onLoad={() => void api.shotReady().catch(() => undefined)}
-          style={{ width: zoom === null ? undefined : naturalCss * zoom }}
-        />
+        {gifPlayable ? (
+          <GifPlayer
+            file={boot.file}
+            w={boot.w}
+            h={boot.h}
+            zoom={zoom}
+            naturalCss={naturalCss}
+            playing={playing}
+            onReady={handleReady}
+            onFrames={setFrameCount}
+          />
+        ) : (
+          <img
+            src={convertFileSrc(boot.file)}
+            crossOrigin="anonymous"
+            alt={isGif ? "GIF 录制" : "滚动长图"}
+            draggable={false}
+            // 首帧就绪回执：Rust 此时才 show（提前 show 闪黑屏）
+            onLoad={handleReady}
+            style={{ width: zoom === null ? undefined : naturalCss * zoom }}
+          />
+        )}
       </div>
       <div className="np-shot-result-bar">
         <span className="np-shot-result-dim">
           {boot.w.toLocaleString()} × {boot.h.toLocaleString()} px
+          {gifPlayable && frameCount !== null ? ` · ${frameCount.toLocaleString()} 帧` : ""}
         </span>
+        {gifPlayable && (
+          <button
+            className="np-shot-btn"
+            data-tip={playing ? "暂停动画（空格）" : "播放动画（空格）"}
+            data-kbd="Space"
+            disabled={busy !== ""}
+            onClick={() => setPlaying((p) => !p)}
+          >
+            <AppIcon icon={playing ? Pause : Play} />
+            {playing ? "暂停" : "播放"}
+          </button>
+        )}
         <button
           className="np-shot-btn"
           data-tip="缩小"
