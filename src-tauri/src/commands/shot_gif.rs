@@ -407,11 +407,14 @@ impl<W: std::io::Write> DeltaEncoder<W> {
 struct RawFrameBlock {
     start: usize,
     end: usize,
+    /// GCE 延迟字节位置（ext_start+4，无 GCE = None）——静止段压缩时原位
+    /// 改写段首帧延迟用
+    delay_at: Option<usize>,
     is_keepalive: bool,
 }
 
-/// 块级扫描（不解码像素）：1×1 + KEEPALIVE_DELAY_CS 双条件识别兜底帧。
-/// 解析异常 = None（调用方保守原样保留文件，同进度条失败策略）
+/// 块级扫描（不解码像素）：1×1 尺寸识别兜底帧。解析异常 = None（调用方
+/// 保守原样保留文件，同进度条失败策略）
 fn scan_gif_frames(data: &[u8]) -> Option<Vec<RawFrameBlock>> {
     if data.len() < 14 || &data[0..3] != b"GIF" {
         return None;
@@ -423,7 +426,7 @@ fn scan_gif_frames(data: &[u8]) -> Option<Vec<RawFrameBlock>> {
         i += 3 * (1usize << ((lsd_flags & 7) + 1)); // 全局色表
     }
     let mut frames = Vec::new();
-    let mut pending_gce: Option<(usize, u16)> = None; // (GCE 起始, delay)
+    let mut pending_gce: Option<(usize, usize)> = None; // (GCE 起始, 延迟字节位)
     loop {
         let Some(&b) = data.get(i) else {
             return None; // 缺 trailer
@@ -441,12 +444,8 @@ fn scan_gif_frames(data: &[u8]) -> Option<Vec<RawFrameBlock>> {
                         return None;
                     }
                     i += 1;
-                    let delay_lo = data.get(gce_data + 2)?;
-                    let delay_hi = data.get(gce_data + 3)?;
-                    pending_gce = Some((
-                        ext_start,
-                        u16::from(*delay_lo) | (u16::from(*delay_hi) << 8),
-                    ));
+                    // 延迟字节 = gce_data+2/+3（0x04 size flags 之后）
+                    pending_gce = Some((ext_start, gce_data + 2));
                 } else {
                     // 其他扩展：逐子块跳过
                     loop {
@@ -475,10 +474,14 @@ fn scan_gif_frames(data: &[u8]) -> Option<Vec<RawFrameBlock>> {
                         break;
                     }
                 }
-                let (gce_start, _delay) = pending_gce.take().unwrap_or((img_start, 0));
+                let (gce_start, delay_at) = pending_gce
+                    .take()
+                    .map(|(ext, pos)| (ext, Some(pos)))
+                    .unwrap_or((img_start, None));
                 frames.push(RawFrameBlock {
                     start: gce_start,
                     end: i,
+                    delay_at,
                     // 1×1 = 兜底帧唯一特征（尾巴分段帧延迟可能是尾段值而非
                     // 100cs，不能用延迟双条件；内容子帧盒最小也有数像素，
                     // 1×1 误判的最坏代价 = 丢一个单像素 ε 变化帧，可忽略）
@@ -490,14 +493,16 @@ fn scan_gif_frames(data: &[u8]) -> Option<Vec<RawFrameBlock>> {
     }
 }
 
-/// 连续 keepalive 段压缩（2026-11-20 用户第二轮定案「重复 2 帧以上才删除，
-/// 2 帧以内保留」+ 第三轮「保留秒数录制前可设」）：段内兜底帧 ≤keep = 完整
-/// 保留真实时长；>keep = 保留段首 keep 帧（段呈现 keep 秒，每帧 ≈1s 静止）
-/// 删掉其余。其余字节原样。解析异常 = 原样返回
-fn compress_keepalive_runs(data: &[u8], keep_frames: usize) -> Vec<u8> {
+/// 连续 keepalive 段压缩（2026-11-20 用户第三轮语义定案「重复帧保留 1 帧
+/// 就行，支持设置停顿几秒」）：每段只保留段首 1 帧，其 GCE 延迟**原位改写**
+/// 为设置的停顿秒数（×100cs）——段呈现时长精确可控、帧数最少；内容帧与其
+/// 余字节原样。解析异常 = 原样返回
+fn compress_keepalive_runs(data: &[u8], pause_seconds: u32) -> Vec<u8> {
     let Some(frames) = scan_gif_frames(data) else {
         return data.to_vec();
     };
+    // 厘秒换算（控制动作已钳 1-60s；6000cs 远在 u16 上限内）
+    let pause_cs = pause_seconds.min(600).saturating_mul(100) as u16;
     let head_end = frames
         .first()
         .map(|f| f.start)
@@ -512,17 +517,22 @@ fn compress_keepalive_runs(data: &[u8], keep_frames: usize) -> Vec<u8> {
             idx += 1;
             continue;
         }
-        // keepalive 段：段内 ≤keep 帧全保留（真实时长），>则保留段首 keep 帧
-        // （段呈现 = keep 秒）；段尾不足 1s 的尾段帧同为兜底帧一并按段处理
+        // keepalive 段：只保留段首帧，延迟原位补丁为设置秒数；段尾不足 1s
+        // 的尾段帧同为兜底帧一并按段处理
         let mut run = idx + 1;
         while run < frames.len() && frames[run].is_keepalive {
             run += 1;
         }
-        let run_len = run - idx;
-        let keep = run_len.min(keep_frames.max(1));
-        for k in 0..keep {
-            let fr = &frames[idx + k];
-            out.extend_from_slice(&data[fr.start..fr.end]);
+        let first = &frames[idx];
+        match first.delay_at {
+            Some(pos) => {
+                let mut bytes = data[first.start..first.end].to_vec();
+                let at = pos - first.start;
+                bytes[at] = pause_cs as u8;
+                bytes[at + 1] = (pause_cs >> 8) as u8;
+                out.extend_from_slice(&bytes);
+            }
+            None => out.extend_from_slice(&data[first.start..first.end]),
         }
         idx = run;
     }
@@ -1011,10 +1021,8 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
     if !cancelled && !aborted {
         match std::fs::read(&path) {
             Ok(data) => {
-                let compressed = compress_keepalive_runs(
-                    &data,
-                    GIF_STATIC_KEEP.load(Ordering::Relaxed) as usize,
-                );
+                let compressed =
+                    compress_keepalive_runs(&data, GIF_STATIC_KEEP.load(Ordering::Relaxed));
                 if compressed.len() < data.len() {
                     match std::fs::write(&path, &compressed) {
                         Ok(()) => log::info!(
@@ -1860,9 +1868,8 @@ mod tests {
     #[test]
     fn compress_keepalive_runs_collapses_static_runs() {
         // 帧序列：全帧(8cs) + 兜底(100cs)×3 + 全帧(5cs) + 兜底(100cs)+(100cs)
-        // +(50cs 尾段) → 第二轮定案语义（重复 2 帧以上才删，2 帧以内保留）：
-        // 第一段 3 帧 >2 → 留段首 2 帧；第二段 3 帧 >2 → 留 2 帧（50cs 尾段
-        // 属段内被删）。输出 [8,100,100,5,100,100]，内容帧原样保留
+        // +(50cs 尾段) → 第三轮语义「每段只留 1 帧 + 延迟改写为设置秒数」：
+        // keep 2s → [8, 200, 5, 200]；keep 1s → [8, 100, 5, 100]。内容帧原样
         let mut buf: Vec<u8> = Vec::new();
         let enc = gif::Encoder::new(&mut buf, 4, 4, &[]).unwrap();
         let mut d = DeltaEncoder::new(enc, 4, 4);
@@ -1886,17 +1893,24 @@ mod tests {
         let compressed = compress_keepalive_runs(&buf, 2);
         println!("原始 {} B → 压缩 {} B", buf.len(), compressed.len());
         assert!(compressed.len() < buf.len(), "应删掉段内兜底帧字节");
-        let mut dec = gif::Decoder::new(&compressed[..]).unwrap();
-        let mut delays: Vec<u16> = Vec::new();
-        while let Some(frame) = dec.read_next_frame().unwrap() {
-            delays.push(frame.delay);
-        }
+        let delays_of = |bytes: &[u8]| {
+            let mut dec = gif::Decoder::new(bytes).unwrap();
+            let mut delays: Vec<u16> = Vec::new();
+            while let Some(frame) = dec.read_next_frame().unwrap() {
+                delays.push(frame.delay);
+            }
+            delays
+        };
         assert_eq!(
-            delays,
-            vec![cs(8), cs(100), cs(100), cs(5), cs(100), cs(100)],
-            "3 帧以上的段保留段首 2 帧"
+            delays_of(&compressed),
+            vec![cs(8), 200, cs(5), 200],
+            "每段留 1 帧，延迟改写为设置的停顿 2 秒"
         );
-        // 短段（≤2 帧重复）完整保留：全帧 + 兜底×2 + 全帧 → 逐帧原样
+        assert_eq!(
+            delays_of(&compress_keepalive_runs(&buf, 1)),
+            vec![cs(8), 100, cs(5), 100]
+        );
+        // 短段同样塌缩为 1 帧 + 设置延迟
         let mut buf2: Vec<u8> = Vec::new();
         let enc2 = gif::Encoder::new(&mut buf2, 4, 4, &[]).unwrap();
         let mut d2 = DeltaEncoder::new(enc2, 4, 4);
@@ -1907,10 +1921,18 @@ mod tests {
         d2.push(&mut g, cs(8)).unwrap();
         d2.push_keepalive(cs(100)).unwrap();
         d2.push_keepalive(cs(100)).unwrap();
+        d2.push_keepalive(cs(100)).unwrap();
+        // 末次捕获真实变化（否则 ViewerIdentical 判定不写帧）
+        for px in g.as_mut_slice().as_chunks_mut::<4>().0.iter_mut().take(4) {
+            px.copy_from_slice(&[240, 240, 10, 255]);
+        }
         d2.push(&mut g, cs(5)).unwrap();
         drop(d2);
-        let compressed2 = compress_keepalive_runs(&buf2, 2);
-        assert_eq!(compressed2.len(), buf2.len(), "2 帧以内的段应原样保留");
+        assert_eq!(
+            delays_of(&compress_keepalive_runs(&buf2, 3)),
+            vec![cs(8), 300, cs(5)],
+            "短段同样留 1 帧（停顿 3 秒），内容帧原样保留"
+        );
     }
 
     #[test]
@@ -2016,8 +2038,7 @@ mod tests {
         println!("总帧数 {idx}，总时长 {total_ms}ms");
         // 静止段压缩预览（只统计不写回）：帧数与总时长变化
         let data = std::fs::read(&path).unwrap_or_else(|e| panic!("读取失败：{e}"));
-        let compressed =
-            compress_keepalive_runs(&data, GIF_STATIC_KEEP.load(Ordering::Relaxed) as usize);
+        let compressed = compress_keepalive_runs(&data, GIF_STATIC_KEEP.load(Ordering::Relaxed));
         println!(
             "静止段压缩：{} → {} B（-{}%）",
             data.len(),
