@@ -1,9 +1,11 @@
 // GIF 录制（2026-11-19 新功能，§3.6 截图域增强）：框选区 → 覆盖窗停靠、
 // 弹录制浮条（label "shot-bar" 复用，boot 换装 gifbar）→ 循环线程按当前
-// fps 间隔 capture_region 实时抓选区 → 逐帧 NeuQuant 量化（gif crate
-// Frame::from_rgba_speed，palette 逐帧独立）→ gif::Encoder 流式写临时盘
-// （内存只持一帧，不囤整段）→ 完成（浮条/Enter/120s 上限）出结果窗
-// （保存 .gif / 打开所在文件夹），取消丢弃并删临时文件。
+// fps 间隔 capture_region 实时抓选区 → 智能剔除重复帧（2026-11-20：静止
+// 帧不写盘、时长并入下一变化帧延迟，2s 兜底补帧防超长延迟兼容问题，体积
+// 大降）→ 逐帧 NeuQuant 量化（gif crate Frame::from_rgba_speed，palette
+// 逐帧独立）→ gif::Encoder 流式写临时盘（内存只持一帧，不囤整段）→ 完成
+// （浮条/Enter/120s 上限）出结果窗（保存 .gif / 打开所在文件夹），取消
+// 丢弃并删临时文件。
 //
 // 结构完全镜像 shot_scroll.rs：两段式入口（begin 存载荷 + end_session 停靠、
 // launch 等停靠确认后建窗起循环——蒙层在场时 build() 泵消息卡死同款坑）；
@@ -34,6 +36,12 @@ const GIF_MAX_SECS: u64 = 120;
 /// 帧率三档（2026-11-19 用户定案：浮条可切，默认 12）
 const FPS_CHOICES: [u32; 3] = [8, 12, 15];
 const FPS_DEFAULT: u32 = 12;
+/// 重复帧剔除兜底上限（2026-11-20 用户需求「智能剔除重复帧」）：静止段不写
+/// 重复帧、时长并入下一变化帧延迟（GIF 静止 = 帧停留，视觉完全一致，体积
+/// 大降）；静止超过该上限补一帧重复帧，防个别播放器对超长延迟的兼容问题
+/// ——等效静止段最低 0.5fps 采样。用户提议的「重复帧保留 5fps」按延迟合并
+/// 口径放大为 2s 上限：视觉相同、体积收益 ~96% vs ~58%（口径见 features.md）
+const DUP_FLUSH_MS: u64 = 2000;
 /// 连续抓帧失败次数：有帧按完成收场（用已有帧出结果），无帧报错收场
 const BAD_CAPTURE_STREAK: u32 = 5;
 /// 选区下限（与滚动截图同款口径）
@@ -84,6 +92,22 @@ fn normalize_fps(fps: u32) -> u32 {
 /// 2（浏览器对 <2cs 按 10cs 处理的通行约定）
 fn gif_delay_cs(elapsed_ms: u64) -> u16 {
     u16::try_from((elapsed_ms / 10).max(2)).unwrap_or(u16::MAX)
+}
+
+/// 重复帧写入决策（纯函数，单测锁定 2026-11-20「智能剔除重复帧」）：
+/// `is_dup` = 本帧与上一写入帧精确等值；`since_written_ms` = 距上一写入帧
+/// 的毫秒数（None = 尚未写过帧）。返回 Some(delay_ms) = 写帧并采用该延迟，
+/// None = 跳过本帧（时长随后续帧延迟合并）。变化帧恒写：延迟 = 距上一写入
+/// 帧的真实间隔（静止段整段并入，回放节奏与录制所见一致），首帧用目标间隔；
+/// 重复帧仅静止达兜底上限时补一帧（延迟 = 上限，防超长延迟兼容问题）
+fn dedup_delay(is_dup: bool, since_written_ms: Option<u64>, target_ms: u64) -> Option<u64> {
+    if !is_dup {
+        return Some(since_written_ms.unwrap_or(target_ms));
+    }
+    match since_written_ms {
+        Some(ms) if ms >= DUP_FLUSH_MS => Some(DUP_FLUSH_MS),
+        _ => None,
+    }
 }
 
 /// NeuQuant 速度档（1 质量/30 速度）按帧像素数自适应：小窗走高质量档，
@@ -313,7 +337,6 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
         }
     };
     let mut next_tick = Instant::now();
-    let mut last_cap: Option<Instant> = None;
     let mut frames: u32 = 0;
     let mut bad_streak: u32 = 0;
     let mut last_emit = Instant::now();
@@ -324,6 +347,12 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
     let mut segment_start = Instant::now(); // 待命期不计入时长上限
     let mut recorded = Duration::ZERO;
     let mut was_paused = false;
+    let mut paused_at: Option<Instant> = None;
+    // 重复帧剔除（2026-11-20 用户需求）：上一写入帧的原始 RGBA 供精确比对
+    // （from_rgba_speed 原地消费捕获缓冲，须先克隆）+ 上一写入帧时刻 =
+    // 延迟合并与兜底节奏的时间基线
+    let mut prev_frame: Option<Vec<u8>> = None;
+    let mut last_written: Option<Instant> = None;
     log::info!(
         "GIF 录制循环进场（待命态）：选区 ({rx},{ry}) {rw}×{rh}，fps {}",
         GIF_FPS.load(Ordering::Relaxed)
@@ -365,6 +394,7 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
             if paused && !was_paused {
                 recorded += segment_start.elapsed();
                 was_paused = true;
+                paused_at = Some(Instant::now());
                 log::info!(
                     "GIF 录制：暂停（已录 {}s / {frames} 帧）",
                     recorded.as_secs()
@@ -384,8 +414,14 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
             } else if !paused && was_paused {
                 was_paused = false;
                 segment_start = Instant::now();
-                // 恢复首帧用目标间隔：暂停时长不得计进帧延迟（回放会卡一大拍）
-                last_cap = None;
+                // 暂停时长平移出帧写入基线：延迟合并与兜底节奏只计录制时间
+                //（否则恢复后首帧延迟会吞进整段暂停时长，回放卡一大拍）
+                if let Some(shifted) = last_written
+                    .zip(paused_at)
+                    .and_then(|(t, p)| t.checked_add(p.elapsed()))
+                {
+                    last_written = Some(shifted);
+                }
                 next_tick = Instant::now();
                 log::info!("GIF 录制：继续录制");
                 let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
@@ -423,27 +459,41 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
                 Ok(frame) => {
                     bad_streak = 0;
                     let now = Instant::now();
-                    // 帧延迟 = 距上一帧捕获的实际间隔（回放节奏与录制所见一致；
-                    // 大选区量化降帧率时诚实放慢，不快进）。首帧用目标间隔
-                    let delay_ms = last_cap
-                        .map(|t| now.duration_since(t).as_millis() as u64)
-                        .unwrap_or_else(|| 1000 / u64::from(fps));
-                    last_cap = Some(now);
                     let (fw, fh) = frame.dimensions();
                     let mut rgba = frame.into_raw();
-                    let mut gframe = gif::Frame::from_rgba_speed(
+                    let (fw16, fh16) = (
                         u16::try_from(fw).unwrap_or(w16),
                         u16::try_from(fh).unwrap_or(h16),
-                        &mut rgba,
-                        quant_speed(rw * rh),
                     );
-                    gframe.delay = gif_delay_cs(delay_ms);
-                    if let Err(e) = encoder.write_frame(&gframe) {
-                        log::error!("GIF 录制：帧写入失败：{e}");
-                        aborted = true;
-                        break;
+                    // ── 智能剔除重复帧（2026-11-20 用户需求）：与上一写入帧
+                    // 精确等值 = 静止帧默认跳过（时长并入后续变化帧延迟，GIF
+                    // 静止 = 帧停留视觉完全一致），静止达兜底上限才补一帧重复
+                    // 帧。跳过帧照常落到循环底部节奏/进度段（continue 会丢帧拍）
+                    let is_dup = prev_frame.as_deref() == Some(rgba.as_slice());
+                    let since_written =
+                        last_written.map(|t| now.duration_since(t).as_millis() as u64);
+                    if let Some(delay_ms) =
+                        dedup_delay(is_dup, since_written, 1000 / u64::from(fps))
+                    {
+                        // 变化帧先克隆原始 RGBA 供下一帧比对（量化原地消费缓冲）
+                        if !is_dup {
+                            prev_frame = Some(rgba.clone());
+                        }
+                        let mut gframe = gif::Frame::from_rgba_speed(
+                            fw16,
+                            fh16,
+                            &mut rgba,
+                            quant_speed(rw * rh),
+                        );
+                        gframe.delay = gif_delay_cs(delay_ms);
+                        if let Err(e) = encoder.write_frame(&gframe) {
+                            log::error!("GIF 录制：帧写入失败：{e}");
+                            aborted = true;
+                            break;
+                        }
+                        frames += 1;
+                        last_written = Some(now);
                     }
-                    frames += 1;
                 }
                 Err(e) => {
                     bad_streak += 1;
@@ -482,6 +532,26 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
                 std::thread::sleep(next_tick - now);
             } else {
                 next_tick = now;
+            }
+        }
+    }
+    // 静止尾巴收尾（重复帧剔除配套，2026-11-20）：录制停在静止段结束时，
+    // 尾巴时长尚未并入任何帧延迟——补一帧兜底帧把尾巴并入，回放时长与录制
+    // 所见一致（否则录完停了 5s 再保存，回放会提前 5s 收尾）。微尾巴（<100ms）
+    // 不可感知，省一帧不补；取消/写盘异常路径不补
+    let tail = if cancelled || aborted || frames == 0 {
+        None
+    } else {
+        last_written.zip(prev_frame.take())
+    };
+    if let Some((t, mut prev)) = tail.filter(|(t, _)| t.elapsed().as_millis() as u64 >= 100) {
+        let trailing_ms = t.elapsed().as_millis() as u64;
+        let mut gframe = gif::Frame::from_rgba_speed(w16, h16, &mut prev, quant_speed(rw * rh));
+        gframe.delay = gif_delay_cs(trailing_ms);
+        match encoder.write_frame(&gframe) {
+            Ok(()) => frames += 1,
+            Err(e) => {
+                log::warn!("GIF 录制：静止尾巴补帧失败（按已有帧出结果）：{e}");
             }
         }
     }
@@ -872,6 +942,19 @@ mod tests {
         assert_eq!(normalize_fps(15), 15);
         assert_eq!(normalize_fps(30), FPS_DEFAULT);
         assert_eq!(normalize_fps(0), FPS_DEFAULT);
+    }
+
+    #[test]
+    fn dedup_delay_skips_static_and_flushes_at_cap() {
+        // 变化帧恒写：有基线 = 距上一写入帧真实间隔（静止段整段并入，回放
+        // 节奏不丢），无基线（首帧）= 目标间隔；重复帧：兜底上限内跳过
+        //（None），达上限补兜底帧（延迟 = 上限，防超长延迟兼容问题）
+        assert_eq!(dedup_delay(false, Some(83), 83), Some(83));
+        assert_eq!(dedup_delay(false, Some(2100), 83), Some(2100));
+        assert_eq!(dedup_delay(false, None, 83), Some(83));
+        assert_eq!(dedup_delay(true, Some(1900), 83), None);
+        assert_eq!(dedup_delay(true, Some(2000), 83), Some(DUP_FLUSH_MS));
+        assert_eq!(dedup_delay(true, Some(5100), 83), Some(DUP_FLUSH_MS));
     }
 
     #[test]
