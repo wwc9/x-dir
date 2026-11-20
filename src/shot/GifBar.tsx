@@ -6,8 +6,10 @@
 // 保存/取消；生成中 = 完成后若开启进度条，逐帧合成期间禁操作，结束后结果窗
 // 接管。进度经 shot-gif-progress 事件（≥1s 一发，paused 字段同步暂停态）
 // 实时刷新；状态跃迁经 shot-gif-phase 事件（Rust 侧 start 处理/后处理开始
-// 时下发）。窗口几何由 Rust 侧决定（宽 480 容按钮组，2026-11-20 反馈
-// 310 时「开始录制」被窗缘裁掉）。
+// 时下发）。窗口几何由 Rust 侧决定（宽 560 容按钮组：暂停/保存/取消 +
+// fps/进度条/指针 三 chip；2026-11-20 反馈 310 时「开始录制」被窗缘裁掉）。
+// 指针 chip = 录制画面叠加鼠标光标（Rust GetCursorInfo+GetDIBits 解码
+// SrcOver 叠画，待命/录制可切下一帧起生效，市场惯例默认开）。
 // ⚠ busy 只作防双击：命令回执即复位（2026-11-20 用户反馈「点开始后无法
 // 退出」根因——start 成功后 busy 恒 true，录制态按钮全 disabled 且键盘
 // 通路被拦）。真正的状态权威是 Rust 侧 phase/progress 事件。
@@ -24,6 +26,8 @@ export interface GifBarBoot {
   fps: number;
   /** 底部进度条开关初值（待命态可切；开启 = 导出后逐帧合成底部进度条） */
   barOn: boolean;
+  /** 鼠标指针叠画开关初值（待命/录制中可切，下一帧起生效） */
+  cursorOn: boolean;
 }
 
 type GifPhase = "ready" | "recording" | "processing";
@@ -38,6 +42,7 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
   /** 常驻窗复用：boot 事件换装并整体重置 */
   const [fps, setFps] = useState(boot.fps);
   const [barOn, setBarOn] = useState(boot.barOn);
+  const [cursorOn, setCursorOn] = useState(boot.cursorOn);
   const [phase, setPhase] = useState<GifPhase>("ready");
   const [paused, setPaused] = useState(false);
   const [secs, setSecs] = useState(0);
@@ -60,16 +65,20 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
   }, []);
 
   useEffect(() => {
-    const un = listen<{ fps: number; barOn?: boolean }>("shot-gif-bar-boot", (e) => {
-      setFps(e.payload.fps);
-      if (typeof e.payload.barOn === "boolean") setBarOn(e.payload.barOn);
-      setPhase("ready");
-      setPaused(false);
-      setSecs(0);
-      setFrames(0);
-      setBytes(0);
-      setBusy(false);
-    });
+    const un = listen<{ fps: number; barOn?: boolean; cursorOn?: boolean }>(
+      "shot-gif-bar-boot",
+      (e) => {
+        setFps(e.payload.fps);
+        if (typeof e.payload.barOn === "boolean") setBarOn(e.payload.barOn);
+        if (typeof e.payload.cursorOn === "boolean") setCursorOn(e.payload.cursorOn);
+        setPhase("ready");
+        setPaused(false);
+        setSecs(0);
+        setFrames(0);
+        setBytes(0);
+        setBusy(false);
+      },
+    );
     return () => {
       void un.then((f) => f()).catch(() => undefined);
     };
@@ -102,7 +111,8 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
         | "pause"
         | "resume"
         | `fps:${8 | 12 | 15}`
-        | `bar:${"on" | "off"}`,
+        | `bar:${"on" | "off"}`
+        | `cursor:${"on" | "off"}`,
     ) => {
       if (busy) return;
       if (action === "start" || action === "finish" || action === "cancel") setBusy(true);
@@ -127,6 +137,15 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
     setBarOn(next);
     void api.shotGifControl(`bar:${next ? "on" : "off"}`).catch(() => undefined);
   }, [barOn]);
+
+  /** 指针叠画开关（待命/录制中可切，下一帧起生效） */
+  const toggleCursor = useCallback(() => {
+    const next = !cursorOn;
+    setCursorOn(next);
+    void api
+      .shotGifControl(`cursor:${next ? "on" : "off"}`)
+      .catch(() => setCursorOn(!next));
+  }, [cursorOn]);
 
   /** 暂停/继续（录制中即时生效：暂停不抓帧、计时冻结；本地先换面，
    *  Rust 跃迁进度事件回填权威态） */
@@ -186,6 +205,15 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
           onClick={toggleBar}
         >
           进度条 {barOn ? "开" : "关"}
+        </button>
+      )}
+      {phase !== "processing" && (
+        <button
+          className="np-shot-gbar-fps"
+          data-tip="录制画面中叠加鼠标指针（下一帧起生效）"
+          onClick={toggleCursor}
+        >
+          指针 {cursorOn ? "开" : "关"}
         </button>
       )}
       <span className="np-shot-sbar-spacer" />

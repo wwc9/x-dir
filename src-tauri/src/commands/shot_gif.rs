@@ -55,6 +55,9 @@ static GIF_ACTIVE: AtomicBool = AtomicBool::new(false);
 /// 录制态暂停（2026-11-20 用户需求「增加暂停按钮」）：暂停期间跳过抓帧，
 /// 时长上限与浮条计时都停摆（只计真实录制时间）；待命态忽略
 static GIF_PAUSED: AtomicBool = AtomicBool::new(false);
+/// 鼠标指针叠画开关（2026-11-20 用户需求「指针录制」，市场惯例默认开——
+/// ScreenToGif/ShareX 教程场景光标刚需）：待命/录制中可切，下一帧起生效
+static GIF_CURSOR: AtomicBool = AtomicBool::new(true);
 /// 当前帧率档（待命/录制中均可切，下一帧起生效）
 static GIF_FPS: AtomicU32 = AtomicU32::new(FPS_DEFAULT);
 /// 底部进度条开关（2026-11-19 用户定案：待命态可选，开启则导出后对 GIF
@@ -189,6 +192,7 @@ pub fn shot_gif_begin(
     GIF_FPS.store(FPS_DEFAULT, Ordering::Relaxed);
     GIF_BAR.store(true, Ordering::Relaxed);
     GIF_PAUSED.store(false, Ordering::Relaxed);
+    GIF_CURSOR.store(true, Ordering::Relaxed);
     GIF_ACTIVE.store(true, Ordering::Relaxed);
     // 覆盖窗停靠（异步消息，必须等真正摘屏才能建窗——蒙层在场时 build()
     // 泵消息永久卡死，滚动截图同款坑在案），拆两段命令由前端顺序调用
@@ -246,7 +250,13 @@ pub fn shot_gif_launch(app: AppHandle) -> Result<(), String> {
         let _ = app2.emit_to(
             "shot-bar",
             "shot-gif-bar-boot",
-            serde_json::json!({ "fps": GIF_FPS.load(Ordering::Relaxed) }),
+            serde_json::json!({
+                "fps": GIF_FPS.load(Ordering::Relaxed),
+                // barOn/cursorOn 全量随发：常驻窗复用时前端 chip 与 Rust 复位
+                // 值对齐（begin 已复位，事件缺省会让前端保留上一场切换值）
+                "barOn": GIF_BAR.load(Ordering::Relaxed),
+                "cursorOn": GIF_CURSOR.load(Ordering::Relaxed),
+            }),
         );
         let reuse = app2.get_webview_window("shot-frame").is_some()
             && app2.get_webview_window("shot-bar").is_some();
@@ -353,6 +363,8 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
     // 延迟合并与兜底节奏的时间基线
     let mut prev_frame: Option<Vec<u8>> = None;
     let mut last_written: Option<Instant> = None;
+    // 指针位图缓存（线程封闭）：光标形状未变时免每帧 GetIconInfo/GetDIBits
+    let mut cursor_cache: Option<CursorCache> = None;
     log::info!(
         "GIF 录制循环进场（待命态）：选区 ({rx},{ry}) {rw}×{rh}，fps {}",
         GIF_FPS.load(Ordering::Relaxed)
@@ -461,6 +473,12 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
                     let now = Instant::now();
                     let (fw, fh) = frame.dimensions();
                     let mut rgba = frame.into_raw();
+                    // 指针叠画先于重复帧判定（2026-11-20 用户需求）：光标
+                    // 参与比对——光标动 = 帧变化（语义正确），光标静止画面
+                    // 静止仍可剔除
+                    if GIF_CURSOR.load(Ordering::Relaxed) {
+                        overlay_cursor(&mut rgba, fw, fh, &geo, &mut cursor_cache);
+                    }
                     let (fw16, fh16) = (
                         u16::try_from(fw).unwrap_or(w16),
                         u16::try_from(fh).unwrap_or(h16),
@@ -736,6 +754,11 @@ pub fn shot_gif_control(action: String) -> Result<(), String> {
         GIF_BAR.store(on == "on", Ordering::Relaxed);
         return Ok(());
     }
+    // 鼠标指针叠画开关（待命/录制中可切，下一帧起生效）
+    if let Some(on) = action.strip_prefix("cursor:") {
+        GIF_CURSOR.store(on == "on", Ordering::Relaxed);
+        return Ok(());
+    }
     match action.as_str() {
         // 待命 → 录制（浮条「开始录制」）
         "start" => GIF_FLAG.store(1, Ordering::Relaxed),
@@ -749,6 +772,253 @@ pub fn shot_gif_control(action: String) -> Result<(), String> {
         _ => return Err("未知操作".into()),
     }
     Ok(())
+}
+
+// ── 鼠标指针叠画（2026-11-20 用户需求「指针录制」，市场惯例默认开）────────
+// GetCursorInfo 取当前光标句柄与屏幕物理坐标（per-monitor DPI aware 进程
+// 下即物理像素，与选区坐标系同源），GetIconInfo+GetDIBits 解码 32bpp RGBA
+// （句柄未变走缓存，免每帧建/读位图），SrcOver 叠进选区帧。光标叠画先于
+// 重复帧判定：光标动 = 帧变化（语义正确），光标静止画面静止仍可剔除。
+// 彩色光标（Vista+ 箭头/手型 ARGB）直接混合，alpha 全 0 的旧式彩色光标用
+// AND mask 兜底透明度；单色光标（I-beam 等）按 ICONINFO 上半 AND 下半
+// XOR 经典公式绘制。
+
+/// 光标位图缓存（线程封闭于录制循环）：句柄未变复用已解码 RGBA
+struct CursorCache {
+    handle: isize,
+    rgba: Vec<u8>,
+    width: u32,
+    height: u32,
+    hotspot_x: u32,
+    hotspot_y: u32,
+}
+
+/// 叠画落位裁剪（纯函数，单测锁定）：光标贴图左上角可落在帧外（负坐标/
+/// 超右下），返回 (帧内起点 fx,fy，源偏移 sx,sy，交集尺寸 w,h)——None =
+/// 完全在帧外不画
+fn cursor_clip(
+    dst_x: i32,
+    dst_y: i32,
+    cw: u32,
+    ch: u32,
+    fw: u32,
+    fh: u32,
+) -> Option<(u32, u32, u32, u32, u32, u32)> {
+    let x0 = dst_x.clamp(0, fw as i32) as u32;
+    let y0 = dst_y.clamp(0, fh as i32) as u32;
+    let x1 = dst_x.saturating_add(cw as i32).clamp(0, fw as i32) as u32;
+    let y1 = dst_y.saturating_add(ch as i32).clamp(0, fh as i32) as u32;
+    if x0 >= x1 || y0 >= y1 {
+        return None;
+    }
+    Some((
+        x0,
+        y0,
+        (x0 as i32 - dst_x) as u32,
+        (y0 as i32 - dst_y) as u32,
+        x1 - x0,
+        y1 - y0,
+    ))
+}
+
+/// SrcOver 叠画（缓存位图 → 帧）：帧背景恒不透明（xcap 捕获 A=255），
+/// 逐像素 out = src*a + dst*(1-a)；帧 alpha 不动保持 255
+fn blend_cursor(frame: &mut [u8], fw: u32, fh: u32, cache: &CursorCache, dst_x: i32, dst_y: i32) {
+    let Some((fx, fy, sx, sy, w, h)) = cursor_clip(dst_x, dst_y, cache.width, cache.height, fw, fh)
+    else {
+        return;
+    };
+    let stride = fw as usize * 4;
+    let src_stride = cache.width as usize * 4;
+    for row in 0..h as usize {
+        let drow = (fy as usize + row) * stride + fx as usize * 4;
+        let srow = (sy as usize + row) * src_stride + sx as usize * 4;
+        for col in 0..w as usize {
+            let s = srow + col * 4;
+            let a = u32::from(cache.rgba[s + 3]);
+            if a == 0 {
+                continue;
+            }
+            let d = drow + col * 4;
+            if a == 255 {
+                frame[d..d + 3].copy_from_slice(&cache.rgba[s..s + 3]);
+            } else {
+                let ia = 255 - a;
+                for c in 0..3 {
+                    frame[d + c] =
+                        ((u32::from(cache.rgba[s + c]) * a + u32::from(frame[d + c]) * ia + 127)
+                            / 255) as u8;
+                }
+            }
+        }
+    }
+}
+
+/// HBITMAP → 32bpp top-down 原始字节（BGRA 顺序；失败 = None）
+#[cfg(windows)]
+fn read_dib_32bpp(hbm: windows::Win32::Graphics::Gdi::HBITMAP, w: u32, h: u32) -> Option<Vec<u8>> {
+    use windows::Win32::Graphics::Gdi::{
+        BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleDC, DIB_RGB_COLORS, DeleteDC,
+        GetDIBits, RGBQUAD,
+    };
+    let mut bi = BITMAPINFO {
+        bmiHeader: BITMAPINFOHEADER {
+            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+            biWidth: w as i32,
+            biHeight: -(h as i32), // 负高 = top-down：行序自上而下
+            biPlanes: 1,
+            biBitCount: 32,
+            biCompression: BI_RGB.0,
+            biSizeImage: 0,
+            biXPelsPerMeter: 0,
+            biYPelsPerMeter: 0,
+            biClrUsed: 0,
+            biClrImportant: 0,
+        },
+        bmiColors: [RGBQUAD::default()],
+    };
+    let mut buf = vec![0u8; w as usize * h as usize * 4];
+    let hdc = unsafe { CreateCompatibleDC(None) };
+    if hdc.is_invalid() {
+        return None;
+    }
+    let lines = unsafe {
+        GetDIBits(
+            hdc,
+            hbm,
+            0,
+            h,
+            Some(buf.as_mut_ptr() as *mut core::ffi::c_void),
+            &mut bi,
+            DIB_RGB_COLORS,
+        )
+    };
+    unsafe {
+        let _ = DeleteDC(hdc);
+    }
+    (lines == h as i32).then_some(buf)
+}
+
+/// hCursor → 32bpp RGBA 位图 + 热区（解码失败 = None，叠画静默跳过）。
+/// GetIconInfo 产出的 hbmMask/hbmColor 用完必须 DeleteObject
+#[cfg(windows)]
+fn decode_cursor(handle: isize) -> Option<CursorCache> {
+    use windows::Win32::Graphics::Gdi::{BITMAP, DeleteObject, GetObjectW, HGDIOBJ};
+    use windows::Win32::UI::WindowsAndMessaging::{GetIconInfo, HICON, ICONINFO};
+
+    let ptr = handle as *mut core::ffi::c_void;
+    let mut info = ICONINFO::default();
+    unsafe {
+        GetIconInfo(HICON(ptr), &mut info).ok()?;
+        let (mask, color) = (info.hbmMask, info.hbmColor);
+        let mut bm = BITMAP::default();
+        let ok = GetObjectW(
+            HGDIOBJ(mask.0),
+            std::mem::size_of::<BITMAP>() as i32,
+            Some(&mut bm as *mut _ as *mut core::ffi::c_void),
+        );
+        if ok == 0 {
+            let _ = DeleteObject(HGDIOBJ(mask.0));
+            if !color.is_invalid() {
+                let _ = DeleteObject(HGDIOBJ(color.0));
+            }
+            return None;
+        }
+        let (bw, bh) = (bm.bmWidth.max(0) as u32, bm.bmHeight.max(0) as u32);
+        let mask_buf = read_dib_32bpp(mask, bw, bh);
+        let decoded = if !color.is_invalid() {
+            // 彩色：hbmColor 32bpp BGRA→RGBA；alpha 全 0 的旧式光标用 AND
+            // mask 兜底透明度（AND 位 1 = 透明）
+            let mut rgba = read_dib_32bpp(color, bw, bh)?;
+            let alpha_fallback = mask_buf
+                .as_deref()
+                .filter(|_| !rgba.as_chunks::<4>().0.iter().any(|px| px[3] != 0));
+            if let Some(m) = alpha_fallback {
+                for (px, mp) in rgba
+                    .as_chunks_mut::<4>()
+                    .0
+                    .iter_mut()
+                    .zip(m.as_chunks::<4>().0)
+                {
+                    px[3] = u8::from(mp[0] == 0) * 255;
+                }
+            }
+            for px in rgba.as_chunks_mut::<4>().0 {
+                px.swap(0, 2);
+            }
+            Some((rgba, bw, bh))
+        } else {
+            // 单色：mask 高 2h，上 AND 下 XOR（ICONINFO 约定）；AND 位 0 =
+            // 不透明画 XOR 色（1bpp 32bpp 化后 0/255 两值），位 1 = 透明
+            if bh % 2 != 0 {
+                None
+            } else {
+                let h = bh / 2;
+                let m = mask_buf?;
+                let stride = bw as usize * 4;
+                let mut rgba = vec![0u8; bw as usize * h as usize * 4];
+                for i in 0..(bw * h) as usize {
+                    if m[i * 4] == 0 {
+                        let g = u8::from(m[h as usize * stride + i * 4] != 0) * 255;
+                        rgba[i * 4..i * 4 + 4].copy_from_slice(&[g, g, g, 255]);
+                    }
+                }
+                Some((rgba, bw, h))
+            }
+        };
+        let _ = DeleteObject(HGDIOBJ(mask.0));
+        if !color.is_invalid() {
+            let _ = DeleteObject(HGDIOBJ(color.0));
+        }
+        let (rgba, width, height) = decoded?;
+        Some(CursorCache {
+            handle,
+            rgba,
+            width,
+            height,
+            hotspot_x: info.xHotspot,
+            hotspot_y: info.yHotspot,
+        })
+    }
+}
+
+/// 帧内叠画当前光标（每帧调用；句柄未变走缓存）。坐标链 = ptScreenPos
+///（虚拟屏幕物理像素）- 热区 - 选区原点（显示器绝对）= 帧内左上角
+fn overlay_cursor(
+    frame: &mut [u8],
+    fw: u32,
+    fh: u32,
+    geo: &GifGeo,
+    cache: &mut Option<CursorCache>,
+) {
+    #[cfg(windows)]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{CURSOR_SHOWING, CURSORINFO, GetCursorInfo};
+        let mut ci = CURSORINFO {
+            cbSize: std::mem::size_of::<CURSORINFO>() as u32,
+            ..Default::default()
+        };
+        if unsafe { GetCursorInfo(&mut ci) }.is_err() {
+            return;
+        }
+        // 系统隐藏光标（触屏/程序隐藏）不画；flags 位测（SHOWING|SUPPRESSED）
+        if (ci.flags.0 & CURSOR_SHOWING.0) == 0 {
+            return;
+        }
+        let handle = ci.hCursor.0 as isize;
+        if cache.as_ref().map(|c| c.handle) != Some(handle) {
+            *cache = decode_cursor(handle);
+        }
+        if let Some(c) = cache {
+            let dx = ci.ptScreenPos.x - c.hotspot_x as i32 - (geo.mon.x + geo.rx as i32);
+            let dy = ci.ptScreenPos.y - c.hotspot_y as i32 - (geo.mon.y + geo.ry as i32);
+            blend_cursor(frame, fw, fh, c, dx, dy);
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (frame, fw, fh, geo, cache);
+    }
 }
 
 // ── 会话窗（遮罩复用滚动框窗组件；浮条 boot 换装 gifbar）────────────────────
@@ -794,19 +1064,21 @@ fn show_mask_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
     win.show().map_err(|e| e.to_string())
 }
 
-/// 录制浮条：停靠选区正下方（bar_layout_sized 定位同滚动；宽度 480——
-/// GIF 按钮组比滚动控制条宽，固定 310 时「开始录制」被窗缘裁掉，2026-11-20
-/// 用户反馈），持有焦点使 Enter/Esc 生效；boot 换装 gifbar（常驻窗复用同款）
+/// 录制浮条：停靠选区正下方（bar_layout_sized 定位同滚动；宽度 560——
+/// GIF 按钮组含 暂停/保存/取消 + fps/进度条/指针 三 chip，固定 310 时
+/// 「开始录制」被窗缘裁掉、480 时加指针 chip 后暂停态偏紧（2026-11-20
+/// 用户反馈），定位算法单一来源），持有焦点使 Enter/Esc 生效；boot 换装
+/// gifbar（常驻窗复用同款）
 fn show_gif_bar_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
     let mon = &geo.mon;
     let s = f64::from(mon.scale);
     let (bx, by, bw, bh) = super::shot_scroll::bar_layout_sized(
         (geo.rx as i32, geo.ry as i32, geo.rw as i32, geo.rh as i32),
         mon,
-        (480.0 * s).round() as i32,
+        (560.0 * s).round() as i32,
         (44.0 * s).round() as i32,
     );
-    let boot = serde_json::json!({ "window": "gifbar", "fps": GIF_FPS.load(Ordering::Relaxed), "barOn": GIF_BAR.load(Ordering::Relaxed) });
+    let boot = serde_json::json!({ "window": "gifbar", "fps": GIF_FPS.load(Ordering::Relaxed), "barOn": GIF_BAR.load(Ordering::Relaxed), "cursorOn": GIF_CURSOR.load(Ordering::Relaxed) });
     let win = match app.get_webview_window("shot-bar") {
         Some(w) => w,
         None => WebviewWindowBuilder::new(app, "shot-bar", WebviewUrl::App("shot.html".into()))
@@ -955,6 +1227,26 @@ mod tests {
         assert_eq!(dedup_delay(true, Some(1900), 83), None);
         assert_eq!(dedup_delay(true, Some(2000), 83), Some(DUP_FLUSH_MS));
         assert_eq!(dedup_delay(true, Some(5100), 83), Some(DUP_FLUSH_MS));
+    }
+
+    #[test]
+    fn cursor_clip_intersects_and_offsets() {
+        // 全在帧内（源偏移 0）；左上越界（源偏移 = 负差值）；右下越界（交集
+        // 收缩）；完全出帧（None 不画）
+        assert_eq!(
+            cursor_clip(10, 20, 32, 32, 200, 100),
+            Some((10, 20, 0, 0, 32, 32))
+        );
+        assert_eq!(
+            cursor_clip(-5, -7, 32, 32, 200, 100),
+            Some((0, 0, 5, 7, 27, 25))
+        );
+        assert_eq!(
+            cursor_clip(190, 90, 32, 32, 200, 100),
+            Some((190, 90, 0, 0, 10, 10))
+        );
+        assert_eq!(cursor_clip(-40, 0, 32, 32, 200, 100), None);
+        assert_eq!(cursor_clip(250, 0, 32, 32, 200, 100), None);
     }
 
     #[test]
