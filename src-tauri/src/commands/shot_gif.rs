@@ -757,7 +757,7 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
                         dedup_delay(is_dup, since_written, 1000 / u64::from(fps))
                     {
                         let res = if is_dup {
-                            // 静止兜底（≥2s）：1×1 画布同色帧，近零体积
+                            // 静止兜底（每 1s 一拍）：1×1 画布同色帧，近零体积
                             delta
                                 .push_keepalive(gif_delay_cs(delay_ms))
                                 .map(|_| FrameKind::Keepalive)
@@ -1306,11 +1306,36 @@ fn overlay_cursor(
         }
         // 系统隐藏光标（触屏/程序隐藏）不画；flags 位测（SHOWING|SUPPRESSED）
         if (ci.flags.0 & CURSOR_SHOWING.0) == 0 {
+            log::warn!(
+                "GIF 指针：光标被系统隐藏（flags={:?}），本帧不画",
+                ci.flags.0
+            );
             return;
         }
         let handle = ci.hCursor.0 as isize;
         if cache.as_ref().map(|c| c.handle) != Some(handle) {
             *cache = decode_cursor(handle);
+            // 会话诊断（用户反馈「指针没录进」定位）：句柄解码结果 + 坐标链
+            // 全量打印；句柄形状切换时偶发几条，可接受
+            let (dx, dy, ok) = match cache {
+                Some(c) => (
+                    ci.ptScreenPos.x - c.hotspot_x as i32 - (geo.mon.x + geo.rx as i32),
+                    ci.ptScreenPos.y - c.hotspot_y as i32 - (geo.mon.y + geo.ry as i32),
+                    "成功",
+                ),
+                None => (0, 0, "失败"),
+            };
+            log::info!(
+                "GIF 指针：句柄 {handle:?} 解码{ok} pos=({},{}) 选区={}+{},{}+{} {}×{} 帧内落点=({dx},{dy})",
+                ci.ptScreenPos.x,
+                ci.ptScreenPos.y,
+                geo.mon.x,
+                geo.rx,
+                geo.mon.y,
+                geo.ry,
+                fw,
+                fh
+            );
         }
         if let Some(c) = cache {
             let dx = ci.ptScreenPos.x - c.hotspot_x as i32 - (geo.mon.x + geo.rx as i32);
@@ -1643,6 +1668,104 @@ mod tests {
             FrameKind::Full,
             "远色应回退全帧"
         );
+    }
+
+    /// 指针叠画管线本机诊断（#[ignore] 手跑：`cargo test --lib
+    /// cursor_pipeline_diagnostics -- --ignored --nocapture`）：GetCursorInfo
+    /// → decode_cursor 全链路直跑并打印每步结果，定位「指针没录进 GIF」
+    /// 的断点（需真实桌面会话，CI 不跑）
+    #[test]
+    #[ignore = "本机指针诊断（需真实桌面会话）"]
+    fn cursor_pipeline_diagnostics() {
+        use windows::Win32::UI::WindowsAndMessaging::{CURSOR_SHOWING, CURSORINFO, GetCursorInfo};
+        let mut ci = CURSORINFO {
+            cbSize: std::mem::size_of::<CURSORINFO>() as u32,
+            ..Default::default()
+        };
+        unsafe { GetCursorInfo(&mut ci) }.expect("GetCursorInfo 失败");
+        println!(
+            "GetCursorInfo: flags={:?} handle={:?} pos=({},{})",
+            ci.flags, ci.hCursor.0 as isize, ci.ptScreenPos.x, ci.ptScreenPos.y
+        );
+        println!(
+            "CURSOR_SHOWING 位 = {}",
+            (ci.flags.0 & CURSOR_SHOWING.0) != 0
+        );
+        match decode_cursor(ci.hCursor.0 as isize) {
+            Some(c) => {
+                println!(
+                    "decode OK: {}×{} hotspot=({},{})",
+                    c.width, c.height, c.hotspot_x, c.hotspot_y
+                );
+                let opaque = c
+                    .rgba
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .filter(|p| p[3] != 0)
+                    .count();
+                println!(
+                    "非透明像素 {}/{}，首像素 {:?}",
+                    opaque,
+                    c.width as usize * c.height as usize,
+                    &c.rgba[0..4]
+                );
+            }
+            None => println!("decode_cursor 返回 None ← 断点在此"),
+        }
+    }
+
+    /// 指针端到端本机诊断（#[ignore] 手跑）：移动真实光标到已知点 → 真实
+    /// 抓屏 → 生产 overlay_cursor → 统计 blend 前后差异。diff = 0 即「叠加
+    /// 未生效」，配合 cache 状态定位是解码、开关还是坐标链问题（移动真实
+    /// 光标，CI 不跑）
+    #[test]
+    #[ignore = "端到端指针诊断（移动真实光标，需桌面会话）"]
+    fn cursor_e2e_diagnostics() {
+        use windows::Win32::UI::WindowsAndMessaging::{CURSORINFO, GetCursorInfo, SetCursorPos};
+        unsafe {
+            SetCursorPos(400, 400).expect("SetCursorPos 失败");
+            std::thread::sleep(Duration::from_millis(150));
+            let mut ci = CURSORINFO {
+                cbSize: std::mem::size_of::<CURSORINFO>() as u32,
+                ..Default::default()
+            };
+            GetCursorInfo(&mut ci).expect("GetCursorInfo 失败");
+            let pos = ci.ptScreenPos;
+            println!("光标 pos = ({},{}) flags={:?}", pos.x, pos.y, ci.flags.0);
+            let Some(mon) = monitor_at(pos.x, pos.y) else {
+                panic!("monitor_at 失败");
+            };
+            println!(
+                "mon = x{} y{} {}×{} scale{}",
+                mon.x, mon.y, mon.w, mon.h, mon.scale
+            );
+            let (rx, ry) = (pos.x - mon.x - 100, pos.y - mon.y - 100);
+            let monitor = xcap::Monitor::all()
+                .unwrap()
+                .into_iter()
+                .find(|m| m.x().ok() == Some(mon.x) && m.y().ok() == Some(mon.y))
+                .expect("xcap 找不到目标显示器");
+            let frame = monitor
+                .capture_region(rx as u32, ry as u32, 200, 200)
+                .expect("capture_region 失败");
+            let raw0 = frame.clone().into_raw();
+            let mut rgba = frame.into_raw();
+            let geo = GifGeo {
+                rx: rx as u32,
+                ry: ry as u32,
+                rw: 200,
+                rh: 200,
+                mon,
+            };
+            let mut cache: Option<CursorCache> = None;
+            overlay_cursor(&mut rgba, 200, 200, &geo, &mut cache);
+            println!("cache decoded = {}", cache.is_some());
+            let diff = rgba.iter().zip(raw0.iter()).filter(|(a, b)| a != b).count();
+            println!("blend 前后差异字节数 = {diff}（>0 = 光标已画上帧）");
+            assert!(diff > 0, "光标未画上帧（叠加未生效）");
+            SetCursorPos(10, 10).ok();
+        }
     }
 
     #[test]
