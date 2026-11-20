@@ -259,6 +259,19 @@ impl<W: std::io::Write> DeltaEncoder<W> {
     /// 写入一帧捕获：内部决策 全帧/子帧/观看无差跳过。`delay_cs` = 已并入
     /// 静止时长的帧延迟；写盘失败 = Err（调用方按 aborted 收场）
     fn push(&mut self, rgba: &mut [u8], delay_cs: u16) -> Result<FrameKind, String> {
+        self.push_hint(rgba, delay_cs, None)
+    }
+
+    /// 带变化域提示的写入：`hint` = (x, y, w, h) 本帧与上一帧可能不同的
+    /// 像素范围（调用方构造性保证——合成链路 = 输入帧矩形 ∪ 底条增量），
+    /// 扫描只遍历提示矩形：小子帧输入的合成扫描成本从全画布降到盒级。
+    /// None = 全画布扫描（录制路径逐帧全区域捕获）
+    fn push_hint(
+        &mut self,
+        rgba: &mut [u8],
+        delay_cs: u16,
+        hint: Option<(usize, usize, usize, usize)>,
+    ) -> Result<FrameKind, String> {
         let w = self.w as usize;
         let h = self.h as usize;
         if self.canvas_rgb.len() != w * h * 3 {
@@ -268,26 +281,30 @@ impl<W: std::io::Write> DeltaEncoder<W> {
         // ε 不算）∧ **观看变化**（raw vs 画布量化色）的交集 = 需要重编码的
         // 像素集。只用观看口径会让高熵内容的 ε 误差铺满全幅（子帧退化为
         // 全帧）；只用内容口径会把画布已呈现的 ε 内变化也重写。交集即
-        // 「屏幕真变了且观看会不同」
+        // 「屏幕真变了且观看会不同」。扫描范围：有提示时只遍历提示矩形
+        //（提示外像素与上一帧逐位相同，构造性保证无需检查）
         let mut count = 0usize;
         let (mut min_x, mut min_y) = (w, h);
         let (mut max_x, mut max_y) = (0usize, 0usize);
         let raw_px = rgba.as_chunks::<4>().0;
         let last_px = self.last_raw.as_chunks::<3>().0;
         let canv_px = self.canvas_rgb.as_chunks::<3>().0;
-        for (p, px) in raw_px.iter().enumerate() {
-            let prev = &last_px[p];
-            if px[0] == prev[0] && px[1] == prev[1] && px[2] == prev[2] {
-                continue; // 内容未变：画布已呈现（ε 内），无需重编码
-            }
-            let cv = &canv_px[p];
-            if px[0] != cv[0] || px[1] != cv[1] || px[2] != cv[2] {
-                count += 1;
-                let (x, y) = (p % w, p / w);
-                min_x = min_x.min(x);
-                min_y = min_y.min(y);
-                max_x = max_x.max(x);
-                max_y = max_y.max(y);
+        let (sx, sy, sw, sh) = hint.unwrap_or((0, 0, w, h));
+        for row in sy..sy + sh {
+            for col in sx..sx + sw {
+                let p = row * w + col;
+                let px = &raw_px[p];
+                let prev = &last_px[p];
+                if px[0] != prev[0] || px[1] != prev[1] || px[2] != prev[2] {
+                    let cv = &canv_px[p];
+                    if px[0] != cv[0] || px[1] != cv[1] || px[2] != cv[2] {
+                        count += 1;
+                        min_x = min_x.min(col);
+                        min_y = min_y.min(row);
+                        max_x = max_x.max(col);
+                        max_y = max_y.max(row);
+                    }
+                }
             }
         }
         if count == 0 {
@@ -1084,7 +1101,7 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
             "shot-gif-phase",
             serde_json::json!({ "phase": "processing" }),
         );
-        if let Err(e) = append_progress_bar(&path) {
+        if let Err(e) = append_progress_bar(&path, Some(&app)) {
             log::error!("GIF 录制：进度条合成失败（保留原 GIF 出结果）：{e}");
         }
     }
@@ -1110,13 +1127,17 @@ const BAR_STEPS_LOW: u32 = 10;
 /// 重编码（逐帧独立调色板，与录制路径同款）。两遍扫描：先跳解码数帧数
 ///（skip_frame_decoding 零 LZW 开销），再 RGBA 解码逐帧合成流式写新文件
 /// 后原子替换。线程阻塞型：由录制线程在收尾阶段调用，浮条已切「生成中」
-fn append_progress_bar(path: &Path) -> Result<(), String> {
-    append_progress_bar_with_steps(path, GIF_BAR_STEPS.load(Ordering::Relaxed))
+fn append_progress_bar(path: &Path, app: Option<&AppHandle>) -> Result<(), String> {
+    append_progress_bar_with_steps(path, GIF_BAR_STEPS.load(Ordering::Relaxed), app)
 }
 
 /// 带步进参数的合成主体（浮条「进度条 平滑/跳进」档位经 GIF_BAR_STEPS
-/// 下发）
-fn append_progress_bar_with_steps(path: &Path, bar_steps: u32) -> Result<(), String> {
+/// 下发）；app = 合成进度/ETA 事件通道（None = 静默，测试用）
+fn append_progress_bar_with_steps(
+    path: &Path,
+    bar_steps: u32,
+    app: Option<&AppHandle>,
+) -> Result<(), String> {
     // pass 1：帧数计数（不解码像素）
     let total = {
         let file = std::fs::File::open(path).map_err(|e| format!("打开 GIF 失败：{e}"))?;
@@ -1142,7 +1163,7 @@ fn append_progress_bar_with_steps(path: &Path, bar_steps: u32) -> Result<(), Str
     let tmp_path = path.with_extension("gif.tmp");
     let out = std::fs::File::create(&tmp_path).map_err(|e| format!("进度条写盘失败：{e}"))?;
     let mut writer = std::io::BufWriter::new(out);
-    let encode = encode_with_bar(path, &mut writer, total, bar_steps);
+    let encode = encode_with_bar(path, &mut writer, total, bar_steps, app);
     drop(writer);
     match encode {
         Ok(()) => {
@@ -1158,12 +1179,14 @@ fn append_progress_bar_with_steps(path: &Path, bar_steps: u32) -> Result<(), Str
 }
 
 /// 进度条合成主体（&mut writer 借用收敛在函数边界）：RGBA 解码逐帧 →
-/// 画布扩底条 → 重编码流式写 writer；bar_steps = 底条步进档位
+/// 画布扩底条 → 重编码流式写 writer；bar_steps = 底条步进档位；app =
+/// 进度事件通道（None = 静默，测试用）
 fn encode_with_bar(
     path: &Path,
     writer: &mut std::io::BufWriter<std::fs::File>,
     total: u32,
     bar_steps: u32,
+    app: Option<&AppHandle>,
 ) -> Result<(), String> {
     {
         use gif::{ColorOutput, DisposalMethod};
@@ -1187,6 +1210,7 @@ fn encode_with_bar(
         // 后续自动产出子帧（内容变化盒 ∪ 填充增量条）与增量条窄帧
         let (gw_u, gh_u) = (usize::from(gw), usize::from(gh));
         let mut delta = DeltaEncoder::new(encoder, gw, gh + bar_h);
+        let synth_t0 = std::time::Instant::now(); // ETA 预估基点
         // 组合画布（RGBA）：帧间差异编码产物含子矩形帧（disposal=Keep 保留
         // 画布），逐帧叠画重建完整画面；全帧 (0,0) 覆盖整幅
         let mut canvas = vec![0u8; gw_u * gh_u * 4];
@@ -1198,6 +1222,7 @@ fn encode_with_bar(
         // 全幅；步进让无增量帧保持纯内容子帧）。回放到最后一帧恰好满格
         let mut step_prev = 0u32;
         let mut i: u32 = 0;
+        let mut last_emit = std::time::Instant::now();
         while let Some(frame) = dec
             .read_next_frame()
             .map_err(|e| format!("GIF 解码失败：{e}"))?
@@ -1229,8 +1254,13 @@ fn encode_with_bar(
             let bar_base = gh_u * gw_u * 4;
             let step_now = i * bar_steps / total.max(1);
             let fill_x = |step: u32| (gw_u as u32 * step / bar_steps) as usize;
+            // 变化域提示 = 输入帧矩形 ∪ 底条增量区（构造性保证：blit 与底条
+            // 绘制之外 work 与上一帧逐位相同）——push_hint 只扫描提示矩形，
+            // 小子帧输入的扫描成本从全画布降到盒级
+            let mut hint = (fl, ft, fw, usize::from(frame.height));
             if i == 1 {
                 // 首帧：全宽轨道 + 当前步之前的填充段
+                hint = (0, 0, gw_u, gh_u + usize::from(bar_h));
                 for x in 0..gw_u {
                     let off = bar_base + x * 4;
                     let (r, g, b) = if x < fill_x(step_now) {
@@ -1246,14 +1276,42 @@ fn encode_with_bar(
                     let off = bar_base + x * 4;
                     work[off..off + 4].copy_from_slice(&[53, 116, 240, 255]);
                 }
+                hint = union_rect(
+                    hint,
+                    (
+                        fill_x(step_prev),
+                        gh_u,
+                        fill_x(step_now) - fill_x(step_prev),
+                        usize::from(bar_h),
+                    ),
+                );
             }
             step_prev = step_now;
-            match delta.push(&mut work, delay) {
+            match delta.push_hint(&mut work, delay, Some(hint)) {
                 Ok(_) => {}
                 Err(e) => {
                     log::error!("GIF 录制：进度条帧写入失败：{e}");
                     return Err(e);
                 }
+            }
+            // 合成进度 + ETA（≥250ms 节流；按已耗均速外推剩余帧耗时）
+            let due = i == 1 || last_emit.elapsed() >= std::time::Duration::from_millis(250);
+            if let Some(app) = app.filter(|_| due) {
+                last_emit = std::time::Instant::now();
+                // ETA 预估：按已耗均速外推剩余帧耗时（首帧含全帧量化，
+                // 偏慢 → 预估略保守偏高，宁长勿短）
+                let elapsed_ms = synth_t0.elapsed().as_millis() as u64;
+                let rate = elapsed_ms / u64::from(i.max(1));
+                let eta_secs = rate.saturating_mul(u64::from(total - i)) / 1000;
+                let _ = app.emit_to(
+                    "shot-bar",
+                    "shot-gif-synth",
+                    serde_json::json!({
+                        "done": i,
+                        "total": total,
+                        "eta": eta_secs,
+                    }),
+                );
             }
         }
         if i != total {
@@ -1261,6 +1319,18 @@ fn encode_with_bar(
         }
         Ok(())
     }
+}
+
+/// 两矩形的包围盒（像素坐标，纯函数）
+fn union_rect(
+    a: (usize, usize, usize, usize),
+    b: (usize, usize, usize, usize),
+) -> (usize, usize, usize, usize) {
+    let x0 = a.0.min(b.0);
+    let y0 = a.1.min(b.1);
+    let x1 = (a.0 + a.2).max(b.0 + b.2);
+    let y1 = (a.1 + a.3).max(b.1 + b.3);
+    (x0, y0, x1 - x0, y1 - y0)
 }
 
 /// 浮条按钮/键盘：finish = 用已录内容出结果；cancel = 丢弃结束；
@@ -1999,6 +2069,47 @@ mod tests {
         );
     }
 
+    /// 提示矩形语义（合成链路契约）：变化 ⊆ 提示 → 盒恰为提示内变化区；
+    /// 提示外的构造性保证 = 调用方声明「提示外与上一帧逐位相同」
+    #[test]
+    fn push_hint_bounds_scan_and_skip_semantics() {
+        let mut buf: Vec<u8> = Vec::new();
+        let enc = gif::Encoder::new(&mut buf, 8, 8, &[]).unwrap();
+        let mut d = DeltaEncoder::new(enc, 8, 8);
+        let mut f1 = vec![0u8; 8 * 8 * 4];
+        for px in f1.as_mut_slice().as_chunks_mut::<4>().0 {
+            px.copy_from_slice(&[10, 20, 30, 255]);
+        }
+        assert_eq!(d.push_hint(&mut f1, 8, None).unwrap(), FrameKind::Full);
+        // 提示 (5,5,2,2) 内近色改动 → 子帧盒恰为该 2×2
+        let mut f2 = f1.clone();
+        for y in 5..7 {
+            for x in 5..7 {
+                let p = (y * 8 + x) * 4;
+                f2[p..p + 4].copy_from_slice(&[16, 26, 36, 255]);
+            }
+        }
+        assert_eq!(
+            d.push_hint(&mut f2, 8, Some((5, 5, 2, 2))).unwrap(),
+            FrameKind::Sub
+        );
+        // 提示外改动（调用方违约场景）：扫描不到 → ViewerIdentical 跳过，
+        // 基线刷新（构造性保证下调用方不会这样用；此处锁定兜底语义）
+        let mut f3 = f2.clone();
+        f3[0..4].copy_from_slice(&[16, 26, 36, 255]);
+        assert_eq!(
+            d.push_hint(&mut f3, 8, Some((5, 5, 2, 2))).unwrap(),
+            FrameKind::ViewerIdentical
+        );
+        drop(d);
+        let mut dec = gif::Decoder::new(&buf[..]).unwrap();
+        let mut geo: Vec<(u16, u16, u16, u16)> = Vec::new();
+        while let Some(frame) = dec.read_next_frame().unwrap() {
+            geo.push((frame.left, frame.top, frame.width, frame.height));
+        }
+        assert_eq!(geo, vec![(0, 0, 8, 8), (5, 5, 2, 2)], "全帧 + 子帧两帧");
+    }
+
     #[test]
     fn delta_encoder_palette_stale_falls_back_full() {
         // 远色大改：平均平方距离超阈 → 调色板陈旧回退全帧（而非硬套旧色板）
@@ -2116,7 +2227,7 @@ mod tests {
         // 新合成管线体积对比：副本上重跑进度条合成（DeltaEncoder 子帧化）
         let tmp = std::env::temp_dir().join("xdir_dump_resynth.gif");
         std::fs::copy(&path, &tmp).unwrap_or_else(|e| panic!("副本失败：{e}"));
-        append_progress_bar(&tmp).unwrap_or_else(|e| panic!("重合成失败：{e}"));
+        append_progress_bar(&tmp, None).unwrap_or_else(|e| panic!("重合成失败：{e}"));
         let resynth = std::fs::metadata(&tmp).map(|m| m.len()).unwrap_or(0) as usize;
         let rb = std::fs::read(&tmp).unwrap_or_default();
         let mut hash = 0xcbf29ce484222325u64;
@@ -2131,7 +2242,7 @@ mod tests {
         // 跳进档（10 级步进）对比
         GIF_BAR_STEPS.store(BAR_STEPS_LOW, Ordering::Relaxed);
         std::fs::copy(&path, &tmp).unwrap_or_else(|e| panic!("副本失败：{e}"));
-        append_progress_bar(&tmp).unwrap_or_else(|e| panic!("低档重合成失败：{e}"));
+        append_progress_bar(&tmp, None).unwrap_or_else(|e| panic!("低档重合成失败：{e}"));
         let low = std::fs::metadata(&tmp).map(|m| m.len()).unwrap_or(0) as usize;
         println!(
             "跳进档(10 级)：{low} B（较平滑档 -{}%）",
@@ -2236,7 +2347,7 @@ mod tests {
             };
             enc.write_frame(&sub).unwrap();
         }
-        append_progress_bar(&path).unwrap();
+        append_progress_bar(&path, None).unwrap();
         let mut options = gif::DecodeOptions::new();
         options.set_color_output(gif::ColorOutput::RGBA);
         let mut dec = options
@@ -2463,7 +2574,7 @@ mod tests {
                 enc.write_frame(&frame).unwrap();
             }
         }
-        append_progress_bar(&path).unwrap();
+        append_progress_bar(&path, None).unwrap();
         let mut options = gif::DecodeOptions::new();
         options.set_color_output(gif::ColorOutput::RGBA);
         let mut options = gif::DecodeOptions::new();

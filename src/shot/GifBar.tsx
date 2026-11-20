@@ -53,6 +53,7 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
   const [barSteps, setBarSteps] = useState(boot.barSteps);
   const [cursorOn, setCursorOn] = useState(boot.cursorOn);
   const [staticKeep, setStaticKeep] = useState(boot.staticKeep);
+  const [synth, setSynth] = useState<{ done: number; total: number; eta: number } | null>(null);
   const [phase, setPhase] = useState<GifPhase>("ready");
   const [paused, setPaused] = useState(false);
   const [secs, setSecs] = useState(0);
@@ -74,6 +75,16 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
     };
   }, []);
 
+  // 底条合成进度/ETA（Rust append_progress_bar_with_steps 逐帧下发）
+  useEffect(() => {
+    const un = listen<{ done: number; total: number; eta: number }>("shot-gif-synth", (e) =>
+      setSynth(e.payload),
+    );
+    return () => {
+      void un.then((f) => f()).catch(() => undefined);
+    };
+  }, []);
+
   useEffect(() => {
     const un = listen<{ fps: number; barOn?: boolean; barSteps?: number; cursorOn?: boolean; staticKeep?: number }>(
       "shot-gif-bar-boot",
@@ -83,6 +94,7 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
         if (typeof e.payload.barSteps === "number") setBarSteps(e.payload.barSteps);
         if (typeof e.payload.cursorOn === "boolean") setCursorOn(e.payload.cursorOn);
         if (typeof e.payload.staticKeep === "number") setStaticKeep(e.payload.staticKeep);
+        setSynth(null);
         setPhase("ready");
         setPaused(false);
         setSecs(0);
@@ -211,7 +223,11 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
       {phase === "processing" ? (
         <>
           <AppIcon icon={Loader2} className="np-spin" />
-          <span className="np-shot-sbar-dim">进度条合成中…</span>
+          <span className="np-shot-sbar-dim">
+            {synth
+              ? `合成中 ${synth.done}/${synth.total} · 预计 ${synth.eta}s`
+              : "进度条合成中…"}
+          </span>
         </>
       ) : phase === "ready" ? (
         <span className="np-shot-sbar-dim">待命 · 点击开始录制</span>
