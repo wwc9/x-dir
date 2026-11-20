@@ -1265,6 +1265,144 @@ mod tests {
         assert_eq!(cursor_clip(250, 0, 32, 32, 200, 100), None);
     }
 
+    /// 体积基准（#[ignore] 手跑：`cargo test --lib dedup_size_benchmark
+    /// -- --ignored --nocapture`）：合成典型录制内容对比剔除重复帧前后的
+    /// 产物体积。编码管线与真实录制完全同源——NeuQuant speed 档（
+    /// quant_speed）、帧延迟口径（gif_delay_cs）、剔除决策（dedup_delay）、
+    /// 尾巴收帧、循环块，差异只有帧内容来源（合成 vs 真实屏幕）
+    #[test]
+    #[ignore = "体积基准手跑（约 15s 逐帧量化），日常 CI 不跑"]
+    fn dedup_size_benchmark() {
+        // 场景 = 480×300 选区 @12fps 录 10s（120 帧，间隔 83ms）：
+        // A 静止为主（教程典型：约每 7 帧一次变化） / B 全程动态（逐帧变化）
+        let (w, h) = (480u16, 300u16);
+        let interval = 1000 / 12u64;
+        let total = 120usize;
+        // LCG 伪随机噪声底图（避免纯色量化失真不真实）
+        let mut rng = 0x2545_F491_4F6C_DD1Du64;
+        let mut next_px = move || {
+            rng ^= rng << 13;
+            rng ^= rng >> 7;
+            rng ^= rng << 17;
+            (rng >> 24) as u8
+        };
+        let mut base = vec![0u8; w as usize * h as usize * 4];
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let p = (y * w as usize + x) * 4;
+                base[p] = next_px();
+                base[p + 1] = (x * 255 / w as usize) as u8;
+                base[p + 2] = (y * 255 / h as usize) as u8;
+                base[p + 3] = 255;
+            }
+        }
+        // 帧序列：every = 变化间隔帧数；变化帧 = 移动 24×24 色块（擦除式
+        // 重画，同光标/弹窗语义），其余帧与当前内容逐字节相同
+        let make_frames = |every: usize| -> Vec<Vec<u8>> {
+            let mut out = Vec::with_capacity(total);
+            let mut cur = base.clone();
+            for i in 0..total {
+                if i % every == 0 {
+                    let mut f = base.clone();
+                    let bx = (i as u32 * 5) % (u32::from(w) - 48);
+                    let by = (i as u32 * 3) % (u32::from(h) - 48);
+                    for y in by..by + 24 {
+                        for x in bx..bx + 24 {
+                            let p = (y as usize * w as usize + x as usize) * 4;
+                            f[p] = 240;
+                            f[p + 1] = 80;
+                            f[p + 2] = 40;
+                            f[p + 3] = 255;
+                        }
+                    }
+                    cur = f;
+                }
+                out.push(cur.clone());
+            }
+            out
+        };
+        // 编码模拟（dedup = 新管线；否则旧管线逐帧全写）
+        let encode = |frames: &[Vec<u8>], dedup: bool| -> (usize, u32) {
+            let mut buf: Vec<u8> = Vec::new();
+            let mut enc = gif::Encoder::new(&mut buf, w, h, &[]).unwrap();
+            enc.set_repeat(gif::Repeat::Infinite).unwrap();
+            let mut prev: Option<Vec<u8>> = None;
+            let mut last_written = 0u64;
+            let mut frames_n = 0u32;
+            for (i, f) in frames.iter().enumerate() {
+                let now = (i as u64 + 1) * interval;
+                let mut rgba = f.clone();
+                let is_dup = prev.as_deref() == Some(rgba.as_slice());
+                let delay_ms = if dedup {
+                    match dedup_delay(is_dup, Some(now - last_written), interval) {
+                        Some(d) => d,
+                        None => continue, // 静止帧剔除
+                    }
+                } else {
+                    interval
+                };
+                if !is_dup {
+                    prev = Some(rgba.clone());
+                }
+                let mut g = gif::Frame::from_rgba_speed(
+                    w,
+                    h,
+                    &mut rgba,
+                    quant_speed(u32::from(w) * u32::from(h)),
+                );
+                g.delay = gif_delay_cs(delay_ms);
+                enc.write_frame(&g).unwrap();
+                frames_n += 1;
+                last_written = now;
+            }
+            // 尾巴收帧（新管线口径）
+            if dedup {
+                let tail = total as u64 * interval - last_written;
+                if tail >= 100 {
+                    if let Some(mut p) = prev.take() {
+                        let mut g = gif::Frame::from_rgba_speed(
+                            w,
+                            h,
+                            &mut p,
+                            quant_speed(u32::from(w) * u32::from(h)),
+                        );
+                        g.delay = gif_delay_cs(tail);
+                        enc.write_frame(&g).unwrap();
+                        frames_n += 1;
+                    }
+                }
+            }
+            drop(enc);
+            (buf.len(), frames_n)
+        };
+        let frames_a = make_frames(7);
+        let frames_b = make_frames(1);
+        let (old_a, fa) = encode(&frames_a, false);
+        let (new_a, na) = encode(&frames_a, true);
+        let (old_b, fb) = encode(&frames_b, false);
+        let (new_b, nb) = encode(&frames_b, true);
+        println!(
+            "场景 A 静止为主（10s@12fps，每 7 帧一变）：{} KB / {} 帧 → {} KB / {} 帧（体积 -{}%）",
+            old_a / 1024,
+            fa,
+            new_a / 1024,
+            na,
+            100 - (new_a * 100 / old_a)
+        );
+        println!(
+            "场景 B 全程动态（10s@12fps，逐帧变化）：{} KB / {} 帧 → {} KB / {} 帧（体积 {}{}%）",
+            old_b / 1024,
+            fb,
+            new_b / 1024,
+            nb,
+            if new_b <= old_b { "-" } else { "+" },
+            old_b.abs_diff(new_b) * 100 / old_b
+        );
+        // 断言：静止场景剔除收益过半；动态场景不劣化（>5% 即回归）
+        assert!(new_a < old_a / 2, "静止场景应省过半体积");
+        assert!(new_b * 20 < old_b * 21, "动态场景不应明显变大");
+    }
+
     #[test]
     fn append_progress_bar_extends_and_fills() {
         // 两帧 8×4 GIF：合成后高 +8（进度条），帧 1 底条半填充（fill=w×1/2）、
