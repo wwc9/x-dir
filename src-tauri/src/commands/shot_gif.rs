@@ -1061,6 +1061,10 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
 
 /// 进度条高度（物理像素）：细条不遮挡内容，原始尺寸下清晰可辨
 const PROGRESS_BAR_H: u32 = 8;
+/// 底条填充离散步进数：合成期底条按步画增量（填充增量条 ≤ gw/40 宽），
+/// 无增量帧保持纯内容子帧——连续微增量会把每帧变化盒拖成「全宽 × 到底」
+/// 全幅，是合成产物体积的支配项；40 步对回放视觉足够平滑
+const BAR_QUANT_STEPS: u32 = 40;
 
 /// 逐帧合成底部进度条：解码原 GIF 全部帧，画布向下扩 PROGRESS_BAR_H——
 /// 第 i 帧（1 起）的填充宽 = w×i/total（回放到最后一帧恰好填满），随帧
@@ -1131,12 +1135,22 @@ fn encode_with_bar(
         encoder
             .set_repeat(gif::Repeat::Infinite)
             .map_err(|e| format!("进度条设置循环播放失败：{e}"))?;
+        // 合成走生产 DeltaEncoder（2026-11-20 用户反馈「一个 gif 5.9M」根因
+        // 修复：旧合成把每帧重编码为全画布，录制期的子帧/1×1 兜底帧全部膨
+        // 胀回全帧）。组合画布（含底条）逐帧喂 DeltaEncoder → 全帧仅首帧，
+        // 后续自动产出子帧（内容变化盒 ∪ 填充增量条）与增量条窄帧
+        let (gw_u, gh_u) = (usize::from(gw), usize::from(gh));
+        let mut delta = DeltaEncoder::new(encoder, gw, gh + bar_h);
         // 组合画布（RGBA）：帧间差异编码产物含子矩形帧（disposal=Keep 保留
-        // 画布），逐帧叠画重建完整画面后再合成底条；全帧 (0,0) 覆盖整幅
-        let mut canvas = vec![0u8; usize::from(gw) * usize::from(gh) * 4];
-        let mut work = vec![0u8; usize::from(gw) * usize::from(gh + bar_h) * 4];
+        // 画布），逐帧叠画重建完整画面；全帧 (0,0) 覆盖整幅
+        let mut canvas = vec![0u8; gw_u * gh_u * 4];
+        let mut work = vec![0u8; gw_u * (gh_u + usize::from(bar_h)) * 4];
         let mut prev_dispose = DisposalMethod::Any;
         let mut prev_rect = (0u16, 0u16, 0u16, 0u16);
+        // 底条 = 深色轨道 + accent 填充，按 BAR_QUANT_STEPS 离散步进（每步
+        // 只画增量段——不量化的连续微增量会把每帧变化盒拖成「全宽 × 到底」
+        // 全幅；步进让无增量帧保持纯内容子帧）。回放到最后一帧恰好满格
+        let mut step_prev = 0u32;
         let mut i: u32 = 0;
         while let Some(frame) = dec
             .read_next_frame()
@@ -1148,7 +1162,7 @@ fn encode_with_bar(
                 let (l, t, fw, fh) = prev_rect;
                 for row in u32::from(t)..u32::from(t) + u32::from(fh) {
                     for col in u32::from(l)..u32::from(l) + u32::from(fw) {
-                        let off = (row as usize * gw as usize + col as usize) * 4;
+                        let off = (row as usize * gw_u + col as usize) * 4;
                         canvas[off..off + 4].copy_from_slice(&[0, 0, 0, 0]);
                     }
                 }
@@ -1156,7 +1170,7 @@ fn encode_with_bar(
             let fw = usize::from(frame.width);
             let (fl, ft) = (usize::from(frame.left), usize::from(frame.top));
             for row in 0..usize::from(frame.height) {
-                let dst = (ft + row) * gw as usize * 4 + fl * 4;
+                let dst = (ft + row) * gw_u * 4 + fl * 4;
                 let src = row * fw * 4;
                 canvas[dst..dst + fw * 4].copy_from_slice(&frame.buffer[src..src + fw * 4]);
             }
@@ -1164,27 +1178,37 @@ fn encode_with_bar(
             prev_rect = (frame.left, frame.top, frame.width, frame.height);
             i += 1;
             let delay = frame.delay;
-            // 全画布 + 底条：底条 = 深色轨道 + accent 填充（i/total，回放到
-            // 最后一帧恰好填满）；work 缓冲跨帧复用零分配
+            // work = 组合画布 + 底条行（跨帧复用：底条只画增量，历史像素保留）
             work[..canvas.len()].copy_from_slice(&canvas);
-            let fill_w =
-                u32::try_from(u64::from(gw) * u64::from(i) / u64::from(total)).unwrap_or(0);
-            for y in gh..gh + bar_h {
-                for x in 0..gw {
-                    let off = (y as usize) * (gw as usize) + x as usize;
-                    let (r, g, b) = if u32::from(x) < fill_w {
+            let bar_base = gh_u * gw_u * 4;
+            let step_now = i * BAR_QUANT_STEPS / total.max(1);
+            let fill_x = |step: u32| (gw_u as u32 * step / BAR_QUANT_STEPS) as usize;
+            if i == 1 {
+                // 首帧：全宽轨道 + 当前步之前的填充段
+                for x in 0..gw_u {
+                    let off = bar_base + x * 4;
+                    let (r, g, b) = if x < fill_x(step_now) {
                         (53, 116, 240)
                     } else {
                         (26, 26, 26)
                     };
-                    work[off * 4..off * 4 + 4].copy_from_slice(&[r, g, b, 255]);
+                    work[off..off + 4].copy_from_slice(&[r, g, b, 255]);
+                }
+            } else if step_now > step_prev {
+                // 增量步：只画新填充段
+                for x in fill_x(step_prev)..fill_x(step_now) {
+                    let off = bar_base + x * 4;
+                    work[off..off + 4].copy_from_slice(&[53, 116, 240, 255]);
                 }
             }
-            let mut out_frame = gif::Frame::from_rgba_speed(gw, gh + bar_h, &mut work, 10);
-            out_frame.delay = delay;
-            encoder
-                .write_frame(&out_frame)
-                .map_err(|e| format!("进度条帧写入失败：{e}"))?;
+            step_prev = step_now;
+            match delta.push(&mut work, delay) {
+                Ok(_) => {}
+                Err(e) => {
+                    log::error!("GIF 录制：进度条帧写入失败：{e}");
+                    return Err(e);
+                }
+            }
         }
         if i != total {
             return Err(format!("帧数两遍扫描不一致（{total} vs {i}）"));
@@ -1954,6 +1978,22 @@ mod tests {
                 0
             }
         );
+        // 新合成管线体积对比：副本上重跑进度条合成（DeltaEncoder 子帧化）
+        let tmp = std::env::temp_dir().join("xdir_dump_resynth.gif");
+        std::fs::copy(&path, &tmp).unwrap_or_else(|e| panic!("副本失败：{e}"));
+        append_progress_bar(&tmp).unwrap_or_else(|e| panic!("重合成失败：{e}"));
+        let resynth = std::fs::metadata(&tmp).map(|m| m.len()).unwrap_or(0) as usize;
+        println!(
+            "新合成管线：{} → {} B（-{}%）",
+            data.len(),
+            resynth,
+            if data.len() > 0 && resynth < data.len() {
+                (data.len() - resynth) * 100 / data.len()
+            } else {
+                0
+            }
+        );
+        let _ = std::fs::remove_file(&tmp);
     }
 
     /// 指针端到端本机诊断（#[ignore] 手跑）：移动真实光标到已知点 → 真实
