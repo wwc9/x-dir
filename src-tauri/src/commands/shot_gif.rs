@@ -1,7 +1,8 @@
 // GIF 录制（2026-11-19 新功能，§3.6 截图域增强）：框选区 → 覆盖窗停靠、
 // 弹录制浮条（label "shot-bar" 复用，boot 换装 gifbar）→ 循环线程按当前
 // fps 间隔 capture_region 实时抓选区 → DeltaEncoder 帧间差异编码（2026-11-20
-// 用户需求）：时间维剔除（静止帧不写盘时长合并 + 2s 兜底 1×1 keepalive）
+// 用户需求）：时间维剔除（静止帧不写盘时长合并 + 1s 兜底 1×1 keepalive，
+// 帧延迟全程 ≤1s 节奏连贯）
 // + 空间维子帧（变化盒小则只写子矩形帧 disposal=Keep，盒内未变像素复用画
 // 布索引零闪烁，真变像素最近邻旧调色板，盒 ≥70% 画幅或调色板陈旧回退全帧
 // NeuQuant）→ gif::Encoder 流式写临时盘（内存只持画布基线不囤整段）→ 完成
@@ -37,12 +38,13 @@ const GIF_MAX_SECS: u64 = 120;
 /// 帧率三档（2026-11-19 用户定案：浮条可切，默认 12）
 const FPS_CHOICES: [u32; 3] = [8, 12, 15];
 const FPS_DEFAULT: u32 = 12;
-/// 重复帧剔除兜底上限（2026-11-20 用户需求「智能剔除重复帧」）：静止段不写
-/// 重复帧、时长并入下一变化帧延迟（GIF 静止 = 帧停留，视觉完全一致，体积
-/// 大降）；静止超过该上限补一帧重复帧，防个别播放器对超长延迟的兼容问题
-/// ——等效静止段最低 0.5fps 采样。用户提议的「重复帧保留 5fps」按延迟合并
-/// 口径放大为 2s 上限：视觉相同、体积收益 ~96% vs ~58%（口径见 features.md）
-const DUP_FLUSH_MS: u64 = 2000;
+/// 重复帧剔除兜底上限（2026-11-20 用户两轮定案：先「智能剔除重复帧」，
+/// 后「重复帧延迟 1 秒，其余重复帧删除」——节奏更连贯）：静止段不写重复
+/// 帧、时长并入下一变化帧延迟（GIF 静止 = 帧停留，视觉完全一致，体积
+/// 大降）；静止达到该上限补一帧 1×1 近零体积兜底帧（延迟 = 上限），帧
+/// 延迟全程 ≤1s。兜底帧为 1×1 画布同色帧，加密到 1s 间隔体积代价可忽略
+/// （每帧 ~15 字节）
+const DUP_FLUSH_MS: u64 = 1000;
 /// 连续抓帧失败次数：有帧按完成收场（用已有帧出结果），无帧报错收场
 const BAD_CAPTURE_STREAK: u32 = 5;
 /// 选区下限（与滚动截图同款口径）
@@ -830,14 +832,20 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
         last_written
     };
     if let Some(t) = tail.filter(|t| t.elapsed().as_millis() as u64 >= 100) {
-        let trailing_ms = t.elapsed().as_millis() as u64;
-        // 1×1 画布同色帧：尾巴时长并入其延迟（回放时长 = 录制所见），体积
-        // 近零（旧口径全帧重量化的开销与体积都省掉）
-        match delta.push_keepalive(gif_delay_cs(trailing_ms)) {
-            Ok(()) => frames += 1,
-            Err(e) => {
-                log::warn!("GIF 录制：静止尾巴补帧失败（按已有帧出结果）：{e}");
+        let mut trailing_ms = t.elapsed().as_millis() as u64;
+        // 1×1 画布同色帧按 ≤1s 分段补：帧延迟全程 ≤1s（2026-11-20 用户定案
+        // 「重复帧延迟 1 秒」），循环收尾不拖长拍；回放时长 = 录制所见，体积
+        // 近零（每帧 ~15 字节）
+        while trailing_ms > 0 {
+            let chunk = trailing_ms.min(DUP_FLUSH_MS);
+            match delta.push_keepalive(gif_delay_cs(chunk)) {
+                Ok(()) => frames += 1,
+                Err(e) => {
+                    log::warn!("GIF 录制：静止尾巴补帧失败（按已有帧出结果）：{e}");
+                    break;
+                }
             }
+            trailing_ms -= chunk;
         }
     }
     // 收尾：丢 delta（持 encoder，drop 即冲刷缓冲）再 flush writer（取消即
@@ -1524,8 +1532,8 @@ mod tests {
         assert_eq!(dedup_delay(false, Some(83), 83), Some(83));
         assert_eq!(dedup_delay(false, Some(2100), 83), Some(2100));
         assert_eq!(dedup_delay(false, None, 83), Some(83));
-        assert_eq!(dedup_delay(true, Some(1900), 83), None);
-        assert_eq!(dedup_delay(true, Some(2000), 83), Some(DUP_FLUSH_MS));
+        assert_eq!(dedup_delay(true, Some(900), 83), None);
+        assert_eq!(dedup_delay(true, Some(1000), 83), Some(DUP_FLUSH_MS));
         assert_eq!(dedup_delay(true, Some(5100), 83), Some(DUP_FLUSH_MS));
     }
 
