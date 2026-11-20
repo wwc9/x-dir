@@ -147,6 +147,10 @@ const DELTA_FULL_BOX_RATIO: f64 = 0.7;
 /// 子帧调色板匹配质量阈值：真变像素到旧调色板的平均平方距离（3 通道平方
 /// 和，≈每通道均差 24）超过即视为调色板陈旧 → 回退全帧重建
 const DELTA_MAX_MEAN_DIST2: u64 = 1728;
+/// 静止段压缩保留帧数（2026-11-20 用户第二轮定案「重复 2 帧以上才删除，
+/// 2 帧以内保留」）：连续兜底帧段 ≤2 = 完整保留真实时长；>2 = 保留段首
+/// 2 帧（段呈现 2s）删掉其余——短停顿节奏真实，长停顿不至于拖沓
+const STATIC_RUN_KEEP: usize = 2;
 
 /// 写入帧类别（循环据此计帧/合并延迟；基准测试与单测同口径断言）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -385,14 +389,12 @@ impl<W: std::io::Write> DeltaEncoder<W> {
     }
 }
 
-// ── 静止段压缩（2026-11-20 用户定案语义澄清「重复帧延迟 1 秒，其他重复
-// 帧删除」= 静止段整体呈现 ≤1s）─────────────────────────────────────────────
-// 录制期 keepalive（1×1 + 100cs）按每秒一拍落盘，是「静止段仍在录」的标记；
-// 但回放语义应为静止段整体停滞 ≤1s——初版每帧 1s 口径下 10s 静止会拖 11s
-//（用户以保存文件实测反馈「不止 1 秒延迟」）。收尾在临时盘上做块级重写：
-// 连续 keepalive 段压成段首单帧（段首延迟 ≤100cs 即段呈现 ≤1s），内容帧与
-// 其余字节原样保留。字节级操作不解码像素——零量化损失、毫秒级完成、体积
-// 同步缩小（删掉的帧字节直接消失）。
+// ── 静止段压缩（2026-11-20 用户两轮定案收敛）─────────────────────────────
+// 第一轮「重复帧延迟 1 秒，其他重复帧删除」= 每帧 1s 口径：10s 静止拖 11s，
+// 回放显快进（用户以保存文件实测反馈）。第二轮（当前）「重复 2 帧以上才
+// 删除，2 帧以内保留」：录制期 keepalive（1×1 + 100cs）按每秒一拍落盘作段
+// 标记，收尾块级重写（不解码像素零量化损失、毫秒级完成、体积同步缩小）把
+// 超长段修到段首 2 帧（段呈现 2s）——短停顿节奏完全真实，长停顿不拖沓。
 
 /// GIF 块结构中的帧记录（字节范围 = GCE 起始到图像数据终止块之后）
 struct RawFrameBlock {
@@ -481,8 +483,10 @@ fn scan_gif_frames(data: &[u8]) -> Option<Vec<RawFrameBlock>> {
     }
 }
 
-/// 连续 keepalive 段压缩为段首单帧（段首延迟 ≤100cs → 段呈现 ≤1s），
-/// 其余字节原样。解析异常 = 原样返回
+/// 连续 keepalive 段压缩（2026-11-20 用户第二轮定案「重复 2 帧以上才删除，
+/// 2 帧以内保留」——初版段首单帧的 ≤1s 压缩把停顿压得太狠，回放显快进）：
+/// 段内兜底帧 ≤2 = 完整保留真实时长；>2 = 保留段首 2 帧（静止段呈现 2s）
+/// 删掉其余。其余字节原样。解析异常 = 原样返回
 fn compress_keepalive_runs(data: &[u8]) -> Vec<u8> {
     let Some(frames) = scan_gif_frames(data) else {
         return data.to_vec();
@@ -496,17 +500,24 @@ fn compress_keepalive_runs(data: &[u8]) -> Vec<u8> {
     let mut idx = 0usize;
     while idx < frames.len() {
         let f = &frames[idx];
-        out.extend_from_slice(&data[f.start..f.end]);
-        if f.is_keepalive {
-            // 段内其余兜底帧跳过（下一个内容帧终止段）
-            let mut run = idx + 1;
-            while run < frames.len() && frames[run].is_keepalive {
-                run += 1;
-            }
-            idx = run;
-        } else {
+        if !f.is_keepalive {
+            out.extend_from_slice(&data[f.start..f.end]);
             idx += 1;
+            continue;
         }
+        // keepalive 段：段内 ≤STATIC_RUN_KEEP 全保留（真实时长），>则保留段
+        // 首 STATIC_RUN_KEEP 帧删掉其余（段呈现 = 2s）
+        let mut run = idx + 1;
+        while run < frames.len() && frames[run].is_keepalive {
+            run += 1;
+        }
+        let run_len = run - idx;
+        let keep = run_len.min(STATIC_RUN_KEEP);
+        for k in 0..keep {
+            let fr = &frames[idx + k];
+            out.extend_from_slice(&data[fr.start..fr.end]);
+        }
+        idx = run;
     }
     let tail_start = frames
         .last()
@@ -984,9 +995,9 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
     drop(delta);
     let flush = std::io::Write::flush(&mut writer);
     drop(writer);
-    // 静止段压缩（2026-11-20 用户定案语义澄清）：连续兜底帧段压成段首单帧
-    // ——静止段回放停滞 ≤1s 节奏连贯；解析异常保守保留原文件（进度条合成
-    // 以压缩后文件为输入，帧数/进度语义自洽）
+    // 静止段压缩（2026-11-20 用户第二轮定案）：段内兜底帧 ≤2 全保留、>2 留
+    // 段首 2 帧——短停顿真实、长停顿呈现 2s；解析异常保守保留原文件（进度
+    // 条合成以压缩后文件为输入，帧数/进度语义自洽）
     if !cancelled && !aborted {
         match std::fs::read(&path) {
             Ok(data) => {
@@ -1827,8 +1838,9 @@ mod tests {
     #[test]
     fn compress_keepalive_runs_collapses_static_runs() {
         // 帧序列：全帧(8cs) + 兜底(100cs)×3 + 全帧(5cs) + 兜底(100cs)+(100cs)
-        // +(50cs 尾段) → 压缩后：全帧(8) + 兜底(100) + 全帧(5) + 兜底(100)
-        // ——每个静止段只留段首一帧（段呈现 ≤1s），内容帧原样保留
+        // +(50cs 尾段) → 第二轮定案语义（重复 2 帧以上才删，2 帧以内保留）：
+        // 第一段 3 帧 >2 → 留段首 2 帧；第二段 3 帧 >2 → 留 2 帧（50cs 尾段
+        // 属段内被删）。输出 [8,100,100,5,100,100]，内容帧原样保留
         let mut buf: Vec<u8> = Vec::new();
         let enc = gif::Encoder::new(&mut buf, 4, 4, &[]).unwrap();
         let mut d = DeltaEncoder::new(enc, 4, 4);
@@ -1859,9 +1871,24 @@ mod tests {
         }
         assert_eq!(
             delays,
-            vec![cs(8), cs(100), cs(5), cs(100)],
-            "每段只留段首兜底帧"
+            vec![cs(8), cs(100), cs(100), cs(5), cs(100), cs(100)],
+            "3 帧以上的段保留段首 2 帧"
         );
+        // 短段（≤2 帧重复）完整保留：全帧 + 兜底×2 + 全帧 → 逐帧原样
+        let mut buf2: Vec<u8> = Vec::new();
+        let enc2 = gif::Encoder::new(&mut buf2, 4, 4, &[]).unwrap();
+        let mut d2 = DeltaEncoder::new(enc2, 4, 4);
+        let mut g = vec![0u8; 4 * 4 * 4];
+        for px in g.as_mut_slice().as_chunks_mut::<4>().0 {
+            px.copy_from_slice(&[10, 20, 30, 255]);
+        }
+        d2.push(&mut g, cs(8)).unwrap();
+        d2.push_keepalive(cs(100)).unwrap();
+        d2.push_keepalive(cs(100)).unwrap();
+        d2.push(&mut g, cs(5)).unwrap();
+        drop(d2);
+        let compressed2 = compress_keepalive_runs(&buf2);
+        assert_eq!(compressed2.len(), buf2.len(), "2 帧以内的段应原样保留");
     }
 
     #[test]
