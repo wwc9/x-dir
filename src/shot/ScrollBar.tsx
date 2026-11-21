@@ -4,7 +4,7 @@
 // shot-bar）只发控制命令与接收进度事件：更新尺寸显示、初始「向下滚动 ·
 // 缓慢匀速」引导、滚太快警示（shot-scroll-fast 事件，2.5s 消退）。窗口几何
 // 由 Rust 侧决定。
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Check, X } from "lucide-react";
 
@@ -36,6 +36,7 @@ export function ScrollBar({ boot }: { boot: ScrollBarBoot }) {
       setBusy(false);
       setWarn(false);
       setDress((d) => d + 1);
+      sentW.current = 0; // 新会话允许缩宽（内容宽随选区变）
     });
     return () => {
       void un.then((f) => f()).catch(() => undefined);
@@ -43,6 +44,20 @@ export function ScrollBar({ boot }: { boot: ScrollBarBoot }) {
   }, []);
 
   useBarTip();
+
+  // 内容自适应宽（GIF 浮条同款，2026-11-21「工具条太宽」）：量实宽 16px 档
+  // 量化回传 Rust 缩窗，同会话只增不减（已捕获高度文本逐秒增长不抖动）
+  const barRef = useRef<HTMLDivElement>(null);
+  const sentW = useRef(0);
+  useLayoutEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const target = Math.ceil(el.offsetWidth / 16) * 16;
+    if (target > 0 && target > sentW.current) {
+      sentW.current = target;
+      void api.shotBarResize(target).catch(() => undefined);
+    }
+  });
 
   // 首绘/换装重绘后回执 Rust（shot_ready）才原子移动上屏（无感链路）
   useEffect(() => {
@@ -98,7 +113,7 @@ export function ScrollBar({ boot }: { boot: ScrollBarBoot }) {
   }, [act]);
 
   return (
-    <div className="np-shot-sbar">
+    <div ref={barRef} className="np-shot-sbar">
       <span className="np-shot-sbar-dot" />
       {warn ? (
         <span className="np-shot-sbar-warn">滚动过快，请放慢</span>

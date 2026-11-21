@@ -344,6 +344,7 @@ pub fn run() {
             commands::shot::shot_copy_raw,
             commands::shot::shot_frame,
             commands::shot_gif::shot_gif_begin,
+            commands::shot_gif::shot_bar_resize,
             commands::shot_gif::shot_gif_control,
             commands::shot_gif::shot_gif_launch,
             commands::shot::shot_nudge_cursor,

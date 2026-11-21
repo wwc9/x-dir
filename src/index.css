@@ -7339,6 +7339,10 @@ body.np-col-resizing * {
   align-items: center;
   gap: 8px;
   height: 100vh;
+  /* 内容自适应宽（2026-11-21 用户反馈「GIF 工具条太宽」）：量实宽回传
+   * shot_bar_resize 缩窗，不再吃满 840 固定窗宽留一条空透明带；spacer
+   * 随之塌缩，浮条 = 内容紧致包络 */
+  width: max-content;
   padding: 0 10px;
   box-sizing: border-box;
   background: var(--np-surface);

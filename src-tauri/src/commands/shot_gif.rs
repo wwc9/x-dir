@@ -2179,6 +2179,41 @@ fn dialog_error(app: &AppHandle, msg: &str) {
         .show(|_| {});
 }
 
+/// 浮条内容自适应宽度（2026-11-21 用户反馈「GIF 工具条太宽」）：窗口几何
+/// 由 Rust 固定 840 逻辑宽（按最全按钮组预留），实际内容窄得多、右侧一条
+/// 空透明带——前端量出内容实宽（np-shot-sbar width:max-content 后的
+/// offsetWidth，16px 档量化防逐秒抖动）后调本命令：按窗 scale 换算物理宽
+/// （下限 240 逻辑 / 上限所在显示器内），保持条**中心**稳定重定位（初场
+/// 以选区居中落位，缩宽后仍对准选区）。滚动控制条同窗同通道
+#[tauri::command]
+pub fn shot_bar_resize(window: tauri::WebviewWindow, w: f64) -> Result<(), String> {
+    if window.label() != "shot-bar" {
+        return Err("仅浮条窗可调用".into());
+    }
+    let scale = window.scale_factor().map_err(|e| e.to_string())?;
+    let pos = window.outer_position().map_err(|e| e.to_string())?;
+    let size = window.outer_size().map_err(|e| e.to_string())?;
+    let cur_w = i32::try_from(size.width).unwrap_or(i32::MAX);
+    let min_w = (240.0 * scale).round() as i32;
+    let new_w = ((w * scale).round() as i32).clamp(min_w, cur_w.max(min_w));
+    // 显示器内钳制（右缘留 8 逻辑 px）：current_monitor 缺失（瞬态）跳过钳制
+    let mut new_x = pos.x + (cur_w - new_w) / 2;
+    if let Ok(Some(mon)) = window.current_monitor() {
+        let mp = mon.position();
+        let ms = mon.size();
+        let pad = (8.0 * scale).round() as i32;
+        let mon_w = i32::try_from(ms.width).unwrap_or(i32::MAX);
+        new_x = new_x.clamp(mp.x + pad, mp.x + mon_w - new_w - pad);
+    }
+    let phys_w = u32::try_from(new_w).unwrap_or(size.width);
+    window
+        .set_size(tauri::PhysicalSize::new(phys_w, size.height))
+        .map_err(|e| e.to_string())?;
+    window
+        .set_position(tauri::PhysicalPosition::new(new_x, pos.y))
+        .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

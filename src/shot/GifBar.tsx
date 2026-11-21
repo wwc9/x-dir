@@ -21,7 +21,7 @@
 // ⚠ busy 只作防双击：命令回执即复位（2026-11-20 用户反馈「点开始后无法
 // 退出」根因——start 成功后 busy 恒 true，录制态按钮全 disabled 且键盘
 // 通路被拦）。真正的状态权威是 Rust 侧 phase/progress 事件。
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Loader2, Pause, Play, Save, X } from "lucide-react";
 
@@ -147,6 +147,27 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
   // 相位切换（chip 组更换）时清残留气泡
   const hideBarTip = useBarTip();
   useEffect(hideBarTip, [phase]);
+
+  // 内容自适应宽（2026-11-21 用户反馈「工具条太宽」）：np-shot-sbar 为
+  // max-content 包络，量实宽 16px 档量化回传 Rust 缩窗（条中心稳定）；
+  // 相位切换重置基线允许缩宽（chip 组更换），同相位只增不减——录制文本
+  // 逐秒增长不引发逐秒缩放抖动
+  const barRef = useRef<HTMLDivElement>(null);
+  const sentW = useRef(0);
+  const prevPhase = useRef<GifPhase>(phase);
+  useLayoutEffect(() => {
+    if (prevPhase.current !== phase) {
+      prevPhase.current = phase;
+      sentW.current = 0;
+    }
+    const el = barRef.current;
+    if (!el) return;
+    const target = Math.ceil(el.offsetWidth / 16) * 16;
+    if (target > 0 && target > sentW.current) {
+      sentW.current = target;
+      void api.shotBarResize(target).catch(() => undefined);
+    }
+  });
 
   // 常驻窗停靠屏外（合成器不离场）：首绘/换装重绘后回执 Rust（shot_ready）
   // 才原子移动上屏——无感链路，2026-11-21 低配闪屏修复
@@ -283,7 +304,7 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
   }, [act, phase]);
 
   return (
-    <div className="np-shot-sbar">
+    <div ref={barRef} className="np-shot-sbar">
       {phase === "recording" ? (
         <span className={paused ? "np-shot-gbar-dot is-paused" : "np-shot-gbar-dot"} />
       ) : (
@@ -299,7 +320,7 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
           </span>
         </>
       ) : phase === "ready" ? (
-        <span className="np-shot-sbar-dim">待命 · 点击开始录制</span>
+        <span className="np-shot-sbar-dim">待命</span>
       ) : (
         <>
           <span className="np-shot-sbar-dim">{fmtSecs(secs)}</span>
