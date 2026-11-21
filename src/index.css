@@ -6982,10 +6982,11 @@ body.np-col-resizing * {
   color: var(--np-muted);
 }
 .np-shot-ocrpanel-text {
-  height: 150px;
+  /* 高度由组件按内容实高自适应（上限 5 行，2026-11-21 用户定案），CSS 不
+   * 定高；resize 一并禁用——手动拖高与自适应互相覆盖 */
   margin: 0 10px;
   padding: 8px 10px;
-  resize: vertical;
+  resize: none;
   border: 1px solid var(--np-border);
   border-radius: var(--np-radius);
   background: var(--np-surface-2);

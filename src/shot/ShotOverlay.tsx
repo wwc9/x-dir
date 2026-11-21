@@ -497,7 +497,22 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
   const ocrAliveRef = useRef(true);
   const ocrTextRef = useRef<string | null>(null);
   const ocrPanelRef = useRef<HTMLDivElement>(null);
+  const ocrTaRef = useRef<HTMLTextAreaElement>(null);
   ocrTextRef.current = ocrText;
+  // OCR 结果框自适应文本高度（2026-11-21 用户定案）：按内容实高撑开（识别
+  // 完成与手动编辑都跟随），上限 5 行——行高/内边距取自计算样式（随主题
+  // 字号走，不写死像素），超出上限滚动
+  useEffect(() => {
+    const el = ocrTaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const cs = getComputedStyle(el);
+    const max =
+      parseFloat(cs.lineHeight) * 5 +
+      parseFloat(cs.paddingTop) +
+      parseFloat(cs.paddingBottom);
+    el.style.height = `${Math.min(el.scrollHeight, max)}px`;
+  }, [ocrText]);
   useEffect(() => () => { ocrAliveRef.current = false; }, []);
 
   // ── 选区 OCR（2026-11-19 新功能）：Ctrl+O / 工具栏钮触发 ─────────────────
@@ -2685,7 +2700,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
               <AppIcon icon={Film} size={DENSITY.iconLg} />
             </button>
             <button
-              className="np-shot-tool"
+              className="np-shot-tool np-shot-primary"
               data-tip="识别文字（OCR）"
               data-kbd="Ctrl+O"
               disabled={ocrBusy}
@@ -3086,6 +3101,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             </button>
           </div>
           <textarea
+            ref={ocrTaRef}
             className="np-shot-ocrpanel-text"
             value={ocrText}
             autoFocus
