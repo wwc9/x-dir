@@ -1547,7 +1547,13 @@ export const api = {
    *  2026-11-20 用户需求「进度条平滑度可设」）；
    *  cursor:on|off = 鼠标指针叠画开关（待命/录制可切，下一帧起生效，2026-11-20）；
    *  keep:N = 静止段保留秒数（1-60，每秒一拍兜底帧下保留 N 帧 = 停顿回放
-   *  最多 N 秒，收尾压缩时生效，2026-11-20） */
+   *  最多 N 秒，收尾压缩时生效，2026-11-20）；
+   *  colors:256|128|64 = 全帧量化色数档（≤档位独特色精确调色板零损失，下一
+   *  帧起生效，2026-11-21）；
+   *  lossy:off|low|mid|high = 近色容差档（容差内帧间微变按未变处理的自研
+   *  lossy，下一帧起生效，2026-11-21）；
+   *  scale:100|75|50 = 导出缩放档（捕获后区域平均重采样，待命设定、会话
+   *  开始定档，2026-11-21） */
   shotGifControl: (
     action:
       | "start"
@@ -1558,7 +1564,10 @@ export const api = {
       | `fps:${8 | 12 | 15}`
       | `bar:${"on" | "low" | "off"}`
       | `cursor:${"on" | "off"}`
-      | `keep:${number}`,
+      | `keep:${number}`
+      | `colors:${256 | 128 | 64}`
+      | `lossy:${"off" | "low" | "mid" | "high"}`
+      | `scale:${100 | 75 | 50}`,
   ) => cmd<void>("shot_gif_control", { action }),
   /** 滚动结果窗：长图（临时 PNG 路径）写入剪贴板 */
   shotResultCopy: (file: string) => cmd<void>("shot_result_copy", { file }),

@@ -21,7 +21,16 @@
 //
 // 时长护栏：120s 上限自动收场（原始尺寸模式下体量的硬护栏，浮条同时实时
 // 显示秒数/帧数/文件字节数）。
+//
+// 体积三旋钮（2026-11-21 用户选定市场调研项 1/2/3，浮条待命态三 chip）：
+// ① 色数 colors:256|128|64（≤档位独特色走精确调色板零损失，超出 NeuQuant，
+//   色表字节与 LZW 最小码长随档收窄）；② 近色容差 lossy:off|low|mid|high
+//   （giflossy --lossy 同思路自研零 GPL 代码——容差内帧间微变按未变处理，
+//   双口径扫描收敛进 dist2_beyond 一条路径，0=字节级精确与旧语义等价）；
+// ③ 缩放导出 scale:100|75|50（捕获后区域平均重采样 + 光标位图最近邻缩放，
+//   会话开始定档场中固定；像素数平方级下降）。
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
@@ -65,6 +74,19 @@ static GIF_CURSOR: AtomicBool = AtomicBool::new(true);
 /// 浮条「停顿 Ns」chip 可设（keep:N 动作），收尾静止段压缩时读取——每帧
 /// 兜底帧 ≈1s 静止，保留 N 帧 = 停顿回放最多 N 秒
 static GIF_STATIC_KEEP: AtomicU32 = AtomicU32::new(DEFAULT_STATIC_KEEP);
+/// 全帧量化色数档（2026-11-21 用户选定调研项①「色数 chip」）：256（默认，
+/// 与 from_rgba_speed 现行为完全同口径）/128/64；≤档位独特色走精确调色板
+///（零量化损失），超出走 NeuQuant——色表字节与 LZW 最小码长随档收窄
+static GIF_COLORS: AtomicU32 = AtomicU32::new(DEFAULT_COLORS);
+/// 近色容差档（2026-11-21 用户选定调研项②「自研 lossy」，giflossy --lossy
+/// 同思路零 GPL 代码）：0=关（字节级精确，现行为）1=低 2=中 3=高，经
+/// lossy_threshold 映射为像素变化平方距离阈——容差内的帧间微变按未变处理
+///（屏幕保持上一帧呈现），吃满抗锯齿/ClearType 亚像素闪烁
+static GIF_LOSSY: AtomicU32 = AtomicU32::new(0);
+/// 导出缩放百分比档（2026-11-21 用户选定调研项③「缩放导出」，市场标配）：
+/// 100/75/50——捕获后区域平均重采样，像素数平方级下降；待命态可设、会话
+/// 开始定档（GIF 头尺寸场中固定，录制中不可切）
+static GIF_SCALE: AtomicU32 = AtomicU32::new(SCALE_DEFAULT);
 /// 当前帧率档（待命/录制中均可切，下一帧起生效）
 static GIF_FPS: AtomicU32 = AtomicU32::new(FPS_DEFAULT);
 /// 底部进度条开关（2026-11-19 用户定案：待命态可选，开启则导出后对 GIF
@@ -136,6 +158,187 @@ fn quant_speed(px: u32) -> i32 {
     }
 }
 
+/// 色数三档（256 = 现行为默认；128/64 为调研项①新增档）
+const COLOR_CHOICES: [u32; 3] = [256, 128, 64];
+const DEFAULT_COLORS: u32 = 256;
+
+/// 色数档合法性（浮条只发三档；非法回落默认）
+fn normalize_colors(v: u32) -> u32 {
+    if COLOR_CHOICES.contains(&v) {
+        v
+    } else {
+        DEFAULT_COLORS
+    }
+}
+
+/// 近色容差档位 → 像素变化平方距离阈（3 通道平方和）：关=0（字节级精确），
+/// 低/中/高 ≈ 每通道均差 5/8/17——高档 900 有意压在调色板陈旧回退阈
+///（DELTA_MAX_MEAN_DIST2=1728）之下，容差不与陈旧判定打架
+const LOSSY_THRESHOLDS: [u64; 4] = [0, 64, 256, 900];
+
+fn lossy_threshold(level: u32) -> u64 {
+    LOSSY_THRESHOLDS
+        .get(usize::try_from(level).unwrap_or(usize::MAX))
+        .copied()
+        .unwrap_or(0)
+}
+
+/// 缩放三档（100 = 原尺寸默认；75/50 为调研项③新增档）
+const SCALE_CHOICES: [u32; 3] = [100, 75, 50];
+const SCALE_DEFAULT: u32 = 100;
+
+/// 缩放档合法性（浮条只发三档；非法回落默认）
+fn normalize_scale(v: u32) -> u32 {
+    if SCALE_CHOICES.contains(&v) {
+        v
+    } else {
+        SCALE_DEFAULT
+    }
+}
+
+/// 缩放后尺寸（纯函数，单测锁定）：按百分比四舍五入、下限 1（GIF 头尺寸
+/// = 会话定档产物，场中固定）
+fn scaled_dims(w: u32, h: u32, pct: u32) -> (u32, u32) {
+    let f = |v: u32| -> u32 {
+        u32::try_from((u64::from(v) * u64::from(pct) + 50) / 100)
+            .unwrap_or(u32::MAX)
+            .max(1)
+    };
+    (f(w), f(h))
+}
+
+/// 区域平均重采样（纯函数，单测锁定；调研项③「缩放导出」）：目标像素 =
+/// 源覆盖分区的 RGBA 各通道均值（整数四舍五入）。覆盖区间用分区法
+///（floor(dx·sw/dw)..floor((dx+1)·sw/dw)，下采样时天然 ≥1 像素）——每个
+/// 源像素恰被计入一个目标，亮度无漂移；box filter 对 UI 文本/线条保持锐
+/// 利且无振铃。捕获帧 alpha 恒 255，各通道同口径平均即可
+fn downscale_rgba(src: &[u8], sw: u32, sh: u32, dw: u32, dh: u32) -> Vec<u8> {
+    let (sw_u, sh_u, dw_u, dh_u) = (sw as usize, sh as usize, dw as usize, dh as usize);
+    assert_eq!(src.len(), sw_u * sh_u * 4, "源缓冲与尺寸不符");
+    if dw_u == 0 || dh_u == 0 {
+        return Vec::new();
+    }
+    let mut out = vec![0u8; dw_u * dh_u * 4];
+    for dy in 0..dh_u {
+        let y0 = (dy as u64 * sh_u as u64 / dh_u as u64) as usize;
+        let y1 = (((dy as u64 + 1) * sh_u as u64 / dh_u as u64) as usize).clamp(y0 + 1, sh_u);
+        for dx in 0..dw_u {
+            let x0 = (dx as u64 * sw_u as u64 / dw_u as u64) as usize;
+            let x1 = (((dx as u64 + 1) * sw_u as u64 / dw_u as u64) as usize).clamp(x0 + 1, sw_u);
+            let (mut sr, mut sg, mut sb, mut sa) = (0u32, 0u32, 0u32, 0u32);
+            let mut n = 0u32;
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    let p = (y * sw_u + x) * 4;
+                    sr += u32::from(src[p]);
+                    sg += u32::from(src[p + 1]);
+                    sb += u32::from(src[p + 2]);
+                    sa += u32::from(src[p + 3]);
+                    n += 1;
+                }
+            }
+            let o = (dy * dw_u + dx) * 4;
+            out[o] = ((sr + n / 2) / n) as u8;
+            out[o + 1] = ((sg + n / 2) / n) as u8;
+            out[o + 2] = ((sb + n / 2) / n) as u8;
+            out[o + 3] = ((sa + n / 2) / n) as u8;
+        }
+    }
+    out
+}
+
+/// 最近邻重采样（纯函数，单测锁定）：目标 (dx,dy) 采样源 (dx*sw/dw,
+/// dy*sh/dh) 向下取整——仅用于光标位图缩放：箭头/工字 1px 线条区域平均会
+/// 抹灰，最近邻保锐度
+fn nearest_downscale_rgba(src: &[u8], sw: u32, sh: u32, dw: u32, dh: u32) -> Vec<u8> {
+    let (sw_u, sh_u, dw_u, dh_u) = (sw as usize, sh as usize, dw as usize, dh as usize);
+    assert_eq!(src.len(), sw_u * sh_u * 4, "源缓冲与尺寸不符");
+    let mut out = vec![0u8; dw_u * dh_u * 4];
+    for dy in 0..dh_u {
+        let sy = (dy as u64 * sh_u as u64 / dh_u as u64) as usize;
+        for dx in 0..dw_u {
+            let sx = (dx as u64 * sw_u as u64 / dw_u as u64) as usize;
+            let p = (sy * sw_u + sx) * 4;
+            let o = (dy * dw_u + dx) * 4;
+            out[o..o + 4].copy_from_slice(&src[p..p + 4]);
+        }
+    }
+    out
+}
+
+/// 自定义色数上限的全帧量化（调研项①；镜像 gif::Frame::from_rgba_speed
+/// 语义——alpha 归一（非 0 → 255，透明像素统一为首透明色）+ 独特色计数：
+/// ≤max_colors 走精确调色板（零量化损失，encoder 自动补齐 2^n 表宽），
+/// 超出走 color_quant NeuQuant（MIT）。max_colors ≥ 256 = 原函数直通（含
+/// 其 ≤256 精确色表分支，现行为不变）
+fn quantize_frame(
+    w: u16,
+    h: u16,
+    pixels: &mut [u8],
+    speed: i32,
+    max_colors: usize,
+) -> gif::Frame<'static> {
+    if max_colors >= 256 {
+        return gif::Frame::from_rgba_speed(w, h, pixels, speed);
+    }
+    let mut transparent: Option<[u8; 4]> = None;
+    for pix in pixels.as_chunks_mut::<4>().0 {
+        if pix[3] != 0 {
+            pix[3] = 0xFF;
+            continue;
+        }
+        if let Some(t) = transparent {
+            pix.copy_from_slice(&t);
+        } else {
+            transparent = Some([pix[0], pix[1], pix[2], pix[3]]);
+        }
+    }
+    let mut colors: BTreeSet<(u8, u8, u8, u8)> = BTreeSet::new();
+    for pixel in pixels.as_chunks::<4>().0 {
+        if colors.insert((pixel[0], pixel[1], pixel[2], pixel[3])) && colors.len() > max_colors {
+            let nq = color_quant::NeuQuant::new(speed, max_colors, pixels);
+            return gif::Frame {
+                width: w,
+                height: h,
+                buffer: std::borrow::Cow::Owned(
+                    pixels
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
+                        .map(|pix| nq.index_of(pix) as u8)
+                        .collect(),
+                ),
+                palette: Some(nq.color_map_rgb()),
+                transparent: transparent.map(|t| nq.index_of(&t) as u8),
+                ..gif::Frame::default()
+            };
+        }
+    }
+    // 精确路径：独特色 ≤ max_colors，调色板 = 独特色平铺（按 BTreeSet 序
+    // 稳定），索引查表直映射
+    let mut palette: Vec<u8> = Vec::with_capacity(colors.len() * 3);
+    let mut index_of: BTreeMap<(u8, u8, u8, u8), u8> = BTreeMap::new();
+    for (i, (r, g, b, a)) in colors.iter().enumerate() {
+        index_of.insert((*r, *g, *b, *a), i as u8);
+        palette.extend_from_slice(&[*r, *g, *b]);
+    }
+    gif::Frame {
+        width: w,
+        height: h,
+        buffer: std::borrow::Cow::Owned(
+            pixels
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|pix| index_of[&(pix[0], pix[1], pix[2], pix[3])])
+                .collect(),
+        ),
+        palette: Some(palette),
+        transparent: transparent.map(|t| index_of[&(t[0], t[1], t[2], t[3])]),
+        ..gif::Frame::default()
+    }
+}
+
 // ── 帧间差异编码（2026-11-20 用户需求；gifsicle -O 同源思路）────────────────
 // 「空间维度去重」，与重复帧剔除（时间维度）共享一套画布状态：帧内容与
 // 观看画布（上一写入帧的量化结果 = 解码器实际呈现的颜色）的差异落在小矩形
@@ -197,6 +400,25 @@ struct DeltaEncoder<W: std::io::Write> {
     palette: Vec<u8>,
     /// 上次捕获的 RGB（3 字节/像素）：真静止快速判定基线（免全帧 diff）
     last_raw: Vec<u8>,
+    /// 全帧量化色数上限（2026-11-21 调研项①）：录制循环逐帧自 GIF_COLORS
+    /// 刷新（下一帧起生效）；≥256 = from_rgba_speed 现行为
+    colors: usize,
+    /// 近色容差（2026-11-21 调研项②「自研 lossy」）：帧间像素变化平方距离
+    /// ≤ 此值按未变处理；0 = 字节级精确（现行为）。合成链路恒 0（重编码
+    /// 语义是确定性的，不叠加二次有损）
+    tolerance: u64,
+}
+
+/// 平方距离是否超阈（容差口径，单测锁定）：t=0 时不等即超阈——与旧字节级
+/// 逐通道比较完全等价，一条路径通吃两代语义
+#[inline]
+fn dist2_beyond(a: [u8; 3], b: [u8; 3], t: u64) -> bool {
+    let (dr, dg, db) = (
+        i32::from(a[0]) - i32::from(b[0]),
+        i32::from(a[1]) - i32::from(b[1]),
+        i32::from(a[2]) - i32::from(b[2]),
+    );
+    ((dr * dr + dg * dg + db * db) as u64) > t
 }
 
 impl<W: std::io::Write> DeltaEncoder<W> {
@@ -209,6 +431,8 @@ impl<W: std::io::Write> DeltaEncoder<W> {
             canvas_idx: Vec::new(),
             palette: Vec::new(),
             last_raw: Vec::new(),
+            colors: 256,
+            tolerance: 0,
         }
     }
 
@@ -236,8 +460,13 @@ impl<W: std::io::Write> DeltaEncoder<W> {
     /// 全帧：NeuQuant 重建调色板 + 画布/索引全量推进
     fn push_full(&mut self, rgba: &mut [u8], delay_cs: u16) -> Result<FrameKind, String> {
         let (w, h) = (self.w, self.h);
-        let mut g =
-            gif::Frame::from_rgba_speed(w, h, rgba, quant_speed(u32::from(w) * u32::from(h)));
+        let mut g = quantize_frame(
+            w,
+            h,
+            rgba,
+            quant_speed(u32::from(w) * u32::from(h)),
+            self.colors,
+        );
         g.delay = delay_cs;
         // 子帧依赖画布保留：全帧 disposal 同样 Keep（覆盖式全帧用 Keep 无害）
         g.dispose = gif::DisposalMethod::Keep;
@@ -281,8 +510,11 @@ impl<W: std::io::Write> DeltaEncoder<W> {
         // ε 不算）∧ **观看变化**（raw vs 画布量化色）的交集 = 需要重编码的
         // 像素集。只用观看口径会让高熵内容的 ε 误差铺满全幅（子帧退化为
         // 全帧）；只用内容口径会把画布已呈现的 ε 内变化也重写。交集即
-        // 「屏幕真变了且观看会不同」。扫描范围：有提示时只遍历提示矩形
+        // 「屏幕真变了且观看会不同」。比对走容差口径（dist2_beyond，
+        // tolerance=0 时与字节级逐通道比较等价——2026-11-21 调研项②把两代
+        // 语义收敛进一条路径）。扫描范围：有提示时只遍历提示矩形
         //（提示外像素与上一帧逐位相同，构造性保证无需检查）
+        let tolerance = self.tolerance;
         let mut count = 0usize;
         let (mut min_x, mut min_y) = (w, h);
         let (mut max_x, mut max_y) = (0usize, 0usize);
@@ -293,11 +525,10 @@ impl<W: std::io::Write> DeltaEncoder<W> {
         for row in sy..sy + sh {
             for col in sx..sx + sw {
                 let p = row * w + col;
-                let px = &raw_px[p];
-                let prev = &last_px[p];
-                if px[0] != prev[0] || px[1] != prev[1] || px[2] != prev[2] {
-                    let cv = &canv_px[p];
-                    if px[0] != cv[0] || px[1] != cv[1] || px[2] != cv[2] {
+                let px = [raw_px[p][0], raw_px[p][1], raw_px[p][2]];
+                if dist2_beyond(px, [last_px[p][0], last_px[p][1], last_px[p][2]], tolerance) {
+                    let cv = [canv_px[p][0], canv_px[p][1], canv_px[p][2]];
+                    if dist2_beyond(px, cv, tolerance) {
                         count += 1;
                         min_x = min_x.min(col);
                         min_y = min_y.min(row);
@@ -635,6 +866,10 @@ pub fn shot_gif_begin(
     GIF_PAUSED.store(false, Ordering::Relaxed);
     GIF_CURSOR.store(true, Ordering::Relaxed);
     GIF_STATIC_KEEP.store(DEFAULT_STATIC_KEEP, Ordering::Relaxed);
+    // 体积三旋钮复位（2026-11-21 调研项①②③）：256 色 / 容差关 / 原尺寸
+    GIF_COLORS.store(DEFAULT_COLORS, Ordering::Relaxed);
+    GIF_LOSSY.store(0, Ordering::Relaxed);
+    GIF_SCALE.store(SCALE_DEFAULT, Ordering::Relaxed);
     GIF_ACTIVE.store(true, Ordering::Relaxed);
     // 覆盖窗停靠（异步消息，必须等真正摘屏才能建窗——蒙层在场时 build()
     // 泵消息永久卡死，滚动截图同款坑在案），拆两段命令由前端顺序调用
@@ -694,13 +929,16 @@ pub fn shot_gif_launch(app: AppHandle) -> Result<(), String> {
             "shot-gif-bar-boot",
             serde_json::json!({
                 "fps": GIF_FPS.load(Ordering::Relaxed),
-                // barOn/cursorOn/staticKeep 全量随发：常驻窗复用时前端 chip 与
-                // Rust 复位值对齐（begin 已复位，事件缺省会让前端保留上一场
-                // 切换值）
+                // barOn/cursorOn/staticKeep/colors/lossy/scale 全量随发：常驻
+                // 窗复用时前端 chip 与 Rust 复位值对齐（begin 已复位，事件缺省
+                // 会让前端保留上一场切换值）
                 "barOn": GIF_BAR.load(Ordering::Relaxed),
                 "cursorOn": GIF_CURSOR.load(Ordering::Relaxed),
                 "staticKeep": GIF_STATIC_KEEP.load(Ordering::Relaxed),
                 "barSteps": GIF_BAR_STEPS.load(Ordering::Relaxed),
+                "colors": GIF_COLORS.load(Ordering::Relaxed),
+                "lossy": GIF_LOSSY.load(Ordering::Relaxed),
+                "scale": GIF_SCALE.load(Ordering::Relaxed),
             }),
         );
         let reuse = app2.get_webview_window("shot-frame").is_some()
@@ -770,9 +1008,14 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
     let dir = shot_dir();
     let _ = std::fs::create_dir_all(&dir);
     let path = dir.join(format!("gif_{}.gif", millis()));
+    // 导出缩放定档（2026-11-21 调研项③）：待命态设定、会话开始固定——GIF
+    // 头尺寸场中固定不可中切；捕获后区域平均重采样，下游（指针叠画/去重/
+    // 子帧/量化）全部工作在缩放后坐标系
+    let scale_pct = normalize_scale(GIF_SCALE.load(Ordering::Relaxed));
+    let (dw, dh) = scaled_dims(rw, rh, scale_pct);
     let (w16, h16) = (
-        u16::try_from(rw).unwrap_or(u16::MAX),
-        u16::try_from(rh).unwrap_or(u16::MAX),
+        u16::try_from(dw).unwrap_or(u16::MAX),
+        u16::try_from(dh).unwrap_or(u16::MAX),
     );
     let file = match std::fs::File::create(&path) {
         Ok(f) => f,
@@ -818,7 +1061,7 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
     // 指针位图缓存（线程封闭）：光标形状未变时免每帧 GetIconInfo/GetDIBits
     let mut cursor_cache: Option<CursorCache> = None;
     log::info!(
-        "GIF 录制循环进场（待命态）：选区 ({rx},{ry}) {rw}×{rh}，fps {}",
+        "GIF 录制循环进场（待命态）：选区 ({rx},{ry}) {rw}×{rh}，fps {}，缩放 {scale_pct}% → 输出 {dw}×{dh}",
         GIF_FPS.load(Ordering::Relaxed)
     );
     // ── 待命态（2026-11-19 用户定案「点开始才开始录」）：选区遮罩 + 浮条
@@ -919,17 +1162,27 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
                 continue;
             }
             let fps = normalize_fps(GIF_FPS.load(Ordering::Relaxed));
+            // 体积三旋钮逐帧自原子刷新（下一帧起生效；缩放除外——会话定档）
+            delta.colors = normalize_colors(GIF_COLORS.load(Ordering::Relaxed)) as usize;
+            delta.tolerance = lossy_threshold(GIF_LOSSY.load(Ordering::Relaxed));
             match monitor.capture_region(rx, ry, rw, rh) {
                 Ok(frame) => {
                     bad_streak = 0;
                     let now = Instant::now();
-                    let (fw, _fh) = frame.dimensions();
-                    let mut rgba = frame.into_raw();
+                    // 缩放导出（2026-11-21 调研项③）：先区域平均降采样再叠
+                    // 画指针——指针缓存与落位坐标随档位缩放
+                    let (sw, sh) = frame.dimensions();
+                    let (fw, fh, mut rgba) = if scale_pct >= SCALE_DEFAULT {
+                        (sw, sh, frame.into_raw())
+                    } else {
+                        let raw = frame.into_raw();
+                        (dw, dh, downscale_rgba(&raw, sw, sh, dw, dh))
+                    };
                     // 指针叠画先于差异判定（2026-11-20 用户需求）：光标参与
                     // 比对——光标动 = 帧变化（语义正确），光标静止画面静止
                     // 仍可剔除/子帧化
                     if GIF_CURSOR.load(Ordering::Relaxed) {
-                        overlay_cursor(&mut rgba, fw, _fh, &geo, &mut cursor_cache);
+                        overlay_cursor(&mut rgba, fw, fh, &geo, &mut cursor_cache, scale_pct);
                     }
                     // ── 三层跳帧/帧间差异（时间维剔除 + 空间维子帧）：快判定
                     // 真静止 → dedup_delay 决定剔除或兜底；变化帧交 DeltaEncoder
@@ -951,10 +1204,17 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
                         };
                         match res {
                             Ok(kind) => {
-                                // ViewerIdentical（量化 ε 内变化）= 观看无差
-                                // 跳过：不推进 last_written，时长自然并入下一
-                                // 写入帧延迟
-                                if kind.is_written() {
+                                // ViewerIdentical（量化 ε / 近色容差内变化）=
+                                // 观看无差跳过：不推进 last_written，时长自然
+                                // 并入下一写入帧延迟；累计 ≥1s 时补兜底帧——
+                                // 「帧延迟全程 ≤1s」不变式与重复帧剔除同口径
+                                //（2026-11-21 调研项②容差跳过会高频走到这里）
+                                let write = kind.is_written()
+                                    || (since_written.is_some_and(|ms| ms >= DUP_FLUSH_MS)
+                                        && delta
+                                            .push_keepalive(gif_delay_cs(DUP_FLUSH_MS))
+                                            .is_ok());
+                                if write {
                                     frames += 1;
                                     last_written = Some(now);
                                 }
@@ -1210,6 +1470,10 @@ fn encode_with_bar(
         // 后续自动产出子帧（内容变化盒 ∪ 填充增量条）与增量条窄帧
         let (gw_u, gh_u) = (usize::from(gw), usize::from(gh));
         let mut delta = DeltaEncoder::new(encoder, gw, gh + bar_h);
+        // 合成色数随会话档位（2026-11-21 调研项①）：录制 128/64 色时重编码
+        // 同档收窄色表与 LZW 码长；容差恒 0——合成重编码要求确定性，不在
+        // 录制期有损之上叠加二次有损
+        delta.colors = normalize_colors(GIF_COLORS.load(Ordering::Relaxed)) as usize;
         let synth_t0 = std::time::Instant::now(); // ETA 预估基点
         // 组合画布（RGBA）：帧间差异编码产物含子矩形帧（disposal=Keep 保留
         // 画布），逐帧叠画重建完整画面；全帧 (0,0) 覆盖整幅
@@ -1374,6 +1638,36 @@ pub fn shot_gif_control(action: String) -> Result<(), String> {
         GIF_STATIC_KEEP.store(keep.clamp(1, STATIC_KEEP_MAX), Ordering::Relaxed);
         return Ok(());
     }
+    // 全帧量化色数档（2026-11-21 调研项①「色数 chip」）：256/128/64，下一
+    // 帧起生效——≤档位独特色走精确调色板，超出走 NeuQuant
+    if let Some(n) = action
+        .strip_prefix("colors:")
+        .and_then(|s| s.parse::<u32>().ok())
+    {
+        GIF_COLORS.store(normalize_colors(n), Ordering::Relaxed);
+        return Ok(());
+    }
+    // 近色容差档（2026-11-21 调研项②「自研 lossy」）：off/low/mid/high →
+    // 平方距离阈 0/64/256/900，下一帧起生效
+    if let Some(level) = action.strip_prefix("lossy:").and_then(|s| match s {
+        "off" => Some(0u32),
+        "low" => Some(1),
+        "mid" => Some(2),
+        "high" => Some(3),
+        _ => None,
+    }) {
+        GIF_LOSSY.store(level, Ordering::Relaxed);
+        return Ok(());
+    }
+    // 导出缩放档（2026-11-21 调研项③「缩放导出」）：100/75/50——待命态可
+    // 设（浮条仅待命显示），会话开始定档后录制中不可切
+    if let Some(n) = action
+        .strip_prefix("scale:")
+        .and_then(|s| s.parse::<u32>().ok())
+    {
+        GIF_SCALE.store(normalize_scale(n), Ordering::Relaxed);
+        return Ok(());
+    }
     match action.as_str() {
         // 待命 → 录制（浮条「开始录制」）
         "start" => GIF_FLAG.store(1, Ordering::Relaxed),
@@ -1398,7 +1692,8 @@ pub fn shot_gif_control(action: String) -> Result<(), String> {
 // AND mask 兜底透明度；单色光标（I-beam 等）按 ICONINFO 上半 AND 下半
 // XOR 经典公式绘制。
 
-/// 光标位图缓存（线程封闭于录制循环）：句柄未变复用已解码 RGBA
+/// 光标位图缓存（线程封闭于录制循环）：句柄 + 缩放档位均未变时复用已解码
+/// RGBA（缩放档位变更须重缩放，2026-11-21 调研项③随档生效）
 struct CursorCache {
     handle: isize,
     rgba: Vec<u8>,
@@ -1406,6 +1701,8 @@ struct CursorCache {
     height: u32,
     hotspot_x: u32,
     hotspot_y: u32,
+    /// 解码后已应用的缩放档位（100 = 原生尺寸）
+    scale: u32,
 }
 
 /// 叠画落位裁剪（纯函数，单测锁定）：光标贴图左上角可落在帧外（负坐标/
@@ -1593,18 +1890,21 @@ fn decode_cursor(handle: isize) -> Option<CursorCache> {
             height,
             hotspot_x: info.xHotspot,
             hotspot_y: info.yHotspot,
+            scale: SCALE_DEFAULT,
         })
     }
 }
 
-/// 帧内叠画当前光标（每帧调用；句柄未变走缓存）。坐标链 = ptScreenPos
-///（虚拟屏幕物理像素）- 热区 - 选区原点（显示器绝对）= 帧内左上角
+/// 帧内叠画当前光标（每帧调用；句柄/缩放档位未变走缓存）。坐标链 =
+/// ptScreenPos（虚拟屏幕物理像素）- 热区 - 选区原点（显示器绝对）再按缩放
+/// 档位折算 = 帧内左上角（2026-11-21 调研项③：位图最近邻缩放随缓存档生效）
 fn overlay_cursor(
     frame: &mut [u8],
     fw: u32,
     fh: u32,
     geo: &GifGeo,
     cache: &mut Option<CursorCache>,
+    scale_pct: u32,
 ) {
     #[cfg(windows)]
     {
@@ -1625,20 +1925,35 @@ fn overlay_cursor(
             return;
         }
         let handle = ci.hCursor.0 as isize;
-        if cache.as_ref().map(|c| c.handle) != Some(handle) {
-            *cache = decode_cursor(handle);
+        if cache.as_ref().map(|c| (c.handle, c.scale)) != Some((handle, scale_pct)) {
+            *cache = decode_cursor(handle).map(|mut c| {
+                if scale_pct < SCALE_DEFAULT && c.width > 0 && c.height > 0 {
+                    let (cw, ch) = scaled_dims(c.width, c.height, scale_pct);
+                    if cw >= 1 && ch >= 1 {
+                        c.rgba = nearest_downscale_rgba(&c.rgba, c.width, c.height, cw, ch);
+                        c.width = cw;
+                        c.height = ch;
+                    }
+                }
+                c.scale = scale_pct;
+                c
+            });
             // 会话诊断（用户反馈「指针没录进」定位）：句柄解码结果 + 坐标链
             // 全量打印；句柄形状切换时偶发几条，可接受
             let (dx, dy, ok) = match cache {
                 Some(c) => (
-                    ci.ptScreenPos.x - c.hotspot_x as i32 - (geo.mon.x + geo.rx as i32),
-                    ci.ptScreenPos.y - c.hotspot_y as i32 - (geo.mon.y + geo.ry as i32),
+                    (ci.ptScreenPos.x - c.hotspot_x as i32 - (geo.mon.x + geo.rx as i32))
+                        * scale_pct as i32
+                        / 100,
+                    (ci.ptScreenPos.y - c.hotspot_y as i32 - (geo.mon.y + geo.ry as i32))
+                        * scale_pct as i32
+                        / 100,
                     "成功",
                 ),
                 None => (0, 0, "失败"),
             };
             log::info!(
-                "GIF 指针：句柄 {handle:?} 解码{ok} pos=({},{}) 选区={}+{},{}+{} {}×{} 帧内落点=({dx},{dy})",
+                "GIF 指针：句柄 {handle:?} 解码{ok} pos=({},{}) 选区={}+{},{}+{} {}×{} 缩放{scale_pct}% 帧内落点=({dx},{dy})",
                 ci.ptScreenPos.x,
                 ci.ptScreenPos.y,
                 geo.mon.x,
@@ -1650,14 +1965,18 @@ fn overlay_cursor(
             );
         }
         if let Some(c) = cache {
-            let dx = ci.ptScreenPos.x - c.hotspot_x as i32 - (geo.mon.x + geo.rx as i32);
-            let dy = ci.ptScreenPos.y - c.hotspot_y as i32 - (geo.mon.y + geo.ry as i32);
+            let dx = (ci.ptScreenPos.x - c.hotspot_x as i32 - (geo.mon.x + geo.rx as i32))
+                * scale_pct as i32
+                / 100;
+            let dy = (ci.ptScreenPos.y - c.hotspot_y as i32 - (geo.mon.y + geo.ry as i32))
+                * scale_pct as i32
+                / 100;
             blend_cursor(frame, fw, fh, c, dx, dy);
         }
     }
     #[cfg(not(windows))]
     {
-        let _ = (frame, fw, fh, geo, cache);
+        let _ = (frame, fw, fh, geo, cache, scale_pct);
     }
 }
 
@@ -1704,21 +2023,21 @@ fn show_mask_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
     win.show().map_err(|e| e.to_string())
 }
 
-/// 录制浮条：停靠选区正下方（bar_layout_sized 定位同滚动；宽度 640——
-/// GIF 按钮组含 暂停/保存/取消 + fps/进度条/指针/停顿 四 chip，560 时待命
-/// 态放不下（2026-11-20 用户需求「停顿保留秒数录制前可设」入列），定位算
-/// 法单一来源），持有焦点使 Enter/Esc 生效；boot 换装 gifbar（常驻窗复用
-/// 同款）
+/// 录制浮条：停靠选区正下方（bar_layout_sized 定位同滚动；宽度 840——
+/// GIF 按钮组含 暂停/保存/取消 + fps/进度条/指针/停顿 四 chip + 待命态
+/// 色数/有损/缩放三 chip（2026-11-21 调研项①②③入列，640 时代指针 chip
+/// 已扩到 560/640），定位算法单一来源），持有焦点使 Enter/Esc 生效；boot
+/// 换装 gifbar（常驻窗复用同款）
 fn show_gif_bar_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
     let mon = &geo.mon;
     let s = f64::from(mon.scale);
     let (bx, by, bw, bh) = super::shot_scroll::bar_layout_sized(
         (geo.rx as i32, geo.ry as i32, geo.rw as i32, geo.rh as i32),
         mon,
-        (640.0 * s).round() as i32,
+        (840.0 * s).round() as i32,
         (44.0 * s).round() as i32,
     );
-    let boot = serde_json::json!({ "window": "gifbar", "fps": GIF_FPS.load(Ordering::Relaxed), "barOn": GIF_BAR.load(Ordering::Relaxed), "cursorOn": GIF_CURSOR.load(Ordering::Relaxed), "staticKeep": GIF_STATIC_KEEP.load(Ordering::Relaxed), "barSteps": GIF_BAR_STEPS.load(Ordering::Relaxed) });
+    let boot = serde_json::json!({ "window": "gifbar", "fps": GIF_FPS.load(Ordering::Relaxed), "barOn": GIF_BAR.load(Ordering::Relaxed), "cursorOn": GIF_CURSOR.load(Ordering::Relaxed), "staticKeep": GIF_STATIC_KEEP.load(Ordering::Relaxed), "barSteps": GIF_BAR_STEPS.load(Ordering::Relaxed), "colors": GIF_COLORS.load(Ordering::Relaxed), "lossy": GIF_LOSSY.load(Ordering::Relaxed), "scale": GIF_SCALE.load(Ordering::Relaxed) });
     let win = match app.get_webview_window("shot-bar") {
         Some(w) => w,
         None => WebviewWindowBuilder::new(app, "shot-bar", WebviewUrl::App("shot.html".into()))
@@ -1859,6 +2178,203 @@ mod tests {
         assert_eq!(normalize_fps(15), 15);
         assert_eq!(normalize_fps(30), FPS_DEFAULT);
         assert_eq!(normalize_fps(0), FPS_DEFAULT);
+    }
+
+    #[test]
+    fn normalize_colors_scale_and_lossy_thresholds() {
+        // 色数/缩放档只认清单档位，非法回落默认；容差档位映射平方距阈，
+        // 越界回落 0（字节级精确）
+        assert_eq!(normalize_colors(256), 256);
+        assert_eq!(normalize_colors(128), 128);
+        assert_eq!(normalize_colors(64), 64);
+        assert_eq!(normalize_colors(100), DEFAULT_COLORS);
+        assert_eq!(normalize_colors(0), DEFAULT_COLORS);
+        assert_eq!(normalize_scale(100), 100);
+        assert_eq!(normalize_scale(75), 75);
+        assert_eq!(normalize_scale(50), 50);
+        assert_eq!(normalize_scale(80), SCALE_DEFAULT);
+        assert_eq!(lossy_threshold(0), 0);
+        assert_eq!(lossy_threshold(1), 64);
+        assert_eq!(lossy_threshold(2), 256);
+        assert_eq!(lossy_threshold(3), 900);
+        assert_eq!(lossy_threshold(4), 0);
+        assert_eq!(lossy_threshold(u32::MAX), 0);
+    }
+
+    #[test]
+    fn scaled_dims_rounds_with_floor_one() {
+        // 偶数尺寸整除精确；奇数尺寸四舍五入；极小尺寸下限 1（GIF 头 ≥1）
+        assert_eq!(scaled_dims(96, 80, 50), (48, 40));
+        assert_eq!(scaled_dims(400, 300, 75), (300, 225));
+        assert_eq!(scaled_dims(97, 81, 75), (73, 61)); // 72.75→73 / 60.75→61
+        assert_eq!(scaled_dims(5, 5, 50), (3, 3)); // 2.5→3
+        assert_eq!(scaled_dims(1, 1, 50), (1, 1));
+    }
+
+    #[test]
+    fn downscale_rgba_box_averages_and_identity() {
+        // 4×4→2×2：四象限各 4 像素均值；恒等缩放（pct=100）逐位复制；
+        // 3×2→2×1 不规则覆盖（目标覆盖源列 0..1 与 1..3）
+        let mut src = vec![0u8; 4 * 4 * 4];
+        let quadrants = [
+            (10u8, 20u8, 30u8),
+            (50, 60, 70),
+            (90, 100, 110),
+            (130, 140, 150),
+        ];
+        for (y, row) in src.chunks_exact_mut(16).enumerate() {
+            for (x, px) in row.chunks_exact_mut(4).enumerate() {
+                let q = (y / 2) * 2 + x / 2;
+                let (r, g, b) = quadrants[q];
+                px.copy_from_slice(&[r, g, b, 255]);
+            }
+        }
+        let out = downscale_rgba(&src, 4, 4, 2, 2);
+        assert_eq!(out.len(), 2 * 2 * 4);
+        assert_eq!(&out[0..4], &[10, 20, 30, 255], "象限均值 = 象限值本身");
+        assert_eq!(&out[4..8], &[50, 60, 70, 255]);
+        assert_eq!(&out[8..12], &[90, 100, 110, 255]);
+        assert_eq!(&out[12..16], &[130, 140, 150, 255]);
+        assert_eq!(downscale_rgba(&src, 4, 4, 4, 4), src, "恒等缩放逐位复制");
+        // 3 宽 → 2 宽（分区法）：目标列 0 覆盖源列 {0}，目标列 1 覆盖源列
+        // {1,2}，行高 1:1
+        let mut w3 = vec![0u8; 3 * 2 * 4];
+        for (i, px) in w3.as_mut_slice().chunks_exact_mut(4).enumerate() {
+            let v = (i % 3) as u8 * 30; // 行 0/1 同值 → 行均值不干扰列断言
+            px.copy_from_slice(&[v, v, v, 255]);
+        }
+        let o2 = downscale_rgba(&w3, 3, 2, 2, 2);
+        assert_eq!(o2[0], 0, "源列 0 直通");
+        assert_eq!(o2[4], 45, "源列 1(30)+2(60) 均值 45");
+    }
+
+    #[test]
+    fn nearest_downscale_rgba_samples_anchor_pixels() {
+        // 最近邻采样 (dx*sw/dw, dy*sh/dh)：2×2→1×1 取 (0,0)；4×4→2×2 取四角
+        let mut src = vec![0u8; 2 * 2 * 4];
+        src[0..4].copy_from_slice(&[1, 2, 3, 255]);
+        src[4..8].copy_from_slice(&[4, 5, 6, 255]);
+        src[8..12].copy_from_slice(&[7, 8, 9, 255]);
+        src[12..16].copy_from_slice(&[10, 11, 12, 255]);
+        let out = nearest_downscale_rgba(&src, 2, 2, 1, 1);
+        assert_eq!(&out[..4], &[1, 2, 3, 255]);
+        let mut big = vec![0u8; 4 * 4 * 4];
+        for (i, px) in big.as_mut_slice().chunks_exact_mut(4).enumerate() {
+            let v = i as u8;
+            px.copy_from_slice(&[v, 0, 0, 255]);
+        }
+        let o4 = nearest_downscale_rgba(&big, 4, 4, 2, 2);
+        // 采样锚点 (dx*4/2, dy*4/2) = (0,0)(2,0)(0,2)(2,2) → 像素序号 0 2 8 10
+        assert_eq!(o4[0], 0);
+        assert_eq!(o4[4], 2);
+        assert_eq!(o4[8], 8);
+        assert_eq!(o4[12], 10);
+    }
+
+    #[test]
+    fn dist2_beyond_matches_byte_compare_at_zero_tolerance() {
+        // t=0：任一通道不等即超阈（与旧字节级口径等价），全等不超阈；
+        // t>0：平方和落阈内按未变处理
+        assert!(!dist2_beyond([10, 20, 30], [10, 20, 30], 0));
+        assert!(dist2_beyond([11, 20, 30], [10, 20, 30], 0));
+        assert!(dist2_beyond([10, 20, 31], [10, 20, 30], 0));
+        assert!(!dist2_beyond([13, 23, 33], [10, 20, 30], 64)); // 27 ≤ 64
+        assert!(!dist2_beyond([14, 24, 34], [10, 20, 30], 64)); // 48 ≤ 64
+        assert!(dist2_beyond([18, 28, 38], [10, 20, 30], 64)); // 192 > 64
+    }
+
+    #[test]
+    fn lossy_tolerance_turns_near_changes_into_viewer_identical() {
+        // 容差中档（256）：平方距 108 的近色小改按未变处理 → ViewerIdentical
+        //（t=0 时同输入为 Sub，见 delta_encoder_full_sub_skip_keepalive）；
+        // 远色大改（平方距 58800 > 256）仍写子帧
+        let mut buf: Vec<u8> = Vec::new();
+        let enc = gif::Encoder::new(&mut buf, 4, 4, &[]).unwrap();
+        let mut d = DeltaEncoder::new(enc, 4, 4);
+        d.tolerance = 256;
+        let mut f1 = vec![0u8; 4 * 4 * 4];
+        for px in f1.as_mut_slice().as_chunks_mut::<4>().0 {
+            px.copy_from_slice(&[200, 210, 220, 255]);
+        }
+        for px in f1.as_mut_slice().as_chunks_mut::<4>().0.iter_mut().take(8) {
+            px.copy_from_slice(&[10, 20, 30, 255]);
+        }
+        assert_eq!(d.push(&mut f1, 8).unwrap(), FrameKind::Full);
+        let mut f2 = f1.clone();
+        f2[0..4].copy_from_slice(&[16, 26, 36, 255]); // dist2 = 108 ≤ 256
+        assert_eq!(
+            d.push(&mut f2, 8).unwrap(),
+            FrameKind::ViewerIdentical,
+            "容差内近色变化应按未变跳过"
+        );
+        assert!(d.same_as_last(&f2), "跳过帧基线应已刷新为本次捕获");
+        let mut f3 = f2.clone();
+        for px in f3.as_mut_slice().as_chunks_mut::<4>().0.iter_mut().take(4) {
+            // 距基线平方距 80672（远超容差 = 真变化），距旧调色板亮色
+            // (200,210,220) 平方距 1200（≤ 陈旧阈 1728 = 子帧可承载）
+            px.copy_from_slice(&[180, 190, 200, 255]);
+        }
+        assert_eq!(
+            d.push(&mut f3, 8).unwrap(),
+            FrameKind::Sub,
+            "容差外真变化仍写子帧"
+        );
+    }
+
+    #[test]
+    fn quantize_colors_caps_palette_and_preserves_exact_small_sets() {
+        // >64 独特色噪声帧 @colors=64：NeuQuant 档位上限生效（调色板 ≤64 项）；
+        // 2 色纯色帧 @colors=64：精确调色板零损失，解码回读逐位还原
+        let mut buf: Vec<u8> = Vec::new();
+        let enc = gif::Encoder::new(&mut buf, 32, 32, &[]).unwrap();
+        let mut d = DeltaEncoder::new(enc, 32, 32);
+        d.colors = 64;
+        let mut noise = vec![0u8; 32 * 32 * 4];
+        let mut seed = 987654321u64;
+        for px in noise.as_mut_slice().as_chunks_mut::<4>().0 {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            px[0] = (seed >> 33) as u8;
+            px[1] = (seed >> 20) as u8;
+            px[2] = (seed >> 7) as u8;
+            px[3] = 255;
+        }
+        assert_eq!(d.push_full(&mut noise, 8).unwrap(), FrameKind::Full);
+        assert!(
+            d.palette.len() <= 64 * 3,
+            "调色板应被 64 色档收窄（实际 {} 项）",
+            d.palette.len() / 3
+        );
+        // 精确路径：2 色帧 @colors=64 → 调色板恰 2 项，解码色逐位等于源
+        let mut buf2: Vec<u8> = Vec::new();
+        let enc2 = gif::Encoder::new(&mut buf2, 8, 8, &[]).unwrap();
+        let mut d2 = DeltaEncoder::new(enc2, 8, 8);
+        d2.colors = 64;
+        let mut two = vec![0u8; 8 * 8 * 4];
+        for (i, px) in two
+            .as_mut_slice()
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .enumerate()
+        {
+            px.copy_from_slice(if i < 32 {
+                &[255, 0, 0, 255]
+            } else {
+                &[0, 0, 255, 255]
+            });
+        }
+        d2.push_full(&mut two, 8).unwrap();
+        assert_eq!(d2.palette.len() / 3, 2, "独特色 ≤ 档位应走精确调色板");
+        drop(d2);
+        let mut dec = gif::Decoder::new(&buf2[..]).unwrap();
+        let frame = dec.read_next_frame().unwrap().unwrap();
+        let pal = frame.palette.clone().unwrap();
+        // 精确路径调色板按 BTreeSet 序：蓝色 (0,0,255) 排在红色 (255,0,0) 前
+        assert_eq!(frame.buffer[0], 1, "红色像素索引 1（BTreeSet 序）");
+        assert_eq!(&pal[0..3], &[0, 0, 255], "精确路径调色板逐位保真");
+        assert_eq!(&pal[3..6], &[255, 0, 0]);
     }
 
     #[test]
@@ -2299,7 +2815,7 @@ mod tests {
                 mon,
             };
             let mut cache: Option<CursorCache> = None;
-            overlay_cursor(&mut rgba, 200, 200, &geo, &mut cache);
+            overlay_cursor(&mut rgba, 200, 200, &geo, &mut cache, SCALE_DEFAULT);
             println!("cache decoded = {}", cache.is_some());
             let diff = rgba.iter().zip(raw0.iter()).filter(|(a, b)| a != b).count();
             println!("blend 前后差异字节数 = {diff}（>0 = 光标已画上帧）");
@@ -2545,6 +3061,89 @@ mod tests {
         assert!(new_a < old_a / 2, "静止场景应省过半体积");
         assert!(new_b < old_b / 2, "局部动态场景子帧应省过半体积");
         assert!(new_c * 20 < old_c * 21, "全帧动态场景不应明显变大");
+        // 2026-11-21 体积三旋钮实测对比（调研项①②③，打印不设断言）：
+        // 有损容差 / 色数档 / 缩放档在局部动态场景的叠加收益
+        let encode_delta_tuned =
+            |frames: &[Vec<u8>], colors: usize, tolerance: u64, dims: (u16, u16)| -> usize {
+                let (w, h) = dims;
+                let mut buf: Vec<u8> = Vec::new();
+                let enc = gif::Encoder::new(&mut buf, w, h, &[]).unwrap();
+                let mut delta = DeltaEncoder::new(enc, w, h);
+                delta.colors = colors;
+                delta.tolerance = tolerance;
+                let mut last_written = 0u64;
+                for (i, f) in frames.iter().enumerate() {
+                    let now = (i as u64 + 1) * interval;
+                    let mut rgba = f.clone();
+                    let is_dup = delta.same_as_last(&rgba);
+                    let since = Some(now.saturating_sub(last_written));
+                    if let Some(delay_ms) = dedup_delay(is_dup, since, interval) {
+                        if is_dup {
+                            delta.push_keepalive(gif_delay_cs(delay_ms)).unwrap();
+                            last_written = now;
+                        } else {
+                            let kind = delta.push(&mut rgba, gif_delay_cs(delay_ms)).unwrap();
+                            if kind.is_written() {
+                                last_written = now;
+                            }
+                        }
+                    }
+                }
+                drop(delta);
+                buf.len()
+            };
+        let pct = |part: usize, base: usize| -> String {
+            if base > 0 && part < base {
+                format!("-{}%", (base - part) * 100 / base)
+            } else {
+                "持平".into()
+            }
+        };
+        let b_lossy = encode_delta_tuned(&frames_b, 256, 256, (w, h));
+        let b_128 = encode_delta_tuned(&frames_b, 128, 0, (w, h));
+        let b_64 = encode_delta_tuned(&frames_b, 64, 0, (w, h));
+        let (bw2, bh2) = scaled_dims(u32::from(w), u32::from(h), 50);
+        let frames_b_small: Vec<Vec<u8>> = frames_b
+            .iter()
+            .map(|f| downscale_rgba(f, u32::from(w), u32::from(h), bw2, bh2))
+            .collect();
+        let b_small_all = encode_delta_tuned(&frames_b_small, 128, 256, (bw2 as u16, bh2 as u16));
+        // 场景 D 亚像素抖动（容差的真正目标：ClearType/抗锯齿/视频压缩噪声
+        // ——每帧全幅 ±2 随机抖动，字节级全变但观看无差）
+        let frames_d: Vec<Vec<u8>> = frames_b
+            .iter()
+            .map(|f| {
+                let mut g = f.clone();
+                for px in g.as_mut_slice().as_chunks_mut::<4>().0 {
+                    let j = i16::from(next_px() % 5) - 2; // ±2 抖动
+                    px[0] = (i16::from(px[0]) + j).clamp(0, 255) as u8;
+                    px[1] = (i16::from(px[1]) + j).clamp(0, 255) as u8;
+                    px[2] = (i16::from(px[2]) + j).clamp(0, 255) as u8;
+                }
+                g
+            })
+            .collect();
+        let d_exact = encode_delta_tuned(&frames_d, 256, 0, (w, h));
+        let d_lossy = encode_delta_tuned(&frames_d, 256, 64, (w, h));
+        let kb = |b: usize| b / 1024;
+        println!(
+            "体积三旋钮（场景 B 基线 {} KB）：有损中 {} KB（{}）；128 色 {} KB（{}）；64 色 {} KB（{}）；缩放50%+128色+有损中 {} KB（{}）",
+            kb(new_b),
+            kb(b_lossy),
+            pct(b_lossy, new_b),
+            kb(b_128),
+            pct(b_128, new_b),
+            kb(b_64),
+            pct(b_64, new_b),
+            kb(b_small_all),
+            pct(b_small_all, new_b),
+        );
+        println!(
+            "场景 D 亚像素抖动（±2/帧）：字节级 {} KB → 有损低 {} KB（{}）",
+            kb(d_exact),
+            kb(d_lossy),
+            pct(d_lossy, d_exact),
+        );
     }
 
     #[test]
