@@ -435,7 +435,8 @@ pub(crate) fn begin_session(app: &AppHandle) {
         }
     }
     // 会话进行中 = 就地重拍（PixPin 惯例）：先撤蒙层再捕获，否则定格的是
-    // 蒙层自己；撤下后给合成器约 140ms 把窗口真正摘离屏幕
+    // 蒙层自己；蒙层经 DWM Cloak 原位摘离合成输出（原子生效，不依赖合成器
+    // 追赶位移），捕获侧只留极短余量
     let reentry = SESSION_ACTIVE.load(Ordering::SeqCst);
     if reentry {
         end_session(app);
@@ -511,7 +512,10 @@ pub(crate) fn begin_session(app: &AppHandle) {
 /// 后台线程：定格光标所在显示器 + 写会话图 + 枚举可截窗口
 fn capture_session(app: &AppHandle, reentry: bool) -> Result<ShotCapture, String> {
     if reentry {
-        std::thread::sleep(Duration::from_millis(140));
+        // Cloak 时代余量（2026-11-21）：end_session 原位罩住即从合成输出摘除，
+        // 捕获不会定格旧蒙版——30ms 仅为 DWM 属性生效余量（旧 140ms 是位移
+        // 停靠时代的合成器追赶余量，纯叠加在重拍感知延迟上，已无必要）
+        std::thread::sleep(Duration::from_millis(30));
     }
     let cur = app
         .cursor_position()

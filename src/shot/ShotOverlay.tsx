@@ -1111,8 +1111,16 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       accentRef.current =
         getComputedStyle(document.documentElement).getPropertyValue("--np-accent").trim() ||
         "#3574f0";
+      // 首帧确定性完整（2026-11-21 闪屏根治）：去罩前**同步**压平 base/live
+      // 并点亮跟随层——redrawLive 尾部 updateFollowDom 把十字线/放大镜/胶囊
+      // 以定格光标位落位点亮（CSS 初始 opacity:0）。此前首绘挂在 [ready]
+      // passive effect 上与去罩竞速：去罩先落地则窗口 surface 还是透明空壳，
+      // 呈现次序变成「蒙版压暗先行、十字线晚 1-2 帧」= 用户看到的「闪一下
+      // 再出十字线」；同步绘制 + 双 rAF 后去罩，蒙版与十字线同帧原子呈现
+      redrawBase();
+      redrawLive();
       setReady(true);
-      // 首帧上屏后再让 Rust 移窗上屏；双 rAF 确保画布已被合成器呈现
+      // 首帧上屏后再让 Rust 去罩上屏；双 rAF 确保画布已被合成器呈现
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
           void api.shotReady().catch(() => undefined);
