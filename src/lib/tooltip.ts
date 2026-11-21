@@ -69,6 +69,21 @@ function position(target: Element) {
   const r = target.getBoundingClientRect();
   const w = el.offsetWidth;
   const h = el.offsetHeight;
+  // 平坦模式（data-tip-flat 容器，2026-11-21 GIF 浮条优化）：44px 条带窗
+  // 上下都翻转不出空间，tip 必然落在条面 band 内——以**触发钮**为锚侧向
+  // 展开：钮右缘外优先（间隙 SIDE），右缘放不下翻钮左缘，两端都放不下
+  // 才视口钳制兜底。锚钮缘而非光标（与 2026-11-06 顶栏光标锚定相反）：
+  // 条带窄，光标锚会让 tip 盖住按钮右半——「不挡悬浮中的图标」优先；
+  // 垂直在窗内居中（单行 tip 高 ≈ chip 高，band 内无更优位）
+  if (el.classList.contains("np-tip-flat")) {
+    let fx = r.right + SIDE;
+    if (fx + w > window.innerWidth - EDGE) fx = r.left - w - SIDE;
+    const x2 = Math.max(EDGE, Math.min(fx, window.innerWidth - w - EDGE));
+    const y2 = Math.max(EDGE, Math.min((window.innerHeight - h) / 2, window.innerHeight - h - EDGE));
+    el.style.left = `${x2}px`;
+    el.style.top = `${y2}px`;
+    return;
+  }
   // 方向：默认上方（见文件头 2026-11-05 定案）；data-tip-down 容器
   // （标题栏/浮窗头等顶部工具区）优先下方，贴边向另一侧自动翻转。
   // 顶部工具区水平落位 = 光标右侧/左侧（2026-11-06 修订）：tip 左缘贴
