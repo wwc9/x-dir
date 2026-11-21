@@ -44,10 +44,6 @@ function show(target: Element) {
   if (!text) return;
   el = document.createElement("div");
   el.className = "np-tip";
-  // 平坦模式（data-tip-flat 容器，2026-11-21 GIF 浮条优化）：截图浮条等
-  // 44px 小窗上下都翻转不出空间，tip 必然压在条面之上——限制单行不折行，
-  // 靠容器侧短文案把占地压到最小（全局 max-width 300 长句在条面上是灾难）
-  if (target.closest("[data-tip-flat]")) el.classList.add("np-tip-flat");
   el.textContent = text;
   const kbd = target.getAttribute("data-kbd");
   if (kbd) {
@@ -69,21 +65,6 @@ function position(target: Element) {
   const r = target.getBoundingClientRect();
   const w = el.offsetWidth;
   const h = el.offsetHeight;
-  // 平坦模式（data-tip-flat 容器，2026-11-21 GIF 浮条优化）：44px 条带窗
-  // 上下都翻转不出空间，tip 必然落在条面 band 内——以**触发钮**为锚侧向
-  // 展开：钮右缘外优先（间隙 SIDE），右缘放不下翻钮左缘，两端都放不下
-  // 才视口钳制兜底。锚钮缘而非光标（与 2026-11-06 顶栏光标锚定相反）：
-  // 条带窄，光标锚会让 tip 盖住按钮右半——「不挡悬浮中的图标」优先；
-  // 垂直在窗内居中（单行 tip 高 ≈ chip 高，band 内无更优位）
-  if (el.classList.contains("np-tip-flat")) {
-    let fx = r.right + SIDE;
-    if (fx + w > window.innerWidth - EDGE) fx = r.left - w - SIDE;
-    const x2 = Math.max(EDGE, Math.min(fx, window.innerWidth - w - EDGE));
-    const y2 = Math.max(EDGE, Math.min((window.innerHeight - h) / 2, window.innerHeight - h - EDGE));
-    el.style.left = `${x2}px`;
-    el.style.top = `${y2}px`;
-    return;
-  }
   // 方向：默认上方（见文件头 2026-11-05 定案）；data-tip-down 容器
   // （标题栏/浮窗头等顶部工具区）优先下方，贴边向另一侧自动翻转。
   // 顶部工具区水平落位 = 光标右侧/左侧（2026-11-06 修订）：tip 左缘贴
@@ -91,7 +72,8 @@ function position(target: Element) {
   // tip 紧邻光标且完全避开光标的水平位置，垂直下移路径永不被挡
   // （初版 2026-11-05 锚按钮右缘：灵动岛等宽按钮时 tip 被推离光标整个
   // 按钮宽度，用户报「距鼠标远」；光标锚在 enter 时记录，同元素内移动
-  // 不更新——tip 位置稳定不跳动）
+  // 不更新——tip 位置稳定不跳动）。浮条窗的 tooltip 已迁遮罩窗外渲染
+  // 通道（shot/barTip.ts），本函数不再处理小窗平坦场景
   const down = target.closest("[data-tip-down]") !== null;
   let x = r.left + r.width / 2 - w / 2;
   let y = down ? r.bottom + GAP : r.top - h - GAP;

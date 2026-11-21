@@ -26,7 +26,7 @@ import { listen } from "@tauri-apps/api/event";
 import { Loader2, Pause, Play, Save, X } from "lucide-react";
 
 import { api } from "../lib/ipc";
-import { initTooltip } from "../lib/tooltip";
+import { useBarTip } from "./barTip";
 import { AppIcon } from "../components/AppIcon";
 
 export interface GifBarBoot {
@@ -143,7 +143,10 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
     };
   }, []);
 
-  useEffect(() => initTooltip(), []);
+  // tooltip 走遮罩窗外渲染通道（useBarTip）：浮条窗 44px 高悬不出上方气泡；
+  // 相位切换（chip 组更换）时清残留气泡
+  const hideBarTip = useBarTip();
+  useEffect(hideBarTip, [phase]);
 
   // 常驻窗停靠屏外（合成器不离场）：首绘/换装重绘后回执 Rust（shot_ready）
   // 才原子移动上屏——无感链路，2026-11-21 低配闪屏修复
@@ -280,7 +283,7 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
   }, [act, phase]);
 
   return (
-    <div className="np-shot-sbar" data-tip-flat>
+    <div className="np-shot-sbar">
       {phase === "recording" ? (
         <span className={paused ? "np-shot-gbar-dot is-paused" : "np-shot-gbar-dot"} />
       ) : (

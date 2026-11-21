@@ -9,7 +9,7 @@ import { listen } from "@tauri-apps/api/event";
 import { Check, X } from "lucide-react";
 
 import { api } from "../lib/ipc";
-import { initTooltip } from "../lib/tooltip";
+import { useBarTip } from "./barTip";
 import { AppIcon } from "../components/AppIcon";
 
 export interface ScrollBarBoot {
@@ -42,7 +42,7 @@ export function ScrollBar({ boot }: { boot: ScrollBarBoot }) {
     };
   }, []);
 
-  useEffect(() => initTooltip(), []);
+  useBarTip();
 
   // 首绘/换装重绘后回执 Rust（shot_ready）才原子移动上屏（无感链路）
   useEffect(() => {
@@ -98,7 +98,7 @@ export function ScrollBar({ boot }: { boot: ScrollBarBoot }) {
   }, [act]);
 
   return (
-    <div className="np-shot-sbar" data-tip-flat>
+    <div className="np-shot-sbar">
       <span className="np-shot-sbar-dot" />
       {warn ? (
         <span className="np-shot-sbar-warn">滚动过快，请放慢</span>

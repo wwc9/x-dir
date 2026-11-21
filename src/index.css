@@ -849,13 +849,6 @@ html.glasswin .np-winedge-top {
   opacity: 1;
   transform: scale(1);
 }
-/* 平坦模式（2026-11-21 GIF 浮条优化）：截图浮条等 44px 小窗里 tip 上下都
-   翻转不出空间、必然压在条面之上——单行不折行把占地压到最小，容器侧
-   （data-tip-flat）配短文案；全局 300px 长句在条面上是盖条灾难 */
-.np-tip.np-tip-flat {
-  max-width: none;
-  white-space: nowrap;
-}
 .np-tip kbd {
   font-family: Consolas, "Cascadia Mono", monospace;
   font-style: normal;
