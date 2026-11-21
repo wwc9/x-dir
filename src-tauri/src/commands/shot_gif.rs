@@ -3256,4 +3256,226 @@ mod tests {
             "GIF 应含 NETSCAPE2.0 循环块"
         );
     }
+
+    /// 真实区域录制体积诊断（#[ignore] 手跑：`cargo test --lib
+    /// real_region_size_diagnostics -- --ignored --nocapture`，需真实桌面
+    /// 会话）：对主屏 800×500 真实区域按生产节奏连录 10s（12fps + 光标扫描
+    /// 动画），同源帧内容分别走 旧管线（逐帧全写 = 未压缩口径）/ 生产管线
+    ///（三层跳帧 + 子帧 + 兜底 + 尾巴 + 静止段压缩）/ 体积三旋钮变体，打印
+    /// 体积对比表与首帧 PNG（%TEMP%/xdir_real_region_first.png）供人工确认
+    /// 录制内容。与 UI 录制的唯一差异 = 选区来源（此处固定矩形），编码决策
+    /// 函数与生产完全同源
+    #[test]
+    #[ignore = "真实区域录制诊断（需真实桌面会话）"]
+    fn real_region_size_diagnostics() {
+        // 主屏（原点 0,0）上取一块覆盖真实应用窗口的区域
+        let Some(mon) = monitor_at(1, 1) else {
+            panic!("找不到主显示器");
+        };
+        let (rw, rh, rx, ry) = (800u32, 500u32, 150i32, 100i32);
+        let monitor = xcap::Monitor::all()
+            .unwrap()
+            .into_iter()
+            .find(|m| m.x().ok() == Some(mon.x) && m.y().ok() == Some(mon.y))
+            .expect("xcap 找不到主显示器");
+        let geo = GifGeo {
+            rx: rx as u32,
+            ry: ry as u32,
+            rw,
+            rh,
+            mon,
+        };
+        // ── 采集 10s @12fps：光标在区域内往返扫描（真实操作语义），首帧落
+        // PNG 供人工核对内容 ──
+        let interval = 83u64;
+        let total = 120usize;
+        let mut frames: Vec<Vec<u8>> = Vec::with_capacity(total);
+        let mut cache: Option<CursorCache> = None;
+        for i in 0..total {
+            // 光标扫描动画：1.2s 一个来回（横向折返 + 正弦纵向），制造
+            // 悬停/移动语义
+            let phase = (i % 15) as f32 / 15.0;
+            let cx = geo.mon.x + rx + (phase * rw as f32) as i32;
+            let cy = geo.mon.y + ry + ((phase * 2.0).sin().abs() * rh as f32) as i32;
+            #[cfg(windows)]
+            unsafe {
+                use windows::Win32::UI::WindowsAndMessaging::SetCursorPos;
+                let _ = SetCursorPos(cx, cy);
+            }
+            std::thread::sleep(Duration::from_millis(interval));
+            let frame = monitor
+                .capture_region(rx as u32, ry as u32, rw, rh)
+                .expect("capture_region 失败");
+            let mut rgba = frame.into_raw();
+            overlay_cursor(&mut rgba, rw, rh, &geo, &mut cache, SCALE_DEFAULT);
+            if i == 0 {
+                let img = image::RgbaImage::from_raw(rw, rh, rgba.clone()).unwrap();
+                let png = std::env::temp_dir().join("xdir_real_region_first.png");
+                img.save(&png).expect("首帧 PNG 落盘失败");
+                println!("首帧内容参照：{}", png.display());
+            }
+            frames.push(rgba);
+        }
+        let raw_total = total * (rw as usize) * (rh as usize) * 4;
+        // ── 旧管线（未压缩口径）：逐帧全帧量化写盘，固定 8cs 延迟 ──
+        let encode_full_frames = |frames: &[Vec<u8>], dims: (u32, u32)| -> usize {
+            let mut buf: Vec<u8> = Vec::new();
+            let mut enc = gif::Encoder::new(&mut buf, dims.0 as u16, dims.1 as u16, &[]).unwrap();
+            enc.set_repeat(gif::Repeat::Infinite).unwrap();
+            for f in frames {
+                let mut rgba = f.clone();
+                let mut g = gif::Frame::from_rgba_speed(
+                    dims.0 as u16,
+                    dims.1 as u16,
+                    &mut rgba,
+                    quant_speed(dims.0 * dims.1),
+                );
+                g.delay = gif_delay_cs(interval);
+                enc.write_frame(&g).unwrap();
+            }
+            drop(enc);
+            buf.len()
+        };
+        // ── 生产管线：dedup + DeltaEncoder + ViewerIdentical 兜底 + 尾巴 +
+        // 静止段压缩（keep=2 与 UI 录制收尾一致）；返回成品字节 ──
+        let encode_production = |frames: &[Vec<u8>],
+                                 dims: (u32, u32),
+                                 colors: usize,
+                                 tolerance: u64|
+         -> Vec<u8> {
+            let mut buf: Vec<u8> = Vec::new();
+            let mut enc = gif::Encoder::new(&mut buf, dims.0 as u16, dims.1 as u16, &[]).unwrap();
+            enc.set_repeat(gif::Repeat::Infinite).unwrap();
+            let mut delta = DeltaEncoder::new(enc, dims.0 as u16, dims.1 as u16);
+            delta.colors = colors;
+            delta.tolerance = tolerance;
+            let mut written = 0usize;
+            let mut last_written_ms = 0u64;
+            for (i, f) in frames.iter().enumerate() {
+                let now = (i as u64 + 1) * interval;
+                let mut rgba = f.clone();
+                let is_dup = delta.same_as_last(&rgba);
+                let since = Some(now.saturating_sub(last_written_ms));
+                match dedup_delay(is_dup, since, interval) {
+                    Some(delay_ms) if is_dup => {
+                        delta.push_keepalive(gif_delay_cs(delay_ms)).unwrap();
+                        written += 1;
+                        last_written_ms = now;
+                    }
+                    Some(delay_ms) => {
+                        let kind = delta.push(&mut rgba, gif_delay_cs(delay_ms)).unwrap();
+                        let flush = kind.is_written()
+                            || (since.is_some_and(|ms| ms >= DUP_FLUSH_MS)
+                                && delta.push_keepalive(gif_delay_cs(DUP_FLUSH_MS)).is_ok());
+                        if flush {
+                            written += 1;
+                            last_written_ms = now;
+                        }
+                    }
+                    None => {}
+                }
+            }
+            // 尾巴收帧（与 gif_loop 同口径：≤1s 分段）
+            let mut tail_ms = total as u64 * interval - last_written_ms;
+            while tail_ms >= 100 {
+                let chunk = tail_ms.min(DUP_FLUSH_MS);
+                delta.push_keepalive(gif_delay_cs(chunk)).unwrap();
+                written += 1;
+                tail_ms -= chunk;
+            }
+            drop(delta);
+            let compressed = compress_keepalive_runs(&buf, DEFAULT_STATIC_KEEP);
+            println!(
+                "  [{}×{} colors {} 容差 {}] 写入帧 {written}，压缩前 {} KB → 静止段压缩后 {} KB",
+                dims.0,
+                dims.1,
+                colors,
+                tolerance,
+                buf.len() / 1024,
+                compressed.len() / 1024
+            );
+            compressed
+        };
+        let kb = |b: usize| b / 1024;
+        let pct = |part: usize, base: usize| -> String {
+            if base > 0 && part < base {
+                format!("-{}%", (base - part) * 100 / base)
+            } else {
+                "持平".into()
+            }
+        };
+        println!(
+            "录制内容：真实屏幕 {}×{} @12fps × 10s（{} 帧，光标扫描动画）",
+            rw, rh, total
+        );
+        println!("① 原始 RGBA 帧字节总量：{} KB（理论上限）", kb(raw_total));
+        let old = encode_full_frames(&frames, (rw, rh));
+        println!(
+            "② 旧管线（逐帧全写，未压缩口径）：{} KB（{}）",
+            kb(old),
+            pct(old, raw_total)
+        );
+        println!("③ 生产管线成品（默认 256 色/容差关/原尺寸，含静止段压缩）：");
+        let prod = encode_production(&frames, (rw, rh), 256, 0);
+        let (sw, sh) = scaled_dims(rw, rh, 75);
+        let frames_75: Vec<Vec<u8>> = frames
+            .iter()
+            .map(|f| downscale_rgba(f, rw, rh, sw, sh))
+            .collect();
+        let v128 = encode_production(&frames, (rw, rh), 128, 0);
+        let vlossy = encode_production(&frames, (rw, rh), 256, 64);
+        let vscale = encode_production(&frames_75, (sw, sh), 256, 0);
+        let vall = encode_production(&frames_75, (sw, sh), 128, 64);
+        println!("════ 体积对比（10s 真实屏幕录制 {}×{}）════", rw, rh);
+        println!("原始 RGBA       ：{:>6} KB", kb(raw_total));
+        println!(
+            "旧管线逐帧全写  ：{:>6} KB（{}）",
+            kb(old),
+            pct(old, raw_total)
+        );
+        println!(
+            "生产管线默认    ：{:>6} KB（较旧管线 {}）",
+            kb(prod.len()),
+            pct(prod.len(), old)
+        );
+        println!(
+            "128 色          ：{:>6} KB（较默认 {}）",
+            kb(v128.len()),
+            pct(v128.len(), prod.len())
+        );
+        println!(
+            "有损低          ：{:>6} KB（较默认 {}）",
+            kb(vlossy.len()),
+            pct(vlossy.len(), prod.len())
+        );
+        println!(
+            "75% 缩放        ：{:>6} KB（较默认 {}）",
+            kb(vscale.len()),
+            pct(vscale.len(), prod.len())
+        );
+        println!(
+            "75%+128色+有损低：{:>6} KB（较默认 {}）",
+            kb(vall.len()),
+            pct(vall.len(), prod.len())
+        );
+        // 产物健康校验：默认成品可解码、几何正确、回放时长 ≈10s（±1s）
+        let mut dec = gif::Decoder::new(&prod[..]).unwrap();
+        let mut n = 0u32;
+        let mut total_ms = 0u64;
+        while let Some(f) = dec.read_next_frame().unwrap() {
+            n += 1;
+            total_ms += u64::from(f.delay) * 10;
+        }
+        assert_eq!((dec.width(), dec.height()), (rw as u16, rh as u16));
+        assert!(n > 0, "成品应有帧");
+        assert!(
+            (9000..=12000).contains(&total_ms),
+            "回放总时长应 ≈10s（实际 {total_ms}ms）"
+        );
+        println!(
+            "产物校验：{n} 帧 / 回放 {total_ms}ms / 几何 {}×{} ✓",
+            dec.width(),
+            dec.height()
+        );
+    }
 }
