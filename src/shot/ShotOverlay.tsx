@@ -2612,8 +2612,8 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             >
               <AppIcon icon={Undo2} size={DENSITY.iconLg} />
             </button>
-          </div>
-          <div className="np-shot-tb-row">
+            {/* 上下对称（2026-11-21 用户需求）：标注颜色归入绘制族行尾——
+                两行各 10 钮等宽成矩形，36px 列跨行对齐网格不变 */}
             <button
               className={`np-shot-tool ${panel?.kind === "color" ? "on" : ""}`}
               data-tip="标注颜色"
@@ -2621,6 +2621,8 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             >
               <AppIcon icon={Palette} size={DENSITY.iconLg} />
             </button>
+          </div>
+          <div className="np-shot-tb-row">
             <button
               className={`np-shot-tool ${panel?.kind === "width" ? "on" : ""}`}
               data-tip="线条宽度"
