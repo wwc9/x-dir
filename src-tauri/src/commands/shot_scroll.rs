@@ -688,13 +688,10 @@ pub fn shot_scroll_begin(
         );
         return Err("滚动截图进行中".into());
     }
-    // 残留窗 = cancel/finish 收尾 close 未奏效的僵尸（实测 wry 偶发），销毁放行
-    for label in ["shot-scroll", "shot-frame", "shot-bar"] {
-        if let Some(w) = app.get_webview_window(label) {
-            log::warn!("滚动截图：清理残留窗 {label}（僵尸收尾）");
-            let _ = w.destroy();
-        }
-    }
+    // 伴生窗常驻复用（2026-11-21 启动提速）：旧「僵尸销毁」循环把预热窗
+    // 每场全数销毁，迫使 launch 走 webview 冷建（300ms+/窗）——Cloak 时代
+    // 收场一律罩内待命不再 close，无僵尸可言；复用 + 换装 + 回执门控下旧
+    // 内容零闪现（launch 开场另有防御性罩住）
     if SCROLL_PENDING
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -779,31 +776,36 @@ pub fn shot_scroll_launch(app: AppHandle) -> Result<(), String> {
         log::error!("滚动截图 launch 被拒绝：无待启动的会话载荷");
         return Err("无待启动的滚动会话".into());
     };
-    log::info!("滚动截图：第二段进场，轮询蒙层停靠后起建三窗");
+    log::info!("滚动截图：第二段进场，轮询蒙层罩住后起建三窗");
     let t_launch = Instant::now();
     let app2 = app.clone();
     std::thread::spawn(move || {
-        // 蒙层停靠确认（2026-11-06 启动提速）：旧实现固定睡 150ms（保守值），
-        // 实际停靠通常 30-80ms 到位——10ms 轮询 shot 窗 outer_position 到达
-        // 停靠区（≤-32000，park 常量 -32700）即续行；500ms 超时兜底照旧起建，
-        // 「蒙层在场时 build() 卡死」的防护语义不变（窗口已不在即视为安全）
+        // 蒙层罩住确认（2026-11-21 启动提速）：Cloak 时代 end_session 原位
+        // 罩住即摘离合成输出，查 DWMWA_CLOAKED 即得（旧 outer_position ≤
+        // -32000 检查在原位罩住下永不成立，每次白等 500ms 超时）；10ms 轮
+        // 询、500ms 超时兜底照旧起建，「蒙层在场时 build() 卡死」防护语义
+        // 不变（窗不存在即视为安全）
         let t0 = Instant::now();
         loop {
             let parked = match app2.get_webview_window("shot") {
-                Some(w) => w
-                    .outer_position()
-                    .map(|p| p.x <= -32000 && p.y <= -32000)
-                    .unwrap_or(false),
+                Some(w) => super::shot::is_cloaked(&w),
                 None => true, // 窗不存在（异常路径）= 无蒙层，直接续行
             };
             if parked || t0.elapsed() >= Duration::from_millis(500) {
                 log::info!(
-                    "滚动截图：蒙层停靠确认 parked={parked}，耗时 {:?}（旧固定等待 150ms）",
+                    "滚动截图：蒙层罩住确认 parked={parked}，耗时 {:?}",
                     t0.elapsed()
                 );
                 break;
             }
             std::thread::sleep(Duration::from_millis(10));
+        }
+        // 复用场防御性罩住（零开销 no-op）：上一场收尾异常残留的可见窗先
+        // 摘离屏幕，换装回执再原子上屏，旧内容零闪现
+        for label in ["shot-frame", "shot-scroll", "shot-bar"] {
+            if let Some(w) = app2.get_webview_window(label) {
+                super::shot::set_cloak(&w, true);
+            }
         }
         // 伴生窗落位目标先于换装事件预置（shot_ready 消费，消除「前端先画
         // 完回执、pending 未设」竞态）：框窗 = 显示器原点整幅，预览 = 贴选区

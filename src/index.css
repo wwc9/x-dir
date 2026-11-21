@@ -7372,14 +7372,15 @@ body.np-col-resizing * {
 }
 .np-shot-gbar-fps {
   flex: none;
-  /* 最小宽 + 居中（2026-11-21 浮条优化）：循环切档时标签变宽（12fps→8fps、
-   * 停顿 1s→10s）不再推挤相邻 chip，连点不漂移 */
+  /* 与主截图工具栏钮同语言（2026-11-21 统一规范）：透明底 + 无边框 +
+   * 悬停 np-hover 浮现（原 surface-2 填充描边脸与工具栏语言不一致）；
+   * min-width + 居中防循环切档推挤（12fps→8fps、停顿 1s→10s） */
   min-width: 56px;
   text-align: center;
   padding: 3px 8px;
-  border: 1px solid var(--np-border);
+  border: none;
   border-radius: var(--np-radius);
-  background: var(--np-surface-2);
+  background: transparent;
   color: var(--np-fg);
   font-size: var(--np-font-sm);
   font-variant-numeric: tabular-nums;
@@ -7388,6 +7389,10 @@ body.np-col-resizing * {
 }
 .np-shot-gbar-fps:hover:not(:disabled) {
   background: var(--np-hover);
+}
+.np-shot-gbar-fps:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 @keyframes np-shot-pulse {
   50% {
@@ -7405,8 +7410,9 @@ body.np-col-resizing * {
   animation: np-shot-pulse 0.9s ease-in-out infinite;
 }
 .np-shot-sbar-dir {
+  /* 状态 chip 同统一规范（2026-11-21）：去描边纯文字（非可点，无悬停态） */
   padding: 2px 8px;
-  border: 1px solid var(--np-hairline);
+  border: none;
   border-radius: var(--np-radius-pill);
   color: var(--np-muted);
   white-space: nowrap;
@@ -7510,14 +7516,14 @@ body.np-col-resizing * {
   padding: 0 10px;
   border: none;
   border-radius: var(--np-radius);
-  background: var(--np-hover);
+  background: var(--np-surface-2);
   color: var(--np-fg);
   cursor: pointer;
   font-size: var(--np-font-sm);
   white-space: nowrap;
 }
 .np-shot-btn:hover:not(:disabled) {
-  background: var(--np-sel);
+  background: var(--np-hover);
 }
 .np-shot-btn:disabled {
   opacity: 0.5;

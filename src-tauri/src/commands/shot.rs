@@ -392,6 +392,38 @@ pub(crate) fn set_cloak(window: &tauri::WebviewWindow, cloak: bool) {
     }
 }
 
+/// Cloak 状态查询（Windows DWMWA_CLOAKED）：launch 停靠确认用——Cloak 时代
+/// end_session 原位罩住不再位移，旧「outer_position ≤ -32000」检查永远不
+/// 成立，滚动/GIF launch 轮询每次白等 500ms 超时才续行（2026-11-21 启动
+/// 提速实绩根因）。罩住即摘离合成输出，与「蒙层已离屏」同语义
+#[cfg(windows)]
+pub(crate) fn is_cloaked(window: &tauri::WebviewWindow) -> bool {
+    use windows::Win32::Graphics::Dwm::{DWMWA_CLOAKED, DwmGetWindowAttribute};
+    if let Ok(hwnd) = window.hwnd() {
+        let mut v: i32 = 0;
+        unsafe {
+            let _ = DwmGetWindowAttribute(
+                hwnd,
+                DWMWA_CLOAKED,
+                &mut v as *mut i32 as *mut core::ffi::c_void,
+                std::mem::size_of::<i32>() as u32,
+            );
+        }
+        v != 0
+    } else {
+        false
+    }
+}
+
+/// 非 Windows 回落：park 位移语义下查坐标（本项目实运维 Windows）
+#[cfg(not(windows))]
+pub(crate) fn is_cloaked(window: &tauri::WebviewWindow) -> bool {
+    window
+        .outer_position()
+        .map(|p| p.x <= -32000 && p.y <= -32000)
+        .unwrap_or(true)
+}
+
 /// snow-shot 同款：禁用 DWM 对该窗的显示/隐藏过渡动画，上屏/停靠零渐隐
 #[cfg(windows)]
 pub(crate) fn disable_dwm_transitions(hwnd: windows::Win32::Foundation::HWND) {
