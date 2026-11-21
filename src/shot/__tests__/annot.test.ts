@@ -563,6 +563,37 @@ describe("keysSide", () => {
     expect(keysSide({ x: 40, y: 40, w: 2480, h: 1300 }, 2560, 1440, 220, 260)).toBeNull();
     expect(keysSide(null, 2560, 1440, 220, 260)).toBeNull();
   });
+
+  // 工具栏矩形避让（2026-11-21 用户报告「小选区时清单与工具栏重叠」）
+  const tbRect = { x: 320, y: 462, w: 700, h: 90 }; // 居中停靠 134×100 选区下方
+  const noHit = (p: { x: number; y: number }, w = 220, h = 260) =>
+    p.x + w <= tbRect.x ||
+    p.x >= tbRect.x + tbRect.w ||
+    p.y + h <= tbRect.y ||
+    p.y >= tbRect.y + tbRect.h;
+
+  it("小选区 + 右侧撞工具栏：右侧保持、上移让出工具栏上缘", () => {
+    const s = { x: 400, y: 350, w: 134, h: 100 };
+    const noTb = keysSide(s, 2560, 1440, 220, 260);
+    expect(noTb).toEqual({ x: 546, y: 270 }); // 默认垂直居中位与 tbRect 相交
+    const p = keysSide(s, 2560, 1440, 220, 260, tbRect);
+    expect(p).toEqual({ x: 546, y: 462 - 8 - 260 }); // 底缘贴工具栏上缘之外
+    expect(noHit(p!)).toBe(true);
+  });
+
+  it("工具栏顶到屏顶致上移放不下：右侧下移到工具栏下缘之外", () => {
+    const s = { x: 400, y: 120, w: 134, h: 100 };
+    const tall = { x: 320, y: 8, w: 700, h: 544 };
+    const p = keysSide(s, 2560, 1440, 220, 260, tall);
+    expect(p).toEqual({ x: 546, y: 8 + 544 + 8 });
+  });
+
+  it("无 tb 参数：行为与旧口径完全一致（回归锁）", () => {
+    const s = { x: 666, y: 400, w: 480, h: 200 };
+    expect(keysSide(s, 2560, 1440, 220, 260, null)).toEqual(
+      keysSide(s, 2560, 1440, 220, 260),
+    );
+  });
 });
 
 describe("adjustShapeProp", () => {

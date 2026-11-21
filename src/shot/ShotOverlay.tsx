@@ -22,7 +22,6 @@ import {
   Check,
   Circle,
   Frame,
-  Grip,
   GripVertical,
   Highlighter,
   Layers,
@@ -163,6 +162,29 @@ const ARROW_LINE_LABELS: Record<ArrowLine, string> = {
           <path d={`M${x2} ${y2} L${f(g.bx)} ${f(g.by)}`} />
         </>
       )}
+    </svg>
+  );
+}
+
+/** 打码族图标（2026-11-21 用户三轮比选定案「带框棋盘格」）：lucide 现库无
+ *  棋盘格单图标，按 lucide 同风格自绘（24 viewBox / stroke 2 / 圆角端点 /
+ *  currentColor，同 ScrollShotGlyph 先例非 lucide 不走 AppIcon）；外框 +
+ *  对角双实心格 = 马赛克棋盘隐喻，马赛克/模糊合并钮与面板马赛克类型钮共用 */
+function MaskGlyph() {
+  return (
+    <svg
+      className="np-shot-mask-ic"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="4" y="4" width="16" height="16" rx="2.5" />
+      <path d="M12 5 H6.5 Q5 5 5 6.5 V12 H12 Z" fill="currentColor" stroke="none" />
+      <path d="M12 12 H19 V17.5 Q19 19 17.5 19 H12 Z" fill="currentColor" stroke="none" />
     </svg>
   );
 }
@@ -444,7 +466,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
    *  工具切入 = 恢复上次笔型 */
   const [penType, setPenType] = useState<"pen" | "marker">("pen");
   /** 马赛克/模糊合并为一钮（2026-10-30 定案，同笔族先例）：点击 = 激活
-   *  打码族并弹 mask 面板选类型（图标固定 Grip 网格不随类型切换）；从其
+   *  打码族并弹 mask 面板选类型（图标固定棋盘格不随类型切换）；从其
    *  他工具切入 = 恢复上次类型 */
   const [maskType, setMaskType] = useState<"mosaic" | "blur">("mosaic");
   /** 箭头样式（头部 × 线条，独立两行设置；箭头钮再次点击开面板） */
@@ -2343,6 +2365,13 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
       setKeysPos(null);
       return;
     }
+    // 工具栏矩形参与清单避让（2026-11-21 小选区重叠修复）：tbPos 同步进
+    // deps，工具栏翻转/拖动后清单跟随重算
+    const tb = toolbarRef.current;
+    const tbRect =
+      tb && tbPos
+        ? { x: tbPos.left, y: tbPos.top, w: tb.offsetWidth, h: tb.offsetHeight }
+        : null;
     setKeysPos(
       keysSide(
         {
@@ -2355,9 +2384,10 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
         window.innerHeight,
         el.offsetWidth,
         el.offsetHeight,
+        tbRect,
       ),
     );
-  }, [sel, following, busy, scale, ready]);
+  }, [sel, following, busy, scale, ready, tbPos]);
 
   // 工具栏拖动：按住非按钮区（容器空白/尺寸标签/分隔线）拖动，钳制屏内
   const onTbPointerDown = (e: React.PointerEvent) => {
@@ -2520,7 +2550,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     {
       id: "mask",
       label: "马赛克 / 模糊（点击选类型）",
-      icon: Grip,
+      glyph: <MaskGlyph />,
       on: maskActive,
       onClick: (e) => {
         setTool(maskType);
@@ -2972,7 +3002,11 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
                         setPanel(null);
                       }}
                     >
-                      <AppIcon icon={m === "mosaic" ? Grip : Waves} size={DENSITY.iconLg} />
+                      {m === "mosaic" ? (
+                        <MaskGlyph />
+                      ) : (
+                        <AppIcon icon={Waves} size={DENSITY.iconLg} />
+                      )}
                     </button>
                   ))}
                 </div>

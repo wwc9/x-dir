@@ -7065,6 +7065,12 @@ body.np-col-resizing * {
   width: 20px;
   height: 20px;
 }
+/* 打码族自绘棋盘格（2026-11-21 用户三轮比选定案）：尺寸档同 scroll-ic/step-ic */
+.np-shot-mask-ic {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
 /* 粗细/字号档位点 */
 .np-shot-bdcolors {
   gap: 5px;

@@ -217,31 +217,67 @@ export function strokeExtent(pts: { x: number; y: number }[] | undefined): numbe
  *  弃屏角方案）：右 → 左 → 上 → 下取第一个放得下的边；下方为末选且
  *  左对齐选区（工具栏居中停靠选区下方，错开）。坐标全 CSS 像素（选区
  *  物理坐标调用前已 ÷scale）；pw/ph = 清单实测尺寸；四边都放不下返回
- *  null（近乎全屏选区不展示） */
+ *  null（近乎全屏选区不展示）。
+ *  tb = 工具栏矩形（2026-11-21 用户报告「小选区时清单与工具栏重叠」）：
+ *  工具栏居中停靠选区下方、宽度远超小选区，右/左边的垂直居中位会撞进
+ *  工具栏横跨区——每边落位先查矩形相交，相撞则沿该边平移让出（上/左缘
+ *  外优先，反向次之），两向都放不下才落下一边 */
 export function keysSide(
   s: { x: number; y: number; w: number; h: number } | null,
   vw: number,
   vh: number,
   pw: number,
   ph: number,
+  tb?: { x: number; y: number; w: number; h: number } | null,
 ): { x: number; y: number } | null {
   if (!s) return null;
   const m = 12; // 与选区间距
   const e = 8; // 距屏边
+  const g = 8; // 与工具栏间距
   const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(v, hi));
-  // 右侧：垂直居中（钳屏内）
+  const hitsTb = (x: number, y: number) =>
+    !!tb && x < tb.x + tb.w && x + pw > tb.x && y < tb.y + tb.h && y + ph > tb.y;
+  // 右侧：垂直居中；撞工具栏则上移（清单底缘贴工具栏上缘之外）→ 下移
   const rx = s.x + s.w + m;
-  if (rx + pw <= vw - e)
-    return { x: rx, y: clamp(s.y + s.h / 2 - ph / 2, e, vh - ph - e) };
-  // 左侧：垂直居中
+  if (rx + pw <= vw - e) {
+    const cy = clamp(s.y + s.h / 2 - ph / 2, e, vh - ph - e);
+    if (!tb || !hitsTb(rx, cy)) return { x: rx, y: cy };
+    const upY = clamp(Math.min(cy, tb.y - g - ph), e, vh - ph - e);
+    if (!hitsTb(rx, upY)) return { x: rx, y: upY };
+    const dnY = clamp(tb.y + tb.h + g, e, vh - ph - e);
+    if (!hitsTb(rx, dnY)) return { x: rx, y: dnY };
+  }
+  // 左侧：垂直居中；同右侧避让口径
   const lx = s.x - m - pw;
-  if (lx >= e) return { x: lx, y: clamp(s.y + s.h / 2 - ph / 2, e, vh - ph - e) };
-  // 上方：水平居中（钳屏内）
+  if (lx >= e) {
+    const cy = clamp(s.y + s.h / 2 - ph / 2, e, vh - ph - e);
+    if (!tb || !hitsTb(lx, cy)) return { x: lx, y: cy };
+    const upY = clamp(Math.min(cy, tb.y - g - ph), e, vh - ph - e);
+    if (!hitsTb(lx, upY)) return { x: lx, y: upY };
+    const dnY = clamp(tb.y + tb.h + g, e, vh - ph - e);
+    if (!hitsTb(lx, dnY)) return { x: lx, y: dnY };
+  }
+  // 上方：水平居中；撞工具栏（工具栏翻转到选区上方时）→ 左移 → 右移
   const ty = s.y - m - ph;
-  if (ty >= e) return { x: clamp(s.x + s.w / 2 - pw / 2, e, vw - pw - e), y: ty };
-  // 下方（末选）：左对齐选区，避开居中的工具栏
+  if (ty >= e) {
+    const cx = clamp(s.x + s.w / 2 - pw / 2, e, vw - pw - e);
+    if (!tb || !hitsTb(cx, ty)) return { x: cx, y: ty };
+    const lfX = clamp(tb.x - g - pw, e, vw - pw - e);
+    if (!hitsTb(lfX, ty)) return { x: lfX, y: ty };
+    const rtX = clamp(tb.x + tb.w + g, e, vw - pw - e);
+    if (!hitsTb(rtX, ty)) return { x: rtX, y: ty };
+  }
+  // 下方（末选）：左对齐选区；撞工具栏（小选区时工具栏横跨选区左右）
+  // → 右移贴工具栏右缘之外 → 左移
   const by = s.y + s.h + m;
-  if (by + ph <= vh - e) return { x: clamp(s.x, e, vw - pw - e), y: by };
+  if (by + ph <= vh - e) {
+    const bx = clamp(s.x, e, vw - pw - e);
+    if (!tb || !hitsTb(bx, by)) return { x: bx, y: by };
+    const rtX = clamp(tb.x + tb.w + g, e, vw - pw - e);
+    if (!hitsTb(rtX, by)) return { x: rtX, y: by };
+    const lfX = clamp(tb.x - g - pw, e, vw - pw - e);
+    if (!hitsTb(lfX, by)) return { x: lfX, y: by };
+  }
   return null;
 }
 
