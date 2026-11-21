@@ -98,7 +98,7 @@ export function ScrollBar({ boot }: { boot: ScrollBarBoot }) {
   }, [act]);
 
   return (
-    <div className="np-shot-sbar">
+    <div className="np-shot-sbar" data-tip-flat>
       <span className="np-shot-sbar-dot" />
       {warn ? (
         <span className="np-shot-sbar-warn">滚动过快，请放慢</span>

@@ -280,7 +280,7 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
   }, [act, phase]);
 
   return (
-    <div className="np-shot-sbar">
+    <div className="np-shot-sbar" data-tip-flat>
       {phase === "recording" ? (
         <span className={paused ? "np-shot-gbar-dot is-paused" : "np-shot-gbar-dot"} />
       ) : (
@@ -307,14 +307,14 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
         </>
       )}
       {phase !== "processing" && (
-        <button className="np-shot-gbar-fps" data-tip="切换帧率（下一帧起生效）" onClick={cycleFps}>
+        <button className="np-shot-gbar-fps" data-tip="切换帧率（下一帧生效）" onClick={cycleFps}>
           {fps}fps
         </button>
       )}
       {phase === "ready" && (
         <button
           className="np-shot-gbar-fps"
-          data-tip="底部进度条：平滑（40 级增量）/跳进（10 级，填充呈阶梯）/关闭，点击切换"
+          data-tip="底部进度条：平滑 / 跳进 / 关"
           onClick={cycleBar}
         >
           进度条 {!barOn ? "关" : barSteps >= 40 ? "平滑" : "跳进"}
@@ -323,7 +323,7 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
       {phase === "ready" && (
         <button
           className="np-shot-gbar-fps"
-          data-tip="全帧量化色数：更少颜色体积更小（≤档位的独特色零损失；点击切换 256/128/64，开始录制后生效）"
+          data-tip="全帧量化色数（独特色零损失）"
           onClick={cycleColors}
         >
           {colors}色
@@ -332,7 +332,7 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
       {phase === "ready" && (
         <button
           className="np-shot-gbar-fps"
-          data-tip="近色容差：容差内的帧间微变化按静止跳过，体积更小画质略降（点击切换 关/低/中/高，下一帧起生效）"
+          data-tip="近色容差：帧间微变按静止跳过"
           onClick={cycleLossy}
         >
           有损 {LOSSY_LABEL[lossy]}
@@ -341,7 +341,7 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
       {phase === "ready" && (
         <button
           className="np-shot-gbar-fps"
-          data-tip="导出缩放：整体缩小画面，体积随像素数平方级下降（点击切换 100%/75%/50%，开始录制后生效）"
+          data-tip="导出缩放（体积随像素平方级降）"
           onClick={cycleScale}
         >
           缩放 {scale}%
@@ -350,7 +350,7 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
       {phase !== "processing" && (
         <button
           className="np-shot-gbar-fps"
-          data-tip="录制中的停顿回放最多保留的秒数（点击切换，保存时生效）"
+          data-tip="静止段回放保留秒数（保存时生效）"
           onClick={cycleKeep}
         >
           停顿 {staticKeep}s
@@ -359,7 +359,7 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
       {phase !== "processing" && (
         <button
           className="np-shot-gbar-fps"
-          data-tip="录制画面中叠加鼠标指针（下一帧起生效）"
+          data-tip="叠画鼠标指针（下一帧生效）"
           onClick={toggleCursor}
         >
           指针 {cursorOn ? "开" : "关"}
@@ -393,7 +393,7 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
         <>
           <button
             className="np-shot-btn"
-            data-tip={paused ? "继续录制（计时恢复累计）" : "暂停录制（已录内容保留，计时冻结）"}
+            data-tip={paused ? "继续录制" : "暂停录制（计时冻结）"}
             disabled={busy}
             onClick={togglePause}
           >

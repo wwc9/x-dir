@@ -44,6 +44,10 @@ function show(target: Element) {
   if (!text) return;
   el = document.createElement("div");
   el.className = "np-tip";
+  // 平坦模式（data-tip-flat 容器，2026-11-21 GIF 浮条优化）：截图浮条等
+  // 44px 小窗上下都翻转不出空间，tip 必然压在条面之上——限制单行不折行，
+  // 靠容器侧短文案把占地压到最小（全局 max-width 300 长句在条面上是灾难）
+  if (target.closest("[data-tip-flat]")) el.classList.add("np-tip-flat");
   el.textContent = text;
   const kbd = target.getAttribute("data-kbd");
   if (kbd) {
