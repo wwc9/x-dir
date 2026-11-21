@@ -1215,7 +1215,7 @@ fn park_session_windows(app: &AppHandle) {
             // 绝不 hide()：SW_HIDE 会让 WebView2 合成器离场，再 show 时 DWM
             // 只能呈现旧白面（闪白，主覆盖窗 park_shot_window 同款结论）；
             // 改停靠屏外保持可见，下一场换装 + 就绪回执原子上屏
-            let _ = w.set_position(crate::commands::shot::park_position());
+            crate::commands::shot::set_cloak(&w, true);
         }
     }
 }
@@ -1330,7 +1330,7 @@ fn show_frame_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
                 .map_err(|e| format!("选区框窗设置穿透失败：{e}"))?;
             // 冷建回退（预热缺失/僵尸清理后）：先停靠屏外放行可见，让
             // WebView2 在屏外画完——就绪回执才原子上屏，杜绝冷建直显黑闪
-            let _ = w.set_position(crate::commands::shot::park_position());
+            crate::commands::shot::set_cloak(&w, true);
             w
         }
     };
@@ -1378,7 +1378,7 @@ fn show_preview_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
         {
             Ok(w) => {
                 // 冷建回退：先停靠屏外放行可见，就绪回执才上屏（三窗同口径）
-                let _ = w.set_position(crate::commands::shot::park_position());
+                crate::commands::shot::set_cloak(&w, true);
                 win = Some(w);
                 break;
             }
@@ -1435,7 +1435,7 @@ fn show_bar_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
                 .build()
                 .map_err(|e| format!("创建控制条失败：{e}"))?;
             // 冷建回退：先停靠屏外放行可见，就绪回执才上屏（三窗同口径）
-            let _ = w.set_position(crate::commands::shot::park_position());
+            crate::commands::shot::set_cloak(&w, true);
             w
         }
     };

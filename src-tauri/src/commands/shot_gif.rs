@@ -2028,7 +2028,7 @@ fn show_mask_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
             // 冷建回退（预热缺失/僵尸清理后）：先停靠屏外放行可见，让
             // WebView2 合成器在屏外把页面画完——就绪回执（shot_ready）才
             // 原子移动上屏，杜绝冷建直显的空窗黑闪（2026-11-21 低配闪屏）
-            let _ = w.set_position(super::shot::park_position());
+            super::shot::set_cloak(&w, true);
             w
         }
     };
@@ -2073,7 +2073,7 @@ fn show_gif_bar_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
                 .build()
                 .map_err(|e| format!("创建录制浮条失败：{e}"))?;
             // 冷建回退：先停靠屏外放行可见，就绪回执才上屏（同遮罩窗口径）
-            let _ = w.set_position(super::shot::park_position());
+            super::shot::set_cloak(&w, true);
             w
         }
     };
@@ -2154,7 +2154,7 @@ fn show_gif_result_window(
 fn park_windows(app: &AppHandle) {
     for label in ["shot-frame", "shot-bar"] {
         if let Some(w) = app.get_webview_window(label) {
-            let _ = w.set_position(super::shot::park_position());
+            super::shot::set_cloak(&w, true);
         }
     }
 }

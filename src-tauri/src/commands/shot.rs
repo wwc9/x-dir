@@ -360,11 +360,36 @@ pub(crate) fn park_position() -> PhysicalPosition<i32> {
     PhysicalPosition::new(-32700, -32700)
 }
 
-/// 覆盖窗停靠回屏幕外（收场）。绝不用 hide()：SW_HIDE 会让 WebView2 合成器
-/// 离场，再 show 时 DWM 只能呈现旧白面（闪白）；停靠期间窗口对合成器持续
-/// 在场，会话内容提前呈现，上屏只是一次原子移动
-fn park_shot_window(w: &tauri::WebviewWindow) {
-    let _ = w.set_position(park_position());
+/// DWM Cloak（Windows 8+ 原子隐匿，PowerToys 防闪同款）：窗口对 DWM 保持
+/// 完整合成（WebView2 合成器不离场、surface 持续提交），只是不呈现到屏幕
+/// ——移动/缩放/换装全部可以在罩内完成，上屏 = 一次「去罩」原子呈现，不
+/// 存在任何窗口系统调用瞬间。对比两代旧方案：park 长距离移动（呈现瞬间 =
+/// 移动中的窗口，低配 DWM / RDP 会话有单帧黑隙，2026-11-21 用户远程实测
+/// 仍在）与 hide/show（SW_HIDE 令合成器离场，show 呈现旧白面）均退役；
+/// Cloak 对 RDP/物理屏语义一致，且不依赖 WebView2 透明（透明在部分远程
+/// 会话渲染为黑）
+#[cfg(windows)]
+pub(crate) fn set_cloak(window: &tauri::WebviewWindow, cloak: bool) {
+    use windows::Win32::Graphics::Dwm::{DWMWA_CLOAK, DwmSetWindowAttribute};
+    if let Ok(hwnd) = window.hwnd() {
+        let v: i32 = if cloak { 1 } else { 0 };
+        unsafe {
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_CLOAK,
+                &v as *const i32 as *const core::ffi::c_void,
+                std::mem::size_of::<i32>() as u32,
+            );
+        }
+    }
+}
+
+/// 非 Windows 回落：移动到屏外（等价旧 park 语义；本项目实运维 Windows）
+#[cfg(not(windows))]
+pub(crate) fn set_cloak(window: &tauri::WebviewWindow, cloak: bool) {
+    if cloak {
+        let _ = window.set_position(park_position());
+    }
 }
 
 /// snow-shot 同款：禁用 DWM 对该窗的显示/隐藏过渡动画，上屏/停靠零渐隐
@@ -431,6 +456,7 @@ pub(crate) fn begin_session(app: &AppHandle) {
                         // 并开整窗穿透（防空壳期拦截用户点击），随后前端画好
                         // 定格帧经 shot_ready 恢复穿透+焦点——上屏路径里不再有
                         // 「长距离移动」，低配 DWM 的呈现间隙无从触发
+                        set_cloak(&w, true);
                         let _ = w.set_ignore_cursor_events(true);
                         let _ = w.set_size(PhysicalSize::new(cap.mw, cap.mh));
                         let _ = w.set_position(PhysicalPosition::new(cap.mx, cap.my));
@@ -595,6 +621,7 @@ pub(crate) fn ensure_shot_window(app: &AppHandle) -> Result<(), String> {
     // 先停靠屏幕外再放行可见：页面在屏外加载呈现（rAF 全速、合成器不离场），
     // 热键首按即有「已渲染完毕」的窗体可原子上屏
     let _ = win.set_position(park_position());
+    set_cloak(&win, true);
     let _ = win.show();
     // 失焦自动收会话（QQ 惯例）：全屏置顶蒙层失焦后 Esc/Enter 全部失效，
     // 留在屏上形同卡死。仅在内容首帧上屏（SHOT_VISIBLE）后生效；保存对话框
@@ -655,7 +682,7 @@ pub fn ensure_session_windows(app: &AppHandle) {
             if let Ok(hwnd) = w.hwnd() {
                 disable_dwm_transitions(hwnd);
             }
-            let _ = w.set_position(park_position());
+            set_cloak(&w, true);
             let _ = w.set_size(PhysicalSize::new(800, 600));
             let _ = w.show();
         }
@@ -686,7 +713,7 @@ pub fn ensure_session_windows(app: &AppHandle) {
             if let Ok(hwnd) = w.hwnd() {
                 disable_dwm_transitions(hwnd);
             }
-            let _ = w.set_position(park_position());
+            set_cloak(&w, true);
             let _ = w.set_size(PhysicalSize::new(840, 44));
             let _ = w.show();
         }
@@ -714,7 +741,7 @@ pub fn ensure_session_windows(app: &AppHandle) {
             if let Ok(hwnd) = w.hwnd() {
                 disable_dwm_transitions(hwnd);
             }
-            let _ = w.set_position(park_position());
+            set_cloak(&w, true);
             let _ = w.set_size(PhysicalSize::new(200, 320));
             let _ = w.show();
         }
@@ -728,7 +755,8 @@ pub(crate) fn end_session(app: &AppHandle) {
     SHOT_VISIBLE.store(false, Ordering::SeqCst);
     *SESSION_FRAME.lock().unwrap_or_else(|p| p.into_inner()) = None;
     if let Some(w) = app.get_webview_window("shot") {
-        park_shot_window(&w);
+        // 原位罩住（不移动）：下一场开场在罩内完成尺寸/位置调整
+        set_cloak(&w, true);
         // 停靠是投给事件循环的异步消息，而 emit 直达 webview——若立即通知
         // 前端卸载会话 UI，可能在窗口真正离屏前触发一帧多余重绘。延迟一拍
         // 等停靠呈现后再卸载（此后重绘全部发生在屏幕外，不可见）
@@ -769,6 +797,7 @@ pub fn shot_ready(window: tauri::WebviewWindow) -> Result<(), String> {
     if label == "shot" || label == "shot-result" || label.starts_with("pin-") {
         if label == "shot" {
             let _ = window.set_ignore_cursor_events(false);
+            set_cloak(&window, false);
         }
         window.show().map_err(|e| e.to_string())?;
         if label == "shot" {
@@ -790,6 +819,7 @@ pub fn shot_ready(window: tauri::WebviewWindow) -> Result<(), String> {
         if let Some((x, y)) = moved {
             let _ = window.set_position(PhysicalPosition::new(x, y));
         }
+        set_cloak(&window, false);
         window.show().map_err(|e| e.to_string())?;
         // 控制条要接键盘（Enter/Esc）；预热期首绘回执（moved=None）不抢焦点
         if label == "shot-bar" && moved.is_some() {
@@ -1840,10 +1870,10 @@ mod flash_probe {
         let (mw, mh) = (mon.width().unwrap_or(1920), mon.height().unwrap_or(1080));
         // 中心区域 1000×600：全屏级黑闪必然落入该区域
         let (rx, ry, rw, rh) = (
-            (mw as i32 - 1000).max(0) / 2,
-            (mh as i32 - 600).max(0) / 2,
-            1000u32.min(mw),
-            600u32.min(mh),
+            (mw as i32 - 480).max(0) / 2,
+            (mh as i32 - 300).max(0) / 2,
+            480u32.min(mw),
+            300u32.min(mh),
         );
         let dir = std::env::temp_dir().join("xdir-flash-probe");
         let _ = std::fs::remove_dir_all(&dir);
@@ -1895,7 +1925,7 @@ mod flash_probe {
         let mut idx = 0usize;
         loop {
             let t = t0.elapsed().as_millis();
-            if t > 10000 {
+            if t > 12000 {
                 break;
             }
             // 触发判定先于抓拍：拍下的是触发后的屏幕
@@ -1908,7 +1938,7 @@ mod flash_probe {
             if let Ok(frame) = mon.capture_region(rx as u32, ry as u32, rw, rh) {
                 let img = image::RgbaImage::from_raw(rw, rh, frame.into_raw()).unwrap();
                 let luma = luma_of(&img);
-                if t >= 500 && t < 8000 {
+                if t >= 1200 && t < 11600 {
                     let name = dir.join(format!("f{idx:04}_t{t}ms_{luma:.0}.png"));
                     let _ = img.save(&name);
                     saved += 1;
