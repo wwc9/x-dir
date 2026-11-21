@@ -7,6 +7,8 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 
+import { api } from "../lib/ipc";
+
 export interface ScrollFrameBoot {
   window: "frame";
   /** 选区显示器相对物理像素矩形 */
@@ -26,6 +28,14 @@ export function ScrollFrame({ boot }: { boot: ScrollFrameBoot }) {
       void un.then((f) => f()).catch(() => undefined);
     };
   }, []);
+  // 常驻窗停靠屏外（合成器不离场）：首绘/换装重绘后回执 Rust（shot_ready）
+  // 才原子移动上屏——无感链路，2026-11-21 低配闪屏修复
+  useEffect(() => {
+    const a = requestAnimationFrame(() => {
+      requestAnimationFrame(() => void api.shotReady().catch(() => undefined));
+    });
+    return () => cancelAnimationFrame(a);
+  }, [geom.x, geom.y, geom.w, geom.h]);
   useEffect(() => {
     document.documentElement.style.background = "transparent";
     document.body.style.background = "transparent";

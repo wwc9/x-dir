@@ -805,7 +805,21 @@ pub fn shot_scroll_launch(app: AppHandle) -> Result<(), String> {
             }
             std::thread::sleep(Duration::from_millis(10));
         }
-        // 三窗常驻（首场后 hide 不销毁）：boot/几何事件先行——页面在 webview
+        // 伴生窗落位目标先于换装事件预置（shot_ready 消费，消除「前端先画
+        // 完回执、pending 未设」竞态）：框窗 = 显示器原点整幅，预览 = 贴选区
+        // 侧边（panel_layout 同参），控制条 = 选区正下方（bar_layout 同参）
+        let (p_px, p_py, _, _) = panel_layout(
+            (geo.rx as i32, geo.ry as i32, geo.rw as i32, geo.rh as i32),
+            &geo.mon,
+        );
+        let (bar_bx, bar_by, _, _) = bar_layout(
+            (geo.rx as i32, geo.ry as i32, geo.rw as i32, geo.rh as i32),
+            &geo.mon,
+        );
+        super::shot::set_session_window_pos("shot-frame", (geo.mon.x, geo.mon.y));
+        super::shot::set_session_window_pos("shot-scroll", (geo.mon.x + p_px, geo.mon.y + p_py));
+        super::shot::set_session_window_pos("shot-bar", (geo.mon.x + bar_bx, geo.mon.y + bar_by));
+        // 三窗常驻（首场后停靠不销毁）：boot/几何事件先行——页面在 webview
         // 线程换装，与主线程建窗/显示并行，无闪屏空窗期。首场窗尚不存在，
         // 事件落空无害（initialization_script 已带同款初始载荷）
         let _ = app2.emit_to(
@@ -1140,7 +1154,7 @@ fn scroll_loop(app: AppHandle, geo: ScrollGeo, base: RgbaImage, canvas: Arc<Mute
             "滚动截图：用户取消，丢弃已拼内容（{}px）",
             canvas.lock().unwrap_or_else(|e| e.into_inner()).h
         );
-        hide_session_windows(&app);
+        park_session_windows(&app);
         return;
     }
     let h = canvas.lock().unwrap_or_else(|e| e.into_inner()).h;
@@ -1195,10 +1209,13 @@ pub fn shot_scroll_chunk(from_y: u32) -> tauri::ipc::Response {
 /// 常驻会话窗收场：hide 不销毁——下一场直接换装复用，免 WebView2 建窗
 /// 闪屏（三窗重建 600-900ms 是启动闪烁主因）。窗内页面保持存活，boot/
 /// 几何事件驱动换装
-fn hide_session_windows(app: &AppHandle) {
+fn park_session_windows(app: &AppHandle) {
     for label in ["shot-scroll", "shot-frame", "shot-bar"] {
         if let Some(w) = app.get_webview_window(label) {
-            let _ = w.hide();
+            // 绝不 hide()：SW_HIDE 会让 WebView2 合成器离场，再 show 时 DWM
+            // 只能呈现旧白面（闪白，主覆盖窗 park_shot_window 同款结论）；
+            // 改停靠屏外保持可见，下一场换装 + 就绪回执原子上屏
+            let _ = w.set_position(crate::commands::shot::park_position());
         }
     }
 }
@@ -1226,7 +1243,7 @@ fn dialog_error(app: &AppHandle, msg: &str) {
 /// 收尾：关会话窗，长图存临时盘后开结果窗
 fn end_scroll(app: &AppHandle, mon: MonRect, img: Option<RgbaImage>, truncated: bool) {
     // 常驻窗收场（hide 复用），结果窗随后独占交互
-    hide_session_windows(app);
+    park_session_windows(app);
     let Some(img) = img else {
         log::error!("滚动截图：无拼接结果可出（启动/收场异常）");
         dialog_error(app, "滚动截图未能生成结果（启动异常），请重新截图");
@@ -1311,15 +1328,18 @@ fn show_frame_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
             // 整窗穿透：滚轮/点击直达下层真实窗口（穿透须在 show 前生效）
             w.set_ignore_cursor_events(true)
                 .map_err(|e| format!("选区框窗设置穿透失败：{e}"))?;
+            // 冷建回退（预热缺失/僵尸清理后）：先停靠屏外放行可见，让
+            // WebView2 在屏外画完——就绪回执才原子上屏，杜绝冷建直显黑闪
+            let _ = w.set_position(crate::commands::shot::park_position());
             w
         }
     };
-    win.set_position(PhysicalPosition::new(mon.x, mon.y))
-        .map_err(|e| e.to_string())?;
+    // 只调尺寸 + 保证停靠位可见（合成器不离场）；上屏由前端首帧回执
+    //（shot_ready）驱动——落位目标已在 launch 线程预置
     win.set_size(PhysicalSize::new(mon.w, mon.h))
         .map_err(|e| e.to_string())?;
     win.show().map_err(|e| e.to_string())?;
-    log::debug!("滚动截图：选区框窗已显示（整屏遮罩，选区 ({rx},{ry}) {rw}×{rh}）");
+    log::debug!("滚动截图：选区框窗已换装（停靠屏外，选区 ({rx},{ry}) {rw}×{rh}）");
     Ok(())
 }
 
@@ -1357,6 +1377,8 @@ fn show_preview_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
             .build()
         {
             Ok(w) => {
+                // 冷建回退：先停靠屏外放行可见，就绪回执才上屏（三窗同口径）
+                let _ = w.set_position(crate::commands::shot::park_position());
                 win = Some(w);
                 break;
             }
@@ -1374,8 +1396,7 @@ fn show_preview_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
         }
     }
     let win = win.ok_or(last_err)?;
-    win.set_position(PhysicalPosition::new(mon.x + px, mon.y + py))
-        .map_err(|e| e.to_string())?;
+    // 只调尺寸 + 保证停靠位可见；上屏由前端首帧回执（shot_ready）驱动
     win.set_size(PhysicalSize::new(pw, ph))
         .map_err(|e| e.to_string())?;
     win.show().map_err(|e| e.to_string())?;
@@ -1395,31 +1416,35 @@ fn show_bar_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
     // 常驻复用优先（同预览窗）
     let win = match app.get_webview_window("shot-bar") {
         Some(w) => w,
-        None => WebviewWindowBuilder::new(app, "shot-bar", WebviewUrl::App("shot.html".into()))
-            .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
-            .title("X-Dir 滚动截图")
-            .decorations(false)
-            .resizable(false)
-            .maximizable(false)
-            .minimizable(false)
-            .skip_taskbar(true)
-            .always_on_top(true)
-            .shadow(false)
-            // 不可见窗口默认 focused(true) 在部分 WebView2 上聚焦异常
-            // （wry#1798）；show() 后再 set_focus()，保险起见显式关闭
-            .focused(false)
-            .visible(false)
-            .initialization_script(format!("window.__BOOT__ = {boot};"))
-            .build()
-            .map_err(|e| format!("创建控制条失败：{e}"))?,
+        None => {
+            let w = WebviewWindowBuilder::new(app, "shot-bar", WebviewUrl::App("shot.html".into()))
+                .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
+                .title("X-Dir 滚动截图")
+                .decorations(false)
+                .resizable(false)
+                .maximizable(false)
+                .minimizable(false)
+                .skip_taskbar(true)
+                .always_on_top(true)
+                .shadow(false)
+                // 不可见窗口默认 focused(true) 在部分 WebView2 上聚焦异常
+                //（wry#1798）；就绪回执后再 set_focus()，保险起见显式关闭
+                .focused(false)
+                .visible(false)
+                .initialization_script(format!("window.__BOOT__ = {boot};"))
+                .build()
+                .map_err(|e| format!("创建控制条失败：{e}"))?;
+            // 冷建回退：先停靠屏外放行可见，就绪回执才上屏（三窗同口径）
+            let _ = w.set_position(crate::commands::shot::park_position());
+            w
+        }
     };
-    win.set_position(PhysicalPosition::new(mon.x + bx, mon.y + by))
-        .map_err(|e| e.to_string())?;
+    // 只调尺寸 + 保证停靠位可见；上屏（原位移动）与焦点由前端首帧回执
+    //（shot_ready）驱动——落位目标已在 launch 线程预置
     win.set_size(PhysicalSize::new(bw, bh))
         .map_err(|e| e.to_string())?;
     win.show().map_err(|e| e.to_string())?;
-    win.set_focus().map_err(|e| e.to_string())?;
-    log::info!("滚动截图：控制条已显示 @({bx},{by}) {bw}×{bh}");
+    log::info!("滚动截图：控制条已换装（停靠屏外，目标 @({bx},{by}) {bw}×{bh}）");
     Ok(())
 }
 

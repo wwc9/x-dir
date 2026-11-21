@@ -25,6 +25,8 @@ export function ScrollBar({ boot }: { boot: ScrollBarBoot }) {
   const [busy, setBusy] = useState(false);
   /** 滚太快警示（Rust 流式帧匹配失败/捕获失败 = 速度超匹配能力） */
   const [warn, setWarn] = useState(false);
+  /** 换装序号：常驻窗停靠屏外，每次换装重绘后回执 Rust 才上屏（无感链路） */
+  const [dress, setDress] = useState(0);
   const warnTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -33,6 +35,7 @@ export function ScrollBar({ boot }: { boot: ScrollBarBoot }) {
       setHeight(0);
       setBusy(false);
       setWarn(false);
+      setDress((d) => d + 1);
     });
     return () => {
       void un.then((f) => f()).catch(() => undefined);
@@ -40,6 +43,14 @@ export function ScrollBar({ boot }: { boot: ScrollBarBoot }) {
   }, []);
 
   useEffect(() => initTooltip(), []);
+
+  // 首绘/换装重绘后回执 Rust（shot_ready）才原子移动上屏（无感链路）
+  useEffect(() => {
+    const a = requestAnimationFrame(() => {
+      requestAnimationFrame(() => void api.shotReady().catch(() => undefined));
+    });
+    return () => cancelAnimationFrame(a);
+  }, [dress]);
 
   useEffect(() => {
     const un = listen<{ height: number }>("shot-scroll-progress", (e) =>

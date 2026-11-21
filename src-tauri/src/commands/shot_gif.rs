@@ -914,6 +914,18 @@ pub fn shot_gif_launch(app: AppHandle) -> Result<(), String> {
             }
             std::thread::sleep(Duration::from_millis(10));
         }
+        // 伴生窗落位目标先于换装事件预置（shot_ready 消费，消除「前端先画
+        // 完回执、pending 未设」竞态）：遮罩 = 显示器原点整幅，浮条 = 选区
+        // 正下方（与 show_gif_bar_window 同参同值）
+        let s_scale = f64::from(geo.mon.scale);
+        let (bar_bx, bar_by, _, _) = super::shot_scroll::bar_layout_sized(
+            (geo.rx as i32, geo.ry as i32, geo.rw as i32, geo.rh as i32),
+            &geo.mon,
+            (840.0 * s_scale).round() as i32,
+            (44.0 * s_scale).round() as i32,
+        );
+        super::shot::set_session_window_pos("shot-frame", (geo.mon.x, geo.mon.y));
+        super::shot::set_session_window_pos("shot-bar", (geo.mon.x + bar_bx, geo.mon.y + bar_by));
         // 两窗常驻复用：boot 事件先行换装（页面在 webview 线程），再建窗/显示。
         // 首场窗不存在事件落空无害（initialization_script 已带初始载荷）
         let _ = app2.emit_to(
@@ -1000,7 +1012,7 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
     });
     let Some(monitor) = mon_obj else {
         log::error!("GIF 录制：找不到目标显示器，收场");
-        hide_windows(&app);
+        park_windows(&app);
         GIF_ACTIVE.store(false, Ordering::Relaxed);
         dialog_error(&app, "GIF 录制未能找到目标显示器，请重新截图");
         return;
@@ -1021,7 +1033,7 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
         Ok(f) => f,
         Err(e) => {
             log::error!("GIF 录制：临时文件创建失败：{e}");
-            hide_windows(&app);
+            park_windows(&app);
             GIF_ACTIVE.store(false, Ordering::Relaxed);
             dialog_error(&app, &format!("GIF 录制临时文件创建失败：{e}"));
             return;
@@ -1035,7 +1047,7 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
         Err(msg) => {
             log::error!("GIF 录制：{msg}");
             let _ = std::fs::remove_file(&path);
-            hide_windows(&app);
+            park_windows(&app);
             GIF_ACTIVE.store(false, Ordering::Relaxed);
             dialog_error(&app, &msg);
             return;
@@ -1323,7 +1335,7 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
     GIF_ACTIVE.store(false, Ordering::Relaxed);
     // 窗口收场延后到出结果窗之前：进度条合成期间浮条保持「生成中」可见
     if cancelled || (aborted && frames == 0) {
-        hide_windows(&app);
+        park_windows(&app);
         let _ = std::fs::remove_file(&path);
         if cancelled {
             log::info!("GIF 录制：用户取消，临时文件已删除（{frames} 帧）");
@@ -1335,7 +1347,7 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
     }
     if let Err(e) = flush {
         log::error!("GIF 录制：编码收尾冲刷失败：{e}");
-        hide_windows(&app);
+        park_windows(&app);
         let _ = std::fs::remove_file(&path);
         dialog_error(&app, &format!("GIF 录制写盘失败：{e}"));
         return;
@@ -1365,7 +1377,7 @@ fn gif_loop(app: AppHandle, geo: GifGeo) {
             log::error!("GIF 录制：进度条合成失败（保留原 GIF 出结果）：{e}");
         }
     }
-    hide_windows(&app);
+    park_windows(&app);
     // 结果窗尺寸取文件实际头（进度条合成后高度 +PROGRESS_BAR_H）
     let (out_w, out_h) = image::image_dimensions(&path).unwrap_or((rw, rh));
     if let Err(e) = show_gif_result_window(&app, &mon, &path, out_w, out_h) {
@@ -2013,11 +2025,15 @@ fn show_mask_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
                     .map_err(|e| format!("创建录制遮罩窗失败：{e}"))?;
             w.set_ignore_cursor_events(true)
                 .map_err(|e| format!("录制遮罩窗设置穿透失败：{e}"))?;
+            // 冷建回退（预热缺失/僵尸清理后）：先停靠屏外放行可见，让
+            // WebView2 合成器在屏外把页面画完——就绪回执（shot_ready）才
+            // 原子移动上屏，杜绝冷建直显的空窗黑闪（2026-11-21 低配闪屏）
+            let _ = w.set_position(super::shot::park_position());
             w
         }
     };
-    win.set_position(PhysicalPosition::new(mon.x, mon.y))
-        .map_err(|e| e.to_string())?;
+    // 暖场/冷建都只调尺寸（暖场已在停靠位、冷建刚停靠）+ 保证停靠位可见
+    //（合成器不离场），真正上屏由前端首帧回执驱动
     win.set_size(PhysicalSize::new(mon.w, mon.h))
         .map_err(|e| e.to_string())?;
     win.show().map_err(|e| e.to_string())
@@ -2031,7 +2047,7 @@ fn show_mask_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
 fn show_gif_bar_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
     let mon = &geo.mon;
     let s = f64::from(mon.scale);
-    let (bx, by, bw, bh) = super::shot_scroll::bar_layout_sized(
+    let (_, _, bw, bh) = super::shot_scroll::bar_layout_sized(
         (geo.rx as i32, geo.ry as i32, geo.rw as i32, geo.rh as i32),
         mon,
         (840.0 * s).round() as i32,
@@ -2040,28 +2056,32 @@ fn show_gif_bar_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
     let boot = serde_json::json!({ "window": "gifbar", "fps": GIF_FPS.load(Ordering::Relaxed), "barOn": GIF_BAR.load(Ordering::Relaxed), "cursorOn": GIF_CURSOR.load(Ordering::Relaxed), "staticKeep": GIF_STATIC_KEEP.load(Ordering::Relaxed), "barSteps": GIF_BAR_STEPS.load(Ordering::Relaxed), "colors": GIF_COLORS.load(Ordering::Relaxed), "lossy": GIF_LOSSY.load(Ordering::Relaxed), "scale": GIF_SCALE.load(Ordering::Relaxed) });
     let win = match app.get_webview_window("shot-bar") {
         Some(w) => w,
-        None => WebviewWindowBuilder::new(app, "shot-bar", WebviewUrl::App("shot.html".into()))
-            .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
-            .title("X-Dir GIF 录制")
-            .decorations(false)
-            .resizable(false)
-            .maximizable(false)
-            .minimizable(false)
-            .skip_taskbar(true)
-            .always_on_top(true)
-            .shadow(false)
-            .focused(false)
-            .visible(false)
-            .initialization_script(format!("window.__BOOT__ = {boot};"))
-            .build()
-            .map_err(|e| format!("创建录制浮条失败：{e}"))?,
+        None => {
+            let w = WebviewWindowBuilder::new(app, "shot-bar", WebviewUrl::App("shot.html".into()))
+                .additional_browser_args(crate::commands::shot::WEBVIEW_BROWSER_ARGS)
+                .title("X-Dir GIF 录制")
+                .decorations(false)
+                .resizable(false)
+                .maximizable(false)
+                .minimizable(false)
+                .skip_taskbar(true)
+                .always_on_top(true)
+                .shadow(false)
+                .focused(false)
+                .visible(false)
+                .initialization_script(format!("window.__BOOT__ = {boot};"))
+                .build()
+                .map_err(|e| format!("创建录制浮条失败：{e}"))?;
+            // 冷建回退：先停靠屏外放行可见，就绪回执才上屏（同遮罩窗口径）
+            let _ = w.set_position(super::shot::park_position());
+            w
+        }
     };
-    win.set_position(PhysicalPosition::new(mon.x + bx, mon.y + by))
-        .map_err(|e| e.to_string())?;
+    // 只调尺寸 + 停靠位可见；上屏（原位移动）与焦点由前端首帧回执
+    //（shot_ready）驱动——落位目标已在 launch 线程预置（换装事件之前）
     win.set_size(PhysicalSize::new(bw, bh))
         .map_err(|e| e.to_string())?;
-    win.show().map_err(|e| e.to_string())?;
-    win.set_focus().map_err(|e| e.to_string())
+    win.show().map_err(|e| e.to_string())
 }
 
 /// 结果窗（复用 shot-result 窗，boot kind = gif）：保存 .gif / 打开所在
@@ -2127,10 +2147,14 @@ fn show_gif_result_window(
 }
 
 /// 常驻会话窗收场（hide 复用，下一场换装；滚动截图同款免建窗闪屏）
-fn hide_windows(app: &AppHandle) {
+/// 常驻会话窗收场（停靠复用，下一场换装）：**绝不 hide()**——SW_HIDE 会让
+/// WebView2 合成器离场，再 show 时 DWM 只能呈现旧白面（闪白，主覆盖窗
+/// park_shot_window 同款结论）；改停靠屏外保持可见，下一场换装 + 就绪
+/// 回执原子上屏（2026-11-21 低配闪屏修复）
+fn park_windows(app: &AppHandle) {
     for label in ["shot-frame", "shot-bar"] {
         if let Some(w) = app.get_webview_window(label) {
-            let _ = w.hide();
+            let _ = w.set_position(super::shot::park_position());
         }
     }
 }

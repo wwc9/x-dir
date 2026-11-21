@@ -305,10 +305,6 @@ static READY_FAIL_STREAK: AtomicU32 = AtomicU32::new(0);
 /// 直传前端（putImageData 直绘，无落盘/读回/解码三跳）；收场释放；滚动
 /// 截图从内存裁首帧（不再读临时文件）
 static SESSION_FRAME: Mutex<Option<SessionFrame>> = Mutex::new(None);
-/// 待上屏的显示器原点（dispatch 时登记，shot_ready 时消费）：覆盖窗停靠在
-/// 屏幕外，会话内容就绪后才移动到该原点原子上屏
-static SESSION_POS: Mutex<Option<(i32, i32)>> = Mutex::new(None);
-
 /// 会话定格帧（显示器整幅 RGBA）
 pub(crate) struct SessionFrame {
     pub mw: u32,
@@ -360,7 +356,7 @@ pub(crate) fn crop_rgba_rows(
 /// 常驻覆盖窗的停靠坐标（虚拟桌面外，任何显示器都够不到）。Windows 把窗口
 /// 坐标钳制在 ±32768 内（E2E 实证 -40000 被钳到 -32768），取 -32700：不触
 /// 钳制、远离最小化惯例的 -32000，即使 8K 窗宽右缘也仍在屏外
-fn park_position() -> PhysicalPosition<i32> {
+pub(crate) fn park_position() -> PhysicalPosition<i32> {
     PhysicalPosition::new(-32700, -32700)
 }
 
@@ -429,12 +425,15 @@ pub(crate) fn begin_session(app: &AppHandle) {
                 let app2 = app.clone();
                 let dispatch = app.run_on_main_thread(move || {
                     if let Some(w) = app2.get_webview_window("shot") {
-                        // 只改尺寸不动位置：窗口此刻应仍停靠在屏幕外，位置由
-                        // shot_ready 在内容就绪后一次性移动（提前移上屏会把
-                        // 上一次会话的残影/空壳暴露给用户）
+                        // 移动/缩放前置到透明空壳期（2026-11-21 低配黑屏修复）：
+                        // 窗口此刻是上一场收尾后的透明空壳（会话 UI 已卸载，
+                        // 页面逐位透明），先把尺寸+目标位置在不可见期调整到位、
+                        // 并开整窗穿透（防空壳期拦截用户点击），随后前端画好
+                        // 定格帧经 shot_ready 恢复穿透+焦点——上屏路径里不再有
+                        // 「长距离移动」，低配 DWM 的呈现间隙无从触发
+                        let _ = w.set_ignore_cursor_events(true);
                         let _ = w.set_size(PhysicalSize::new(cap.mw, cap.mh));
-                        *SESSION_POS.lock().unwrap_or_else(|p| p.into_inner()) =
-                            Some((cap.mx, cap.my));
+                        let _ = w.set_position(PhysicalPosition::new(cap.mx, cap.my));
                         SESSION_ACTIVE.store(true, Ordering::SeqCst);
                         if let Err(e) = app2.emit_to("shot", "shot-session", &cap) {
                             log::error!("截图会话下发失败：{e}");
@@ -622,12 +621,111 @@ pub(crate) fn ensure_shot_window(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// 伴生会话窗启动预热（lib.rs setup 与 ensure_shot_window 同址调用）：
+/// 遮罩窗（shot-frame）/控制条（shot-bar）/长图预览窗（shot-scroll）首场
+/// 前预建并停靠屏外保持可见——WebView2 冷建 300ms+ 的首场直显空窗与 hide/
+/// show 循环闪白（2026-11-21 用户报告 GIF/长截图/低配三入口黑屏闪烁）从
+/// 根上消除；预热 boot 用占位几何，会话开场经换装事件重绘 + shot_ready
+/// 原子上屏。冷建回退分支（各 show_* 内）同口径：停靠+可见+就绪门控
+pub fn ensure_session_windows(app: &AppHandle) {
+    // 遮罩窗：整屏透明 + 整窗穿透（滚动/GIF 共用，ScrollFrame 组件）
+    if app.get_webview_window("shot-frame").is_none() {
+        let boot = serde_json::json!({
+            "window": "frame", "x": 0, "y": 0, "w": 96, "h": 80, "scale": 1.0,
+        });
+        if let Ok(w) =
+            WebviewWindowBuilder::new(app, "shot-frame", WebviewUrl::App("shot.html".into()))
+                .additional_browser_args(WEBVIEW_BROWSER_ARGS)
+                .title("X-Dir 截图")
+                .decorations(false)
+                .resizable(false)
+                .maximizable(false)
+                .minimizable(false)
+                .skip_taskbar(true)
+                .always_on_top(true)
+                .shadow(false)
+                .transparent(true)
+                .focused(false)
+                .visible(false)
+                .initialization_script(format!("window.__BOOT__ = {boot};"))
+                .build()
+        {
+            let _ = w.set_ignore_cursor_events(true);
+            #[cfg(windows)]
+            if let Ok(hwnd) = w.hwnd() {
+                disable_dwm_transitions(hwnd);
+            }
+            let _ = w.set_position(park_position());
+            let _ = w.set_size(PhysicalSize::new(800, 600));
+            let _ = w.show();
+        }
+    }
+    // 控制条：滚动条/GIF 浮条共用（ScrollBar/GifBar 组件按 boot.window 换装）
+    if app.get_webview_window("shot-bar").is_none() {
+        let boot = serde_json::json!({
+            "window": "gifbar", "fps": 12, "barOn": true, "barSteps": 40,
+            "cursorOn": true, "staticKeep": 2, "colors": 256, "lossy": 0, "scale": 100,
+        });
+        if let Ok(w) =
+            WebviewWindowBuilder::new(app, "shot-bar", WebviewUrl::App("shot.html".into()))
+                .additional_browser_args(WEBVIEW_BROWSER_ARGS)
+                .title("X-Dir 截图")
+                .decorations(false)
+                .resizable(false)
+                .maximizable(false)
+                .minimizable(false)
+                .skip_taskbar(true)
+                .always_on_top(true)
+                .shadow(false)
+                .focused(false)
+                .visible(false)
+                .initialization_script(format!("window.__BOOT__ = {boot};"))
+                .build()
+        {
+            #[cfg(windows)]
+            if let Ok(hwnd) = w.hwnd() {
+                disable_dwm_transitions(hwnd);
+            }
+            let _ = w.set_position(park_position());
+            let _ = w.set_size(PhysicalSize::new(840, 44));
+            let _ = w.show();
+        }
+    }
+    // 长图预览窗（ScrollPreview 组件）
+    if app.get_webview_window("shot-scroll").is_none() {
+        let boot = serde_json::json!({ "window": "scroll-preview", "w": 170, "h": 300 });
+        if let Ok(w) =
+            WebviewWindowBuilder::new(app, "shot-scroll", WebviewUrl::App("shot.html".into()))
+                .additional_browser_args(WEBVIEW_BROWSER_ARGS)
+                .title("X-Dir 截图")
+                .decorations(false)
+                .resizable(false)
+                .maximizable(false)
+                .minimizable(false)
+                .skip_taskbar(true)
+                .always_on_top(true)
+                .shadow(false)
+                .focused(false)
+                .visible(false)
+                .initialization_script(format!("window.__BOOT__ = {boot};"))
+                .build()
+        {
+            #[cfg(windows)]
+            if let Ok(hwnd) = w.hwnd() {
+                disable_dwm_transitions(hwnd);
+            }
+            let _ = w.set_position(park_position());
+            let _ = w.set_size(PhysicalSize::new(200, 320));
+            let _ = w.show();
+        }
+    }
+}
+
 /// 收场：停靠常驻覆盖窗到屏幕外回到 idle（不销毁、不 SW_HIDE），清会话状态
 /// 与定格帧（33MB 内存即还），并通知前端卸载会话 UI（释放画布内存）
 pub(crate) fn end_session(app: &AppHandle) {
     SESSION_ACTIVE.store(false, Ordering::SeqCst);
     SHOT_VISIBLE.store(false, Ordering::SeqCst);
-    *SESSION_POS.lock().unwrap_or_else(|p| p.into_inner()) = None;
     *SESSION_FRAME.lock().unwrap_or_else(|p| p.into_inner()) = None;
     if let Some(w) = app.get_webview_window("shot") {
         park_shot_window(&w);
@@ -642,18 +740,35 @@ pub(crate) fn end_session(app: &AppHandle) {
     }
 }
 
-/// 覆盖窗/贴图窗/结果窗内容首帧就绪后由前端调用：此刻才真正可见——
-/// 覆盖窗从屏幕外停靠位一次移动到目标显示器原点，DWM 直接呈现已就绪的
-/// 最终 surface（零白帧）；show 仅作异常兜底（窗口若处于真隐藏态）
+/// 伴生会话窗（shot-frame 遮罩 / shot-bar 控制条 / shot-scroll 预览）就绪
+/// 待落位目标：show_* 只设尺寸 + 换装事件，不上屏；前端首帧绘出调
+/// shot_ready 后才原子上屏。窗口全程「停靠屏外且可见」（合成器不离场，
+/// 同主覆盖窗口径，2026-11-21 低配闪屏修复），上屏 = 一次原子移动
+static SESSION_WINDOW_POS: Mutex<[Option<(i32, i32)>; 3]> = Mutex::new([None, None, None]);
+
+/// 预置伴生窗落位目标（launch 线程在换装事件发出**之前**调用——消除「前端
+/// 先画完回执、pending 未设」竞态）；label = shot-frame / shot-bar / shot-scroll
+pub(crate) fn set_session_window_pos(label: &str, pos: (i32, i32)) {
+    let idx = match label {
+        "shot-frame" => 0,
+        "shot-bar" => 1,
+        "shot-scroll" => 2,
+        _ => return,
+    };
+    SESSION_WINDOW_POS.lock().unwrap_or_else(|p| p.into_inner())[idx] = Some(pos);
+}
+
+/// 覆盖窗/贴图窗/结果窗/伴生窗内容首帧就绪后由前端调用：此刻才真正可见。
+/// 主覆盖窗的移动已前置到会话开场透明空壳期（2026-11-21 低配黑屏修复：
+/// 「画好后再长距离移动」在低配 DWM 上有呈现间隙）——这里只恢复指针接收
+/// （开场为防拦截用户操作已开穿透）；伴生窗 = 停靠位原子移动上屏；
+/// show 仅作异常兜底（窗口若处于真隐藏态）
 #[tauri::command]
 pub fn shot_ready(window: tauri::WebviewWindow) -> Result<(), String> {
     let label = window.label();
     if label == "shot" || label == "shot-result" || label.starts_with("pin-") {
         if label == "shot" {
-            let pos = SESSION_POS.lock().unwrap_or_else(|p| p.into_inner()).take();
-            if let Some((x, y)) = pos {
-                let _ = window.set_position(PhysicalPosition::new(x, y));
-            }
+            let _ = window.set_ignore_cursor_events(false);
         }
         window.show().map_err(|e| e.to_string())?;
         if label == "shot" {
@@ -663,6 +778,21 @@ pub fn shot_ready(window: tauri::WebviewWindow) -> Result<(), String> {
             if t0 > 0 {
                 log::info!("截图感知延迟 {}ms", millis().saturating_sub(u128::from(t0)));
             }
+            window.set_focus().map_err(|e| e.to_string())?;
+        }
+    } else if label == "shot-frame" || label == "shot-bar" || label == "shot-scroll" {
+        let idx = match label {
+            "shot-frame" => 0,
+            "shot-bar" => 1,
+            _ => 2,
+        };
+        let moved = SESSION_WINDOW_POS.lock().unwrap_or_else(|p| p.into_inner())[idx].take();
+        if let Some((x, y)) = moved {
+            let _ = window.set_position(PhysicalPosition::new(x, y));
+        }
+        window.show().map_err(|e| e.to_string())?;
+        // 控制条要接键盘（Enter/Esc）；预热期首绘回执（moved=None）不抢焦点
+        if label == "shot-bar" && moved.is_some() {
             window.set_focus().map_err(|e| e.to_string())?;
         }
     }
@@ -1688,5 +1818,114 @@ mod crop_rows_tests {
             crop_rgba_rows(4, 3, &[0u8; 47], 0, 0, 1, 1).is_none(),
             "载荷长度不符拒绝"
         );
+    }
+}
+
+/// 屏闪探针（#[ignore] 手跑：`cargo test --lib flash_probe -- --ignored
+/// --nocapture`，需真实桌面会话 + dev 版应用在运行）：高频连拍主屏中心区域
+/// ~4.6s，800ms 时 SendInput 默认热键 Ctrl+Alt+A 触发一次真实截图会话，逐帧
+/// 打印平均亮度时间线并把触发窗口内全部帧落盘 PNG（%TEMP%/xdir-flash-probe/），
+/// 供逐帧人检「黑屏闪烁」是否存在/持续几帧。结束发送 Esc 收场。
+#[cfg(test)]
+mod flash_probe {
+    #[test]
+    #[ignore = "屏闪取证（连拍主屏 + 真实触发截图，需桌面会话）"]
+    fn flash_probe() {
+        use std::time::Instant;
+        let mon = xcap::Monitor::all()
+            .unwrap()
+            .into_iter()
+            .find(|m| m.x().ok() == Some(0) && m.y().ok() == Some(0))
+            .expect("找不到主显示器");
+        let (mw, mh) = (mon.width().unwrap_or(1920), mon.height().unwrap_or(1080));
+        // 中心区域 1000×600：全屏级黑闪必然落入该区域
+        let (rx, ry, rw, rh) = (
+            (mw as i32 - 1000).max(0) / 2,
+            (mh as i32 - 600).max(0) / 2,
+            1000u32.min(mw),
+            600u32.min(mh),
+        );
+        let dir = std::env::temp_dir().join("xdir-flash-probe");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let luma_of = |img: &image::RgbaImage| -> f32 {
+            let (w, h) = img.dimensions();
+            let px = img.as_raw();
+            let (mut sum, mut n) = (0u64, 0u64);
+            for y in (0..h as usize).step_by(6) {
+                for x in (0..w as usize).step_by(6) {
+                    let p = (y * w as usize + x) * 4;
+                    sum += u64::from(px[p]) * 299
+                        + u64::from(px[p + 1]) * 587
+                        + u64::from(px[p + 2]) * 114;
+                    n += 1;
+                }
+            }
+            (sum / (n * 1000)) as f32
+        };
+        #[cfg(windows)]
+        let send_combo = || {
+            use windows::Win32::UI::Input::KeyboardAndMouse::{
+                KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, keybd_event,
+            };
+            let seq: [u8; 3] = [0x11, 0x12, 0x41]; // Ctrl Alt A
+            unsafe {
+                for code in seq {
+                    keybd_event(code, 0, KEYBD_EVENT_FLAGS(0), 0);
+                }
+                for code in seq.into_iter().rev() {
+                    keybd_event(code, 0, KEYEVENTF_KEYUP, 0);
+                }
+            }
+        };
+        let send_esc = || {
+            #[cfg(windows)]
+            unsafe {
+                use windows::Win32::UI::Input::KeyboardAndMouse::{
+                    KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, keybd_event,
+                };
+                keybd_event(0x1B, 0, KEYBD_EVENT_FLAGS(0), 0);
+                keybd_event(0x1B, 0, KEYEVENTF_KEYUP, 0);
+            }
+        };
+        let t0 = Instant::now();
+        let mut timeline: Vec<(u128, f32)> = Vec::new();
+        let mut saved = 0usize;
+        let mut triggered = false;
+        let mut idx = 0usize;
+        loop {
+            let t = t0.elapsed().as_millis();
+            if t > 10000 {
+                break;
+            }
+            // 触发判定先于抓拍：拍下的是触发后的屏幕
+            if !triggered && t >= 1500 {
+                triggered = true;
+                println!("── t={t}ms 触发 Ctrl+Alt+A ──");
+                #[cfg(windows)]
+                send_combo();
+            }
+            if let Ok(frame) = mon.capture_region(rx as u32, ry as u32, rw, rh) {
+                let img = image::RgbaImage::from_raw(rw, rh, frame.into_raw()).unwrap();
+                let luma = luma_of(&img);
+                if t >= 500 && t < 8000 {
+                    let name = dir.join(format!("f{idx:04}_t{t}ms_{luma:.0}.png"));
+                    let _ = img.save(&name);
+                    saved += 1;
+                }
+                timeline.push((t, luma));
+            }
+            idx += 1;
+        }
+        send_esc();
+        println!("共 {idx} 帧，落盘 {saved} 张 → {}", dir.display());
+        for (t, l) in &timeline {
+            println!(
+                "t={:>5}ms luma={:>6.1} {}",
+                t,
+                l,
+                "#".repeat((*l / 8.0) as usize)
+            );
+        }
     }
 }

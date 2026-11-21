@@ -129,6 +129,10 @@ pub fn run() {
                     if let Err(e) = commands::shot::ensure_shot_window(&h) {
                         log::warn!("截图覆盖窗预热失败：{e}");
                     }
+                    // 伴生会话窗（遮罩/控制条/长图预览）同批预热：首场 GIF/
+                    // 长截图不再冷建直显（2026-11-21 低配闪屏修复）；已错开
+                    // 主线程批次，与上方覆盖窗各占一段主循环呼吸间隙
+                    commands::shot::ensure_session_windows(&h);
                 });
                 // 剪贴板浮窗（§3.7）错后 1s 单独建（2026-11-01 启动速度优化）：
                 // WebView 建窗各耗数百 ms 且必须落在主线程，同一闭包连续建

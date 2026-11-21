@@ -30,6 +30,14 @@ export function ScrollPreview({ boot }: { boot: ScrollPreviewBoot }) {
   /** 已绘制内容的显示高度（物理行数 × 显示缩放比）：画布位图按 2 的幂预
    *  分配会留出透明空腔，用裁剪容器按此高度裁掉，灰白底不再露出 */
   const [drawnH, setDrawnH] = useState(0);
+  // 常驻窗停靠屏外：首绘/换装重绘后回执 Rust（shot_ready）才原子上屏
+  //（无感链路，2026-11-21 低配闪屏修复）
+  useEffect(() => {
+    const a = requestAnimationFrame(() => {
+      requestAnimationFrame(() => void api.shotReady().catch(() => undefined));
+    });
+    return () => cancelAnimationFrame(a);
+  }, [dim.w, dim.h]);
   useEffect(() => {
     const un = listen<{ w: number; h: number }>("shot-preview-boot", (e) => {
       setDim(e.payload);

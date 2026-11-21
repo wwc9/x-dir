@@ -75,6 +75,8 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
   const [colors, setColors] = useState(boot.colors);
   const [lossy, setLossy] = useState(boot.lossy);
   const [scale, setScale] = useState(boot.scale);
+  /** 换装序号：常驻窗停靠屏外，每次 boot 换装重绘后回执 Rust 才上屏（无感链路） */
+  const [dress, setDress] = useState(0);
   const [synth, setSynth] = useState<{ done: number; total: number; eta: number } | null>(null);
   const [phase, setPhase] = useState<GifPhase>("ready");
   const [paused, setPaused] = useState(false);
@@ -126,6 +128,7 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
       if (typeof e.payload.colors === "number") setColors(e.payload.colors);
       if (typeof e.payload.lossy === "number") setLossy(e.payload.lossy);
       if (typeof e.payload.scale === "number") setScale(e.payload.scale);
+      setDress((d) => d + 1);
         setSynth(null);
         setPhase("ready");
         setPaused(false);
@@ -141,6 +144,15 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
   }, []);
 
   useEffect(() => initTooltip(), []);
+
+  // 常驻窗停靠屏外（合成器不离场）：首绘/换装重绘后回执 Rust（shot_ready）
+  // 才原子移动上屏——无感链路，2026-11-21 低配闪屏修复
+  useEffect(() => {
+    const a = requestAnimationFrame(() => {
+      requestAnimationFrame(() => void api.shotReady().catch(() => undefined));
+    });
+    return () => cancelAnimationFrame(a);
+  }, [dress]);
 
   useEffect(() => {
     const un = listen<{ secs: number; frames: number; bytes: number; fps: number; paused?: boolean }>(
