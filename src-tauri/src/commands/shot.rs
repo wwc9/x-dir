@@ -687,6 +687,9 @@ pub fn ensure_session_windows(app: &AppHandle) {
                 disable_dwm_transitions(hwnd);
             }
             set_cloak(&w, true);
+            // 停靠屏外兜底：预热窗 Builder 未设位置会落在 Windows 默认级联
+            // 位（主屏左上角），Cloak 万一失效即现形桌面（2026-11-21 实绩）
+            let _ = w.set_position(park_position());
             let _ = w.set_size(PhysicalSize::new(800, 600));
             let _ = w.show();
         }
@@ -718,6 +721,7 @@ pub fn ensure_session_windows(app: &AppHandle) {
                 disable_dwm_transitions(hwnd);
             }
             set_cloak(&w, true);
+            let _ = w.set_position(park_position());
             let _ = w.set_size(PhysicalSize::new(840, 44));
             let _ = w.show();
         }
@@ -746,6 +750,7 @@ pub fn ensure_session_windows(app: &AppHandle) {
                 disable_dwm_transitions(hwnd);
             }
             set_cloak(&w, true);
+            let _ = w.set_position(park_position());
             let _ = w.set_size(PhysicalSize::new(200, 320));
             let _ = w.show();
         }
@@ -820,14 +825,18 @@ pub fn shot_ready(window: tauri::WebviewWindow) -> Result<(), String> {
             _ => 2,
         };
         let moved = SESSION_WINDOW_POS.lock().unwrap_or_else(|p| p.into_inner())[idx].take();
+        // 只有真实会话（launch 线程已预置落位目标）才去罩上屏；预热期首绘
+        // 回执（moved=None）必须原位罩内待命——伴生窗预热停靠在默认级联位
+        // 置（非屏外），无条件去罩会把三个窗直接亮在桌面左上角（2026-11-21
+        // 用户报告「桌面左上角出现灰色区域」实绩）
         if let Some((x, y)) = moved {
             let _ = window.set_position(PhysicalPosition::new(x, y));
-        }
-        set_cloak(&window, false);
-        window.show().map_err(|e| e.to_string())?;
-        // 控制条要接键盘（Enter/Esc）；预热期首绘回执（moved=None）不抢焦点
-        if label == "shot-bar" && moved.is_some() {
-            window.set_focus().map_err(|e| e.to_string())?;
+            set_cloak(&window, false);
+            window.show().map_err(|e| e.to_string())?;
+            // 控制条要接键盘（Enter/Esc）
+            if label == "shot-bar" {
+                window.set_focus().map_err(|e| e.to_string())?;
+            }
         }
     }
     Ok(())
