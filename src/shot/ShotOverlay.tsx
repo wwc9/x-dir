@@ -2430,7 +2430,18 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
     on: boolean;
     onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   }[] = [
-    { id: "select", label: "选择 / 移动选区", icon: MousePointer2, on: tool === "select", onClick: () => setTool("select"), },
+    {
+      id: "select",
+      label: "选择 / 移动选区",
+      icon: MousePointer2,
+      on: tool === "select",
+      // 选择工具无参数面板：切过来必须收掉上一工具遗留的面板（面板收起
+      // 监听只管工具栏外点击，工具栏内切换靠这里显式清）
+      onClick: () => {
+        setTool("select");
+        setPanel(null);
+      },
+    },
     {
       id: "rect",
       label: "矩形（点击设置样式）",
