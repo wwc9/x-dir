@@ -11,6 +11,7 @@ import { Check, X } from "lucide-react";
 import { api } from "../lib/ipc";
 import { useBarTip } from "./barTip";
 import { AppIcon } from "../components/AppIcon";
+import { DENSITY } from "../lib/tokens";
 
 export interface ScrollBarBoot {
   window: "scrollbar";
@@ -114,40 +115,40 @@ export function ScrollBar({ boot }: { boot: ScrollBarBoot }) {
 
   return (
     <div ref={barRef} className="np-shot-sbar">
-      <span className="np-shot-sbar-dot" />
-      {warn ? (
-        <span className="np-shot-sbar-warn">滚动过快，请放慢</span>
-      ) : height > 0 ? (
-        <span className="np-shot-sbar-dim">
-          {selW.toLocaleString()} × {height.toLocaleString()}
+      <div className="np-shot-sbar-row">
+        <span className="np-shot-sbar-dot" />
+        {warn ? (
+          <span className="np-shot-sbar-warn">滚动过快，请放慢</span>
+        ) : height > 0 ? (
+          <span className="np-shot-sbar-dim">
+            {selW.toLocaleString()} × {height.toLocaleString()}
+          </span>
+        ) : (
+          <span className="np-shot-sbar-dim">向下滚动 · 缓慢匀速</span>
+        )}
+        <span className="np-shot-sbar-dir" data-tip="横向滚动截图暂未支持">
+          纵向
         </span>
-      ) : (
-        <span className="np-shot-sbar-dim">向下滚动 · 缓慢匀速</span>
-      )}
-      <span className="np-shot-sbar-dir" data-tip="横向滚动截图暂未支持">
-        纵向
-      </span>
-      <span className="np-shot-sbar-spacer" />
-      <button
-        className="np-shot-btn primary"
-        data-tip="用已拼内容出结果"
-        data-kbd="Enter"
-        disabled={busy}
-        onClick={() => act("finish")}
-      >
-        <AppIcon icon={Check} />
-        完成
-      </button>
-      <button
-        className="np-shot-btn"
-        data-tip="丢弃长图"
-        data-kbd="Esc"
-        disabled={busy}
-        onClick={() => act("cancel")}
-      >
-        <AppIcon icon={X} />
-        取消
-      </button>
+        <span className="np-shot-sbar-spacer" />
+        <button
+          className="np-shot-tool np-shot-ok"
+          data-tip="用已拼内容出结果"
+          data-kbd="Enter"
+          disabled={busy}
+          onClick={() => act("finish")}
+        >
+          <AppIcon icon={Check} size={DENSITY.iconLg} />
+        </button>
+        <button
+          className="np-shot-tool np-shot-danger"
+          data-tip="丢弃长图"
+          data-kbd="Esc"
+          disabled={busy}
+          onClick={() => act("cancel")}
+        >
+          <AppIcon icon={X} size={DENSITY.iconLg} />
+        </button>
+      </div>
     </div>
   );
 }

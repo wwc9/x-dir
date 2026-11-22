@@ -925,6 +925,13 @@ pub fn shot_gif_launch(app: AppHandle) -> Result<(), String> {
             (840.0 * s_scale).round() as i32,
             (44.0 * s_scale).round() as i32,
         );
+        // 条在选区下方放不上即上翻（与 bar_layout_sized 同源判定）：flipped
+        // 随 boot 下发，前端设置面板向上展开（不盖录制选区）
+        let bar_flipped = super::shot_scroll::bar_flips_above(
+            (geo.rx as i32, geo.ry as i32, geo.rw as i32, geo.rh as i32),
+            &geo.mon,
+            (44.0 * s_scale).round() as i32,
+        );
         super::shot::set_session_window_pos("shot-frame", (geo.mon.x, geo.mon.y));
         super::shot::set_session_window_pos("shot-bar", (geo.mon.x + bar_bx, geo.mon.y + bar_by));
         // 两窗常驻复用：boot 事件先行换装（页面在 webview 线程），再建窗/显示。
@@ -952,6 +959,7 @@ pub fn shot_gif_launch(app: AppHandle) -> Result<(), String> {
                 "colors": GIF_COLORS.load(Ordering::Relaxed),
                 "lossy": GIF_LOSSY.load(Ordering::Relaxed),
                 "scale": GIF_SCALE.load(Ordering::Relaxed),
+                "flipped": bar_flipped,
             }),
         );
         let reuse = app2.get_webview_window("shot-frame").is_some()
@@ -2054,7 +2062,12 @@ fn show_gif_bar_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
         (840.0 * s).round() as i32,
         (44.0 * s).round() as i32,
     );
-    let boot = serde_json::json!({ "window": "gifbar", "fps": GIF_FPS.load(Ordering::Relaxed), "barOn": GIF_BAR.load(Ordering::Relaxed), "cursorOn": GIF_CURSOR.load(Ordering::Relaxed), "staticKeep": GIF_STATIC_KEEP.load(Ordering::Relaxed), "barSteps": GIF_BAR_STEPS.load(Ordering::Relaxed), "colors": GIF_COLORS.load(Ordering::Relaxed), "lossy": GIF_LOSSY.load(Ordering::Relaxed), "scale": GIF_SCALE.load(Ordering::Relaxed) });
+    let flipped = super::shot_scroll::bar_flips_above(
+        (geo.rx as i32, geo.ry as i32, geo.rw as i32, geo.rh as i32),
+        mon,
+        bh as i32,
+    );
+    let boot = serde_json::json!({ "window": "gifbar", "fps": GIF_FPS.load(Ordering::Relaxed), "barOn": GIF_BAR.load(Ordering::Relaxed), "cursorOn": GIF_CURSOR.load(Ordering::Relaxed), "staticKeep": GIF_STATIC_KEEP.load(Ordering::Relaxed), "barSteps": GIF_BAR_STEPS.load(Ordering::Relaxed), "colors": GIF_COLORS.load(Ordering::Relaxed), "lossy": GIF_LOSSY.load(Ordering::Relaxed), "scale": GIF_SCALE.load(Ordering::Relaxed), "flipped": flipped });
     let win = match app.get_webview_window("shot-bar") {
         Some(w) => w,
         None => {
@@ -2179,14 +2192,23 @@ fn dialog_error(app: &AppHandle, msg: &str) {
         .show(|_| {});
 }
 
-/// 浮条内容自适应宽度（2026-11-21 用户反馈「GIF 工具条太宽」）：窗口几何
+/// 浮条内容自适应宽（2026-11-21 用户反馈「GIF 工具条太宽」）：窗口几何
 /// 由 Rust 固定 840 逻辑宽（按最全按钮组预留），实际内容窄得多、右侧一条
 /// 空透明带——前端量出内容实宽（np-shot-sbar width:max-content 后的
 /// offsetWidth，16px 档量化防逐秒抖动）后调本命令：按窗 scale 换算物理宽
-/// （下限 240 逻辑 / 上限所在显示器内），保持条**中心**稳定重定位（初场
-/// 以选区居中落位，缩宽后仍对准选区）。滚动控制条同窗同通道
+/// （下限 240 逻辑 / 上限显示器宽-16），保持条**中心**稳定重定位（初场
+/// 以选区居中落位，缩宽后仍对准选区）。滚动控制条同窗同通道。
+/// 2026-11-22 扩展：h = 内容逻辑高（设置面板展开时窗口长高承载，缺省保持
+/// 现高）；up = 面板向上展开（flipped 场，窗口底缘锚定向上生长并把顶缘钳
+/// 屏内，行面屏幕位置不变），缺省顶缘锚定向下生长。旧实现的宽度上限 = 当前
+/// 窗宽（只能缩），录制文本逐秒增长/面板展开均需涨宽，上限改显示器宽。
 #[tauri::command]
-pub fn shot_bar_resize(window: tauri::WebviewWindow, w: f64) -> Result<(), String> {
+pub fn shot_bar_resize(
+    window: tauri::WebviewWindow,
+    w: f64,
+    h: Option<f64>,
+    up: Option<bool>,
+) -> Result<(), String> {
     if window.label() != "shot-bar" {
         return Err("仅浮条窗可调用".into());
     }
@@ -2194,23 +2216,48 @@ pub fn shot_bar_resize(window: tauri::WebviewWindow, w: f64) -> Result<(), Strin
     let pos = window.outer_position().map_err(|e| e.to_string())?;
     let size = window.outer_size().map_err(|e| e.to_string())?;
     let cur_w = i32::try_from(size.width).unwrap_or(i32::MAX);
+    let cur_h = i32::try_from(size.height).unwrap_or(i32::MAX);
     let min_w = (240.0 * scale).round() as i32;
-    let new_w = ((w * scale).round() as i32).clamp(min_w, cur_w.max(min_w));
+    let pad = (8.0 * scale).round() as i32;
+    let mut max_w = i32::MAX / 2;
+    let mut mon_rect: Option<(i32, i32)> = None; // (y_min, y_max_exclusive)
+    if let Ok(Some(mon)) = window.current_monitor() {
+        let mp = mon.position();
+        let ms = mon.size();
+        let mon_w = i32::try_from(ms.width).unwrap_or(i32::MAX);
+        let mon_h = i32::try_from(ms.height).unwrap_or(i32::MAX);
+        max_w = mon_w - 2 * pad;
+        mon_rect = Some((mp.y + pad, mp.y + mon_h - pad));
+    }
+    let new_w = ((w * scale).round() as i32).clamp(min_w, max_w.max(min_w));
+    let new_h = match h {
+        Some(h) if h > 0.0 => ((h * scale).round() as i32).max(pad),
+        _ => cur_h,
+    };
+    // 面板向上展开：底缘锚定，顶缘上移差值（行面屏幕位置不变）；向下展开
+    // 顶缘锚定零位移。顶缘钳显示器内（上翻场贴屏顶极端场景兜底）
+    let mut new_y = if up.unwrap_or(false) {
+        pos.y - (new_h - cur_h)
+    } else {
+        pos.y
+    };
+    if let Some((y_min, y_max)) = mon_rect {
+        new_y = new_y.clamp(y_min, (y_max - new_h).max(y_min));
+    }
     // 显示器内钳制（右缘留 8 逻辑 px）：current_monitor 缺失（瞬态）跳过钳制
     let mut new_x = pos.x + (cur_w - new_w) / 2;
     if let Ok(Some(mon)) = window.current_monitor() {
         let mp = mon.position();
-        let ms = mon.size();
-        let pad = (8.0 * scale).round() as i32;
-        let mon_w = i32::try_from(ms.width).unwrap_or(i32::MAX);
+        let mon_w = i32::try_from(mon.size().width).unwrap_or(i32::MAX);
         new_x = new_x.clamp(mp.x + pad, mp.x + mon_w - new_w - pad);
     }
     let phys_w = u32::try_from(new_w).unwrap_or(size.width);
+    let phys_h = u32::try_from(new_h).unwrap_or(size.height);
     window
-        .set_size(tauri::PhysicalSize::new(phys_w, size.height))
+        .set_size(tauri::PhysicalSize::new(phys_w, phys_h))
         .map_err(|e| e.to_string())?;
     window
-        .set_position(tauri::PhysicalPosition::new(new_x, pos.y))
+        .set_position(tauri::PhysicalPosition::new(new_x, new_y))
         .map_err(|e| e.to_string())
 }
 

@@ -1572,7 +1572,10 @@ export const api = {
   /** 浮条内容自适应宽度（2026-11-21 用户反馈「GIF 工具条太宽」）：前端量
    *  np-shot-sbar 内容实宽（逻辑 px，16px 档量化）后调用，Rust 保持条中心
    *  稳定缩放重定位；GIF 浮条与滚动控制条共用 shot-bar 窗 */
-  shotBarResize: (w: number) => cmd<void>("shot_bar_resize", { w }),
+  /** 浮条内容自适应回传：w/h = 内容逻辑尺寸；up = 面板向上展开（底缘锚定
+   *  生长，行面屏幕位置不变）。h 缺省保持现高 */
+  shotBarResize: (w: number, h?: number, up?: boolean) =>
+    cmd<void>("shot_bar_resize", { w, h, up }),
   /** 滚动结果窗：长图（临时 PNG 路径）写入剪贴板 */
   shotResultCopy: (file: string) => cmd<void>("shot_result_copy", { file }),
   /** 结果窗：另存（原生对话框；kind = png 滚动长图（缺省）/ gif GIF 录制，

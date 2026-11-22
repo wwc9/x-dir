@@ -640,6 +640,14 @@ pub(crate) fn bar_layout(sel: (i32, i32, i32, i32), mon: &MonRect) -> (i32, i32,
     )
 }
 
+/// 条窗是否上翻（纯函数）：下方放不下（选区底 + 间距 + 条高越过屏底护栏）
+/// 即翻选区上方。bar_layout_sized 与 GIF 浮条 boot 的 flipped 下发共用此
+/// 判定（单源；flipped 供前端设置面板向上展开避免盖住录制选区）
+pub(crate) fn bar_flips_above(sel: (i32, i32, i32, i32), mon: &MonRect, bh: i32) -> bool {
+    let gap = (10.0 * f64::from(mon.scale)).round() as i32;
+    sel.1 + sel.3 + gap + bh > mon.h as i32 - 8
+}
+
 /// 条窗布局（尺寸参数化 2026-11-20）：GIF 浮条按钮组更宽（待命/录制态 =
 /// 状态区 + fps/进度条 chip + 开始/暂停/保存/取消），固定 310 装不下导致
 /// 「开始按钮被遮挡」（用户反馈），按会话传自有尺寸；定位算法单一来源
@@ -652,10 +660,11 @@ pub(crate) fn bar_layout_sized(
     let (gx, gy, gw, gh) = sel;
     let x = (gx + (gw - bw) / 2).clamp(8, (mon.w as i32 - bw - 8).max(8));
     let gap = (10.0 * f64::from(mon.scale)).round() as i32;
-    let mut y = gy + gh + gap;
-    if y + bh > mon.h as i32 - 8 {
-        y = gy - gap - bh;
-    }
+    let y = if bar_flips_above(sel, mon, bh) {
+        gy - gap - bh
+    } else {
+        gy + gh + gap
+    };
     let y = y.clamp(8, (mon.h as i32 - bh - 8).max(8));
     (x, y, bw.max(1) as u32, bh.max(1) as u32)
 }
@@ -2161,5 +2170,28 @@ mod tests {
         assert_eq!(x + bw as i32, 2560 - 8);
         let (_x, y, _bw, bh) = bar_layout((100, 700, 800, 100), &m);
         assert!(y >= 8 && y + bh as i32 <= 1440 - 8);
+    }
+
+    #[test]
+    fn bar_flips_above_matches_layout_flip() {
+        // 翻转判定与 bar_layout_sized 实际落位单源一致：屏中部不翻、贴屏底翻
+        let m = mon(0, 0, 2560, 1440, 1.0);
+        assert!(!bar_flips_above((100, 100, 800, 400), &m, 44));
+        assert!(bar_flips_above((100, 1300, 800, 120), &m, 44));
+        // 判定值必须与布局函数选择的上/下分支互证（不含钳制场景）
+        for sel in [
+            (100i32, 100i32, 800i32, 400i32),
+            (100, 1300, 800, 120),
+            (0, 1396, 400, 40),
+        ] {
+            let flip = bar_flips_above(sel, &m, 44);
+            let (_x, y_dock, _bw, bh) = bar_layout_sized(sel, &m, 310, 44);
+            let gap = 10;
+            let below = sel.1 + sel.3 + gap;
+            let above = sel.1 - gap - bh as i32;
+            let expect = if flip { above } else { below };
+            // 贴边钳制可能改写 y，此处三例均远离钳制边界，落位应逐值相等
+            assert_eq!(y_dock, expect, "sel={sel:?} flip={flip}");
+        }
     }
 }

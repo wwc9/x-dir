@@ -7333,17 +7333,18 @@ body.np-col-resizing * {
 
 /* 滚动截图控制条（label shot-bar，停靠选区正下方）、侧边预览窗（label
    shot-scroll）、选区框窗（label shot-frame，整窗点击穿透只画边框）与结果窗
-   （label shot-result）：独立小窗脱离主界面体系，取值仍全走 --np-* token */
+   （label shot-result）：独立小窗脱离主界面体系，取值仍全走 --np-* token。
+   浮条卡片语言与主截图工具栏（np-shot-toolbar）同规范（2026-11-22 用户需求
+   「gif/长截图工具栏样式与截图主区域工具栏一致」）：surface 卡 + 发丝边 +
+   radius-lg + 阴影，行内图标钮共用 np-shot-tool；容器 = 纵向卡（行面 +
+   可选设置面板），窗高随内容（Rust shot_bar_resize h/up 承载） */
 .np-shot-sbar {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 100vh;
+  flex-direction: column;
   /* 内容自适应宽（2026-11-21 用户反馈「GIF 工具条太宽」）：量实宽回传
    * shot_bar_resize 缩窗，不再吃满 840 固定窗宽留一条空透明带；spacer
    * 随之塌缩，浮条 = 内容紧致包络 */
   width: max-content;
-  padding: 0 10px;
   box-sizing: border-box;
   background: var(--np-surface);
   border: 1px solid var(--np-border);
@@ -7351,6 +7352,24 @@ body.np-col-resizing * {
   box-shadow: var(--np-shadow);
   font-size: var(--np-font-sm);
   user-select: none;
+}
+.np-shot-sbar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+/* 上翻场（选区贴屏底，浮条停靠选区上方）：设置面板朝上展开（column-reverse
+ * 行面沉底）——底缘锚定长高后行面屏幕位置不动，面板永不盖进录制选区；
+ * 容器 fixed 底缘锚定：窗高未跟上的瞬态帧行面也始终可见（顶缘只裁面板） */
+.np-shot-sbar.is-up {
+  flex-direction: column-reverse;
+  position: fixed;
+  bottom: 0;
+  left: 0;
 }
 .np-shot-sbar-dot {
   width: 8px;
@@ -7360,7 +7379,7 @@ body.np-col-resizing * {
   animation: np-shot-pulse 1.1s ease-in-out infinite;
   flex: none;
 }
-/* GIF 录制浮条（复用 np-shot-sbar 布局基座）：录制红点惯例 + fps 切档钮；
+/* GIF 录制浮条（复用 np-shot-sbar 布局基座）：录制红点惯例；
    暂停态 = 红点静止降透明（脉冲停 = 录制停，2026-11-20 暂停功能） */
 .np-shot-gbar-dot {
   width: 8px;
@@ -7374,29 +7393,44 @@ body.np-col-resizing * {
   animation: none;
   opacity: 0.55;
 }
-.np-shot-gbar-fps {
-  flex: none;
-  /* 与主截图工具栏钮同语言（2026-11-21 统一规范）：透明底 + 无边框 +
-   * 悬停 np-hover 浮现（原 surface-2 填充描边脸与工具栏语言不一致）；
-   * min-width + 居中防循环切档推挤（12fps→8fps、停顿 1s→10s） */
-  min-width: 56px;
-  text-align: center;
-  padding: 3px 8px;
+/* GIF 设置面板（2026-11-22 用户需求「设置项收纳进设置图标」）：齿轮钮
+ * （np-shot-tool on 态）展开，行 = 图标 + 名称 + 当前值，点击循环切档；
+ * 发丝分隔线随展开朝向换边（column-reverse 上面板贴行缘在下） */
+.np-shot-gset {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 4px 6px 6px;
+  border-top: 1px solid var(--np-hairline);
+}
+.np-shot-sbar.is-up .np-shot-gset {
+  border-top: none;
+  border-bottom: 1px solid var(--np-hairline);
+}
+.np-shot-gset-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 6px;
   border: none;
   border-radius: var(--np-radius);
   background: transparent;
   color: var(--np-fg);
-  font-size: var(--np-font-sm);
-  font-variant-numeric: tabular-nums;
-  cursor: pointer;
+  font-size: var(--np-font-ui);
+  text-align: left;
   white-space: nowrap;
+  cursor: pointer;
 }
-.np-shot-gbar-fps:hover:not(:disabled) {
+.np-shot-gset-row:hover {
   background: var(--np-hover);
 }
-.np-shot-gbar-fps:disabled {
-  opacity: 0.35;
-  cursor: default;
+.np-shot-gset-val {
+  margin-left: auto;
+  padding-left: 16px;
+  color: var(--np-muted);
+  font-variant-numeric: tabular-nums;
 }
 @keyframes np-shot-pulse {
   50% {
