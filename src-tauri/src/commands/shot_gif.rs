@@ -921,7 +921,7 @@ pub fn shot_gif_launch(app: AppHandle) -> Result<(), String> {
         let s_scale = f64::from(geo.mon.scale);
         let bar_bh = ((super::shot_scroll::BAR_CARD_H + super::shot_scroll::BAR_RING) * s_scale)
             .round() as i32;
-        let (bar_bx, bar_by, _, bar_bw) = super::shot_scroll::bar_layout_sized(
+        let (bar_bx, bar_by, bar_bw, _) = super::shot_scroll::bar_layout_sized(
             (geo.rx as i32, geo.ry as i32, geo.rw as i32, geo.rh as i32),
             &geo.mon,
             (840.0 * s_scale).round() as i32,
@@ -2267,6 +2267,17 @@ pub fn shot_bar_resize(
     }
     let phys_w = u32::try_from(new_w).unwrap_or(size.width);
     let phys_h = u32::try_from(new_h).unwrap_or(size.height);
+    log::info!(
+        "浮条自适应：收到 w={w} h={h:?} up={up:?}，当前 {}×{} @({},{}) scale={scale} → {}×{} @({}, {})",
+        size.width,
+        size.height,
+        pos.x,
+        pos.y,
+        phys_w,
+        phys_h,
+        new_x,
+        new_y
+    );
     window
         .set_size(tauri::PhysicalSize::new(phys_w, phys_h))
         .map_err(|e| e.to_string())?;

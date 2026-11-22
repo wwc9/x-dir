@@ -830,7 +830,7 @@ pub fn shot_scroll_launch(app: AppHandle) -> Result<(), String> {
             (geo.rx as i32, geo.ry as i32, geo.rw as i32, geo.rh as i32),
             &geo.mon,
         );
-        let (bar_bx, bar_by, _, bar_bw) = bar_layout(
+        let (bar_bx, bar_by, bar_bw, _) = bar_layout(
             (geo.rx as i32, geo.ry as i32, geo.rw as i32, geo.rh as i32),
             &geo.mon,
         );

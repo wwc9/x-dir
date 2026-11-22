@@ -874,11 +874,17 @@ pub fn shot_ready(window: tauri::WebviewWindow) -> Result<(), String> {
             // ——预置 x 按全宽计算，右移「预置宽 - 实宽」的一半让条心对准
             // 选区中轴。若缩窗尚未落地（cur_w = 预置宽），差值 0 = 原样落位，
             // 随后的缩窗自带居中重定位，两种顺序殊途同归
+            let mut cur_w_log = -1;
+            let x0 = x;
             if preset_w > 0
                 && let Ok(size) = window.outer_size()
             {
-                x += (preset_w - i32::try_from(size.width).unwrap_or(preset_w)) / 2;
+                cur_w_log = i32::try_from(size.width).unwrap_or(-1);
+                x += (preset_w - cur_w_log) / 2;
             }
+            log::info!(
+                "伴生窗落位 {label}：预置 x={x0} y={y} 预置宽 {preset_w} 实宽 {cur_w_log} → 落位 x={x}"
+            );
             let _ = window.set_position(PhysicalPosition::new(x, y));
             set_cloak(&window, false);
             window.show().map_err(|e| e.to_string())?;

@@ -65,6 +65,43 @@ function ShotHost() {
   return session ? <ShotOverlay key={session.seq} boot={session} /> : null;
 }
 
+/** 控制条宿主（shot-bar 窗滚动/GIF 共用）：预热 __BOOT__ 固定 gifbar 占位，
+ *  复用会话靠 boot 事件换装——scroll 会话发 shot-bar-boot、gif 会话发
+ *  shot-gif-bar-boot，谁在监听取决于当前挂载的组件（2026-11-22 回归：预热
+ *  后首场 scroll 会话 GifBar 不监听 shot-bar-boot → 浮条停在罩内 → 长截图
+ *  没有工具栏也无法退出）。宿主常驻监听两路事件按最新载荷切换组件：异类
+ *  会话在此重挂（状态全量重置，语义正确），同类会话换装仍由各组件自己的
+ *  boot 监听处理（不重挂） */
+function BarHost({ initial }: { initial: GifBarBoot | ScrollBarBoot }) {
+  const [boot, setBoot] = useState<GifBarBoot | ScrollBarBoot>(initial);
+  useEffect(() => {
+    let dead = false;
+    const offs: (() => void)[] = [];
+    (async () => {
+      offs.push(
+        await listen<{ w: number }>("shot-bar-boot", (e) =>
+          setBoot({ window: "scrollbar", w: e.payload.w }),
+        ),
+        await listen<Omit<GifBarBoot, "window">>("shot-gif-bar-boot", (e) =>
+          setBoot({ window: "gifbar", ...e.payload }),
+        ),
+      );
+      if (dead) {
+        offs.forEach((f) => f());
+      }
+    })();
+    return () => {
+      dead = true;
+      offs.forEach((f) => f());
+    };
+  }, []);
+  return boot.window === "scrollbar" ? (
+    <ScrollBar key="scrollbar" boot={boot} />
+  ) : (
+    <GifBar key="gifbar" boot={boot} />
+  );
+}
+
 const boot = window.__BOOT__;
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
@@ -74,10 +111,8 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <PinWindow boot={boot} />
   ) : boot.window === "frame" ? (
     <ScrollFrame boot={boot} />
-  ) : boot.window === "scrollbar" ? (
-    <ScrollBar boot={boot} />
-  ) : boot.window === "gifbar" ? (
-    <GifBar boot={boot} />
+  ) : boot.window === "scrollbar" || boot.window === "gifbar" ? (
+    <BarHost initial={boot} />
   ) : boot.window === "scroll-preview" ? (
     <ScrollPreview boot={boot} />
   ) : (
