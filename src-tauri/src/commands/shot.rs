@@ -754,7 +754,9 @@ pub fn ensure_session_windows(app: &AppHandle) {
             }
             set_cloak(&w, true);
             let _ = w.set_position(park_position());
-            let _ = w.set_size(PhysicalSize::new(840, 44));
+            // 占位尺寸 = GIF 全宽 840 × (行面 44 + 环留 32)，实际尺寸由各
+            // 会话 show_* 按显示器 scale 重设（停靠屏外不可见，近似无妨）
+            let _ = w.set_size(PhysicalSize::new(840, 76));
             let _ = w.show();
         }
     }
@@ -810,14 +812,19 @@ pub(crate) fn end_session(app: &AppHandle) {
 }
 
 /// 伴生会话窗（shot-frame 遮罩 / shot-bar 控制条 / shot-scroll 预览）就绪
-/// 待落位目标：show_* 只设尺寸 + 换装事件，不上屏；前端首帧绘出调
-/// shot_ready 后才原子上屏。窗口全程「停靠屏外且可见」（合成器不离场，
-/// 同主覆盖窗口径，2026-11-21 低配闪屏修复），上屏 = 一次原子移动
-static SESSION_WINDOW_POS: Mutex<[Option<(i32, i32)>; 3]> = Mutex::new([None, None, None]);
+/// 待落位目标：(x, y, 预置窗宽)。show_* 只设尺寸 + 换装事件，不上屏；前端
+/// 首帧绘出调 shot_ready 后才原子上屏。窗口全程「停靠屏外且可见」（合成器
+/// 不离场，同主覆盖窗口径，2026-11-21 低配闪屏修复），上屏 = 一次原子移动。
+/// 预置窗宽仅浮条 >0（2026-11-22 居中修复）：浮条在 ready 前已按内容实宽
+/// 自适应缩窗（IPC 顺序保证缩窗命令先于 ready 执行），预置 x 按 launch 全宽
+/// （840/310·scale）计算——ready 时按「预置宽 - 当前实宽」的一半右移，条心
+/// 回到选区中轴；缩窗与落位两步全程罩内完成，无可见跳动
+static SESSION_WINDOW_POS: Mutex<[Option<(i32, i32, i32)>; 3]> = Mutex::new([None, None, None]);
 
 /// 预置伴生窗落位目标（launch 线程在换装事件发出**之前**调用——消除「前端
-/// 先画完回执、pending 未设」竞态）；label = shot-frame / shot-bar / shot-scroll
-pub(crate) fn set_session_window_pos(label: &str, pos: (i32, i32)) {
+/// 先画完回执、pending 未设」竞态）；label = shot-frame / shot-bar / shot-scroll，
+/// w = 预置窗宽物理像素（浮条 >0，其余 0 = 落位不做宽度补偿）
+pub(crate) fn set_session_window_pos(label: &str, pos: (i32, i32, i32)) {
     let idx = match label {
         "shot-frame" => 0,
         "shot-bar" => 1,
@@ -861,7 +868,17 @@ pub fn shot_ready(window: tauri::WebviewWindow) -> Result<(), String> {
         // 回执（moved=None）必须原位罩内待命——伴生窗预热停靠在默认级联位
         // 置（非屏外），无条件去罩会把三个窗直接亮在桌面左上角（2026-11-21
         // 用户报告「桌面左上角出现灰色区域」实绩）
-        if let Some((x, y)) = moved {
+        if let Some((mut x, y, preset_w)) = moved {
+            // 浮条宽度补偿（2026-11-22 居中修复）：前端缩窗先于本命令执行
+            // （同 webview IPC 顺序 + 主线程串行），当前实宽已是内容自适应宽
+            // ——预置 x 按全宽计算，右移「预置宽 - 实宽」的一半让条心对准
+            // 选区中轴。若缩窗尚未落地（cur_w = 预置宽），差值 0 = 原样落位，
+            // 随后的缩窗自带居中重定位，两种顺序殊途同归
+            if preset_w > 0
+                && let Ok(size) = window.outer_size()
+            {
+                x += (preset_w - i32::try_from(size.width).unwrap_or(preset_w)) / 2;
+            }
             let _ = window.set_position(PhysicalPosition::new(x, y));
             set_cloak(&window, false);
             window.show().map_err(|e| e.to_string())?;

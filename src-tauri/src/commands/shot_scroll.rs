@@ -627,16 +627,23 @@ fn panel_height(canvas_h: u32, pw: u32, rw: u32, panel_y: i32, mon: &MonRect) ->
         .max(1) as u32
 }
 
+/// 浮条窗环留（2026-11-22 圆角阴影对齐主工具栏）：卡片四周留透明环留承载
+/// 完整 box-shadow（CSS margin 顶4/侧16/底28，纵向和 = 横向和 = 32；上翻
+/// 场 CSS 整环镜像）。窗高/翻转判定按「行面 44 + 环留 32」计——环留贴选区
+/// 侧仅 4px 且恒在选区外（透明但会接住点击，绝不伸进录制区域）
+pub(crate) const BAR_CARD_H: f64 = 44.0;
+pub(crate) const BAR_RING: f64 = 32.0;
+
 /// 控制条停靠位（纯函数，单测锁定）：选区正下方居中（PixPin 样式），下方
-/// 放不下翻选区上方，均钳屏内。滚动控制条尺寸固定 (310,44)·scale，返回
-/// 左上角与尺寸（显示器相对物理像素）
+/// 放不下翻选区上方，均钳屏内。滚动控制条尺寸固定 (310,44+环留32)·scale，
+/// 返回左上角与尺寸（显示器相对物理像素）
 pub(crate) fn bar_layout(sel: (i32, i32, i32, i32), mon: &MonRect) -> (i32, i32, u32, u32) {
     let s = f64::from(mon.scale);
     bar_layout_sized(
         sel,
         mon,
         (310.0 * s).round() as i32,
-        (44.0 * s).round() as i32,
+        ((BAR_CARD_H + BAR_RING) * s).round() as i32,
     )
 }
 
@@ -823,13 +830,17 @@ pub fn shot_scroll_launch(app: AppHandle) -> Result<(), String> {
             (geo.rx as i32, geo.ry as i32, geo.rw as i32, geo.rh as i32),
             &geo.mon,
         );
-        let (bar_bx, bar_by, _, _) = bar_layout(
+        let (bar_bx, bar_by, _, bar_bw) = bar_layout(
             (geo.rx as i32, geo.ry as i32, geo.rw as i32, geo.rh as i32),
             &geo.mon,
         );
-        super::shot::set_session_window_pos("shot-frame", (geo.mon.x, geo.mon.y));
-        super::shot::set_session_window_pos("shot-scroll", (geo.mon.x + p_px, geo.mon.y + p_py));
-        super::shot::set_session_window_pos("shot-bar", (geo.mon.x + bar_bx, geo.mon.y + bar_by));
+        super::shot::set_session_window_pos("shot-frame", (geo.mon.x, geo.mon.y, 0));
+        super::shot::set_session_window_pos("shot-scroll", (geo.mon.x + p_px, geo.mon.y + p_py, 0));
+        // 控制条带预置宽：ready 时按已缩窄的实际宽度做居中补偿（shot.rs）
+        super::shot::set_session_window_pos(
+            "shot-bar",
+            (geo.mon.x + bar_bx, geo.mon.y + bar_by, bar_bw as i32),
+        );
         // 三窗常驻（首场后停靠不销毁）：boot/几何事件先行——页面在 webview
         // 线程换装，与主线程建窗/显示并行，无闪屏空窗期。首场窗尚不存在，
         // 事件落空无害（initialization_script 已带同款初始载荷）
@@ -2144,12 +2155,12 @@ mod tests {
 
     #[test]
     fn bar_layout_docks_below_selection() {
-        // 选区在屏幕上部：控制条停靠正下方居中
+        // 选区在屏幕上部：控制条停靠正下方居中（bh = 行面 44 + 环留 32）
         let m = mon(0, 0, 2560, 1440, 1.0);
         let (x, y, bw, bh) = bar_layout((100, 100, 800, 400), &m);
         assert_eq!(y, 100 + 400 + 10);
         assert_eq!(bw, 310);
-        assert_eq!(bh, 44);
+        assert_eq!(bh, 76);
         // 水平居中于选区
         assert_eq!(x, 100 + (800 - 310) / 2);
     }
@@ -2176,16 +2187,17 @@ mod tests {
     fn bar_flips_above_matches_layout_flip() {
         // 翻转判定与 bar_layout_sized 实际落位单源一致：屏中部不翻、贴屏底翻
         let m = mon(0, 0, 2560, 1440, 1.0);
-        assert!(!bar_flips_above((100, 100, 800, 400), &m, 44));
-        assert!(bar_flips_above((100, 1300, 800, 120), &m, 44));
+        let bh76 = (BAR_CARD_H + BAR_RING) as i32;
+        assert!(!bar_flips_above((100, 100, 800, 400), &m, bh76));
+        assert!(bar_flips_above((100, 1300, 800, 120), &m, bh76));
         // 判定值必须与布局函数选择的上/下分支互证（不含钳制场景）
         for sel in [
             (100i32, 100i32, 800i32, 400i32),
             (100, 1300, 800, 120),
             (0, 1396, 400, 40),
         ] {
-            let flip = bar_flips_above(sel, &m, 44);
-            let (_x, y_dock, _bw, bh) = bar_layout_sized(sel, &m, 310, 44);
+            let flip = bar_flips_above(sel, &m, bh76);
+            let (_x, y_dock, _bw, bh) = bar_layout_sized(sel, &m, 310, bh76);
             let gap = 10;
             let below = sel.1 + sel.3 + gap;
             let above = sel.1 - gap - bh as i32;

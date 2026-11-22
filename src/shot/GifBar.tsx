@@ -184,10 +184,10 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
   const hideBarTip = useBarTip();
   useEffect(hideBarTip, [phase]);
 
-  // 内容自适应尺寸（2026-11-21 宽 / 2026-11-22 高）：宽 = 行实宽 16px 档
-  // 量化、高 = 容器实高（设置面板开合长高），回传 Rust 缩放窗口（缩宽条中心
-  // 稳定 / 上翻场底缘锚定）；同相位宽只增不减防录制文本逐秒抖动，高逐值比对
-  // 面板开合即变无抖动源
+  // 内容自适应尺寸（2026-11-21 宽 / 2026-11-22 高）：宽 = 行实宽 + 透明环
+  // 留（左右 16×2，CSS margin 同值）16px 档量化、高 = 卡实高 + 环留（上 4 +
+  // 下 28 = 32），回传 Rust 缩放窗口（缩宽条中心稳定 / 上翻场底缘锚定）；
+  // 同相位宽只增不减防录制文本逐秒抖动，高逐值比对面板开合即变无抖动源
   useLayoutEffect(() => {
     if (prevPhase.current !== phase) {
       prevPhase.current = phase;
@@ -197,8 +197,8 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
     const row = rowRef.current;
     const el = barRef.current;
     if (!row || !el) return;
-    const w = Math.ceil(row.offsetWidth / 16) * 16;
-    const h = el.offsetHeight;
+    const w = Math.ceil((row.offsetWidth + 32) / 16) * 16;
+    const h = el.offsetHeight + 32;
     if (w > 0 && (w > sentW.current || (sentW.current > 0 && h !== sentH.current))) {
       sentW.current = Math.max(sentW.current, w);
       sentH.current = h;

@@ -34,6 +34,11 @@
   --np-cat-remove: #d1434b;
   --np-cat-convert: #7d64d8;
   --np-shadow: 0 12px 32px rgba(20, 28, 40, 0.14);
+  /* 截图浮条紧凑阴影（2026-11-22）：卡片四周透明环留（顶4/侧16/底28）承载
+     完整晕开——对齐主工具栏悬浮脸；up = 上翻场整环镜像（阴影背向选区，
+     防晕进录制区域被拍进帧） */
+  --np-shadow-float: 0 4px 16px rgba(20, 28, 40, 0.16);
+  --np-shadow-float-up: 0 -4px 16px rgba(20, 28, 40, 0.16);
   /* 玻璃拟态四枚（2026-11-12 右键菜单「霜」方案，design/menu-proposal-c-frost.html）：
      半透明底 + 内高光描边 + 高光悬停条 + 光晕投影，深浅主题各一套。
      alpha 实测校准（0.72 在应用纯白列表上不可感知）：浅 0.55 / 深 0.55，
@@ -158,6 +163,8 @@ html.bp6-dark {
   --np-cat-remove: #f27073;
   --np-cat-convert: #a08df5;
   --np-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  --np-shadow-float: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --np-shadow-float-up: 0 -4px 16px rgba(0, 0, 0, 0.45);
   --np-glass: rgba(32, 34, 38, 0.55);
   --np-glass-ring: rgba(255, 255, 255, 0.12);
   --np-glass-hover: rgba(92, 157, 255, 0.18);
@@ -7346,10 +7353,15 @@ body.np-col-resizing * {
    * 随之塌缩，浮条 = 内容紧致包络 */
   width: max-content;
   box-sizing: border-box;
+  /* 透明环留（顶4/侧16/底28）= 阴影晕开空间，窗大于卡：圆角 + 悬浮阴影
+   * 与主截图工具栏同脸（2026-11-22 用户反馈「四周圆角样式不一样」——旧版
+   * 窗贴卡、阴影整圈被窗缘裁掉呈硬边）；贴选区侧仅 4px 且恒在选区外，
+   * 不吞录制区域点击；上翻场（.is-up）整环镜像、阴影背向选区 */
+  margin: 4px 16px 28px;
   background: var(--np-surface);
   border: 1px solid var(--np-border);
   border-radius: var(--np-radius-lg);
-  box-shadow: var(--np-shadow);
+  box-shadow: var(--np-shadow-float);
   font-size: var(--np-font-sm);
   user-select: none;
 }
@@ -7364,12 +7376,15 @@ body.np-col-resizing * {
 }
 /* 上翻场（选区贴屏底，浮条停靠选区上方）：设置面板朝上展开（column-reverse
  * 行面沉底）——底缘锚定长高后行面屏幕位置不动，面板永不盖进录制选区；
- * 容器 fixed 底缘锚定：窗高未跟上的瞬态帧行面也始终可见（顶缘只裁面板） */
+ * 容器 fixed 底缘锚定：窗高未跟上的瞬态帧行面也始终可见（顶缘只裁面板）；
+ * 环留整环镜像（顶28/底4）+ 阴影向上（背向选区，防晕进录制区域） */
 .np-shot-sbar.is-up {
   flex-direction: column-reverse;
   position: fixed;
   bottom: 0;
   left: 0;
+  margin: 28px 16px 4px;
+  box-shadow: var(--np-shadow-float-up);
 }
 .np-shot-sbar-dot {
   width: 8px;

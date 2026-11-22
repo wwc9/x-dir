@@ -919,21 +919,27 @@ pub fn shot_gif_launch(app: AppHandle) -> Result<(), String> {
         // 完回执、pending 未设」竞态）：遮罩 = 显示器原点整幅，浮条 = 选区
         // 正下方（与 show_gif_bar_window 同参同值）
         let s_scale = f64::from(geo.mon.scale);
-        let (bar_bx, bar_by, _, _) = super::shot_scroll::bar_layout_sized(
+        let bar_bh = ((super::shot_scroll::BAR_CARD_H + super::shot_scroll::BAR_RING) * s_scale)
+            .round() as i32;
+        let (bar_bx, bar_by, _, bar_bw) = super::shot_scroll::bar_layout_sized(
             (geo.rx as i32, geo.ry as i32, geo.rw as i32, geo.rh as i32),
             &geo.mon,
             (840.0 * s_scale).round() as i32,
-            (44.0 * s_scale).round() as i32,
+            bar_bh,
         );
         // 条在选区下方放不上即上翻（与 bar_layout_sized 同源判定）：flipped
         // 随 boot 下发，前端设置面板向上展开（不盖录制选区）
         let bar_flipped = super::shot_scroll::bar_flips_above(
             (geo.rx as i32, geo.ry as i32, geo.rw as i32, geo.rh as i32),
             &geo.mon,
-            (44.0 * s_scale).round() as i32,
+            bar_bh,
         );
-        super::shot::set_session_window_pos("shot-frame", (geo.mon.x, geo.mon.y));
-        super::shot::set_session_window_pos("shot-bar", (geo.mon.x + bar_bx, geo.mon.y + bar_by));
+        super::shot::set_session_window_pos("shot-frame", (geo.mon.x, geo.mon.y, 0));
+        // 控制条带预置宽：ready 时按已缩窄的实际宽度做居中补偿（shot.rs）
+        super::shot::set_session_window_pos(
+            "shot-bar",
+            (geo.mon.x + bar_bx, geo.mon.y + bar_by, bar_bw as i32),
+        );
         // 两窗常驻复用：boot 事件先行换装（页面在 webview 线程），再建窗/显示。
         // 首场窗不存在事件落空无害（initialization_script 已带初始载荷）
         let _ = app2.emit_to(
@@ -2056,11 +2062,12 @@ fn show_mask_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
 fn show_gif_bar_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
     let mon = &geo.mon;
     let s = f64::from(mon.scale);
+    // 窗高 = 行面 44 + 环留 32（透明环承载完整阴影，CSS margin 同值）
     let (_, _, bw, bh) = super::shot_scroll::bar_layout_sized(
         (geo.rx as i32, geo.ry as i32, geo.rw as i32, geo.rh as i32),
         mon,
         (840.0 * s).round() as i32,
-        (44.0 * s).round() as i32,
+        ((super::shot_scroll::BAR_CARD_H + super::shot_scroll::BAR_RING) * s).round() as i32,
     );
     let flipped = super::shot_scroll::bar_flips_above(
         (geo.rx as i32, geo.ry as i32, geo.rw as i32, geo.rh as i32),

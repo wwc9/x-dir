@@ -38,6 +38,7 @@ export function ScrollBar({ boot }: { boot: ScrollBarBoot }) {
       setWarn(false);
       setDress((d) => d + 1);
       sentW.current = 0; // 新会话允许缩宽（内容宽随选区变）
+      sentH.current = 0;
     });
     return () => {
       void un.then((f) => f()).catch(() => undefined);
@@ -46,17 +47,21 @@ export function ScrollBar({ boot }: { boot: ScrollBarBoot }) {
 
   useBarTip();
 
-  // 内容自适应宽（GIF 浮条同款，2026-11-21「工具条太宽」）：量实宽 16px 档
-  // 量化回传 Rust 缩窗，同会话只增不减（已捕获高度文本逐秒增长不抖动）
+  // 内容自适应宽（GIF 浮条同款，2026-11-21「工具条太宽」）：量实宽 + 透明
+  // 环留（左右 16×2，承载完整阴影）16px 档量化回传 Rust 缩窗，同会话只增
+  // 不减（已捕获高度文本逐秒增长不抖动）；高 = 卡实高 + 环留（上4/下28）
   const barRef = useRef<HTMLDivElement>(null);
   const sentW = useRef(0);
+  const sentH = useRef(0);
   useLayoutEffect(() => {
     const el = barRef.current;
     if (!el) return;
-    const target = Math.ceil(el.offsetWidth / 16) * 16;
-    if (target > 0 && target > sentW.current) {
-      sentW.current = target;
-      void api.shotBarResize(target).catch(() => undefined);
+    const target = Math.ceil((el.offsetWidth + 32) / 16) * 16;
+    const h = el.offsetHeight + 32;
+    if (target > 0 && (target > sentW.current || (sentW.current > 0 && h !== sentH.current))) {
+      sentW.current = Math.max(sentW.current, target);
+      sentH.current = h;
+      void api.shotBarResize(target, h).catch(() => undefined);
     }
   });
 
