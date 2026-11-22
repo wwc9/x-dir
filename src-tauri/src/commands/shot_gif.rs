@@ -2088,6 +2088,8 @@ fn show_gif_bar_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
                 .skip_taskbar(true)
                 .always_on_top(true)
                 .shadow(false)
+                // 窗体透明（预热建窗同旗）：环留区透出桌面承载阴影
+                .transparent(true)
                 .focused(false)
                 .visible(false)
                 .initialization_script(format!("window.__BOOT__ = {boot};"))

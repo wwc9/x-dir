@@ -743,6 +743,10 @@ pub fn ensure_session_windows(app: &AppHandle) {
                 .skip_taskbar(true)
                 .always_on_top(true)
                 .shadow(false)
+                // 窗体透明（贴图窗同先例）：卡片四周环留（CSS margin 顶4/侧16/
+                // 底28）要透出桌面承载阴影——缺此旗 WebView2 表面本体白色，
+                // 页面透明也透不出去（2026-11-22 用户反馈「工具栏底部白色区域」）
+                .transparent(true)
                 .focused(false)
                 .visible(false)
                 .initialization_script(format!("window.__BOOT__ = {boot};"))
@@ -774,6 +778,7 @@ pub fn ensure_session_windows(app: &AppHandle) {
                 .skip_taskbar(true)
                 .always_on_top(true)
                 .shadow(false)
+                .transparent(true) // 同 shot-bar：圆角卡 + 余量区透出桌面
                 .focused(false)
                 .visible(false)
                 .initialization_script(format!("window.__BOOT__ = {boot};"))

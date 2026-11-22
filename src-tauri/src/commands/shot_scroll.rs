@@ -1391,6 +1391,7 @@ fn show_preview_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
             .skip_taskbar(true)
             .always_on_top(true)
             .shadow(false)
+            .transparent(true) // 同族口径：圆角卡 + 余量区透出桌面
             // 不可见窗口默认 focused(true) 在部分 WebView2 上聚焦异常（wry#1798）；
             // show() 后再 set_focus()，保险起见显式关闭
             .focused(false)
@@ -1449,6 +1450,8 @@ fn show_bar_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
                 .skip_taskbar(true)
                 .always_on_top(true)
                 .shadow(false)
+                // 窗体透明（预热建窗同旗）：环留区透出桌面承载阴影
+                .transparent(true)
                 // 不可见窗口默认 focused(true) 在部分 WebView2 上聚焦异常
                 //（wry#1798）；就绪回执后再 set_focus()，保险起见显式关闭
                 .focused(false)
