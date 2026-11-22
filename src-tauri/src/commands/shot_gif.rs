@@ -2095,13 +2095,20 @@ fn show_gif_bar_window(app: &AppHandle, geo: &GifGeo) -> Result<(), String> {
                 .map_err(|e| format!("创建录制浮条失败：{e}"))?;
             // 冷建回退：先停靠屏外放行可见，就绪回执才上屏（同遮罩窗口径）
             super::shot::set_cloak(&w, true);
+            // 冷建才设初始尺寸（全宽预留 + 环留）；**复用场绝不重设**——
+            // 窗口尺寸自 2026-11-21 起归前端自适应链路所有（boot 换装后前端
+            // 量实宽回传 shot_bar_resize），此处重设会在「缩窗已执行、ready
+            // 未落位」的窗口期把窗口弹回全宽，浮条停在左缘 + 现出大底色
+            //（2026-11-22 复发「不居中 + 背景太大」根因：launch 40ms 复用
+            // 重设覆盖前端缩窗；预热使首场即复用路径，场场必现）
+            w.set_size(PhysicalSize::new(bw, bh))
+                .map_err(|e| e.to_string())?;
             w
         }
     };
-    // 只调尺寸 + 停靠位可见；上屏（原位移动）与焦点由前端首帧回执
-    //（shot_ready）驱动——落位目标已在 launch 线程预置（换装事件之前）
-    win.set_size(PhysicalSize::new(bw, bh))
-        .map_err(|e| e.to_string())?;
+    // 上屏（原位移动）与焦点由前端首帧回执（shot_ready）驱动——落位目标
+    // 已在 launch 线程预置（含预置宽，ready 时做居中补偿）；复用场尺寸由
+    // 前端在 boot 换装后自适应回传，此处不再触碰
     win.show().map_err(|e| e.to_string())
 }
 

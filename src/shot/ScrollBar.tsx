@@ -30,6 +30,13 @@ export function ScrollBar({ boot }: { boot: ScrollBarBoot }) {
   const [dress, setDress] = useState(0);
   const warnTimer = useRef<number | null>(null);
 
+  // 窗体透明强制（ScrollFrame/GifBar 同款）：index.css 的 body 规则
+  // （--np-bg）会盖掉 shot.html 内联透明——环留区域必须透出桌面
+  useEffect(() => {
+    document.documentElement.style.background = "transparent";
+    document.body.style.background = "transparent";
+  }, []);
+
   useEffect(() => {
     const un = listen<{ w: number }>("shot-bar-boot", (e) => {
       setSelW(e.payload.w);

@@ -1458,13 +1458,17 @@ fn show_bar_window(app: &AppHandle, geo: &ScrollGeo) -> Result<(), String> {
                 .map_err(|e| format!("创建控制条失败：{e}"))?;
             // 冷建回退：先停靠屏外放行可见，就绪回执才上屏（三窗同口径）
             crate::commands::shot::set_cloak(&w, true);
+            // 冷建才设初始尺寸（全宽 + 环留）；**复用场绝不重设**——尺寸归
+            // 前端自适应链路所有（GIF 浮条同款，2026-11-22「不居中 + 大背景」
+            // 复发根因：复用重设把前端刚缩好的窗口弹回全宽）
+            w.set_size(PhysicalSize::new(bw, bh))
+                .map_err(|e| e.to_string())?;
             w
         }
     };
-    // 只调尺寸 + 保证停靠位可见；上屏（原位移动）与焦点由前端首帧回执
-    //（shot_ready）驱动——落位目标已在 launch 线程预置
-    win.set_size(PhysicalSize::new(bw, bh))
-        .map_err(|e| e.to_string())?;
+    // 上屏（原位移动）与焦点由前端首帧回执（shot_ready）驱动——落位目标
+    // 已在 launch 线程预置（含预置宽，ready 时做居中补偿）；复用场尺寸由
+    // 前端在 boot 换装后自适应回传，此处不再触碰
     win.show().map_err(|e| e.to_string())?;
     log::info!("滚动截图：控制条已换装（停靠屏外，目标 @({bx},{by}) {bw}×{bh}）");
     Ok(())

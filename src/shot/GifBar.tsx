@@ -109,9 +109,8 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
   fpsRef.current = fps;
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
-  // 内容自适应尺寸测量基座（宽 = 行 16px 档量化，高 = 容器实高）
+  // 内容自适应尺寸测量基座（宽 = 卡 offsetWidth + 环留，高 = 卡实高 + 环留）
   const barRef = useRef<HTMLDivElement>(null);
-  const rowRef = useRef<HTMLDivElement>(null);
   const sentW = useRef(0);
   const sentH = useRef(0);
   const prevPhase = useRef<GifPhase>(phase);
@@ -124,6 +123,14 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
     return () => {
       void un.then((f) => f()).catch(() => undefined);
     };
+  }, []);
+
+  // 窗体透明强制（ScrollFrame 同款）：shot.html 的内联透明背景会被 index.css
+  // 的 body 规则（--np-bg）按注入顺序盖掉——环留区域必须透出桌面，否则窗体
+  // 比卡片大的部分就是一块实底色板（2026-11-22 用户反馈「背景太大」）
+  useEffect(() => {
+    document.documentElement.style.background = "transparent";
+    document.body.style.background = "transparent";
   }, []);
 
   // 生成中禁操作：面板随相位收起（尺寸回落由测量链路自动跟随）
@@ -184,20 +191,20 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
   const hideBarTip = useBarTip();
   useEffect(hideBarTip, [phase]);
 
-  // 内容自适应尺寸（2026-11-21 宽 / 2026-11-22 高）：宽 = 行实宽 + 透明环
-  // 留（左右 16×2，CSS margin 同值）16px 档量化、高 = 卡实高 + 环留（上 4 +
-  // 下 28 = 32），回传 Rust 缩放窗口（缩宽条中心稳定 / 上翻场底缘锚定）；
-  // 同相位宽只增不减防录制文本逐秒抖动，高逐值比对面板开合即变无抖动源
+  // 内容自适应尺寸（2026-11-21 宽 / 2026-11-22 高）：宽 = 卡实宽（offsetWidth
+  // 含描边，设置面板更宽时随卡）+ 透明环留（左右 16×2，CSS margin 同值）
+  // 16px 档量化、高 = 卡实高 + 环留（上 4 + 下 28 = 32），回传 Rust 缩放窗口
+  // （缩宽条中心稳定 / 上翻场底缘锚定）；同相位宽只增不减防录制文本逐秒
+  // 抖动，高逐值比对面板开合即变无抖动源
   useLayoutEffect(() => {
     if (prevPhase.current !== phase) {
       prevPhase.current = phase;
       sentW.current = 0;
       sentH.current = 0;
     }
-    const row = rowRef.current;
     const el = barRef.current;
-    if (!row || !el) return;
-    const w = Math.ceil((row.offsetWidth + 32) / 16) * 16;
+    if (!el) return;
+    const w = Math.ceil((el.offsetWidth + 32) / 16) * 16;
     const h = el.offsetHeight + 32;
     if (w > 0 && (w > sentW.current || (sentW.current > 0 && h !== sentH.current))) {
       sentW.current = Math.max(sentW.current, w);
@@ -343,7 +350,7 @@ export function GifBar({ boot }: { boot: GifBarBoot }) {
 
   return (
     <div ref={barRef} className={flipped ? "np-shot-sbar is-up" : "np-shot-sbar"}>
-      <div ref={rowRef} className="np-shot-sbar-row">
+      <div className="np-shot-sbar-row">
         {phase === "recording" ? (
           <span className={paused ? "np-shot-gbar-dot is-paused" : "np-shot-gbar-dot"} />
         ) : (
