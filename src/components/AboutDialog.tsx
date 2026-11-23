@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { t } from "../lib/i18n";
 import { Button, Dialog, DialogBody, DialogFooter } from "@blueprintjs/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Download, Info, Link2, RefreshCw } from "lucide-react";
+import { Copy, Download, Info, Link2, RefreshCw } from "lucide-react";
 
 import { RELEASE_URLS, REPO_URLS, checkForUpdate, groupNotes, isUpdateAvailable } from "../lib/update";
 import { api, type SystemInfo } from "../lib/ipc";
@@ -122,6 +122,31 @@ export function AboutDialog() {
 
   const hasNew = isUpdateAvailable(check);
   const manifest = check?.manifest ?? null;
+
+  // 一键复制浮窗汇总信息（2026-11-23 用户需求「关于界面中的文字要支持复制」）：
+  // 设备环境区本就是远程排障入口，整段复制贴进反馈最省事；文案与界面逐项同源
+  const copyInfo = () => {
+    const lines = [
+      `X-Dir ${check?.current ? `v${check.current}` : ""}`,
+      t(APP_INTRO),
+      `${t("开发者")}：王文铖`,
+      `${t("微信公众号")}：效率视界`,
+      `${t("开源地址")}：${REPO_URLS.gitee} / ${REPO_URLS.github}`,
+      `${t("运行环境")}：${engineInfo()}`,
+    ];
+    if (sys) {
+      lines.push(
+        `${t("操作系统")}：${sys.os}`,
+        `${t("处理器")}：${sys.cpu}`,
+        `${t("内存")}：${sys.memoryGb} GB`,
+        `${t("显卡")}：${sys.gpus.join("、")}`,
+      );
+    }
+    navigator.clipboard.writeText(lines.join("\n")).then(
+      () => useUi.getState().toast(t("已复制")),
+      () => useUi.getState().toast(t("复制失败"), "error"),
+    );
+  };
 
   return (
     <Dialog
@@ -335,6 +360,9 @@ export function AboutDialog() {
       <DialogFooter
         actions={
           <>
+            <Button size="small" icon={ic(Copy)} onClick={copyInfo}>
+              {t("复制信息")}
+            </Button>
             <Button
               size="small"
               icon={ic(RefreshCw)}

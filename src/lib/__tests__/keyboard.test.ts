@@ -580,6 +580,31 @@ describe("文件操作", () => {
     covered.add("clipboard");
   });
 
+  it("text-copy：正文选区在场时 Ctrl+C / X 让路原生复制，不再劫持为文件复制（2026-11-23）", () => {
+    // node 环境无 getSelection：手动挂替身模拟"预览/对话框中已选中文本"
+    const sel = { type: "Range", isCollapsed: false, toString: () => "文本" };
+    const gsel = vi.fn(() => sel);
+    const prev = (globalThis as { getSelection?: unknown }).getSelection;
+    (globalThis as { getSelection?: unknown }).getSelection = gsel;
+    try {
+      fire({ key: "c", ctrl: true });
+      expect(h.onCopy).not.toHaveBeenCalled();
+      fire({ key: "x", ctrl: true });
+      expect(h.onCopy).not.toHaveBeenCalled();
+      // Ctrl+Shift+C（传输到目标窗格）不在让路范围
+      fire({ key: "C", ctrl: true, shift: true });
+      expect(h.onTransferToPane).toHaveBeenLastCalledWith(false);
+      // 折叠选区（Caret）恢复文件复制路由
+      (sel as { type: string }).type = "Caret";
+      (sel as { isCollapsed: boolean }).isCollapsed = true;
+      fire({ key: "c", ctrl: true });
+      expect(h.onCopy).toHaveBeenLastCalledWith(false);
+    } finally {
+      if (prev === undefined) delete (globalThis as { getSelection?: unknown }).getSelection;
+      else (globalThis as { getSelection?: unknown }).getSelection = prev;
+    }
+  });
+
   it("new-folder：Ctrl+Shift+N 新建文件夹", () => {
     fire({ key: "n", ctrl: true, shift: true });
     expect(h.onNewFolder).toHaveBeenCalledOnce();

@@ -125,7 +125,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { id: "rename", keys: ["F2"], label: "就地重命名", scope: "global" },
       { id: "delete", keys: ["Delete"], label: "删除到回收站（可设删除前确认）", scope: "global" },
       { id: "delete-permanent", keys: ["Shift+Delete"], label: "永久删除（强制确认，不可恢复）", scope: "global" },
-      { id: "clipboard", keys: ["Ctrl+C / Ctrl+X / Ctrl+V"], label: "应用内剪贴板：复制 / 剪切 / 粘贴", scope: "global" },
+      { id: "clipboard", keys: ["Ctrl+C / Ctrl+X / Ctrl+V"], label: "复制 / 剪切 / 粘贴（预览或对话框中有选中文本时 = 复制该文本）", scope: "global" },
       { id: "new-folder", keys: ["Ctrl+Shift+N"], label: "新建文件夹", scope: "global" },
       { id: "undo", keys: ["Ctrl+Z"], label: "撤销：回收站删除还原 / 重命名改回 / 移动移回 / 复制删副本 / 新建移入回收站", scope: "global" },
       { id: "redo", keys: ["Ctrl+Y", "Ctrl+Shift+Z"], label: "重做：再执行一遍刚撤销的操作", scope: "global" },

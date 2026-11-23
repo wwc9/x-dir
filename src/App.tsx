@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 
 import { onGlobalKeyDown } from "./lib/keyboard";
+import { registerTextCopyMenu } from "./lib/contextMenu";
 import { getList } from "./lib/listRegistry";
 import { hotkeySpecs } from "./lib/hotkey";
 import { initOleDnd } from "./lib/oleDispatch";
@@ -216,6 +217,24 @@ export default function App() {
         window.addEventListener("wheel", onZoomWheel, { passive: false });
         // V2：从 Explorer 复制后切回本窗口时同步系统剪贴板（CF_HDROP）
         window.addEventListener("focus", onFocusSyncClipboard);
+        // 预览/对话框文本选区的右键「复制」菜单开启器（lib/contextMenu 经注册器
+        // 间接调用——shot/clip 轻量窗共用该拦截，不注册即行为不变）
+        registerTextCopyMenu((text, x, y) => {
+          useUi.getState().openMenu(
+            [
+              {
+                label: t("复制"),
+                action: () =>
+                  navigator.clipboard.writeText(text).then(
+                    () => useUi.getState().toast(t("已复制")),
+                    () => useUi.getState().toast(t("复制失败"), "error"),
+                  ),
+              },
+            ],
+            x,
+            y,
+          );
+        });
         void useClipboard.getState().syncFromSystem();
 
         // 启动静默检查更新（双源拉取失败即静默，不打扰）：结果驱动顶栏关于钮角标；
@@ -260,6 +279,7 @@ export default function App() {
       window.removeEventListener("keydown", onGlobalKeyDown);
       window.removeEventListener("wheel", onZoomWheel);
       window.removeEventListener("focus", onFocusSyncClipboard);
+      registerTextCopyMenu(null);
     };
   }, []);
 

@@ -32,17 +32,25 @@ export default function PdfPreview({
   onDocInfo,
   onError,
   search,
+  rotateSignal = 0,
 }: {
   url: string;
   /** 文档就绪后回报总页数（footer 展示） */
   onDocInfo(pages: number): void;
   onError(message: string): void;
   search?: PreviewSearchCtl;
+  /** 宿主"旋转"按钮的递增信号：每 +1 顺时针转 90°（内部跳过初始值） */
+  rotateSignal?: number;
 }) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [ratio, setRatio] = useState(1.414); // 首页宽高比估算（A4 竖版），measureElement 修正
   const [width, setWidth] = useState(0);
   const [jump, setJump] = useState("");
+  /** 预览旋转角（0/90/180/270，叠加在页面自带 /Rotate 之上；换文档归零） */
+  const [rot, setRot] = useState(0);
+  const rotPrev = useRef(0);
+  /** 旋转前首屏页码：尺寸剧变滚动锚点必漂，翻转后跳回原页 */
+  const keepPage = useRef(1);
   const scrollRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   /** 每页拍平文本（搜索用；null = 尚未抽取完成） */
@@ -55,6 +63,8 @@ export default function PdfPreview({
     let alive = true;
     let task: { destroy(): void } | null = null;
     setDoc(null);
+    setRot(0);
+    rotPrev.current = rotateSignal;
     pageTextsRef.current = null;
     setSearchReady(0);
     (async () => {
@@ -109,6 +119,25 @@ export default function PdfPreview({
     return () => ro.disconnect();
   }, [doc]);
 
+  // 宿主旋转信号：递增即顺时针 90°（跳过挂载时的初始值）；记下当前首屏页，
+  // 翻转后跳回——页高随旋转剧变，不锚定会漂到别的页
+  useEffect(() => {
+    if (rotateSignal !== rotPrev.current) {
+      rotPrev.current = rotateSignal;
+      const first = virtualizer.getVirtualItems()[0];
+      keepPage.current = first ? first.index + 1 : 1;
+      setRot((r) => (r + 90) % 360);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rotateSignal]);
+
+  // 翻转落定后跳回原首屏页（键含 rot 触发行重挂重测，此处按新尺寸定位）
+  useEffect(() => {
+    if (doc && rot !== 0)
+      virtualizer.scrollToIndex(keepPage.current - 1, { align: "start" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rot]);
+
   // 命中列表：每页文本匹配 + 页前缀累计（全局活动序号 → 页 + 页内序号）
   const matches = useMemo(() => {
     void searchReady; // 文本抽取完成后重算
@@ -129,12 +158,15 @@ export default function PdfPreview({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matches.length]);
 
+  // 旋转 90°/270° 时页高估算用宽高比互换（首页比值为估算，measureElement 修正）
+  const swapped = rot % 180 !== 0;
   const virtualizer = useVirtualizer({
     count: doc?.numPages ?? 0,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => (width || 760) * ratio + PAGE_GAP,
+    estimateSize: () => (width || 760) * (swapped ? 1 / ratio : ratio) + PAGE_GAP,
     overscan: 2,
-    getItemKey: (i) => i + 1,
+    // 键含 rot：旋转即整列重挂 → measureElement 重测新尺寸（沿用旧键会吃陈旧测量）
+    getItemKey: (i) => `${rot}:${i + 1}`,
   });
 
   // 活动命中 → 跳页
@@ -192,6 +224,7 @@ export default function PdfPreview({
                   doc={doc}
                   pageNum={row.index + 1}
                   width={width || 760}
+                  rot={rot}
                   term={term}
                   globalOffset={pageOffsets.get(row.index + 1) ?? -1}
                   activeGlobal={search && matches.length ? Math.min(search.active, matches.length - 1) : -1}
@@ -230,6 +263,7 @@ function PdfCanvas({
   doc,
   pageNum,
   width,
+  rot,
   term,
   globalOffset,
   activeGlobal,
@@ -237,6 +271,8 @@ function PdfCanvas({
   doc: PDFDocumentProxy;
   pageNum: number;
   width: number;
+  /** 预览旋转角（0/90/180/270，叠加在页面自带 /Rotate 之上） */
+  rot: number;
   term: string;
   /** 本页首个命中的全局序号（-1 = 本页无命中） */
   globalOffset: number;
@@ -254,13 +290,17 @@ function PdfCanvas({
       const canvas = canvasRef.current;
       if (!alive || !canvas) return;
       const base = page.getViewport({ scale: 1 });
-      const scale = width / base.width;
-      // 画布按 devicePixelRatio 放大保证清晰，CSS 尺寸 = 逻辑宽
-      const viewport = page.getViewport({ scale: scale * window.devicePixelRatio });
+      // getViewport 的 rotation 是绝对角（缺省 = 页面 /Rotate），预览旋转叠加其上；
+      // 显示宽恒 = 内容列宽，90°/270° 时旋转后视口的宽来自原页高
+      const rotation = (base.rotation + rot) % 360;
+      const swapped = rot % 180 !== 0;
+      const scale = width / (swapped ? base.height : base.width);
+      // 画布按 devicePixelRatio 放大保证清晰，CSS 尺寸 = 逻辑宽高
+      const viewport = page.getViewport({ scale: scale * window.devicePixelRatio, rotation });
       canvas.width = Math.max(1, Math.floor(viewport.width));
       canvas.height = Math.max(1, Math.floor(viewport.height));
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${Math.floor(base.height * scale)}px`;
+      canvas.style.width = `${Math.floor((swapped ? base.height : base.width) * scale)}px`;
+      canvas.style.height = `${Math.floor((swapped ? base.width : base.height) * scale)}px`;
       task = page.render({ canvas, viewport });
       await task.promise;
     })().catch(() => {
@@ -270,7 +310,7 @@ function PdfCanvas({
       alive = false;
       task?.cancel();
     };
-  }, [doc, pageNum, width]);
+  }, [doc, pageNum, width, rot]);
 
   // 文本层：页面文字可选中复制；滚动离屏随组件销毁
   useEffect(() => {
@@ -283,7 +323,10 @@ function PdfCanvas({
       const layer = layerRef.current;
       if (!alive || !layer) return;
       const base = page.getViewport({ scale: 1 });
-      const viewport = page.getViewport({ scale: width / base.width });
+      const rotation = (base.rotation + rot) % 360;
+      const swapped = rot % 180 !== 0;
+      const scale = width / (swapped ? base.height : base.width);
+      const viewport = page.getViewport({ scale, rotation });
       layer.textContent = "";
       tl = new pdfjs.TextLayer({
         textContentSource: page.streamTextContent(),
@@ -300,7 +343,7 @@ function PdfCanvas({
       alive = false;
       tl?.cancel();
     };
-  }, [doc, pageNum, width]);
+  }, [doc, pageNum, width, rot]);
 
   // 页内查找高亮：文本层节点扫描 + CSS Highlight API（按页分组，页间不互覆盖）；
   // 活动命中单独色

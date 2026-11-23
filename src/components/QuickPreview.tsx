@@ -313,7 +313,10 @@ export function QuickPreviewHost() {
               disabled={queue.length <= 1}
               onClick={next}
             />
-            {kind === "image" && (
+            {/* 旋转仅图片与 PDF（2026-11-23 用户需求「预览要支持对文件旋转」）：
+                图片经 ImagePreview 变换矩阵，PDF 经旋转视口重渲染（文本层随视口
+                同转，选中/查找高亮不漂移） */}
+            {(kind === "image" || kind === "pdf") && (
               <Button
                 minimal
                 size="small"

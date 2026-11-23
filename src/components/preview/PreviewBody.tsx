@@ -335,6 +335,7 @@ export function PreviewBody({
               onDocInfo={setPdfPages}
               onError={(m) => setMediaError(m || t("转换后的 PDF 加载失败"))}
               search={search}
+              rotateSignal={rotateSignal}
             />
           </Suspense>
         );
@@ -357,6 +358,7 @@ export function PreviewBody({
                 setMediaError(m || t("PDF 加载失败（加密或损坏的文件不支持预览）"))
               }
               search={search}
+              rotateSignal={rotateSignal}
             />
           </Suspense>
         );

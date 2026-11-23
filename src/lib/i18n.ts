@@ -100,6 +100,10 @@ export const EN: Record<string, string> = {
   "剪切": "Cut",
   "复制": "Copy",
   "粘贴": "Paste",
+  "已复制": "Copied",
+  "复制信息": "Copy info",
+  "复制 / 剪切 / 粘贴（预览或对话框中有选中文本时 = 复制该文本）":
+    "Copy / cut / paste (with selected text in preview or a dialog, copies that text)",
   "复制路径": "Copy path",
   "复制名称": "Copy name",
   "新建文件夹": "New folder",
@@ -939,7 +943,6 @@ export const EN: Record<string, string> = {
   "就地重命名": "Rename in place",
   "删除到回收站（可设删除前确认）": "Move to Recycle Bin (confirm-before-delete optional)",
   "永久删除（强制确认，不可恢复）": "Delete permanently (forced confirm, unrecoverable)",
-  "应用内剪贴板：复制 / 剪切 / 粘贴": "App clipboard: copy / cut / paste",
   "撤销：回收站删除还原 / 重命名改回 / 移动移回 / 复制删副本 / 新建移入回收站": "Undo: restore from Recycle Bin / revert rename / move back / remove copies / send new items to Recycle Bin",
   "重做：再执行一遍刚撤销的操作": "Redo: re-apply the operation just undone",
   "呼出选中项右键菜单": "Open the context menu for the selection",

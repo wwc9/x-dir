@@ -88,6 +88,40 @@ export function onGlobalKeyDown(e: KeyboardEvent): void {
   ) {
     e.preventDefault();
   }
+  // ── 文本复制让路（2026-11-23 用户需求「预览/关于等界面的文本要支持复制」）：
+  //    正文选区在场时 Ctrl+C / Ctrl+X 交还浏览器原生复制，不再路由成列表文件
+  //    复制/剪切——快速预览开着时 ui.dialog 不置位、按键会一路落到列表路由，
+  //    关于等浮窗对话框（aboutOpen 等独立开关不经模态守卫）同理，文本复制
+  //    曾被文件复制劫持；Ctrl+A 在选区所在的文本容器（预览正文 / 对话框内容
+  //    面）内全选，替代会选中整页 UI 文字的浏览器全选。node 测试环境无
+  //    getSelection：整体跳过，保持原路由 ──
+  const selApi =
+    typeof window.getSelection === "function" ? window.getSelection() : null;
+  if (
+    selApi &&
+    selApi.type === "Range" &&
+    !selApi.isCollapsed &&
+    ctrl0 &&
+    !e.altKey &&
+    !e.shiftKey
+  ) {
+    const lo = k0.toLowerCase();
+    if (lo === "c" || lo === "x") return;
+    if (lo === "a") {
+      const anchor = selApi.anchorNode;
+      const hostEl =
+        anchor instanceof Element ? anchor : (anchor?.parentElement ?? null);
+      const box = hostEl?.closest?.(".np-pv-body, .bp6-dialog-body") ?? null;
+      if (box && typeof document.createRange === "function") {
+        const rg = document.createRange();
+        rg.selectNodeContents(box);
+        selApi.removeAllRanges();
+        selApi.addRange(rg);
+        e.preventDefault();
+        return;
+      }
+    }
+  }
   // 右键菜单打开：Esc 关闭（其余键被下方模态守卫拦截）
   if (e.key === "Escape" && useUi.getState().menu) {
     useUi.getState().closeMenu();
