@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   Button,
+  ButtonGroup,
   Menu,
   MenuDivider,
   MenuItem,
   PopoverNext,
+  Switch,
 } from "@blueprintjs/core";
 
 import { api, THIS_PC } from "../lib/ipc";
@@ -20,6 +22,7 @@ import {
   HardDrive,
   History,
   Info,
+  Languages,
   LayoutTemplate,
   Minus,
   Moon,
@@ -27,11 +30,13 @@ import {
   Plus,
   Search,
   Settings,
+  Sparkles,
   Square,
   Star,
-  Sun,
   Trash2,
+  VenetianMask,
   X,
+  ZoomIn,
 } from "lucide-react";
 import { AppIcon, ic } from "./AppIcon";
 import { AboutBadgeDot } from "./AboutDialog";
@@ -44,6 +49,7 @@ import { useLayout } from "../stores/layout";
 import { usePanes } from "../stores/panes";
 import { setThemeWithFx, useSettings } from "../stores/settings";
 import { useT } from "../lib/i18n";
+import { zoomStep } from "../lib/zoom";
 import { useHistory } from "../stores/history";
 import { useUi } from "../stores/ui";
 
@@ -115,15 +121,14 @@ export function TitleBar() {
   const hasNewVersion = isUpdateAvailable(updateCheck);
   const [histOpen, setHistOpen] = useState(false);
   const [favOpen, setFavOpen] = useState(false);
+  // 显示与外观快捷面板（2026-11-23 三钮合一）：缩放/主题/语言/毛玻璃悬浮直设
+  const [qsOpen, setQsOpen] = useState(false);
+  const glassOn = useSettings((s) => s.windowGlass === "on");
   // 更多钮（左段收纳聚合入口）：开合态 + 顶栏实际宽驱动档位。按钮显隐由
   // TSX 条件渲染（菜单项并入档位也靠它），CSS 容器查询只管各功能钮本体
   const [moreOpen, setMoreOpen] = useState(false);
   const tbRef = useRef<HTMLElement | null>(null);
   const [tbW, setTbW] = useState(0);
-  // 跟随系统档的实时长亮态：只驱动切换按钮的图标/文案，文档类名由 applyTheme 统一管
-  const [sysDark, setSysDark] = useState(
-    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
-  );
   const activePath = useLayout((s) =>
     s.activePane()?.tabs[s.activePane()!.activeTab]?.path ?? THIS_PC,
   );
@@ -155,13 +160,6 @@ export function TitleBar() {
     };
   }, []);
 
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const fn = (e: MediaQueryListEvent) => setSysDark(e.matches);
-    mq.addEventListener("change", fn);
-    return () => mq.removeEventListener("change", fn);
-  }, []);
-
   // 顶栏宽度观测：contentRect.width = content-box 宽，与容器查询同口径基准
   useEffect(() => {
     const el = tbRef.current;
@@ -170,9 +168,6 @@ export function TitleBar() {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-
-  // 当前生效是否深色（含"跟随系统"档），决定切换按钮的图标/文案
-  const isDark = theme === "dark" || (theme === "system" && sysDark);
 
   // 更多钮档位（与 index.css 收纳梯度同名档，常量见 TB_MORE_*）：出现区间
   // = 快捷组收纳档 → 物理下限之前；各功能项并入档与对应按钮的 CSS 收纳档同值
@@ -201,6 +196,7 @@ export function TitleBar() {
     setFavOpen(false);
     setPresetOpen(false);
     setMoreOpen(false);
+    setQsOpen(false);
     on();
   };
   /** 离开触发钮/弹层：宽限后关闭（期间进入任一悬浮面即取消） */
@@ -255,6 +251,7 @@ export function TitleBar() {
             setFavOpen(false);
             setPresetOpen(false);
             setMoreOpen(false);
+            setQsOpen(false);
           }
         }}
     >
@@ -795,7 +792,7 @@ export function TitleBar() {
         <IslandPill path={activePath} />
       </div>
 
-      {/* ── 右段：设置/关于 + 系统态（缩放/主题/语言）+ 窗口控制 ── */}
+      {/* ── 右段：设置/关于 + 显示与外观快捷面板 + 窗口控制 ── */}
       <div className="np-tb-side np-tb-r" data-tauri-drag-region>
       <span
         className="np-tb-fill"
@@ -837,50 +834,125 @@ export function TitleBar() {
         <AboutBadgeDot />
       </Button>
 
-      {/* 语义分组分隔：设置/关于 | 系统态组（原中央拖拽区已拆为三段各自的
-          np-tb-fill 弹性补白，2026-11-11 三段居中定案；data-tb=sys ≤290 随
-          主题钮同收防孤儿线） */}
+      {/* 语义分组分隔：设置/关于 | 显示外观组（原中央拖拽区已拆为三段各自的
+          np-tb-fill 弹性补白，2026-11-11 三段居中定案；data-tb=sys ≤380 随
+          快捷面板钮同收防孤儿线） */}
       <span className="np-tb-sep" aria-hidden data-tb="sys" />
 
-      {/* 界面缩放指示：右簇首位常驻，点击重置 100%（Ctrl+滚轮/Ctrl+加减 调整后在此确认） */}
-      <button
-        className="np-zoompill"
-        data-tip={t("界面缩放 {p}% · Ctrl+滚轮 / Ctrl+加减号调整 · 点击重置 100%", {
-          p: Math.round(uiZoom * 100),
-        })}
-        onClick={() => useSettings.getState().update({ uiZoom: 1 })}
-      >
-        {Math.round(uiZoom * 100)}%
-      </button>
-
-      {/* 明暗切换：按当前生效主题二态翻转；"跟随系统"档仍在设置面板可选 */}
-      <Button
-        minimal
-        size="small"
-        icon={ic(isDark ? Sun : Moon)}
-        className="np-theme-btn"
-        data-tip={isDark ? t("切换为浅色主题") : t("切换为深色主题")}
-        onClick={(e) => {
-          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          setThemeWithFx(isDark ? "light" : "dark", {
-            x: r.left + r.width / 2,
-            y: r.top + r.height / 2,
-          });
-        }}
-      />
-
-      {/* 界面语言切换（2026-10-21）：明暗切换钮右侧；显示目标语言缩写，点按即换 */}
-      <button
-        className="np-langbtn"
-        data-tip={lang === "zh" ? t("切换到英文界面") : "Switch to Chinese"}
-        onClick={() =>
-          useSettings.getState().update({ lang: lang === "zh" ? "en" : "zh" })
+      {/* 显示与外观快捷面板（2026-11-23 用户定案「三钮合一 + 悬浮直接设置」）：
+          缩放/主题/语言/窗口毛玻璃四项收纳进单一功能钮（用户选定面具图标
+          lucide VenetianMask），悬浮即开（沿用弹层组悬浮约定），全部控件与
+          设置浮窗同一 store 双向同步；毛玻璃开关回执与设置页逐字一致（§4.8） */}
+      <PopoverNext
+        isOpen={qsOpen}
+        onClose={() => setQsOpen(false)}
+        placement="bottom-end"
+        arrow={false}
+        content={
+          <div {...hoverProps(() => setQsOpen(false))}>
+            <div className="np-qs-panel">
+              <div className="np-qs-row">
+                <AppIcon icon={ZoomIn} size={DENSITY.iconSm} className="np-qs-ic" />
+                <span className="np-qs-label">{t("界面缩放")}</span>
+                <span className="np-qs-step">
+                  <button
+                    className="np-qs-stepbtn"
+                    aria-label={t("缩小")}
+                    data-tip={t("缩小")}
+                    onClick={() => useSettings.getState().update({ uiZoom: zoomStep(uiZoom, -1) })}
+                  >
+                    −
+                  </button>
+                  <button
+                    className="np-qs-val"
+                    aria-label={t("点击重置 100%")}
+                    data-tip={t("点击重置 100%")}
+                    onClick={() => useSettings.getState().update({ uiZoom: 1 })}
+                  >
+                    {Math.round(uiZoom * 100)}%
+                  </button>
+                  <button
+                    className="np-qs-stepbtn"
+                    aria-label={t("放大")}
+                    data-tip={t("放大")}
+                    onClick={() => useSettings.getState().update({ uiZoom: zoomStep(uiZoom, 1) })}
+                  >
+                    +
+                  </button>
+                </span>
+              </div>
+              <div className="np-qs-row">
+                <AppIcon icon={Moon} size={DENSITY.iconSm} className="np-qs-ic" />
+                <span className="np-qs-label">{t("主题")}</span>
+                <ButtonGroup className="np-seg" size="small" variant="minimal">
+                  <Button active={theme === "light"} onClick={() => setThemeWithFx("light")}>
+                    {t("浅色")}
+                  </Button>
+                  <Button active={theme === "dark"} onClick={() => setThemeWithFx("dark")}>
+                    {t("深色")}
+                  </Button>
+                  <Button active={theme === "system"} onClick={() => setThemeWithFx("system")}>
+                    {t("跟随系统")}
+                  </Button>
+                </ButtonGroup>
+              </div>
+              <div className="np-qs-row">
+                <AppIcon icon={Languages} size={DENSITY.iconSm} className="np-qs-ic" />
+                <span className="np-qs-label">{t("语言")}</span>
+                <ButtonGroup className="np-seg" size="small" variant="minimal">
+                  {/* 专属字面量「中文」：不得复用尺寸档的 t("中")（其 EN 词条是 Medium） */}
+                  <Button
+                    active={lang === "zh"}
+                    onClick={() => useSettings.getState().update({ lang: "zh" })}
+                  >
+                    {t("中文")}
+                  </Button>
+                  <Button
+                    active={lang === "en"}
+                    onClick={() => useSettings.getState().update({ lang: "en" })}
+                  >
+                    EN
+                  </Button>
+                </ButtonGroup>
+              </div>
+              <div className="np-qs-row">
+                <AppIcon icon={Sparkles} size={DENSITY.iconSm} className="np-qs-ic" />
+                <span className="np-qs-label">{t("窗口毛玻璃")}</span>
+                <Switch
+                  checked={glassOn}
+                  onChange={(e) => {
+                    const m = e.currentTarget.checked ? "on" : "off";
+                    useSettings.getState().update({ windowGlass: m });
+                    useUi
+                      .getState()
+                      .toast(`${t("窗口毛玻璃")}：${m === "off" ? t("关") : t("开")}`);
+                  }}
+                />
+              </div>
+              <div className="np-qs-hint">{t("改动即时生效，与设置浮窗同步")}</div>
+            </div>
+          </div>
         }
       >
-        {/* 专属字面量「中文」：不得复用尺寸档的 t("中")（其 EN 词条是 Medium，
-            2026-11-17 用户实测英文界面下语言钮错显 Medium 即键位冲突） */}
-        {lang === "zh" ? "EN" : t("中文")}
-      </button>
+        <Button
+          minimal
+          size="small"
+          className="np-pop-trigger"
+          icon={ic(VenetianMask)}
+          active={qsOpen}
+          aria-label={t("显示与外观")}
+          data-tip={t("显示与外观")}
+          onMouseEnter={hoverEnter(() => setQsOpen(true))}
+          onMouseLeave={hoverLeave(() => setQsOpen(false))}
+          onClick={() => {
+            setQsOpen((o) => !o);
+            setHistOpen(false);
+            setFavOpen(false);
+            setPresetOpen(false);
+            setMoreOpen(false);
+          }}
+        />
+      </PopoverNext>
 
       {/* 窗口控制与功能钮之间：分组边界 + 安全间距（防误触窗口钮） */}
       <span className="np-tb-sep" aria-hidden />

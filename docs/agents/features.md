@@ -512,6 +512,14 @@
 
 ## 13. 横切改造记录（跨功能域批量改造，按时间倒序）
 
+### 13.0 顶栏显示快捷面板（缩放/主题/语言/毛玻璃四钮合一）
+
+**组件与模块**：`components/TitleBar.tsx`（合并钮 + PopoverNext 四行面板，交互完全复用弹层组 hoverEnter/hoverLeave/hoverProps 约定）+ `index.css` np-qs 面板族 + 设计预览 `design/quick-settings-popover-proposal.html`（图标选型交互稿，用户选定面具图标 lucide `VenetianMask`）。
+
+- **三钮合一 + 新增项（2026-11-23 用户需求「缩放/主题/语言融合为一个功能图标，悬浮弹出界面直接设置，再增加磨玻璃开关」）**：顶栏右段退役 缩放胶囊(np-zoompill)/明暗切换钮(np-theme-btn)/语言钮(np-langbtn) 及其渐进收纳 CSS，改为单一「显示与外观」钮（data-tip 同名，np-pop-trigger 载体）+ 悬浮面板四行直设：① 界面缩放 = −/+ 步进（`zoomStep` 档位表与 Ctrl+滚轮同源）+ 点数值重置 100%；② 主题 = 浅色/深色/跟随系统三态 np-seg（`setThemeWithFx` 圆形揭示特效保留；比旧按钮多出显式「跟随系统」档）；③ 语言 = 中文/EN 二态 np-seg；④ **窗口毛玻璃 Switch**（新增直设入口）——回执与设置页逐字一致（镜像文案 §4.8）。全部控件与设置浮窗同一 store 双向同步（面板底 hint 注明）。
+- **交互口径**：悬浮即开/离开宽限关闭/点击切换（与浏览记录/收藏夹/预设弹层完全同约定），`placement="bottom-end"` 右对齐防溢出；顶栏渐进收纳档随三钮退役更新（≤640 收关于钮、≤380 收快捷面板钮与 data-tb=sys）。
+- **行为备注**：主题切换的 View Transition 圆形揭示期间指针边界事件可能令面板按宽限期自动收起——操作意图已完成，再悬停即重开，不做复杂化处理。
+
 ### 13.1 PDF/图片参数界面优化批
 
 **组件与模块**：`pdf/mod.rs`（rotate_pdf_file + 六出口 available_name）+ `pdf/stamp.rs`（WmRange::Spec）+ `img/mod.rs`（WatermarkOpts rgb/pos + stamp_at_pos）+ 共享组件 `components/WmPosGrid.tsx`（位置九宫格双水印共用）+ `lib/dialogPrefs.ts`（sanitize/merge 纯函数配 vitest）。

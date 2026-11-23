@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>顶栏显示快捷钮 · 三钮合一 + 悬浮面板 方案预览</title>
+<style>
+  /* ── 预览页自身（中性展示底，非应用画布） ── */
+  :root {
+    --accent: #3574f0;
+    --radius-pane: 10px;
+    --radius: 6px;
+    --hairline: rgba(0, 0, 0, .08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: #1b1d22;
+    color: #e8eaee;
+    padding: 40px 24px 64px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+  }
+  .page-head { text-align: center; max-width: 760px; }
+  .page-head h1 { font-size: 20px; font-weight: 600; letter-spacing: .5px; }
+  .page-head p { font-size: 13px; color: #9aa0ab; margin-top: 8px; line-height: 1.7; }
+  .page-head .tag {
+    display: inline-block; margin-top: 10px; font-size: 11px; color: #8fb3ff;
+    border: 1px solid rgba(143, 179, 255, .35); border-radius: 999px; padding: 2px 10px;
+  }
+
+  /* ── 模拟窗口（应用顶栏外观，浅/深两态） ── */
+  .mock {
+    width: 860px; max-width: 96vw;
+    border-radius: var(--radius-pane);
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, .45);
+    position: relative;
+    transition: background .25s;
+  }
+  .mock .canvas-hint {
+    height: 150px;
+    transition: background .25s;
+    position: relative;
+  }
+  .mock .canvas-hint .pane {
+    position: absolute; inset: 12px auto 12px 12px; width: 38%;
+    border-radius: 8px;
+  }
+
+  /* 浅色态 */
+  .mock.light { background: #f3f4f6; outline: 1px solid rgba(255,255,255,.14); }
+  .mock.light .tb { background: #ffffff; }
+  .mock.light .canvas-hint { background: #f3f4f6; }
+  .mock.light .canvas-hint .pane { background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  /* 深色态 */
+  .mock.dark { background: #161616; outline: 1px solid rgba(255,255,255,.10); }
+  .mock.dark .tb { background: #2b2b2b; }
+  .mock.dark .canvas-hint { background: #161616; }
+  .mock.dark .canvas-hint .pane { background: #2b2b2b; }
+  /* 磨玻璃开：画布换渐变 + 顶栏/卡片霜玻璃 */
+  .mock.glass.light {
+    background: linear-gradient(160deg, #cfe0ff 0%, #eef3ff 28%, #ffe9dd 62%, #ffd9e8 100%);
+  }
+  .mock.glass.dark {
+    background: linear-gradient(160deg, #14203c 0%, #1d2c52 30%, #3a2547 66%, #46243c 100%);
+  }
+  .mock.glass .tb {
+    background: rgba(255, 255, 255, .55);
+    backdrop-filter: blur(22px) saturate(1.4);
+  }
+  .mock.glass.dark .tb { background: rgba(36, 41, 55, .55); }
+  .mock.glass .canvas-hint .pane {
+    background: rgba(255, 255, 255, .45);
+    backdrop-filter: blur(22px) saturate(1.4);
+  }
+  .mock.glass.dark .canvas-hint .pane { background: rgba(36, 41, 55, .45); }
+
+  /* ── 顶栏 ── */
+  .tb {
+    display: flex; align-items: center; gap: 8px;
+    height: 44px; padding: 0 10px;
+    transition: background .25s;
+    position: relative; z-index: 5;
+  }
+  .logo {
+    width: 24px; height: 24px; border-radius: 6px; flex: none;
+    background: conic-gradient(from 220deg at 50% 50%, #3574f0, #6ea8ff, #b7dcff, #3574f0);
+    margin-right: 2px;
+  }
+  .brand { font-size: 13px; font-weight: 600; margin-right: 6px; }
+  .light .brand { color: #223047; } .dark .brand { color: #e8eaee; }
+  .tb-spacer { flex: 1; }
+  .island {
+    font-size: 11px; padding: 3px 12px; border-radius: 999px; flex: none;
+  }
+  .light .island { background: #eef0f3; color: #7a8291; }
+  .dark .island { background: #3a3a3a; color: #8f8f8f; }
+
+  .tb-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 24px; min-width: 24px; padding: 0 4px;
+    border: none; background: transparent; border-radius: var(--radius);
+    cursor: default; font-family: inherit;
+    transition: background .12s;
+  }
+  .tb-btn:hover { background: rgba(128, 128, 128, .16); }
+  .light .tb-btn { color: #3d4757; }
+  .dark .tb-btn { color: #d4d4d4; }
+  .tb-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .tb-btn.text { font-size: 12px; padding: 0 8px; }
+  .zoom-pill {
+    font-size: 12px; padding: 0 10px; height: 24px; border-radius: 999px;
+    display: inline-flex; align-items: center;
+  }
+  .light .zoom-pill { background: #eef0f3; color: #5a6474; }
+  .dark .zoom-pill { background: #3a3a3a; color: #b9bdc4; }
+  .tb-sep { width: 1px; height: 16px; margin: 0 2px; }
+  .light .tb-sep { background: rgba(0,0,0,.10); }
+  .dark .tb-sep { background: rgba(255,255,255,.12); }
+  .tb-ghost { font-size: 11px; padding: 0 8px; }
+  .light .tb-ghost { color: #9aa2af; } .dark .tb-ghost { color: #6d7076; }
+
+  /* ── 合并钮（新方案）与悬浮面板 ── */
+  .qs-wrap { position: relative; flex: none; }
+  .qs-btn { position: relative; }
+  .qs-btn .dot {
+    position: absolute; right: 1px; bottom: 1px; width: 6px; height: 6px;
+    border-radius: 999px; background: var(--accent); display: none;
+  }
+  .qs-btn.open .dot { display: none; }
+
+  .qs-panel {
+    position: absolute; top: calc(100% + 8px); right: -4px;
+    width: 292px;
+    border-radius: var(--radius-pane);
+    z-index: 50;
+    padding: 6px;
+    opacity: 0; transform: translateY(-4px) scale(.98); pointer-events: none;
+    transition: opacity .16s ease-out, transform .16s ease-out;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, .28), 0 0 0 1px var(--hairline);
+  }
+  .qs-panel.on { opacity: 1; transform: none; pointer-events: auto; }
+  .light .qs-panel { background: #ffffff; }
+  .dark .qs-panel { background: #2b2b2b; }
+  .mock.glass .qs-panel {
+    backdrop-filter: blur(22px) saturate(1.4);
+  }
+  .mock.glass.light .qs-panel { background: rgba(255, 255, 255, .72); box-shadow: 0 8px 28px rgba(31,51,102,.25), 0 0 0 1px rgba(255,255,255,.5) inset; }
+  .mock.glass.dark .qs-panel { background: rgba(36, 41, 55, .72); box-shadow: 0 8px 28px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.14) inset; }
+
+  .qs-row {
+    display: flex; align-items: center; gap: 8px;
+    height: 34px; padding: 0 8px; border-radius: var(--radius);
+  }
+  .qs-row + .qs-row { margin-top: 2px; }
+  .light .qs-row:hover { background: #f1f3f6; }
+  .dark .qs-row:hover { background: rgba(255,255,255,.05); }
+  .qs-row > svg { width: 15px; height: 15px; flex: none; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .light .qs-row > svg { stroke: #6a7484; } .dark .qs-row > svg { stroke: #9aa0ab; }
+  .qs-label { font-size: 13px; flex: 1; white-space: nowrap; }
+  .light .qs-label { color: #2c3648; } .dark .qs-label { color: #d4d4d4; }
+
+  /* 分段选择（主题 / 语言）—— np-seg 语言：选中淡染底 + accent 加粗 + ✓，无描边 */
+  .seg { display: inline-flex; gap: 2px; }
+  .seg button {
+    border: none; background: transparent; font-family: inherit;
+    font-size: 11px; padding: 3px 8px; border-radius: 999px; cursor: default;
+    display: inline-flex; align-items: center; gap: 3px;
+    transition: background .12s, color .12s;
+  }
+  .light .seg button { color: #8a93a3; } .dark .seg button { color: #8f8f8f; }
+  .light .seg button:hover { background: #eef0f3; }
+  .dark .seg button:hover { background: rgba(255,255,255,.06); }
+  .seg button.sel { font-weight: 600; }
+  .light .seg button.sel { background: rgba(53, 116, 240, .12); color: #3574f0; }
+  .dark .seg button.sel { background: rgba(92, 157, 255, .16); color: #5C9DFF; }
+  .seg button.sel::before { content: "✓"; font-size: 10px; }
+
+  /* 步进（缩放）：− 值 +，点击值重置 100% */
+  .step { display: inline-flex; align-items: center; gap: 2px; }
+  .step button {
+    width: 22px; height: 22px; border: none; border-radius: var(--radius);
+    background: transparent; cursor: default; font-family: inherit;
+    font-size: 13px; display: inline-flex; align-items: center; justify-content: center;
+    transition: background .12s;
+  }
+  .light .step button { color: #5a6474; } .dark .step button { color: #b9bdc4; }
+  .light .step button:hover { background: #e8ebef; } .dark .step button:hover { background: rgba(255,255,255,.08); }
+  .step .val {
+    font-size: 12px; min-width: 46px; text-align: center; padding: 2px 6px;
+    border-radius: 999px; font-variant-numeric: tabular-nums;
+  }
+  .light .step .val { background: #eef0f3; color: #4d5768; }
+  .dark .step .val { background: #3a3a3a; color: #c9ccd1; }
+
+  /* 开关（磨玻璃）—— Blueprint Switch 语言 */
+  .sw { position: relative; width: 30px; height: 17px; flex: none; border-radius: 999px; transition: background .15s; }
+  .sw::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px;
+    border-radius: 999px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3);
+    transition: left .15s;
+  }
+  .sw.off { background: rgba(128,128,128,.35); }
+  .sw.on { background: var(--accent); }
+  .sw.on::after { left: 15px; }
+
+  .qs-hint {
+    margin: 4px 6px 2px; padding-top: 6px; border-top: 1px solid var(--hairline);
+    font-size: 11px; line-height: 1.5;
+  }
+  .light .qs-hint { color: #98a0ad; border-top-color: rgba(0,0,0,.07); }
+  .dark .qs-hint { color: #7c7f85; border-top-color: rgba(255,255,255,.08); }
+
+  /* tooltip 键帽示意 */
+  .tip-demo {
+    margin-top: 14px; display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12px;
+  }
+  .tip-card {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 10px; border-radius: 8px; font-size: 12px;
+  }
+  .light .tip-card { background: #fff; color: #2c3648; box-shadow: 0 4px 14px rgba(0,0,0,.18), 0 0 0 1px var(--hairline); }
+  .dark .tip-card { background: #2b2b2b; color: #d4d4d4; box-shadow: 0 4px 14px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.1); }
+  kbd {
+    font-family: Consolas, "Cascadia Mono", monospace; font-style: normal;
+    font-size: 11px; padding: 0 5px; border-radius: 4px;
+  }
+  .light kbd { background: #eef0f3; border: 1px solid var(--hairline); color: #6a7484; }
+  .dark kbd { background: #3a3a3a; border: 1px solid rgba(255,255,255,.1); color: #9aa0ab; }
+
+  /* ── 图标选型条 ── */
+  .icon-pick {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 12px 14px 14px;
+  }
+  .icon-card {
+    border: 1px solid rgba(255,255,255,.08); border-radius: var(--radius-pane);
+    background: #1d2027; padding: 12px 10px 10px; cursor: default;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    transition: border-color .15s, background .15s;
+    font-family: inherit; color: inherit;
+  }
+  .icon-card:hover { background: #242832; }
+  .icon-card.sel { border-color: var(--accent); background: rgba(53, 116, 240, .10); }
+  .icon-card svg { width: 26px; height: 26px; stroke: #e8eaee; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .icon-card .nm { font-size: 12px; color: #e2e5ea; font-weight: 600; }
+  .icon-card .ds { font-size: 11px; color: #8d93a0; text-align: center; line-height: 1.5; }
+  .icon-card.sel .ds { color: #9db9f5; }
+  .icon-card .bd { font-size: 10px; padding: 1px 8px; border-radius: 999px; background: rgba(53,116,240,.18); color: #8fb3ff; }
+
+  /* ── 说明区 ── */
+  .notes {
+    width: 860px; max-width: 96vw;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+  .note-card {
+    border-radius: var(--radius-pane); padding: 14px 16px;
+    background: #23262c; box-shadow: 0 0 0 1px rgba(255,255,255,.07);
+  }
+  .note-card h3 { font-size: 13px; color: #cfd4dc; margin-bottom: 8px; font-weight: 600; }
+  .note-card li { font-size: 12px; color: #9aa0ab; line-height: 1.8; list-style: none; padding-left: 14px; position: relative; }
+  .note-card li::before { content: "·"; position: absolute; left: 2px; color: #5C9DFF; }
+  .note-card b { color: #d6dae1; font-weight: 600; }
+
+  .compare { display: flex; gap: 12px; width: 860px; max-width: 96vw; }
+  .cmp-card { flex: 1; border-radius: var(--radius-pane); background: #23262c; box-shadow: 0 0 0 1px rgba(255,255,255,.07); overflow: hidden; }
+  .cmp-card .cap { font-size: 12px; color: #9aa0ab; padding: 8px 14px; border-bottom: 1px solid rgba(255,255,255,.06); }
+  .cmp-card .cap b { color: #d6dae1; }
+</style>
+</head>
+<body>
+  <div class="page-head">
+    <h1>顶栏显示快捷钮 · 缩放 / 主题 / 语言 三钮合一</h1>
+    <p>合并现有「100% 缩放胶囊 / 深浅主题钮 / 语言钮」为单一功能图标，悬浮弹出面板直接设置；<br>
+       面板内新增第四项「窗口毛玻璃」开关——设置浮窗里的同名项即时联动，改动即刻生效。</p>
+    <span class="tag">方案预览 · design/quick-settings-popover-proposal.html · 悬停按钮体验交互</span>
+  </div>
+
+  <!-- 模拟窗口：真实交互（悬浮展开面板，全部控件可点） -->
+  <div class="mock light glass" id="mock">
+    <div class="tb">
+      <span class="logo"></span>
+      <span class="brand">X-Dir</span>
+      <span class="tb-ghost">浏览记录</span>
+      <span class="tb-ghost">全盘搜索</span>
+      <span class="tb-sep"></span>
+      <span class="island">灵动岛回执</span>
+      <span class="tb-spacer"></span>
+
+      <!-- 合并后的唯一入口 -->
+      <div class="qs-wrap">
+        <button class="tb-btn qs-btn" id="qsBtn" title="显示与外观（缩放 / 主题 / 语言 / 毛玻璃）">
+          <span id="qsIcon"></span>
+        </button>
+
+        <div class="qs-panel" id="qsPanel">
+          <div class="qs-row">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="11" x2="11" y1="8" y2="14"/><line x1="8" x2="14" y1="11" y2="11"/></svg>
+            <span class="qs-label" data-zh="界面缩放" data-en="UI zoom">界面缩放</span>
+            <span class="step">
+              <button id="zMinus">−</button>
+              <span class="val" id="zVal" title="点击重置 100%">100%</span>
+              <button id="zPlus">+</button>
+            </span>
+          </div>
+          <div class="qs-row">
+            <svg viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+            <span class="qs-label" data-zh="主题" data-en="Theme">主题</span>
+            <span class="seg" id="themeSeg">
+              <button data-v="light" data-zh="浅色" data-en="Light">浅色</button>
+              <button data-v="dark" data-zh="深色" data-en="Dark">深色</button>
+              <button data-v="auto" class="sel" data-zh="跟随系统" data-en="Auto">跟随系统</button>
+            </span>
+          </div>
+          <div class="qs-row">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+            <span class="qs-label" data-zh="语言" data-en="Language">语言</span>
+            <span class="seg" id="langSeg">
+              <button data-v="zh" class="sel">中文</button>
+              <button data-v="en">EN</button>
+            </span>
+          </div>
+          <div class="qs-row">
+            <svg viewBox="0 0 24 24"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/></svg>
+            <span class="qs-label" data-zh="窗口毛玻璃" data-en="Frosted window">窗口毛玻璃</span>
+            <span class="sw on" id="glassSw" role="switch"></span>
+          </div>
+          <div class="qs-hint" id="qsHint" data-zh="改动即时生效并与设置浮窗同步；毛玻璃低配置档自动关闭" data-en="Changes apply live and sync with Settings; frosted glass auto-off on low-end devices">
+            改动即时生效并与设置浮窗同步；毛玻璃低配置档自动关闭
+          </div>
+        </div>
+      </div>
+
+      <span class="tb-sep"></span>
+      <button class="tb-btn text" title="设置">⚙</button>
+      <button class="tb-btn text" title="关于">ⓘ</button>
+    </div>
+    <div class="canvas-hint"><div class="pane"></div></div>
+  </div>
+
+  <!-- tooltip 口径示意 -->
+  <div class="tip-demo">
+    <span style="color:#9aa0ab" id="tipCap">合并钮 tooltip（data-tip + data-kbd，120ms 全局自绘）：</span>
+    <span class="tip-card" id="tipCard">显示与外观 <kbd>Ctrl+Alt+S</kbd></span>
+  </div>
+
+  <!-- 现状对比 -->
+  <div class="compare">
+    <div class="cmp-card">
+      <div class="cap"><b>现状</b>：缩放胶囊 / 主题钮 / 语言钮 三处分散，毛玻璃要去设置浮窗</div>
+      <div class="tb" style="background:#2b2b2b;">
+        <span class="tb-spacer"></span>
+        <span class="zoom-pill">100%</span>
+        <button class="tb-btn"><svg viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></button>
+        <button class="tb-btn text">EN</button>
+        <span class="tb-spacer"></span>
+      </div>
+    </div>
+    <div class="cmp-card">
+      <div class="cap"><b>合并后</b>：单图标占位，悬浮即弹出四项快捷设置（右对齐防溢出）</div>
+      <div class="tb" style="background:#2b2b2b;">
+        <span class="tb-spacer"></span>
+        <button class="tb-btn"><span id="cmpIcon"></span></button>
+        <span class="tb-spacer"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 图标选型 -->
+  <div class="cmp-card" style="width:860px;max-width:96vw;">
+    <div class="cap"><b>功能图标选型 · 外观向</b> —— 点击任意候选即套用到上方按钮实时预览；图标均取自 lucide 官方 path（与 AppIcon 同源）</div>
+    <div class="icon-pick" id="iconPick"></div>
+  </div>
+
+  <!-- 设计说明 -->
+  <div class="notes">
+    <div class="note-card">
+      <h3>交互语义</h3>
+      <ul>
+        <li><b>悬浮 200ms</b> 弹出面板，移出按钮与面板 240ms 后关闭；<b>点击 = 固定/收起</b>（拖动窗口不误关）</li>
+        <li>面板<b>右缘对齐按钮右缘</b>下弹出（顶栏右侧贴边，防视口溢出，贴边自动翻转沿用 data-tip-down 口径）</li>
+        <li>合并钮 tooltip：显示与外观（data-kbd 键帽示意，落地时可注册全局热键）</li>
+        <li>Esc / 点击面板外任意处关闭；面板打开期间不拦截顶栏其余按钮</li>
+      </ul>
+    </div>
+    <div class="note-card">
+      <h3>四项设置口径</h3>
+      <ul>
+        <li><b>界面缩放</b>：− / + 步进（同 Ctrl+滚轮 1.1 档），点击数值重置 100%，与设置页 uiZoom 同源</li>
+        <li><b>主题</b>：浅色 / 深色 / 跟随系统 三态分段——比现按钮多出「跟随系统」显式档</li>
+        <li><b>语言</b>：中文 / EN 分段，切换即时重渲染（与现语言钮同语义）</li>
+        <li><b>窗口毛玻璃</b>：Switch 开关，与设置 → 外观同名项双向同步；低配置档禁用 + 提示（§4.10 门禁口径）</li>
+      </ul>
+    </div>
+  </div>
+
+<script>
+  const $ = (s) => document.querySelector(s);
+  const mock = $("#mock");
+
+  // ── 候选图标·第二批（外观向，lucide 官方 node 数据，与 AppIcon 同源） ──
+  const ICONS = {
+    "paintbrush": { zh: "涂装刷", rec: true, ds: "个性化/自定义外观直觉，Windows「个性化」同款意象" },
+    "shirt": { zh: "T 恤·皮肤", ds: "「主题 = 皮肤」中文语境最直觉，图形简洁" },
+    "eclipse": { zh: "日食", ds: "明暗模式一图说清，形态干净利落" },
+    "drama": { zh: "戏剧面具", ds: "GNOME 外观工具同源意象，个性化气质" },
+    "rainbow": { zh: "彩虹", ds: "多彩个性化，观感轻松" },
+    "aperture": { zh: "光圈", ds: "显示/成像语义，中性耐看" },
+    "paint-roller": { zh: "滚筒刷", ds: "涂装变体，与涂装刷二选一" },
+    "shapes": { zh: "三形状", ds: "形状/个性化，语义稍泛" },
+    "sparkle": { zh: "星光", ds: "效果感（毛玻璃特效呼应）" },
+    "sun-dim": { zh: "调光", ds: "亮度/观感调节，偏缩放与主题之间" },
+    "gem": { zh: "宝石", ds: "精致外观，个性化装饰感" },
+    "venetian-mask": { zh: "面具", ds: "外观/伪装意象，个性但指向偏弱" },
+  };
+  const NODES = {
+    "paintbrush": [["path", { d: "m14.622 17.897-10.68-2.913" }], ["path", { d: "M18.376 2.622a1 1 0 1 1 3.002 3.002L17.36 9.643a.5.5 0 0 0 0 .707l.944.944a2.41 2.41 0 0 1 0 3.408l-.944.944a.5.5 0 0 1-.707 0L8.354 7.348a.5.5 0 0 1 0-.707l.944-.944a2.41 2.41 0 0 1 3.408 0l.944.944a.5.5 0 0 0 .707 0z" }], ["path", { d: "M9 8c-1.804 2.71-3.97 3.46-6.583 3.948a.507.507 0 0 0-.302.819l7.32 8.883a1 1 0 0 0 1.185.204C12.735 20.405 16 16.792 16 15" }]],
+    "shirt": [["path", { d: "M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z" }]],
+    "eclipse": [["circle", { cx: "12", cy: "12", r: "10" }], ["path", { d: "M12 2a7 7 0 1 0 10 10" }]],
+    "drama": [["path", { d: "M10 11h.01" }], ["path", { d: "M14 6h.01" }], ["path", { d: "M18 6h.01" }], ["path", { d: "M6.5 13.1h.01" }], ["path", { d: "M22 5c0 9-4 12-6 12s-6-3-6-12c0-2 2-3 6-3s6 1 6 3" }], ["path", { d: "M17.4 9.9c-.8.8-2 .8-2.8 0" }], ["path", { d: "M10.1 7.1C9 7.2 7.7 7.7 6 8.6c-3.5 2-4.7 3.9-3.7 5.6 4.5 7.8 9.5 8.4 11.2 7.4.9-.5 1.9-2.1 1.9-4.7" }], ["path", { d: "M9.1 16.5c.3-1.1 1.4-1.7 2.4-1.4" }]],
+    "rainbow": [["path", { d: "M22 17a10 10 0 0 0-20 0" }], ["path", { d: "M6 17a6 6 0 0 1 12 0" }], ["path", { d: "M10 17a2 2 0 0 1 4 0" }]],
+    "aperture": [["circle", { cx: "12", cy: "12", r: "10" }], ["path", { d: "m14.31 8 5.74 9.94" }], ["path", { d: "M9.69 8h11.48" }], ["path", { d: "m7.38 12 5.74-9.94" }], ["path", { d: "M9.69 16 3.95 6.06" }], ["path", { d: "M14.31 16H2.83" }], ["path", { d: "m16.62 12-5.74 9.94" }]],
+    "paint-roller": [["rect", { width: "16", height: "6", x: "2", y: "2", rx: "2" }], ["path", { d: "M10 16v-2a2 2 0 0 1 2-2h8a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" }], ["rect", { width: "4", height: "6", x: "8", y: "16", rx: "1" }]],
+    "shapes": [["path", { d: "M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1Z" }], ["rect", { x: "3", y: "14", width: "7", height: "7", rx: "1" }], ["circle", { cx: "17.5", cy: "17.5", r: "3.5" }]],
+    "sparkle": [["path", { d: "M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" }]],
+    "sun-dim": [["circle", { cx: "12", cy: "12", r: "4" }], ["path", { d: "M12 4h.01" }], ["path", { d: "M20 12h.01" }], ["path", { d: "M12 20h.01" }], ["path", { d: "M4 12h.01" }], ["path", { d: "M17.657 6.343h.01" }], ["path", { d: "M17.657 17.657h.01" }], ["path", { d: "M6.343 17.657h.01" }], ["path", { d: "M6.343 6.343h.01" }]],
+    "gem": [["path", { d: "M10.5 3 8 9l4 13 4-13-2.5-6" }], ["path", { d: "M17 3a2 2 0 0 1 1.6.8l3 4a2 2 0 0 1 .013 2.382l-7.99 10.986a2 2 0 0 1-3.247 0l-7.99-10.986A2 2 0 0 1 2.4 7.8l2.998-3.997A2 2 0 0 1 7 3z" }], ["path", { d: "M2 9h20" }]],
+    "venetian-mask": [["path", { d: "M18 11c-1.5 0-2.5.5-3 2" }], ["path", { d: "M4 6a2 2 0 0 0-2 2v4a5 5 0 0 0 5 5 8 8 0 0 1 5 2 8 8 0 0 1 5-2 5 5 0 0 0 5-5V8a2 2 0 0 0-2-2h-3a8 8 0 0 0-5 2 8 8 0 0 0-5-2z" }], ["path", { d: "M6 11c1.5 0 2.5.5 3 2" }]],
+  };
+  function iconSvg(name) {
+    const attrs = (a) => Object.entries(a).map(([k, v]) => `${k}="${v}"`).join(" ");
+    return `<svg viewBox="0 0 24 24">${NODES[name].map(([tag, a]) => `<${tag} ${attrs(a)}/>`).join("")}</svg>`;
+  }
+  function applyIcon(name) {
+    $("#qsIcon").innerHTML = iconSvg(name);
+    $("#qsIcon").style.display = "inline-flex";
+    $("#qsIcon").querySelector("svg").style.cssText = "width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round";
+    $("#cmpIcon").innerHTML = iconSvg(name);
+    $("#cmpIcon").style.display = "inline-flex";
+    $("#cmpIcon").querySelector("svg").style.cssText = "width:16px;height:16px;stroke:#d4d4d4;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round";
+    document.querySelectorAll(".icon-card").forEach((c) => c.classList.toggle("sel", c.dataset.k === name));
+  }
+  // 选型条渲染
+  const pick = $("#iconPick");
+  for (const [k, meta] of Object.entries(ICONS)) {
+    const card = document.createElement("button");
+    card.className = "icon-card";
+    card.dataset.k = k;
+    card.innerHTML = `${iconSvg(k)}<span class="nm">${meta.zh}</span><span class="ds">${meta.ds}</span>${meta.rec ? '<span class="bd">推荐</span>' : ""}`;
+    card.onclick = () => applyIcon(k);
+    pick.appendChild(card);
+  }
+  applyIcon("paintbrush");
+
+  // ── 主题：浅/深/跟随系统（跟随 = 预览页初次按系统偏好落档） ──
+  let theme = "auto";
+  const sysDark = matchMedia("(prefers-color-scheme: dark)").matches;
+  function applyTheme() {
+    const dark = theme === "dark" || (theme === "auto" && sysDark);
+    mock.classList.toggle("dark", dark);
+    mock.classList.toggle("light", !dark);
+  }
+  applyTheme();
+  $("#themeSeg").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    theme = b.dataset.v;
+    [...$("#themeSeg").children].forEach((x) => x.classList.toggle("sel", x === b));
+    applyTheme();
+  });
+
+  // ── 语言：中/EN 切换全部 data-zh/data-en 文案 ──
+  $("#langSeg").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    const lang = b.dataset.v;
+    [...$("#langSeg").children].forEach((x) => x.classList.toggle("sel", x === b));
+    document.querySelectorAll("[data-zh]").forEach((el) => {
+      el.textContent = lang === "en" ? el.dataset.en : el.dataset.zh;
+    });
+    $("#tipCard").firstChild.textContent = lang === "en" ? "Display & appearance " : "显示与外观 ";
+    $("#zVal").title = lang === "en" ? "Click to reset 100%" : "点击重置 100%";
+  });
+
+  // ── 缩放步进：1.1 档同 Ctrl+滚轮，点击数值重置 100% ──
+  let zoom = 100;
+  const zVal = $("#zVal");
+  const renderZoom = () => (zVal.textContent = Math.round(zoom * 10) / 10 + "%");
+  $("#zMinus").onclick = () => { zoom = Math.max(50, zoom / 1.1); renderZoom(); };
+  $("#zPlus").onclick = () => { zoom = Math.min(200, zoom * 1.1); renderZoom(); };
+  zVal.onclick = () => { zoom = 100; renderZoom(); };
+
+  // ── 毛玻璃开关：切换模拟窗的霜玻璃 ──
+  $("#glassSw").onclick = () => {
+    const on = $("#glassSw").classList.toggle("on");
+    $("#glassSw").classList.toggle("off", !on);
+    mock.classList.toggle("glass", on);
+  };
+
+  // ── 面板：悬浮 200ms 弹出 / 移出 240ms 关闭 / 点击固定切换 ──
+  const btn = $("#qsBtn"), panel = $("#qsPanel");
+  const wrap = btn.parentElement;
+  let pin = false, t1, t2;
+  const open = () => { panel.classList.add("on"); btn.classList.add("open"); };
+  const close = () => { panel.classList.remove("on"); btn.classList.remove("open"); };
+  btn.addEventListener("mouseenter", () => { clearTimeout(t2); t1 = setTimeout(open, 200); });
+  btn.addEventListener("mouseleave", () => { clearTimeout(t1); if (!pin) t2 = setTimeout(close, 240); });
+  panel.addEventListener("mouseenter", () => clearTimeout(t2));
+  panel.addEventListener("mouseleave", () => { if (!pin) t2 = setTimeout(close, 240); });
+  btn.addEventListener("click", () => {
+    pin = !pin;
+    pin ? (clearTimeout(t2), open()) : (panel.classList.contains("on") && false, close());
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { pin = false; close(); } });
+</script>
+</body>
+</html>

@@ -22,15 +22,10 @@ export const EN: Record<string, string> = {
   "关于 X-Dir": "About X-Dir",
   "关于 X-Dir（发现新版本 {v}）": "About X-Dir (new version {v} found)",
   "拖动窗口 · 双击最大化/还原": "Drag to move · Double-click to maximize/restore",
-  "切换为浅色主题": "Switch to light theme",
-  "切换为深色主题": "Switch to dark theme",
   "最小化": "Minimize",
   "最大化": "Maximize",
   "还原": "Restore",
   "关闭窗口": "Close window",
-  "界面缩放 {p}% · Ctrl+滚轮 / Ctrl+加减号调整 · 点击重置 100%":
-    "UI zoom {p}% · Ctrl+scroll or Ctrl+plus/minus to adjust · Click to reset to 100%",
-  "切换到英文界面": "Switch to English",
   // 语言切换钮的目标语言名（EN 界面下显示），专名不翻译；与尺寸档 t("中")
   // → "Medium" 刻意区分（2026-11-17 键位冲突实测：语言钮曾错显 Medium）
   "中文": "中文",
@@ -791,6 +786,12 @@ export const EN: Record<string, string> = {
   "烘焙 EXIF 方向（手机照片转正，顺带抹除位置等元数据）": "Bake EXIF orientation (straighten phone photos and strip GPS metadata)",
   "用默认程序打开": "Open with default app",
   "界面缩放": "UI zoom",
+  "显示与外观": "Display & appearance",
+  "语言": "Language",
+  "缩小": "Zoom out",
+  "放大": "Zoom in",
+  "点击重置 100%": "Click to reset to 100%",
+  "改动即时生效，与设置浮窗同步": "Changes apply live and stay in sync with Settings",
   "目标窗格在「此电脑」页，请先进入一个文件夹": "Target pane is on This PC — enter a folder first",
   "直接子项": "Direct children",
   "真实文件图标": "Real file icons",

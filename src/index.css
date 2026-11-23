@@ -1128,7 +1128,6 @@ input:where(:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
   color: var(--np-muted);
 }
 /* pill 胶囊：全圆角 + 小字（底色/内边距/悬停语义在各成员自带，§4.7） */
-.np-zoompill,
 .np-pv-badge,
 .np-gsearch-chip,
 .np-gsearch-idx,
@@ -1369,8 +1368,6 @@ body:has(
   }
 }
 @container np-tb (max-width: 640px) {
-  .np-titlebar .np-zoompill,
-  .np-titlebar .np-langbtn,
   .np-titlebar .np-about-btn {
     display: none;
   }
@@ -1378,7 +1375,7 @@ body:has(
 @container np-tb (max-width: 380px) {
   .np-titlebar .np-title,
   .np-titlebar [data-tb="tree"],
-  .np-titlebar .np-theme-btn,
+  .np-titlebar .np-qs-btn,
   .np-titlebar [data-tb="sys"] {
     display: none;
   }
@@ -1575,18 +1572,83 @@ body:has(
   background: var(--np-danger);
   color: var(--np-danger-fg);
 }
-/* 界面缩放指示 pill（顶栏右缘、窗口控制钮左侧；常显，点击重置 100%） */
-.np-zoompill {
-  flex: 0 0 auto;
-  padding: 2px 8px;
-  border: 0;
-  background: var(--np-surface-2);
-  color: var(--np-muted);
-  cursor: pointer;
+/* 显示与外观快捷面板（2026-11-23 三钮合一）：顶栏右缘悬浮弹出，四行直设
+   （缩放步进 / 主题三态 / 语言二态 / 毛玻璃开关），与设置浮窗同一 store
+   双向同步；面板 = PopoverNext surface 卡（全局 .bp6-popover 脸），行高
+   34px 中轴对齐，seg 复用 .np-seg 勾选 chip 配方 */
+.np-qs-panel {
+  width: 272px;
+  padding: 6px;
 }
-.np-zoompill:hover {
+.np-qs-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 8px;
+  border-radius: var(--np-radius);
+}
+.np-qs-row:hover {
+  background: var(--np-hover);
+}
+.np-qs-ic {
+  color: var(--np-muted);
+}
+.np-qs-label {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+  white-space: nowrap;
+}
+.np-qs-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.np-qs-stepbtn {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: var(--np-radius);
+  background: transparent;
+  color: var(--np-muted);
+  font-family: inherit;
+  font-size: var(--np-font-ui);
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.np-qs-stepbtn:hover {
   background: var(--np-hover);
   color: var(--np-fg);
+}
+.np-qs-val {
+  min-width: 48px;
+  height: 22px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-surface-2);
+  color: var(--np-muted);
+  font-family: inherit;
+  font-size: var(--np-font-sm);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.np-qs-val:hover {
+  background: var(--np-hover);
+  color: var(--np-fg);
+}
+.np-qs-hint {
+  margin: 2px 8px 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--np-hairline);
+  font-size: var(--np-font-sm);
+  line-height: 1.5;
+  color: var(--np-muted);
 }
 
 /* 左侧边栏（2026-10-17 卡片化）：透明沟槽容器，上下两张卡（布局方案 / 暂存区）
@@ -6456,23 +6518,6 @@ body.np-col-resizing * {
 }
 .np-textarea::placeholder {
   color: var(--np-muted);
-}
-
-/* 界面语言切换钮（2026-10-21）：顶栏明暗切换钮右侧，显示目标语言缩写
-   （中文界面显 EN、英文界面显 中），点按在 zh/en 间切换，词典见 lib/i18n.ts */
-.np-langbtn {
-  height: 24px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: var(--np-radius-pill);
-  background: none;
-  color: var(--np-muted);
-  font-size: var(--np-font-sm);
-  cursor: pointer;
-}
-.np-langbtn:hover {
-  background: var(--np-hover);
-  color: var(--np-fg);
 }
 
 /* PDF 合并对话框（2026-10-22）：待处理清单 = surface-2 凹陷列表（§4.7
