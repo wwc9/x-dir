@@ -458,6 +458,53 @@ html.glasswin.bp6-dark > body {
     rgba(52 26 40 / calc(var(--np-glass-pop-alpha, 0.5) * 0.8))
   );
 }
+/* ═══ 玻璃值组件（2026-11-23 用户需求「为值组件做一套磨玻璃效果：切换类/选择值类」）═══
+   glasswin 作用域专属（实底模式维持 Blueprint 原样）：Switch 轨道半透子面 +
+   旋钮磨玻璃圆片（backdrop blur 采样所在霜面与画布）、Checkbox/Radio 指示器
+   半透子面、Slider 拇指磨玻璃圆片 + 轨道沿用 surface-2 半透；选中态统一
+   accent（顺带修 glasswin 作用域内 Blueprint #2d72d2 未走 token 的偏差，同
+   设置滑块皮肤先例）。属卡内值控件子面（§4.10 子面玻璃化口径：叠在已模糊
+   卡片上、半透即可无穿透风险），不入 frostFamily 浮层强霜家族审计名单 */
+html.glasswin .bp6-control .bp6-control-indicator {
+  background: rgba(255, 255, 255, 0.4);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+html.glasswin.bp6-dark .bp6-control .bp6-control-indicator {
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+html.glasswin .bp6-control input:checked ~ .bp6-control-indicator {
+  background: var(--np-accent);
+  box-shadow: none;
+}
+/* 开关旋钮：磨玻璃圆片（blur 采样 accent 轨道/所在霜面），几何沿用 Blueprint */
+html.glasswin .bp6-control.bp6-switch .bp6-control-indicator::before {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(6px) saturate(1.3);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+html.glasswin.bp6-dark .bp6-control.bp6-switch .bp6-control-indicator::before {
+  background: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+/* 滑杆：拇指磨玻璃圆片（覆盖设置页 np-set-slider 与参数行裸 Slider 两处）、
+   进度统一 accent（修 Blueprint 默认蓝）、轨道半透子面 */
+html.glasswin .bp6-slider-track {
+  background: var(--np-surface-2);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+html.glasswin .bp6-slider-progress {
+  background: var(--np-accent);
+}
+html.glasswin .bp6-slider-handle {
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(10px) saturate(1.4);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.3);
+}
+html.glasswin.bp6-dark .bp6-slider-handle {
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
 /* ═══ 玻璃背景图案（2026-11-18 收敛定案：六案比选后用户拍板「除极光外全删」——
    五案〔云隙晨光 dawn/几何构成 geo/绸缎流波 silk/点阵蓝图 blueprint/暮山层影
    mountain〕整段移除，仅留极光基座 + 自定义图片；色相家族近似〔深色五案全在
