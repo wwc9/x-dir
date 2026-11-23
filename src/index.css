@@ -6998,6 +6998,9 @@ body.np-col-resizing * {
   border-radius: var(--np-radius);
   background: var(--np-surface-2);
   color: var(--np-fg);
+  /* 等宽字体（2026-11-23 用户需求「识别结果用等宽的字体」）：OCR 文本按字
+   * 符网格对齐呈现，与 kbd/代码预览同款栈；CJK 字形回落系统字体不受影响 */
+  font-family: Consolas, "Cascadia Mono", monospace;
   font-size: var(--np-font-ui);
   line-height: 1.5;
   outline: none;
