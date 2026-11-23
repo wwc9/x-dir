@@ -821,7 +821,8 @@ html.glasswin .np-winedge-top {
    描边勾选 chip（design/wm-seg-proposals.html），替代 surface-2 轨道 + accent
    实心填充——纯文字多段时唯一选中信号太弱，且 accent 整块填充会吞掉语义色
    （水印颜色行选「红」时按蓝底）：无轨道，每项独立 chip 描边兜边界，
-   选中 = sel 淡染底 + accent 字重 600 + ✓ 前缀；未选 = 无底色 muted 字。
+   选中 = sel 淡染底 + accent 字重 600；未选 = 无底色 muted 字。
+   （✓ 前缀 2026-11-23 用户定案退役：「有蓝色选中样式已经比较明显了」）
    全部无描边（2026-11-11 用户两次定案收敛：先去选中 accent 描边、再去
    未选灰描边——「选项值 chip 一律无框」，蓝/灰底 + 圆角即边界信号）；
    设置/菜单编辑/工具箱对话框通用 */
@@ -851,12 +852,6 @@ html.glasswin .np-winedge-top {
   background-image: none;
   color: var(--np-accent);
   font-weight: 600;
-}
-/* 选中 ✓ 前缀：::before 占位，选中态 chip 略增宽（提案稿同款行为） */
-.np-seg .bp6-button.bp6-active::before {
-  content: "✓";
-  font-size: var(--np-font-sm);
-  margin-right: var(--np-gap);
 }
 /* Popover 面板统一（菜单 / 布局选择器 / 设置面板 / 地址历史等共用一张"脸"）：
    与 .bp6-menu 同款 surface 卡片 + 大圆角 + np 阴影，深浅主题随 token 自适应 */
@@ -7769,7 +7764,7 @@ body.np-col-resizing * {
    面板窗（clipboard.html 轻量入口），视觉对齐弹层统一规范（§4.7）——
    surface 卡 + border ring（Popover 同脸）、列表行/选中/悬停对齐文件列表
    np-row 口径（sel 淡染底 + accent 文字）、类型分段复用 np-seg 配方
-   （勾选 chip：sel 底 + accent 600 + ✓ 前缀，无描边——2026-11-11 全局定案）；
+   （sel 底 + accent 600，无描边——2026-11-11 全局定案；✓ 前缀 2026-11-23 退役）；
    置顶条目排前，行内动作按钮（置顶/删除）悬停与选中行常显。
    ══════════════════════════════════════════════════════════════ */
 .np-clip {

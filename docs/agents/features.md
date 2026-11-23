@@ -55,7 +55,7 @@
 
 **组件与模块**：`Switch`（v6 无 small，默认即紧凑）、`RadioGroup`、`ButtonGroup`、自研 `np-seg`。
 
-- 分段选择 = np-seg 勾选 chip：配方单源 index.css `.np-seg` 段——选中态 = sel 淡染蓝底 + accent 文字加粗 + ✓ 前缀、**无描边**（终态口径见 ui-standards §4.9），未选 = 无底色 muted 字；新增变体只覆写尺寸、禁止复写选中态或加回边框。
+- 分段选择 = np-seg 勾选 chip：配方单源 index.css `.np-seg` 段——选中态 = sel 淡染蓝底 + accent 文字加粗、**无描边**（✓ 前缀 2026-11-23 用户定案退役——「有蓝色选中样式已经比较明显了」；终态口径见 ui-standards §4.9），未选 = 无底色 muted 字；新增变体只覆写尺寸、禁止复写选中态或加回边框。
 
 ### 1.8 图标
 
