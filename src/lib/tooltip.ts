@@ -125,12 +125,21 @@ export function initTooltip(): () => void {
     downEl = (e.target as Element | null)?.closest?.("[data-tip]") ?? null;
     hide();
   };
+  // mouseup 即解除按下态（2026-11-23 用户报「顶栏截图的 tooltips 怎么没了」）：
+  // downEl 此前只在下一次 mousedown 才复位——点击截图等动作钮后再次悬停同一
+  // 按钮，enter() 的 target === downEl 门会一直拒绝展示，tooltip 永久消失
+  // （其他未点过的按钮不受影响）。按下期间（mousedown → mouseup）仍维持
+  // 隐藏不回弹，松开后悬停即恢复
+  const up = () => {
+    downEl = null;
+  };
   const key = (e: KeyboardEvent) => {
     if (e.key === "Escape") hide();
   };
   document.addEventListener("mouseover", over);
   document.addEventListener("focusin", focus);
   document.addEventListener("mousedown", down);
+  document.addEventListener("mouseup", up);
   document.addEventListener("keydown", key);
   window.addEventListener("scroll", hide, true);
   window.addEventListener("resize", hide);
@@ -140,6 +149,7 @@ export function initTooltip(): () => void {
     document.removeEventListener("mouseover", over);
     document.removeEventListener("focusin", focus);
     document.removeEventListener("mousedown", down);
+    document.removeEventListener("mouseup", up);
     document.removeEventListener("keydown", key);
     window.removeEventListener("scroll", hide, true);
     window.removeEventListener("resize", hide);
