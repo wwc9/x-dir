@@ -488,6 +488,36 @@ html.glasswin.bp6-dark .bp6-control.bp6-switch .bp6-control-indicator::before {
   background: rgba(255, 255, 255, 0.25);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25);
 }
+/* 分段（np-seg glasswin 变体，2026-11-23 用户需求「这个组件优化磨玻璃效果」）：
+   未选 chip = 半透白子面 + backdrop blur（磨玻璃质感透出所在霜面/画布）、
+   hover 加深一档；选中 = accent 半透 + 同款 blur。§4.9「无描边」定案不破——
+   玻璃质感靠 blur + 透明度层次，不加框线；dark 对应半透白 .08 一档。
+   选择器结构镜像上方 (0,5,0) 双类兜底（html.glasswin 前缀整体 +1 级必胜） */
+html.glasswin .np-seg .bp6-button {
+  background: rgba(255, 255, 255, 0.42);
+  backdrop-filter: blur(6px) saturate(1.3);
+}
+html.glasswin .np-seg .bp6-button:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+html.glasswin .np-seg .bp6-button.bp6-active,
+html.glasswin .np-seg .bp6-button.bp6-active.bp6-active:hover,
+html.glasswin .bp6-button-group.np-seg .bp6-button.bp6-active.bp6-active,
+html.glasswin .bp6-button-group.np-seg .bp6-button.bp6-active.bp6-active:hover {
+  background: rgba(53, 116, 240, 0.16);
+}
+html.glasswin.bp6-dark .np-seg .bp6-button {
+  background: rgba(255, 255, 255, 0.08);
+}
+html.glasswin.bp6-dark .np-seg .bp6-button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+html.glasswin.bp6-dark .np-seg .bp6-button.bp6-active,
+html.glasswin.bp6-dark .np-seg .bp6-button.bp6-active.bp6-active:hover,
+html.glasswin.bp6-dark .bp6-button-group.np-seg .bp6-button.bp6-active.bp6-active,
+html.glasswin.bp6-dark .bp6-button-group.np-seg .bp6-button.bp6-active.bp6-active:hover {
+  background: rgba(92, 157, 255, 0.2);
+}
 /* ═══ 玻璃背景图案（2026-11-18 收敛定案：六案比选后用户拍板「除极光外全删」——
    五案〔云隙晨光 dawn/几何构成 geo/绸缎流波 silk/点阵蓝图 blueprint/暮山层影
    mountain〕整段移除，仅留极光基座 + 自定义图片；色相家族近似〔深色五案全在
