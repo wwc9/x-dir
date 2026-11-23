@@ -668,6 +668,14 @@ html.glasswin .np-palette {
   -webkit-backdrop-filter: blur(max(calc(var(--np-glass-pop-blur, 20px) * 0.55), 8px)) saturate(1.4);
   backdrop-filter: blur(max(calc(var(--np-glass-pop-blur, 20px) * 0.55), 8px)) saturate(1.4);
 }
+/* PopoverNext + Menu 组合去双霜（2026-11-23 用户反馈「下拉菜单还是没有磨玻璃
+   效果」）：外壳 .bp6-popover-content 与内里 .bp6-menu 各挂一层 0.5 白霜，
+   叠加有效白 ~0.75 → 下拉呈实底白看不出磨玻璃。菜单体在强霜外壳内转透明，
+   单层外壳霜即成——菜单项悬停/选中态自带底色不受影响；.np-ctx-pop（右键
+   子菜单透明壳）经上方 :not 排除，自持霜面不变 */
+html.glasswin .bp6-popover:not(.np-ctx-pop) .bp6-popover-content .bp6-menu {
+  background: transparent;
+}
 /* 弹窗染色极光玻璃（2026-11-18 用户定案 = 方案 C，design/dialog-glass-proposal-c-tinted.html）：
    background = --np-dialog-glass 主题化极光染色渐变；顶缘受光内高光补边界
    （深色按卡片家族口径 8% 白）。可读性由 blur(40)+染色面自持——遮罩方案 A
