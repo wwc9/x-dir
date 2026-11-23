@@ -2418,7 +2418,10 @@ body.np-col-resizing .np-menued-grip::after {
   overflow-y: auto;
   /* 兜底禁横向滚动（2026-11-17 用户定案）：行内容超宽时截断而非撑出横滚条 */
   overflow-x: hidden;
-  padding: 2px 2px 2px 14px;
+  /* 右缘 12px = 与胶囊滚动条（10px 槽）的安全距离——此前 2px 时行尾值
+     （9 px/43 %）与开关贴住滚动条（2026-11-23 用户反馈「滚动条离内容区域
+     太近了」）；左 14px 与导航分隔线对齐 */
+  padding: 2px 12px 2px 14px;
 }
 
 /* 设置行：左侧 标题+说明、右侧控件；相邻行以 hairline 分隔 */
