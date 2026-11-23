@@ -40,7 +40,11 @@ export function NpSelect<T extends string | number>({
     <PopoverNext
       isOpen={open}
       onInteraction={setOpen}
-      placement="bottom-start"
+      // bottom-end：菜单右缘对齐触发钮右缘、向左展开——值列下拉普遍贴所在
+      // 界面（设置浮窗/参数对话框）右缘，bottom-start 会把宽菜单推出界面外
+      // （2026-11-23 用户反馈「超过了设置界面的范围」）；视口级翻转仍由
+      // Blueprint 自动处理（贴近视口左缘时翻回 bottom-start）
+      placement="bottom-end"
       arrow={false}
       content={
         <Menu className={popoverClassName}>
