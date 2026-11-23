@@ -1375,8 +1375,7 @@ body:has(
 @container np-tb (max-width: 380px) {
   .np-titlebar .np-title,
   .np-titlebar [data-tb="tree"],
-  .np-titlebar .np-qs-btn,
-  .np-titlebar [data-tb="sys"] {
+  .np-titlebar .np-qs-btn {
     display: none;
   }
 }

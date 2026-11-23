@@ -834,11 +834,6 @@ export function TitleBar() {
         <AboutBadgeDot />
       </Button>
 
-      {/* 语义分组分隔：设置/关于 | 显示外观组（原中央拖拽区已拆为三段各自的
-          np-tb-fill 弹性补白，2026-11-11 三段居中定案；data-tb=sys ≤380 随
-          快捷面板钮同收防孤儿线） */}
-      <span className="np-tb-sep" aria-hidden data-tb="sys" />
-
       {/* 显示与外观快捷面板（2026-11-23 用户定案「三钮合一 + 悬浮直接设置」）：
           缩放/主题/语言/窗口毛玻璃四项收纳进单一功能钮（用户选定面具图标
           lucide VenetianMask），悬浮即开（沿用弹层组悬浮约定），全部控件与
