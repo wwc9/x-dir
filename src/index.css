@@ -1250,16 +1250,18 @@ body:has(
   height: 100%;
 }
 /* 顶栏语义分组分隔线（2026-10-20 定案）：浏览定位 | 全局模式、应用级 | 窗口控制。
-   用 --np-border（hairline 对 14px 短竖线过淡）；与窗口控制钮之间自然形成
-   ~9px 间隙，兼作低频钮的防误触安全距离。高分缩放收纳时部分分隔线挂同名
-   data-tb 随组同收（孤儿线防护，梯度见「顶栏渐进收纳」段） */
+   高分缩放收纳时部分分隔线挂同名 data-tb 随组同收（孤儿线防护，梯度见
+   「顶栏渐进收纳」段）。原色 --np-border（固定浅灰/深灰）在毛玻璃/自定义壁纸
+   的彩色渐变画布上对比度随底色漂移——同一顶栏左白右蓝时右侧线几乎隐形
+   （2026-11-23 用户反馈「左右竖线的样式要一致」）→ 改由前景色低透明度派生：
+   与正文文字同源对比，任意主题、任意画布底色下观感一致 */
 .np-tb-sep {
   flex: 0 0 auto;
   align-self: center;
   width: 1px;
   height: 14px;
   margin: 0 5px;
-  background: var(--np-border);
+  background: color-mix(in srgb, var(--np-fg) 22%, transparent);
 }
 .np-logo {
   display: flex;
