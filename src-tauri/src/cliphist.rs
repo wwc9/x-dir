@@ -1661,11 +1661,58 @@ pub(crate) fn ocr_png_text(png: &[u8]) -> Result<String, String> {
         .Text()
         .map_err(|e| format!("取识别文本失败：{e}"))?
         .to_string();
-    let text = text.trim().to_string();
+    let text = normalize_ocr_spaces(text.trim());
     if text.is_empty() {
         return Err("未识别出文字".into());
     }
     Ok(text)
+}
+
+/// 空格邻接的字符是否属于 CJK（汉字/CJK 扩展/兼容区/假名/谚文/CJK 符号与
+/// 标点/全角形式）：这些位置的空格是识别噪声而非排版语义
+fn is_cjk_ish(c: char) -> bool {
+    matches!(c,
+        '\u{3040}'..='\u{30FF}'   // 平假名 / 片假名
+        | '\u{3400}'..='\u{4DBF}' // CJK 扩展 A
+        | '\u{4E00}'..='\u{9FFF}' // CJK 统一表意文字
+        | '\u{AC00}'..='\u{D7AF}' // 谚文
+        | '\u{F900}'..='\u{FAFF}' // CJK 兼容表意文字
+        | '\u{3000}'..='\u{303F}' // CJK 符号与标点（含全角空格外的间隔号等）
+        | '\u{FF00}'..='\u{FFEF}' // 全角形式（全角标点/拉丁/数字）
+    )
+}
+
+/// OCR 文本空格规整（2026-11-23 用户反馈「字符间距有点大，是不是空格太多了」）：
+/// Windows.Media.Ocr 对中文截图常在汉字/全角标点乃至西文词与汉字之间吐出成串
+/// ASCII 空格（识别噪声）——中文排版本不以空格分词，规整 = 连续空格段只要
+/// 任一侧邻接 CJK 即整段去除；两侧均非 CJK 的西文词间空格原样保留。
+/// 只处理 ASCII 空格（U+0020）：全角空格是显式排版意图，不碰。
+pub fn normalize_ocr_spaces(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == ' ' {
+            let mut j = i;
+            while j < chars.len() && chars[j] == ' ' {
+                j += 1;
+            }
+            // 空格段 [i, j)：邻接 CJK 即整段为噪声；行首/尾只看有字的一侧
+            let dropped = match (i.checked_sub(1).map(|k| chars[k]), chars.get(j).copied()) {
+                (Some(p), Some(n)) => is_cjk_ish(p) || is_cjk_ish(n),
+                (Some(p), None) | (None, Some(p)) => is_cjk_ish(p),
+                (None, None) => true, // 全文皆空格：无语义，去除
+            };
+            if !dropped {
+                out.extend(&chars[i..j]);
+            }
+            i = j;
+        } else {
+            out.push(chars[i]);
+            i += 1;
+        }
+    }
+    out
 }
 
 /// PNG 字节 → OCR 识别文本（无状态重活；识别结果写回剪贴板）
@@ -1886,6 +1933,38 @@ pub fn write_back(
 mod tests {
     use super::*;
     use image::GenericImageView;
+
+    /// OCR 空格规整（2026-11-23）：CJK 邻接的空格段是识别噪声整段去除，
+    /// 西文词间空格原样保留，换行与空格行结构不动
+    #[test]
+    fn normalize_ocr_spaces_rules() {
+        // 汉字间 / 汉字与全角标点间：逐个去除
+        assert_eq!(normalize_ocr_spaces("基 线 悬 停"), "基线悬停");
+        assert_eq!(normalize_ocr_spaces("双 端 ）。截 图"), "双端）。截图");
+        // 连续多空格整段去除
+        assert_eq!(normalize_ocr_spaces("汉  汉"), "汉汉");
+        // 西文/数字与汉字之间：同样去除（中文排版无词间空格）
+        assert_eq!(normalize_ocr_spaces("截图 OCR 识别"), "截图OCR识别");
+        assert_eq!(normalize_ocr_spaces("7 、点击"), "7、点击");
+        assert_eq!(
+            normalize_ocr_spaces("全绿、 npm run build 零错误"),
+            "全绿、npm run build零错误"
+        );
+        // 西文词间（两侧均非 CJK）：保留，多空格也原样
+        assert_eq!(normalize_ocr_spaces("hello world"), "hello world");
+        assert_eq!(normalize_ocr_spaces("npm  run  build"), "npm  run  build");
+        // 换行结构与行首尾不破坏
+        assert_eq!(normalize_ocr_spaces("汉 \n 汉"), "汉\n汉");
+        assert_eq!(normalize_ocr_spaces("a\nb c"), "a\nb c");
+        // 行尾空格邻接汉字去除；邻接西文保留
+        assert_eq!(normalize_ocr_spaces("汉 \n"), "汉\n");
+        assert_eq!(normalize_ocr_spaces("a \n"), "a \n");
+        // 空文本与纯空格
+        assert_eq!(normalize_ocr_spaces(""), "");
+        assert_eq!(normalize_ocr_spaces("   "), "");
+        // 全角空格（U+3000）是显式排版意图：不碰
+        assert_eq!(normalize_ocr_spaces("汉\u{3000}汉"), "汉\u{3000}汉");
+    }
 
     fn mem_db() -> Connection {
         let c = Connection::open_in_memory().expect("内存库");
