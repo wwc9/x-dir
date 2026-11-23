@@ -119,6 +119,11 @@ export function TitleBar() {
   // 更新检查结果（启动静默检查 / 关于浮窗写入）：有新版本时关于钮亮角标
   const updateCheck = useUi((s) => s.updateCheck);
   const hasNewVersion = isUpdateAvailable(updateCheck);
+  // 关于钮角标显示条件（与 AboutBadgeDot 内部判定同源）：children 必须在
+  // 不显示时传 false——传 <AboutBadgeDot/>（内部渲染 null）会被 Blueprint
+  // 判定"有文字内容"，图标失去 icon-only 负边距补偿，关于钮两侧多出空白
+  const aboutOpen = useUi((s) => s.aboutOpen);
+  const dotVisible = !aboutOpen && hasNewVersion;
   const [histOpen, setHistOpen] = useState(false);
   const [favOpen, setFavOpen] = useState(false);
   // 显示与外观快捷面板（2026-11-23 三钮合一）：缩放/主题/语言/毛玻璃悬浮直设
@@ -831,7 +836,7 @@ export function TitleBar() {
         }
         onClick={() => useUi.getState().openAbout()}
       >
-        <AboutBadgeDot />
+        {dotVisible ? <AboutBadgeDot /> : false}
       </Button>
 
       {/* 显示与外观快捷面板（2026-11-23 用户定案「三钮合一 + 悬浮直接设置」）：
