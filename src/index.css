@@ -460,11 +460,13 @@ html.glasswin.bp6-dark > body {
 }
 /* ═══ 玻璃值组件（2026-11-23 用户需求「为值组件做一套磨玻璃效果：切换类/选择值类」；
      同日用户复述「滑杆要保持之前的样式」→ 滑杆相关玻璃规则撤回，np-set-slider
-     皮肤与裸 Slider Blueprint 原样维持）═══
+     皮肤与裸 Slider Blueprint 原样维持；2026-11-24 用户需求「开关开启态重新优化
+     磨玻璃效果」→ Switch 选中态玻璃化，见下方开关开启态规则）═══
    glasswin 作用域专属（实底模式维持 Blueprint 原样）：Switch 轨道半透子面 +
    旋钮磨玻璃圆片（backdrop blur 采样所在霜面与画布）、Checkbox/Radio 指示器
    半透子面；选中态统一 accent（顺带修 glasswin 作用域内 Blueprint #2d72d2 未走
-   token 的偏差，同设置滑块皮肤先例）。无描边（2026-11-24 用户定案「切换组件
+   token 的偏差，同设置滑块皮肤先例）——Switch 选中例外玻璃化（accent 半透 +
+   blur），Checkbox/Radio 仍实心 accent。无描边（2026-11-24 用户定案「切换组件
    不要加边框」：轨道 inset 圈与旋钮圈一并退役，同 np-seg「玻璃质感靠 blur +
    透明度层次，不加框线」家族口径；全局 Switch 无描边块见按钮焦点态段后）。
    属卡内值控件子面（§4.10 子面玻璃化口径：叠在已模糊卡片上、半透即可无穿透
@@ -478,6 +480,19 @@ html.glasswin.bp6-dark .bp6-control .bp6-control-indicator {
 html.glasswin .bp6-control input:checked ~ .bp6-control-indicator {
   background: var(--np-accent);
   box-shadow: none;
+}
+/* 开关开启态玻璃化（2026-11-24 用户需求「这个按钮重新优化下磨玻璃效果」）：
+   镜像 np-seg 选中玻璃语言——accent 半透 + backdrop blur 采样所在霜面。
+   透明度较 seg 选中（0.16/0.2）加深：开关以轨道色承担开/关语义，过淡则与
+   关闭态（白 0.4/0.07 轨道）不可分；仅 Switch 生效（.bp6-switch 提级压过
+   上一条通配），Checkbox/Radio 选中维持实心 accent */
+html.glasswin .bp6-control.bp6-switch input:checked ~ .bp6-control-indicator {
+  background: rgba(53, 116, 240, 0.4);
+  backdrop-filter: blur(6px) saturate(1.3);
+  box-shadow: none;
+}
+html.glasswin.bp6-dark .bp6-control.bp6-switch input:checked ~ .bp6-control-indicator {
+  background: rgba(92, 157, 255, 0.45);
 }
 /* 开关旋钮：磨玻璃圆片（blur 采样 accent 轨道/所在霜面），几何沿用 Blueprint */
 html.glasswin .bp6-control.bp6-switch .bp6-control-indicator::before {

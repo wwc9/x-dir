@@ -56,6 +56,7 @@
 **组件与模块**：`Switch`（v6 无 small，默认即紧凑）、`RadioGroup`、`ButtonGroup`、自研 `np-seg`。
 
 - 分段选择 = np-seg 勾选 chip：配方单源 index.css `.np-seg` 段——选中态 = sel 淡染蓝底 + accent 文字加粗、**无描边**（✓ 前缀 2026-11-23 用户定案退役——「有蓝色选中样式已经比较明显了」；终态口径见 ui-standards §4.9），未选 = 无底色 muted 字；新增变体只覆写尺寸、禁止复写选中态或加回边框。
+- **Switch 玻璃变体（glasswin 作用域；2026-11-24 用户需求「开关重新优化下磨玻璃效果」）**：关闭态轨道 = 半透白子面（浅 .42 / 深 .08）、开启态 = **accent 半透 + backdrop blur(6px) saturate(1.3)**（浅 rgba(53,116,240,.40) / 深 rgba(92,157,255,.45)）——镜像 np-seg 玻璃语言但透明度加深（seg 选中 0.16/0.2 对开关过淡：轨道色承担开/关语义）；旋钮 = 磨玻璃圆片（白 .55/.25 + 同款 blur）；实底模式维持 Blueprint 原样。仅 Switch 生效（Checkbox/Radio 选中仍实心 accent）。配方单源 index.css「玻璃值组件」块。
 
 ### 1.8 图标
 
