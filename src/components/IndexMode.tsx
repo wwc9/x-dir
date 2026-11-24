@@ -255,7 +255,12 @@ export function IndexModeNote({ status }: { status: IndexStatus | null }) {
   return (
     <div className="np-gsearch-idxnote">
       <AppIcon icon={Info} size={DENSITY.iconSm} colorVar="--np-accent" />
-      <span className="np-gsearch-idxnote-text">
+      <span
+        className="np-gsearch-idxnote-text"
+        data-tip={t(
+          "当前为实时遍历扫描（大目录秒级起）；开启索引模式后，NTFS 名称索引让全盘搜索毫秒级出结果，文件变动实时同步。",
+        )}
+      >
         {t(
           "当前为实时遍历扫描（大目录秒级起）；开启索引模式后，NTFS 名称索引让全盘搜索毫秒级出结果，文件变动实时同步。",
         )}

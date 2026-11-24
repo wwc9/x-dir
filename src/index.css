@@ -4160,15 +4160,16 @@ body.np-col-resizing * {
   gap: var(--np-gap);
 }
 /* 索引模式说明条（IndexModeNote，2026-11-24 用户需求「普通用户不知道索引模式
-   的用处」）：搜索页过滤行下的一行提示——说明价值 + 开启入口 + 可关闭；
-   索引就绪时组件不渲染。玻璃/实底两态都走 surface-2 子面（§4.10 子面口径，
-   实底模式 surface-2 即原样） */
+   的用处」+ 同日复报「放到上方/页头没看到」→ 内嵌页头行：标题右侧、最近搜索
+   chips 左侧的弹性空档。索引未生效时渲染；surface-2 子面两态通用（§4.10）；
+   文案单行截断（悬停 data-tip 看全文），窄窗不挤掉开启钮与关闭钮 */
 .np-gsearch-idxnote {
-  flex: none;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: var(--np-gutter);
-  margin: 0 0 var(--np-gutter);
+  margin: 0 var(--np-gutter);
   padding: 3px 6px 3px 10px;
   background: var(--np-surface-2);
   border-radius: var(--np-radius);
@@ -4178,6 +4179,9 @@ body.np-col-resizing * {
 .np-gsearch-idxnote-text {
   flex: 1 1 auto;
   min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .np-gsearch-idxnote .bp6-button {
   flex: none;

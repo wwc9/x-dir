@@ -638,6 +638,8 @@ export function GlobalSearchPage() {
           <span>{t("返回主界面")}</span>
         </button>
         <span className="np-menupage-title">{t("全盘搜索")}</span>
+        {/* 索引模式说明条（索引未生效时显示）：内嵌页头行，一句话讲清价值 + 开启入口 */}
+        <IndexModeNote status={indexStatus} />
         {/* 空 query 时的最近搜索 chips：收纳在头部右侧（不占独立行，出现/消失不推挤布局） */}
         {!query.trim() && history.length > 0 && (
           <div className="np-gsearch-history">
@@ -650,8 +652,6 @@ export function GlobalSearchPage() {
           </div>
         )}
       </header>
-        {/* 索引模式说明条（索引未生效时显示）：一句话讲清价值 + 开启入口，位于页头正下方 */}
-        <IndexModeNote status={indexStatus} />
         <div className="np-gsearch-filters">
           <InputGroup
           inputRef={inputRef}
