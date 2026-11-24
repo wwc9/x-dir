@@ -56,6 +56,7 @@
 **组件与模块**：`Switch`（v6 无 small，默认即紧凑）、`RadioGroup`、`ButtonGroup`、自研 `np-seg`。
 
 - 分段选择 = np-seg 勾选 chip：配方单源 index.css `.np-seg` 段——选中态 = sel 淡染蓝底 + accent 文字加粗、**无描边**（✓ 前缀 2026-11-23 用户定案退役——「有蓝色选中样式已经比较明显了」；终态口径见 ui-standards §4.9），未选 = 无底色 muted 字；新增变体只覆写尺寸、禁止复写选中态或加回边框。
+- **分段玻璃变体（glasswin 作用域；2026-11-24 用户定案「参考 Tabs/Single-choice 槽式分段」重做）**：整段 = 一体槽——半透白子面（浅 .40 / 深 .07）+ blur(6px) + 凹感内影，radius pill 全圆角；未选 chip 全透明只留 muted 字（hover 白 .28/.10 微亮）；选中 chip = **实心 accent pill + 白字**（Single choice 参考；accent-fg token）。chip 无白霜底、无 blur（玻璃感由槽体承担）。配方单源 index.css np-seg 玻璃段；特异性备注：选中规则 (0,5,1) 需压过基础段双 active 加深 (0,5,0)，枚举写法见该段注释。
 - **Switch 滑杆语言开关（glasswin 作用域；2026-11-24 用户定案「参考滑杆这种效果」，替代同日早前的半透玻璃轨道版）**：关闭轨道 = 半透白子面（浅 .42 / 深 .08）；开启轨道 = **实心 accent**（与 np-set-slider progress 同源）；旋钮两种状态 = **surface 白芯 + 描边圈**，开启态圈转 accent + 25% accent 光环（滑杆 handle hover 圈同源），旋钮不再自带 blur——玻璃感由所在霜面承载，控件本体回归滑杆的干净语言。仅 Switch 生效（Checkbox/Radio 选中仍实心 accent）。配方单源 index.css「玻璃值组件」块；旋钮描边圈是滑杆语言本体，不受「切换组件无描边」定案约束（该条指轨道）。
 
 ### 1.8 图标
