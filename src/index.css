@@ -1076,7 +1076,9 @@ html.glasswin .np-winedge-top {
   color: var(--np-muted);
 }
 /* 功能图标统一档（AGENTS §4.5 三档）：chrome 按钮图标一律 fg（继承），
-   显式钉死防 Blueprint 默认文字色漂移；激活 accent 由活动窗格规则更高优先级覆盖 */
+   显式钉死防 Blueprint 默认文字色漂移；2026-11-24 用户定案「工具图标颜色
+   统一规范」后无例外——活动窗格不翻 accent（激活指示只剩导航栏淡染），
+   控件自身激活态（开关开启/排序方向等）在各自规则里单独给 accent */
 .np-titlebar .bp6-button,
 .np-nav .bp6-button,
 .np-sidebar .bp6-button,
@@ -2991,14 +2993,14 @@ body.np-col-resizing .np-menued-grip::after {
     display: none;
   }
 }
-/* 激活指示 = 导航栏染色（2026-10-11 定案，design/pane-active-preview.html 方案 2）：
-   窗格边框保持中性、不再描边；导航栏染 accent 淡色 + 图标转 accent */
+/* 激活指示 = 导航栏染色（2026-10-11 定案，design/pane-active-preview.html 方案 2；
+   2026-11-24 用户定案「工具图标颜色统一」收窄）：窗格边框保持中性、不再描边；
+   导航栏染 accent 淡色 + 底缘分隔线随染——**图标不再随窗格激活转 accent**
+   （旧规则连工具钮/关闭钮一起翻蓝，同一工具两窗格两色；图标一律常规 fg 档，
+   accent 只留给控件自身激活态，见 §4.5 三档与「功能图标统一档」块） */
 .np-pane-active .np-nav {
   background: color-mix(in srgb, var(--np-accent) 9%, var(--np-surface));
   border-bottom-color: color-mix(in srgb, var(--np-accent) 22%, transparent);
-}
-.np-pane-active .np-nav .bp6-button:not(:disabled) {
-  color: var(--np-accent);
 }
 .np-pane-active .np-tab-on {
   background: color-mix(in srgb, var(--np-accent) 14%, var(--np-surface-2));

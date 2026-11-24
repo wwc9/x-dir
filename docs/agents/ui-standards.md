@@ -59,10 +59,11 @@
   - `AppIcon`/`ic()` 默认档 = sm，新代码不传尺寸即正确
 - **文件类型图标唯一来源：`src/lib/fileIcons.ts`**（扩展名 → Lucide 组件 + `--np-icon-*` 色变量）。2026-10-15 扩充（已全部应用）：覆盖 375+ 扩展名（代码/配置/办公三件套/图片/相机 RAW/3D/音频/视频/字幕/压缩/镜像/安装包/字体/数据库/证书/备份），**38 种图标**按语义细分（常见格式各有专属图标：RAW=Camera、设计=PenTool、字幕=Captions、光盘=Disc3、虚拟磁盘=HardDrive、种子=Magnet、安装包=Package、Java 包=Coffee、系统组件=Cog、字体=ALargeSmall 等），分类常量 + `BY_EXT`（含 `.gitignore` 等 dotfile）+ `BY_NAME`（Dockerfile 等无扩展名文件）+ `TYPE_GROUPS` 分组类型名；新增颜色 token `--np-icon-doc/-slide/-font`；新文件类型 = 在对应分类常量行加一格 + `TYPE_GROUPS` 补类型名；预览页 = `node tools/gen-file-icon-preview.mjs` 生成 `design/file-icons-preview.html`（浅/深切换，数据单一源）
 - 颜色只走 `--np-icon-*` token，图标继承/显式传入，禁止写死色值
-- **功能图标颜色三档（2026-10-12 定案，顶栏/导航/侧栏/标签条统一执行）**：
+- **功能图标颜色三档（2026-10-12 定案，顶栏/导航/侧栏/标签条统一执行；2026-11-24 用户定案「工具图标颜色统一规范」扩覆盖并收窄 accent）**：
   - 常规 = 继承按钮文字色（`ic()`/`AppIcon` **不传 `colorVar`**），按钮文字统一 `--np-fg`，禁再引第三种灰
-  - 激活/强调 = `--np-accent`（活动窗格导航、开关开启态、当前排序方向）
+  - 激活/强调 = `--np-accent`（**控件自身**的激活/开启态、当前排序方向）；活动窗格指示 = 导航栏 accent 淡染背景（2026-11-24 收窄：**导航图标不随窗格激活翻 accent**，同一工具在活动/非活动窗格同色）
   - 危险 = `--np-danger`（仅关闭类动作的 hover/确认态）
+  - **工具箱工具图标全表面统一（2026-11-24 定案）**：右键菜单（无图标）/ 窗格工具栏 / 功能库面板 / 定制页 / 全部工具对话框，同一工具的图标一律常规 fg 继承档——禁按表面或窗格激活态给工具图标单独着色；条件不满足的置灰走 `.np-tool-off` / `.is-off` 透明度口径，不改色相
   - 特例两处：顶栏品牌位 = 九宫格对角渐变 logo SVG（2026-10-12 定稿：亮蓝→天蓝→冰蓝 直角九宫格，与桌面/任务栏应用图标同源，图标资产由 `tools/gen-logo-icon.mjs` 生成）；文件类型图标 = `--np-icon-*` 语义色族（代表"文件"，不受本档约束）
   - PR 中给 UI 功能图标传语义 `colorVar`（非文件类型图标场景）即打回
 - 选新图标：查 [lucide.dev](https://lucide.dev/icons) → import 组件 → 经 `ic()`/`AppIcon` 使用；留意 lucide 大版本改名（优先用当前导出名，tsc 会兜底）
