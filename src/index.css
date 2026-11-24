@@ -850,7 +850,11 @@ html.glasswin .np-winedge-top {
   transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1),
     width 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.np-seg .bp6-button {
+/* chip 圆角等基础态必须 (0,3,0) 双类写法——下方「全局中性按钮 6px 圆角」规则
+   (.bp6-button:not([class*="bp6-intent-"])，(0,2,0)) 在文件更靠后，同特异性会
+   把 chip 的 pill 圆角压成 6px（悬浮底呈方角、与胶囊滑块不一致，2026-11-24
+   用户复报「悬浮圆角不一致」实病灶）；active 选中规则的双类写法同此理 */
+.bp6-button-group.np-seg .bp6-button {
   /* chip 浮于滑块层之上（z1）；选中态背景透明——accent 由滑块层供给 */
   position: relative;
   z-index: 1;
