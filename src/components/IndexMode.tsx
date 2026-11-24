@@ -3,7 +3,7 @@
 // 阶段归约在 lib/indexPhase.ts（纯函数配单测），完成/失败经灵动岛回执播报。
 // 开启 = UAC 拉起提权守护（一次授权，后台常驻）；关闭 = 写停止文件优雅退出。
 import { useEffect, useRef, useState } from "react";
-import { PopoverNext, Switch } from "@blueprintjs/core";
+import { Button, PopoverNext, Switch } from "@blueprintjs/core";
 import { Check, LoaderCircle, X } from "lucide-react";
 
 import { api, type IndexStatus } from "../lib/ipc";
@@ -198,9 +198,19 @@ export function IndexModeBar({ status }: { status: IndexStatus | null }) {
               </div>
             )}
             {phase === "down" && (
-              <div className="np-gsearch-idx-hint">
-                {t("上次启动未成功或守护已退出；重新开关一次索引模式即可再试。")}
-              </div>
+              <>
+                <div className="np-gsearch-idx-hint">
+                  {t("上次启动未成功或守护已退出（重启电脑后常见）；重新授权拉起即可恢复秒搜。")}
+                </div>
+                <Button
+                  minimal
+                  size="small"
+                  intent="primary"
+                  onClick={() => onToggle(true)}
+                >
+                  {t("重新启用索引")}
+                </Button>
+              </>
             )}
             {phase === "off" && (
               <div className="np-gsearch-idx-hint">

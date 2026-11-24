@@ -12,6 +12,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use super::store::{self, VolumeMeta};
 use super::table::NameTable;
+use super::task;
 use super::volume::{self, ROOT_FRN, VolumeHandle};
 
 pub const HEARTBEAT_FILE: &str = "daemon.heartbeat";
@@ -20,10 +21,35 @@ pub const DAEMON_JSON: &str = "daemon.json";
 pub const STATUS_JSON: &str = "status.json";
 /// 心跳超过该时长视为守护进程死亡
 const ALIVE_WINDOW: Duration = Duration::from_secs(10);
-/// 脏表落盘间隔
-const SAVE_INTERVAL: Duration = Duration::from_secs(30);
-/// USN 轮询间隔
-const USN_POLL: Duration = Duration::from_millis(500);
+/// USN 轮询间隔自适应上限（空转封顶档）
+const USN_POLL_MAX: Duration = Duration::from_millis(2000);
+/// 变更静默判定：距最后一次变更超过该时长 = 活动收尾，可以保存
+const SAVE_SETTLE_MS: u64 = 8_000;
+/// 脏保存上限间隔：持续高频变更时的兜底重写节奏（防写饥饿）
+const SAVE_STALE_MS: u64 = 60_000;
+
+/// USN 轮询间隔自适应（纯函数配 cargo test）：有记录保持 250ms 快轮跟手；
+/// 空转逐级退避 500ms→1s→2s 封顶——空闲盘不再 500ms 忙轮询，常驻功耗显著下降
+fn usn_poll_delay(idle_rounds: u32) -> Duration {
+    match idle_rounds {
+        0 => Duration::from_millis(250),
+        1 => Duration::from_millis(500),
+        2 => Duration::from_millis(1000),
+        _ => USN_POLL_MAX,
+    }
+}
+
+/// 脏保存时机（纯函数配 cargo test）：变更静默 8s 即收尾固化（活动结束后
+/// 尽快落盘，空档期零写盘）；持续高频变更以 60s 兜底防写饥饿——取代旧
+/// 「dirty 即每 30s 全量重写」的固定节奏，空闲/低频盘大幅减少 SSD 写放大。
+/// last_saved_ms = 0（初建/续载后首存）时 stale 恒真，保持旧的立即首存语义
+fn save_due(dirty: bool, last_change_ms: u64, last_saved_ms: u64, now: u64) -> bool {
+    if !dirty {
+        return false;
+    }
+    now.saturating_sub(last_change_ms) >= SAVE_SETTLE_MS
+        || now.saturating_sub(last_saved_ms) >= SAVE_STALE_MS
+}
 
 pub fn index_dir() -> PathBuf {
     match CFG_ROOT.get() {
@@ -159,6 +185,7 @@ struct VolumeState {
     next_usn: u64,
     serial: u64,
     dirty: bool,
+    last_change_ms: u64,
     last_saved_ms: u64,
     error: Option<String>,
 }
@@ -276,19 +303,24 @@ fn run_volume(
         next_usn,
         serial,
         dirty: true, // 初建/续载后先落一次盘
+        last_change_ms: now_ms(),
         last_saved_ms: 0,
         error: None,
     };
     let mut last_sync = now_ms();
+    let mut idle_rounds: u32 = 0;
     loop {
         if stop.load(Ordering::Relaxed) {
             state.save();
             return Some(state);
         }
+        let mut had_records = false;
         match vol.read_usn(journal_id, next_usn) {
             Ok((next, recs)) => {
+                had_records = !recs.is_empty();
                 if apply_usn(&mut state.table, &recs) {
                     state.dirty = true;
+                    state.last_change_ms = now_ms();
                 }
                 next_usn = next;
                 state.next_usn = next;
@@ -305,6 +337,7 @@ fn run_volume(
                         state.journal_id = id;
                         state.next_usn = n;
                         state.dirty = true;
+                        state.last_change_ms = now_ms();
                     }
                     Err(e) => {
                         set_err(&status, letter, &e);
@@ -317,10 +350,14 @@ fn run_volume(
                 return Some(state);
             }
         }
-        // 脏表定期落盘（含初建/续载后的首次保存）
-        if state.dirty
-            && now_ms().saturating_sub(state.last_saved_ms) >= SAVE_INTERVAL.as_millis() as u64
-        {
+        // 脏表自适应保存：变更静默 8s 收尾固化；持续高频变更 60s 兜底
+        // （含初建/续载后的首存，last_saved_ms = 0 时 stale 恒真）
+        if save_due(
+            state.dirty,
+            state.last_change_ms,
+            state.last_saved_ms,
+            now_ms(),
+        ) {
             state.save();
         }
         let mut st = status.lock().unwrap();
@@ -337,7 +374,13 @@ fn run_volume(
             state.save();
             return Some(state);
         }
-        std::thread::sleep(USN_POLL);
+        // 轮询节奏自适应：有记录快轮跟手，空转逐级退避（省常驻功耗）
+        idle_rounds = if had_records {
+            0
+        } else {
+            idle_rounds.saturating_add(1).min(3)
+        };
+        std::thread::sleep(usn_poll_delay(idle_rounds));
     }
 }
 
@@ -352,6 +395,50 @@ fn set_err(status: &Mutex<StatusDoc>, letter: u8, msg: &str) {
             error: Some(msg.to_string()),
         },
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{save_due, usn_poll_delay};
+    use std::time::Duration;
+
+    #[test]
+    fn poll_delay_escalates_and_caps() {
+        // 有记录快轮；连续空转 500ms→1s→2s 封顶（省常驻功耗）
+        assert_eq!(usn_poll_delay(0), Duration::from_millis(250));
+        assert_eq!(usn_poll_delay(1), Duration::from_millis(500));
+        assert_eq!(usn_poll_delay(2), Duration::from_millis(1000));
+        assert_eq!(usn_poll_delay(3), Duration::from_millis(2000));
+        assert_eq!(usn_poll_delay(99), Duration::from_millis(2000));
+    }
+
+    #[test]
+    fn save_requires_dirty() {
+        // 不脏永不保存（哪怕远超上限间隔）
+        assert!(!save_due(false, 0, 0, u64::MAX));
+    }
+
+    #[test]
+    fn save_after_settle_of_last_change() {
+        // 静默 8s 收尾：变更后 7s 不存、8s 存
+        assert!(!save_due(true, 1_000, 0, 8_999));
+        assert!(save_due(true, 1_000, 0, 9_000));
+    }
+
+    #[test]
+    fn save_stale_cap_during_sustained_activity() {
+        // 持续高频变更（last_change 一直很近）→ 60s 上限兜底强制重写
+        let now = 10_000_000;
+        assert!(!save_due(true, now - 1_000, now - 59_000, now));
+        assert!(save_due(true, now - 1_000, now - 60_000, now));
+    }
+
+    #[test]
+    fn first_save_after_build_is_immediate() {
+        // 初建/续载后首存语义保持：last_saved = 0 → stale 恒真立即落盘
+        let now = 10_000_000;
+        assert!(save_due(true, now, 0, now));
+    }
 }
 
 /// 守护进程的配置根：主程序经 `--index-daemon <config_root>` 显式传入。
@@ -387,16 +474,43 @@ pub fn run() -> ! {
         std::process::id(),
         letters.iter().map(|l| *l as char).collect::<String>()
     );
+    // 登录自启任务（2026-11-24 优化批）：本进程已提权，由它自行幂等注册
+    // 「登录时最高权限运行」计划任务——此后每次开机任务计划程序静默拉起
+    // 守护，用户不再每个开机周期重拨开关过一次 UAC。失败仅记日志不阻断
+    // 会话（下次启动或配置变更时自愈重试）
+    let cfg_root = dir
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| dir.clone());
+    match task::register_autostart_task(&std::env::current_exe().unwrap_or_default(), &cfg_root) {
+        Ok(()) => eprintln!("[x-dir-daemon] 登录自启任务已注册（{}）", task::TASK_NAME),
+        Err(e) => eprintln!("[x-dir-daemon] 登录自启任务注册失败：{e}"),
+    }
     let status = Arc::new(Mutex::new(StatusDoc::default()));
     let stop = Arc::new(AtomicBool::new(false));
 
-    // 心跳 + 停止检测线程
+    // 心跳 + 停止检测 + 配置变更监视线程
     {
         let status = status.clone();
         let stop = stop.clone();
+        let mut cfg_sig = std::fs::read_to_string(dir.join(DAEMON_JSON)).unwrap_or_default();
         std::thread::spawn(move || {
             loop {
                 let _ = std::fs::write(index_dir().join(HEARTBEAT_FILE), now_ms().to_string());
+                // daemon.json 变更（开关重开/卷清单调整）→ 幂等重注册自启任务，
+                // 保证任务里的动作路径与新配置同步
+                let cur =
+                    std::fs::read_to_string(index_dir().join(DAEMON_JSON)).unwrap_or_default();
+                if !cur.is_empty() && cur != cfg_sig {
+                    cfg_sig = cur.clone();
+                    match task::register_autostart_task(
+                        &std::env::current_exe().unwrap_or_default(),
+                        &cfg_root,
+                    ) {
+                        Ok(()) => eprintln!("[x-dir-daemon] 配置变更，登录自启任务已重注册"),
+                        Err(e) => eprintln!("[x-dir-daemon] 登录自启任务重注册失败：{e}"),
+                    }
+                }
                 if index_dir().join(STOP_FILE).exists() {
                     stop.store(true, Ordering::Relaxed);
                     // 等卷线程收尾保存
@@ -404,6 +518,12 @@ pub fn run() -> ! {
                     let st = status.lock().unwrap();
                     write_status(&st);
                     drop(st);
+                    // 开关关闭语义 = 全撤：自启任务一并删除（普通权限的开关
+                    // 删不动最高权限任务，删除由本提权进程执行）
+                    match task::delete_autostart_task() {
+                        Ok(()) => eprintln!("[x-dir-daemon] 登录自启任务已删除"),
+                        Err(e) => eprintln!("[x-dir-daemon] 登录自启任务删除失败：{e}"),
+                    }
                     let _ = std::fs::remove_file(index_dir().join(HEARTBEAT_FILE));
                     let _ = std::fs::remove_file(index_dir().join(STOP_FILE));
                     eprintln!("[x-dir-daemon] 收到停止请求，退出");

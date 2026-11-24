@@ -10,6 +10,7 @@ pub mod daemon;
 mod scan;
 mod store;
 mod table;
+mod task;
 mod volume;
 
 pub use daemon::daemon_alive;
