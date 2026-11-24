@@ -492,6 +492,7 @@ export function TitleBar() {
         icon={ic(Search)}
         data-tb="search"
         active={gsearchOpen}
+        aria-label={t("全盘搜索")}
         data-tip={t("全盘搜索")} data-kbd="Ctrl+Shift+F"
         onClick={() =>
           gsearchOpen
