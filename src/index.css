@@ -2556,11 +2556,15 @@ body.np-col-resizing .np-menued-grip::after {
 .np-set-slider .bp6-slider-handle {
   border-radius: 50%;
   background: var(--np-surface);
-  box-shadow: none;
-  border: 1px solid var(--np-border);
+  /* 旋钮无描边（2026-11-24 用户定案「不要加边框」）：悬停/拖拽的 accent 圈
+     一并退役——白芯以柔投影分隔，可见性不依赖描边 */
+  border: none;
+  box-shadow: 0 1px 4px rgb(20 28 40 / 0.18), 0 0 0 1px rgb(20 28 40 / 0.06);
 }
-.np-set-slider .bp6-slider-handle:hover {
-  border-color: var(--np-accent);
+.np-set-slider .bp6-slider-handle:hover,
+.np-set-slider .bp6-slider-handle.bp6-active {
+  /* 悬停/拖拽不再变圈：仅投影微深作反馈 */
+  box-shadow: 0 2px 6px rgb(20 28 40 / 0.24), 0 0 0 1px rgb(20 28 40 / 0.08);
 }
 .np-set-slider .bp6-slider-label {
   display: none;
