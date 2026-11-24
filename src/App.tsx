@@ -91,12 +91,18 @@ export default function App() {
             useSettings.getState().update({ perfTier: tier });
           }
           const resolved = resolvePerf(st0.perfMode, tier);
-          const firstLow = resolved === "low" && st0.perfApplied !== "low";
-          useSettings.getState().applyPerfMode(resolved);
-          if (firstLow) {
-            useIsland
-              .getState()
-              .pushReceipt("info", t("已按低配置优化视觉效果（可在设置 → 性能中调整）"));
+          // 幂等门禁只能守在启动调用点：applyPerfMode 本体守卫已按
+          // 2026-11-18「点击档位切换相应设置项」定案移除（同档重按须覆盖
+          // 手动改动），若启动也无条件重应用，用户改回的项（如手动关闭
+          // 窗口毛玻璃）每次重启都被预设改回去（features.md §12.8）
+          if (resolved !== st0.perfApplied) {
+            const firstLow = resolved === "low" && st0.perfApplied !== "low";
+            useSettings.getState().applyPerfMode(resolved);
+            if (firstLow) {
+              useIsland
+                .getState()
+                .pushReceipt("info", t("已按低配置优化视觉效果（可在设置 → 性能中调整）"));
+            }
           }
         }
         const st: Settings = useSettings.getState();

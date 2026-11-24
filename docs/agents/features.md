@@ -493,7 +493,7 @@
 
 - **低配置界定**：远程会话（`GetSystemMetrics(SM_REMOTESESSION)`）一票低配；否则硬件信号命中 ≥2 = 低配——CPU 逻辑线程 <4 / 物理内存 ≤8GB / 仅核显（独显关键词 NVIDIA·GeForce·RTX·GTX·Radeon RX·Pro·Arc 命中即非；空表 = 软件渲染已滤，保守按核显）。**判定只在首启做一次**（结果缓存 `perfTier`），模式解析 = perfMode 为 auto 取判定档否则显式档（`resolvePerf`）。
 - **联动预设（切换模式真实写盘，高性能 = 出厂默认）**：真实图标 / 文件夹大小（递归计算 IO）/ 截图十字辅助线（全屏覆盖层）/ 剪贴板历史（常驻浮窗第二个 WebView 进程）/ 右键菜单毛玻璃 / 主题与浮层动画，六项低配全关。对比表在 性能 tab 以三列（设置项/高性能/低性能）呈现，表数据 = `PERF_TABLE` 单源。
-- **应用机制**：App 启动检测（先于 hotkeys/cliphistConfigure，保证按应用后偏好配置服务）→ `applyPerfMode(resolved)` 与 `perfApplied` 不同才写预设（幂等，用户改回的项不会被启动循环改回去）；首次落低配发灵动岛回执提示可调整。毛玻璃/动效经 `applyPerfFx` 挂根类 `nofx-glass`/`nofx-anim`：玻璃实底脸与 @supports 兜底同款、主题揭示在 setThemeWithFx 直切（fxAnim 与 prefers-reduced-motion 同口径），功能性指示（进度扫动）保留。
+- **应用机制**：App 启动检测（先于 hotkeys/cliphistConfigure，保证按应用后偏好配置服务）→ `applyPerfMode(resolved)` 与 `perfApplied` 不同才写预设（幂等，用户改回的项不会被启动循环改回去）；首次落低配发灵动岛回执提示可调整。**幂等门禁只能守在 App.tsx 启动调用点**（2026-11-24 回归修复「手动关闭磨玻璃重启后又自动打开」：11-18「点击档位切换相应设置项」定案把守卫从 applyPerfMode 本体移除——设置页同档重按须覆盖手动改动，语义正确——但启动路径随之失去门禁，每次重启无条件重应用预设，把用户手动关闭的 windowGlass（及全部预设内项）改回去；守卫收敛回启动处 `resolved !== perfApplied` 判断，applyPerfMode 本体保持每次点击重新应用）。毛玻璃/动效经 `applyPerfFx` 挂根类 `nofx-glass`/`nofx-anim`：玻璃实底脸与 @supports 兜底同款、主题揭示在 setThemeWithFx 直切（fxAnim 与 prefers-reduced-motion 同口径），功能性指示（进度扫动）保留。
 - **检测失败的兜底**：system_info/is_remote_session 任一失败 = 保守按高性能档（默认值即高性能预设，不误降级）。
 
 ### 12.9 窗口毛玻璃（设置 → 外观，2026-11-17 用户定案 = 渐变底 + 窗格霜玻璃，纯 CSS）
