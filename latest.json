@@ -1,11 +1,11 @@
 {
-    "version":  "0.3.0",
+    "version":  "0.3.1",
     "notes":  "见 Release 说明",
-    "pub_date":  "2026-11-19T02:51:35Z",
+    "pub_date":  "2026-11-24T16:13:39Z",
     "platforms":  {
                       "windows-x86_64":  {
-                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRa0NJNWIrWTdXWXBUU3dxVXhnaVc3MWhGa04rYk5pam5YdUt3Rkp6amZTUjE0aGhSNjRyQ3FyaFo2UkRua0MrT1JabFl2aEhWL1F0b2RnVkY0KzM3UzFqWTh5QTlaeVF3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1MDU2Njk0CWZpbGU6WC1EaXJfMC4zLjBfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMy4wClZ5Q3ZtZmREY1VZY2ZHL0ErMm5Ya0Y1UFJaQjFEVGZUSmVYSjllNktpTkdGTXJla2VSTTBqSjVaQlczbHBaTGdvcnprTmdGaWViZERVNUJ2WHhUc0JRPT0K",
-                                             "url":  "https://gitee.com/wwc9/x-dir/releases/download/v0.3.0/X-Dir_0.3.0_x64-setup.exe"
+                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRa0NJNWIrWTdXWWtJaFhVS0xwQmwxM1RxSDRncmlRZjFDbzY5SEhRY2kzLzUzbE5WSHJjRy8vY1JqZHFqUG54RHFSRkJYWSs0eFg1c0xXMkJkTWFVeUM2ZEpmZ1ZYZEFFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NTM2ODE4CWZpbGU6WC1EaXJfMC4zLjFfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMy4xCng4cnBKL1RzREYxckF4NkFKandNZ3YxaHpRcDFKTjNuS3BMZS9GdTBGTkNnYjVsSWtocG91ZGRuNWJnZXpYaUFvY3Q4QUR0V2JnaWp2MUhNVVBvZkJ3PT0K",
+                                             "url":  "https://gitee.com/wwc9/x-dir/releases/download/v0.3.1/X-Dir_0.3.1_x64-setup.exe"
                                          }
                   }
 }
