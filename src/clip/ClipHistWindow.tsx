@@ -17,6 +17,12 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Check,
   ClipboardList,
+  File,
+  Folder,
+  Image as ImageIcon,
+  Layers,
+  Link2,
+  Route,
   ScanText,
   Star,
   FolderInput,
@@ -28,6 +34,7 @@ import {
   Settings as SettingsIcon,
   Square,
   Trash2,
+  Type,
   X,
 } from "lucide-react";
 
@@ -41,15 +48,17 @@ import { DENSITY } from "../lib/tokens";
 const PAGE = 50;
 const ROW_H = DENSITY.rowH;
 
-const KIND_TABS: { v: string; l: string }[] = [
-  { v: "", l: "全部" },
-  { v: "fav", l: "收藏" },
-  { v: "text", l: "文本" },
-  { v: "link", l: "链接" },
-  { v: "path", l: "路径" },
-  { v: "image", l: "图片" },
-  { v: "files", l: "文件" },
-  { v: "dirs", l: "文件夹" },
+/** 过滤档图标化（2026-11-24 用户需求「分类换成图标」）：图标 + data-tip/
+ *  aria-label 保留文字语义（§4.8 图标钮必须有可访问名） */
+const KIND_TABS: { v: string; l: string; i: typeof Layers }[] = [
+  { v: "", l: "全部", i: Layers },
+  { v: "fav", l: "收藏", i: Star },
+  { v: "text", l: "文本", i: Type },
+  { v: "link", l: "链接", i: Link2 },
+  { v: "path", l: "路径", i: Route },
+  { v: "image", l: "图片", i: ImageIcon },
+  { v: "files", l: "文件", i: File },
+  { v: "dirs", l: "文件夹", i: Folder },
 ];
 
 export function ClipHistWindow() {
@@ -685,8 +694,14 @@ export function ClipHistWindow() {
         {/* 过滤档（方案 C：实心选中 pill；搜索框已上移顶栏） */}
         <div className="np-clip-seg">
           {KIND_TABS.map((t) => (
-            <button key={t.v} className={kind === t.v ? "is-on" : ""} onClick={() => setKind(t.v)}>
-              {t.l}
+            <button
+              key={t.v}
+              className={kind === t.v ? "is-on" : ""}
+              data-tip={t.l}
+              aria-label={t.l}
+              onClick={() => setKind(t.v)}
+            >
+              <AppIcon icon={t.i} size={DENSITY.iconSm} />
             </button>
           ))}
         </div>

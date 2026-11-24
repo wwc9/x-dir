@@ -39,6 +39,11 @@
      防晕进录制区域被拍进帧） */
   --np-shadow-float: 0 4px 16px rgba(20, 28, 40, 0.16);
   --np-shadow-float-up: 0 -4px 16px rgba(20, 28, 40, 0.16);
+  /* 预览图片边界阴影（2026-11-24 用户需求「预览阴影加重，边界不够清晰」）：
+     三层 = 1px 收边圈 + 40px 大晕 + 12px 近影，白底图片在浅色霜面上轮廓
+     清晰；深色主题同构（165 段黑基深影） */
+  --np-shadow-img: 0 0 0 1px rgb(20 28 40 / 0.1), 0 12px 40px rgb(20 28 40 / 0.38),
+    0 2px 12px rgb(20 28 40 / 0.25);
   /* 玻璃拟态四枚（2026-11-12 右键菜单「霜」方案，design/menu-proposal-c-frost.html）：
      半透明底 + 内高光描边 + 高光悬停条 + 光晕投影，深浅主题各一套。
      alpha 实测校准（0.72 在应用纯白列表上不可感知）：浅 0.55 / 深 0.55，
@@ -165,6 +170,9 @@ html.bp6-dark {
   --np-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
   --np-shadow-float: 0 4px 16px rgba(0, 0, 0, 0.45);
   --np-shadow-float-up: 0 -4px 16px rgba(0, 0, 0, 0.45);
+  /* 预览图片边界阴影（深色）：同构黑基三层 */
+  --np-shadow-img: 0 0 0 1px rgb(0 0 0 / 0.3), 0 12px 40px rgb(0 0 0 / 0.6),
+    0 2px 12px rgb(0 0 0 / 0.4);
   --np-glass: rgba(32, 34, 38, 0.55);
   --np-glass-ring: rgba(255, 255, 255, 0.12);
   --np-glass-hover: rgba(92, 157, 255, 0.18);
@@ -4597,6 +4605,10 @@ body.np-col-resizing * {
   top: 50%;
   max-width: none;
   user-select: none;
+  /* 边界阴影（2026-11-24 用户需求「预览阴影加重」）：白底图在霜面/浅色
+     画布上轮廓模糊——三层影 + 1px 收边圈勾出图片矩形边界；随缩放/平移
+     transform 同步（阴影画在元素盒上） */
+  box-shadow: var(--np-shadow-img);
 }
 
 /* 媒体：视频满幅等比，音频居中竖排 */
@@ -7910,13 +7922,17 @@ body.np-col-resizing * {
   padding-block: var(--np-gap);
 }
 .np-clip-seg button {
+  /* 过滤档图标化（2026-11-24 用户需求「分类换成图标」）：icon-only 方形胶囊
+     （14px 图标 + 均衡内边距），文字语义由 data-tip/aria-label 承载 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: var(--np-ctl-h);
-  padding: 1px 12px;
+  min-width: calc(var(--np-ctl-h) + 2px);
+  padding: 1px 8px;
   border: 1px solid var(--np-border);
   border-radius: var(--np-radius-pill);
   background: transparent;
-  font-size: var(--np-font-ui);
-  font-weight: 400;
   color: var(--np-muted);
   cursor: pointer;
 }
