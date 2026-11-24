@@ -771,8 +771,9 @@ export function SettingsPanel() {
                   {t("天")}
                 </span>
               </span>
+              {/* 危险操作 = danger 实心白字（§4.7 定案）——不配 minimal：
+                  Blueprint minimal intent 规则 (0,3,0) 会把它翻成红字幽灵钮 */}
               <Button
-                minimal
                 size="small"
                 intent="danger"
                 disabled={!s.cliphistEnabled}
