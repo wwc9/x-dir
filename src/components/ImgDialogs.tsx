@@ -11,7 +11,7 @@
 // 九宫格角标位置（与 PDF 水印同源口径，Rust img::stamp_at_pos）+ 不透明度
 // 统一 0–10 滑杆（payload 仍为百分比 10–100）；宫格拼图透明底禁选 JPEG；
 // 裸中文文案补 t()（英文界面覆盖）。
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { t, useT } from "../lib/i18n";
 import type { FileEntry } from "../lib/ipc";
 import {
@@ -50,8 +50,45 @@ export function Seg<T>({
   /** 整组禁用（关联参数不适用时，如 PNG8/无损目标下的质量档） */
   disabled?: boolean;
 }) {
+  // 滑块动效（2026-11-24 用户需求「切换时左右移动的动效」）：thumb 绝对层
+  // 平移到选中 chip 下方；首测定位不动画（np-ready 后续切换才带过渡），
+  // ResizeObserver 跟随宽度变化（界面缩放/字体）
+  const segRef = useRef<HTMLDivElement>(null);
+  const [thumb, setThumb] = useState<{ x: number; w: number } | null>(null);
+  useLayoutEffect(() => {
+    const seg = segRef.current;
+    if (!seg) return;
+    const measure = () => {
+      const btns = seg.querySelectorAll("button");
+      const idx = options.findIndex((o) => o.value === value);
+      const btn = (btns[idx] ?? btns[0]) as HTMLElement | undefined;
+      if (!btn) return;
+      setThumb((prev) =>
+        prev && prev.x === btn.offsetLeft && prev.w === btn.offsetWidth
+          ? prev
+          : { x: btn.offsetLeft, w: btn.offsetWidth },
+      );
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(seg);
+    return () => ro.disconnect();
+  }, [value, options]);
+  const ready = thumb !== null;
   return (
-    <ButtonGroup className="np-seg" size="small" variant="minimal">
+    <ButtonGroup
+      className={"np-seg" + (ready ? " np-ready" : "")}
+      ref={segRef}
+      size="small"
+      variant="minimal"
+    >
+      {ready && (
+        <span
+          className="np-seg-thumb"
+          aria-hidden
+          style={{ transform: `translateX(${thumb.x}px)`, width: thumb.w }}
+        />
+      )}
       {options.map((o) => (
         <Button
           key={String(o.value)}

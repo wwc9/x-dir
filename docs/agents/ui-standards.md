@@ -219,8 +219,7 @@
   glasswin 模式半透白霜槽 + blur），radius pill；未选 chip 透明只留 muted 字
   （hover 微亮）；选中 = **实心 accent pill + 白字、不加粗**（实底已足够强调，
   2026-11-24 同日定案退役旧「sel 淡染底 + accent 加粗」与 11-23 玻璃逐片变体）；
-  chip flex 居中、min-height 收窄使组件总高恒 --np-ctl-h。配方单源 index.css
-  `.np-seg` 段 + glasswin 槽体覆写段，新增变体只覆写尺寸、禁止复写选中态或加回边框。
+  chip flex 居中、min-height 收窄使组件总高恒 --np-ctl-h；**切换滑块动效**（2026-11-24 同日需求）：内置 accent 滑块层平移到选中 chip（0.18s，首测不动画），槽体/chip/滑块圆角统一 --np-radius-pill；样式不分磨玻璃/实底（surface-2 token 自适应，glasswin 槽体覆写段已删）。配方单源 index.css `.np-seg` 段，新增变体只覆写尺寸、禁止复写选中态或加回边框。
 - **默认值**：新增/快速添加一律带合理默认（如 着色规则 *.pdf + 红、合并输出
   合并文档.pdf、水印 黑体/14/黑/右上/透明度 9），减少空表单上手成本。
 - **快速添加**：列表类参数支持输入文本回车即建（Enter 提交 + 默认值兜底），
