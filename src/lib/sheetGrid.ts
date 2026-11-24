@@ -126,6 +126,73 @@ export function sheetColumnCount(rows: SheetRows): number {
   return n;
 }
 
+export interface SheetTrimResult {
+  rows: SheetRows;
+  colCount: number;
+  merges: SheetMerge[];
+}
+
+/** 边缘空行/空列裁剪（纯函数，2026-11-24 表格预览增强）：源文件样式化的
+ *  used range 常从 A1 起带装饰性空行空列——顶部空行还会挤掉表头判定
+ *  （is-head 指向空行、真实表头按数据行渲染）。裁剪四缘全空行/列，合并区
+ *  坐标随裁剪平移、跨度钳回新网格，完全出界的合并丢弃；中段空行/列保留。 */
+export function trimSheetEdges(
+  rows: SheetRows,
+  colCount: number,
+  merges: SheetMerge[],
+): SheetTrimResult {
+  const rowEmpty = (r: number) => {
+    const row = rows[r];
+    for (let c = 0; c < colCount && c < row.length; c++) {
+      if (row[c]) return false;
+    }
+    return true;
+  };
+  let top = 0;
+  while (top < rows.length && rowEmpty(top)) top++;
+  let bottom = rows.length;
+  while (bottom > top && rowEmpty(bottom - 1)) bottom--;
+  const colEmpty = (c: number) => {
+    for (let r = top; r < bottom; r++) {
+      if (rows[r][c]) return false;
+    }
+    return true;
+  };
+  let left = 0;
+  while (left < colCount && colEmpty(left)) left++;
+  let right = colCount;
+  while (right > left && colEmpty(right - 1)) right--;
+  const cut = rows.slice(top, bottom).map((row) => {
+    const out: string[] = [];
+    for (let c = left; c < right; c++) out.push(row[c] ?? "");
+    return out;
+  });
+  const newCount = Math.max(0, right - left);
+  const newMerges: SheetMerge[] = [];
+  for (const m of merges) {
+    const row = m.row - top;
+    const col = m.col - left;
+    const rowSpan = Math.min(m.rowSpan, cut.length - row);
+    const colSpan = Math.min(m.colSpan, newCount - col);
+    if (row < 0 || col < 0 || rowSpan < 1 || colSpan < 1) continue;
+    newMerges.push({ row, col, rowSpan, colSpan });
+  }
+  return { rows: cut, colCount: newCount, merges: newMerges };
+}
+
+/** 表头行判定（纯函数）：前 5 行内首个非空占比 ≥0.6 的行；跨列合并的装饰
+ *  标题行（锚点只占 1 格）占比不足会被跳过——冻结的是列头行而非标题行。
+ *  找不到回落 -1（无冻结条）。 */
+export function sheetHeaderRow(rows: SheetRows, colCount: number): number {
+  const cap = Math.min(5, rows.length);
+  for (let r = 0; r < cap; r++) {
+    let nonEmpty = 0;
+    for (let c = 0; c < colCount; c++) if (rows[r][c]) nonEmpty++;
+    if (colCount > 0 && nonEmpty / colCount >= 0.6) return r;
+  }
+  return -1;
+}
+
 /** 数值样文本（纯函数）：可选正负号 + 千分位（半/全角逗号，仅数字组间合法）+
  *  可选小数 + 可选百分号；"3," 与 "1.2.3" 这类非数值不入列 */
 export function isNumericLike(v: string): boolean {
@@ -135,11 +202,15 @@ export function isNumericLike(v: string): boolean {
   return /^-?(\d{1,3}([,，]\d{3})+|\d+)(\.\d+)?$/.test(body) || /^-?\.\d+$/.test(body);
 }
 
-/** 列级数值判定（纯函数）：采样 ≤500 行（跳过表头行），列内非空值 ≥60% 为
- *  数值样 → 该列右对齐。返回 colCount 布尔数组。 */
-export function sheetNumericCols(rows: SheetRows, colCount: number): boolean[] {
+/** 列级数值判定（纯函数）：采样 ≤500 行（跳过表头及上方行），列内非空值
+ *  ≥60% 为数值样 → 该列右对齐。返回 colCount 布尔数组。 */
+export function sheetNumericCols(
+  rows: SheetRows,
+  colCount: number,
+  skipRows = 1,
+): boolean[] {
   const NUM_RATIO = 0.6;
-  const body = rows.length > 1 ? rows.slice(1) : rows;
+  const body = rows.length > skipRows ? rows.slice(skipRows) : rows;
   const sample = body.length > 500 ? body.slice(0, 500) : body;
   const out: boolean[] = [];
   for (let c = 0; c < colCount; c++) {

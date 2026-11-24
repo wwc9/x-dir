@@ -192,6 +192,20 @@ fn parse_section(sec: &str) -> ParsedCode {
                     p.lits.push((!seen_placeholder, chars[i].to_string()));
                 }
             }
+            '_' if !in_quote => {
+                // 占位宽度符 _：渲染为「下一个字符的宽度」——定宽预览输出一个
+                // 空格字面量并吞掉参照字符（会计格式 _(* …_) 的 _(/_) 即此，
+                // 否则落兜底分支按字面量输出 _ ( 产生 "_ * … _" 脏字符）
+                flush(&mut p, &mut lit, !seen_placeholder);
+                i += 1;
+                p.lits.push((!seen_placeholder, " ".into()));
+                seen_placeholder = true;
+            }
+            '*' if !in_quote => {
+                // 填充符 *：Excel 以其后字符平铺填充剩余列宽——定宽预览无填充
+                // 语义，整体吞没（* 与其后参照字符都不输出）
+                i += 1;
+            }
             _ if in_quote => lit.push(ch),
             '@' => {
                 flush(&mut p, &mut lit, !seen_placeholder);
@@ -407,9 +421,17 @@ pub fn render_num(v: f64, code: &str) -> String {
             out.push_str(text);
         }
     }
-    // 括号已由分区内 '(' ')' 字面量按位携带（负区），此处不再二次包裹
+    // 括号已由分区内 '(' ')' 字面量按位携带（负区），此处不再二次包裹；
+    // 会计格式 `_)` 的闭合括号被 _ 吞为宽度后负区不闭合（ECMA 严格口径），
+    // Excel 实际显示为括号平衡——检测未闭合的 '(' 补齐 ')'
     if neg && sections.len() <= 1 {
         out = format!("-{out}");
+    }
+    if p.parens && out.matches('(').count() > out.matches(')').count() {
+        // 补齐的 ')' 插在尾随空格之前（_) 的空格在字面量流里排在 ) 前）
+        let trimmed = out.trim_end();
+        let pad = &out[trimmed.len()..];
+        out = format!("{trimmed}){pad}");
     }
     out
 }
@@ -614,5 +636,16 @@ mod tests {
             "0.081934899448"
         );
         assert_eq!(display_for(&Data::Int(3), Some("0.00")), "3.00");
+    }
+
+    /// 会计格式（2026-11-24 用户报障样例：`_ * 4,426,586.20 _` 脏字符）：
+    /// `_(* #,##0.00_)` 的 _ 占位空格、* 填充符吞没 → 空格环绕纯数值；
+    /// 负区 `( #,##0.00_)` 括号字面量照位输出
+    #[test]
+    fn accounting_format_strips_placeholders() {
+        let code = "_(* #,##0.00_);_(* (#,##0.00_);_(* \"-\"??_);_(@_)";
+        assert_eq!(render_num(4426586.2, code), " 4,426,586.20 ");
+        assert_eq!(render_num(-1234.5, code), " (1,234.50) ");
+        assert_eq!(render_num(7442.85, code), " 7,442.85 ");
     }
 }

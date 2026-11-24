@@ -4781,11 +4781,24 @@ body.np-col-resizing * {
   align-items: center;
   background: var(--np-surface);
 }
-/* 首行表头（2026-10-18）：加粗 + surface-2 底 + 冻结在滚动口顶部 */
+/* 冻结表头条（2026-11-24 表格预览增强）：长表下滚后行 0..表头行移出虚拟
+   窗口、粘性头随之卸载失效——独立表头条接管（横向随滚动条平移；滚动未越
+   表头底缘时隐藏，此时网格内自带表头不重复）。条带出现 = 表头语义延续 */
+.np-pv-sheet-headstrip {
+  flex: none;
+  overflow: hidden;
+  position: relative;
+  background: var(--np-surface-2);
+  border-bottom: 1px solid var(--np-border);
+}
+.np-pv-sheet-headstrip .np-pv-sheet-cell.is-head {
+  position: static;
+  top: auto;
+}
+/* 首行表头（2026-10-18）：加粗 + surface-2 底。冻结改由独立表头条承载
+   （2026-11-24：行虚拟化下 position sticky 滚远即随行卸载失效） */
 .np-pv-sheet-cell.is-head {
   z-index: 2;
-  position: sticky;
-  top: 0;
   background: var(--np-surface-2);
   font-weight: 600;
   border-bottom-color: var(--np-border);

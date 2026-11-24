@@ -7,7 +7,9 @@ import {
   sheetNumericCols,
   sheetMatches,
   sheetRowHeights,
+  sheetHeaderRow,
   textWidthPx,
+  trimSheetEdges,
 } from "../sheetGrid";
 
 describe("表格预览网格（parseSheetRows）", () => {
@@ -17,6 +19,68 @@ describe("表格预览网格（parseSheetRows）", () => {
       ["c", "d"],
     ]);
     expect(parseSheetRows("")).toEqual([]);
+  });
+});
+
+describe("边缘空行空列裁剪（trimSheetEdges）", () => {
+  it("裁顶部空行 + 最左空列 + 尾部空列，中段空行保留", () => {
+    // 源文件样式化 used range：首行空、首列空、尾部多出一列
+    const rows = [
+      ["", "", "", ""],
+      ["", "名称", "数量", ""],
+      ["", "苹果", "3", ""],
+      ["", "", "", ""],
+      ["", "梨", "5", ""],
+    ];
+    const r = trimSheetEdges(rows, 4, []);
+    expect(r.rows).toEqual([
+      ["名称", "数量"],
+      ["苹果", "3"],
+      ["", ""],
+      ["梨", "5"],
+    ]);
+    expect(r.colCount).toBe(2);
+  });
+
+  it("全空网格裁成空", () => {
+    const r = trimSheetEdges(
+      [
+        ["", ""],
+        ["", ""],
+      ],
+      2,
+      [],
+    );
+    expect(r.rows).toEqual([]);
+    expect(r.colCount).toBe(0);
+  });
+
+  it("合并区坐标随裁剪平移，出界丢弃", () => {
+    // 首行空被裁 → 行 -1；锚点 (2,2) → (1,1)；跨度钳回新网格
+    const rows = [
+      ["", "", "", ""],
+      ["", "a", "b", ""],
+      ["", "c", "d", ""],
+    ];
+    const r = trimSheetEdges(rows, 4, [{ row: 2, col: 2, rowSpan: 2, colSpan: 3 }]);
+    expect(r.merges).toEqual([{ row: 1, col: 1, rowSpan: 1, colSpan: 1 }]);
+  });
+});
+
+describe("表头行判定（sheetHeaderRow）", () => {
+  it("跨列合并标题行被跳过，首个高占比行为表头", () => {
+    const rows = [
+      ["代持并表企业收益情况表", "", "", "", "", ""], // 合并锚点占 1/6 格
+      ["企业名称", "项目", "2018年", "2019年", "2020年", "2021年"], // 6/6
+      ["建工集团", "营业收入", "4,426,586.20", "", "", ""], // 2/6
+    ];
+    expect(sheetHeaderRow(rows, 6)).toBe(1);
+  });
+
+  it("首行即表头返回 0；全空/低占比回落 -1", () => {
+    expect(sheetHeaderRow([["a", "b", "c"]], 3)).toBe(0);
+    expect(sheetHeaderRow([["", "", ""], ["x"]], 3)).toBe(-1);
+    expect(sheetHeaderRow([], 3)).toBe(-1);
   });
 });
 
