@@ -650,6 +650,8 @@ export function GlobalSearchPage() {
           </div>
         )}
       </header>
+        {/* 索引模式说明条（索引未生效时显示）：一句话讲清价值 + 开启入口，位于页头正下方 */}
+        <IndexModeNote status={indexStatus} />
         <div className="np-gsearch-filters">
           <InputGroup
           inputRef={inputRef}
@@ -736,8 +738,6 @@ export function GlobalSearchPage() {
             onClick={() => useSettings.getState().update({ gsearchPreview: !previewOpen })}
           />
         </div>
-        {/* 索引模式说明条（索引未生效时显示）：普通用户不知道索引模式用处，一句话讲清价值 + 开启入口 */}
-        <IndexModeNote status={indexStatus} />
         <div className="np-gsearch-main">
           <div
             ref={panelRef}

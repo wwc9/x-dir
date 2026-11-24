@@ -203,7 +203,6 @@ export function IndexModeBar({ status }: { status: IndexStatus | null }) {
                   {t("上次启动未成功或守护已退出（重启电脑后常见）；重新授权拉起即可恢复秒搜。")}
                 </div>
                 <Button
-                  minimal
                   size="small"
                   intent="primary"
                   onClick={() => onToggle(true)}
@@ -262,7 +261,6 @@ export function IndexModeNote({ status }: { status: IndexStatus | null }) {
         )}
       </span>
       <Button
-        minimal
         size="small"
         intent="primary"
         onClick={() => toggleIndexMode(true, setEnabled)}
