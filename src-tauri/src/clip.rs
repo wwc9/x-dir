@@ -90,6 +90,44 @@ pub fn set_image(w: u32, h: u32, rgba: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
+/// 双格式写入（2026-11-24 混合类型条目）：位图（CF_DIB）+ 文本（CF_UNICODETEXT）
+/// 单次 EmptyClipboard 后先后落两种格式——目标应用各取所需（Excel/WPS 取位图
+/// 保格式，记事本/输入框取文本），不再互斥。失败窗口纪律同 set_image
+#[cfg(windows)]
+pub fn set_image_and_text(w: u32, h: u32, rgba: &[u8], text: &str) -> Result<(), String> {
+    if w == 0 || h == 0 || rgba.len() != w as usize * h as usize * 4 {
+        return Err("位图尺寸与数据不符".into());
+    }
+    if text.contains('\0') {
+        return Err("文本包含非法 NUL 字符".into());
+    }
+    let dib = build_dib(w, h, rgba);
+    let bytes: Vec<u8> = text
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .flat_map(|u| u.to_le_bytes())
+        .collect();
+    if !open_clipboard() {
+        return Err("无法打开系统剪贴板".into());
+    }
+    unsafe {
+        if EmptyClipboard().is_err() {
+            let _ = CloseClipboard();
+            return Err("无法清空系统剪贴板".into());
+        }
+        if !set_block(CF_DIB, &dib) {
+            let _ = CloseClipboard();
+            return Err("写入 CF_DIB 失败".into());
+        }
+        if !set_block(CF_UNICODETEXT, &bytes) {
+            let _ = CloseClipboard();
+            return Err("写入 CF_UNICODETEXT 失败".into());
+        }
+        let _ = CloseClipboard();
+    }
+    Ok(())
+}
+
 /// 解析 CF_DIB 负载 → (宽, 高, RGBA top-down)。支持 32bpp BGRA 与 24bpp BGR
 /// （行 4 字节对齐）、正/负 biHeight（bottom-up / top-down）；BITMAPINFOHEADER
 /// 之外的变长头（V4/V5）按 biSize 跳过。压缩格式：BI_RGB(0) 直接收；32bpp

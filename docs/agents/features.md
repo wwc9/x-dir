@@ -416,6 +416,7 @@
 ### 11.3 性能与回归批
 
 - **watcher 两阶段入库**：短锁查重（命中即置顶）→ 锁外编码（encode_image_payload，4K PNG 数百 ms）→ 短锁复核+落库+清理——旧路径持 conn Mutex 编码会冻住全部 cliphist 命令乃至主线程。
+- **混合类型条目（2026-11-24 用户反馈「同时复制图片和文本没有处理混合类型」）**：Excel/WPS/Word 一次复制会同时放位图与文本两种格式，旧 `read_clipboard` 按 Files > Text > Image 硬优先只入一半（图或文丢一半）。现双格式合为**一条** image 条目（图为主、文本随行存 text 列）：随行文本参与 hash（同图不同文 = 不同条目）、可搜索（search_text + 拼音）、列表预览显示文本首行（缩略图仍显示视觉）；`ClipContent::Image` 变体加 `text: Option<String>` 字段。**回写双格式恢复**：clip.rs 新增 `set_image_and_text`（单次 EmptyClipboard 落 CF_DIB + CF_UNICODETEXT，失败窗口纪律同 set_image）——目标应用各取所需（Excel/WPS 取位图保格式，记事本取文本）。敏感凭据跳过对混合条目随行文本同口径；位图不可解析（罕见 DIB 变体）时随行文本不陪葬回落为文本条目。配 `mixed_image_text_entry_semantics` cargo test。
 - **重命令 async + spawn_blocking**：list/write_back/ocr/get_image/export/import/merge_paste 全部离开主线程与 runtime worker（JS 侧 API 签名不变）。
 - 四列惰性迁移（py/source/html/fav）合并为一趟 pragma_table_info；capabilities windows 必须含 cliphist（漏列致浮窗页核心事件 API 被拒）。
 

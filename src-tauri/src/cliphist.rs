@@ -242,8 +242,18 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ClipContent {
     Text(String),
-    Image { w: u32, h: u32, rgba: Vec<u8> },
-    Files { paths: Vec<String>, cut: bool },
+    /// 位图 + 随行文本（2026-11-24 混合类型）：Excel/WPS 等一次复制会同时
+    /// 放位图与文本两种格式——合为一条（图为主、文本随行），回写双格式恢复
+    Image {
+        w: u32,
+        h: u32,
+        rgba: Vec<u8>,
+        text: Option<String>,
+    },
+    Files {
+        paths: Vec<String>,
+        cut: bool,
+    },
 }
 
 impl ClipContent {
@@ -263,11 +273,20 @@ impl ClipContent {
                 h.update(*b"T");
                 h.update(t.as_bytes());
             }
-            ClipContent::Image { w, h: hh, rgba } => {
+            ClipContent::Image {
+                w,
+                h: hh,
+                rgba,
+                text,
+            } => {
                 h.update(*b"I");
                 h.update(w.to_le_bytes());
                 h.update(hh.to_le_bytes());
                 h.update(rgba);
+                if let Some(t) = text {
+                    h.update(*b"T");
+                    h.update(t.as_bytes());
+                }
             }
             ClipContent::Files { paths, cut } => {
                 h.update(*b"F");
@@ -301,7 +320,7 @@ impl ClipContent {
     pub fn search_text(&self) -> Option<String> {
         match self {
             ClipContent::Text(t) => Some(t.clone()),
-            ClipContent::Image { .. } => None,
+            ClipContent::Image { text, .. } => text.clone(),
             ClipContent::Files { paths, .. } => Some(paths.join("\n")),
         }
     }
@@ -541,9 +560,9 @@ fn insert_item(
 ) -> rusqlite::Result<()> {
     let (text, image, thumb, files, file_cut) = match content {
         ClipContent::Text(_) => (content.search_text(), None, None, None, 0i64),
-        ClipContent::Image { .. } => {
+        ClipContent::Image { text, .. } => {
             let (png, thumb) = image.expect("图片条目必须先经 encode_image_payload");
-            (None, Some(png), thumb, None, 0)
+            (text.clone(), Some(png), thumb, None, 0)
         }
         ClipContent::Files { paths, cut } => {
             let json = serde_json::to_string(paths).unwrap_or_else(|_| "[]".into());
@@ -618,7 +637,7 @@ fn ingest(
     if promote_if_duplicate(conn, &hash, now)?.is_some() {
         return Ok(true);
     }
-    let image = if let ClipContent::Image { w, h, rgba } = content {
+    let image = if let ClipContent::Image { w, h, rgba, .. } = content {
         match encode_image_payload(*w, *h, rgba) {
             Ok(p) => Some(p),
             Err(e) => {
@@ -873,8 +892,13 @@ fn handle_clipboard_change(app: &AppHandle) {
     let Some(content) = read_clipboard() else {
         return;
     };
-    // 敏感凭据跳过（高置信模式，T1-1）
-    if let ClipContent::Text(t) = &content
+    // 敏感凭据跳过（高置信模式，T1-1；混合条目的随行文本同口径）
+    let sens_text = match &content {
+        ClipContent::Text(t) => Some(t),
+        ClipContent::Image { text: Some(t), .. } => Some(t),
+        _ => None,
+    };
+    if let Some(t) = sens_text
         && is_sensitive(t)
     {
         log::info!("剪贴板文本命中敏感凭据模式，跳过入库");
@@ -922,7 +946,7 @@ fn handle_clipboard_change(app: &AppHandle) {
         let _ = app.emit("cliphist-updated", ());
         return;
     }
-    let image = if let ClipContent::Image { w, h: hh, rgba } = &content {
+    let image = if let ClipContent::Image { w, h: hh, rgba, .. } = &content {
         match encode_image_payload(*w, *hh, rgba) {
             Ok(p) => Some(p),
             Err(e) => {
@@ -970,32 +994,31 @@ fn read_clipboard() -> Option<ClipContent> {
     if let Some((paths, cut)) = crate::clip::get_files() {
         return Some(ClipContent::Files { paths, cut });
     }
-    if let Some(t) = crate::clip::get_text()
-        && !t.trim().is_empty()
-    {
-        return Some(ClipContent::Text(t));
+    // 混合捕获（2026-11-24 用户反馈「同时复制图片和文本没有处理混合类型」）：
+    // Excel/WPS/Word 一次复制会同时放位图与文本两种格式——旧实现 Text 优先
+    // 只入一半；现在双格式合为一条（图为主、文本随行），回写双格式恢复
+    let text = crate::clip::get_text().filter(|t| !t.trim().is_empty());
+    let Some(dib) = crate::clip::get_dib() else {
+        return text.map(ClipContent::Text);
+    };
+    match crate::clip::parse_dib(&dib) {
+        Some((w, h, rgba)) => Some(ClipContent::Image { w, h, rgba, text }),
+        // 位图在但不认头（非标准 BI_BITFIELDS/RLE 等）：留痕可查，静默吞掉
+        // 会像 2026-10-31 首轮 E2E 那样无从事后定位；随行文本不陪葬
+        None => {
+            log::warn!(
+                "剪贴板位图不入库（不支持的 DIB 变体）：len={} compression={}",
+                dib.len(),
+                u32::from_le_bytes(
+                    dib.get(16..20)
+                        .unwrap_or_default()
+                        .try_into()
+                        .unwrap_or([0; 4])
+                )
+            );
+            text.map(ClipContent::Text)
+        }
     }
-    if let Some(dib) = crate::clip::get_dib() {
-        return match crate::clip::parse_dib(&dib) {
-            Some((w, h, rgba)) => Some(ClipContent::Image { w, h, rgba }),
-            // 位图在但不认头（非标准 BI_BITFIELDS/RLE 等）：留痕可查，静默
-            // 吞掉会像 2026-10-31 首轮 E2E 那样无从事后定位
-            None => {
-                log::warn!(
-                    "剪贴板位图不入库（不支持的 DIB 变体）：len={} compression={}",
-                    dib.len(),
-                    u32::from_le_bytes(
-                        dib.get(16..20)
-                            .unwrap_or_default()
-                            .try_into()
-                            .unwrap_or([0; 4])
-                    )
-                );
-                None
-            }
-        };
-    }
-    None
 }
 
 /// 启动监听（幂等：已在监听直接返回）
@@ -1538,7 +1561,12 @@ pub fn write_back(
                 .map_err(|e| format!("图片条目解码失败：{e}"))?;
             let rgba = img.into_rgba8();
             let (w, hh) = rgba.dimensions();
-            crate::clip::set_image(w, hh, rgba.as_raw())?;
+            // 混合条目（图 + 随行文本）双格式恢复：目标应用各取所需
+            // （Excel/WPS 取位图保格式，记事本/输入框取文本）
+            match item.text.as_deref().filter(|t| !t.trim().is_empty()) {
+                Some(t) => crate::clip::set_image_and_text(w, hh, rgba.as_raw(), t)?,
+                None => crate::clip::set_image(w, hh, rgba.as_raw())?,
+            }
         }
         other => return Err(format!("未知条目类型：{other}")),
     }
@@ -1934,6 +1962,28 @@ mod tests {
     use super::*;
     use image::GenericImageView;
 
+    /// 混合类型（2026-11-24）：图 + 随行文本 = 单条 image 条目；文本可搜索、
+    /// 预览仍为尺寸、hash 含随行文本（同图不同文 = 不同条目）
+    #[test]
+    fn mixed_image_text_entry_semantics() {
+        let c = ClipContent::Image {
+            w: 4,
+            h: 4,
+            rgba: vec![0; 64],
+            text: Some("季度报表".into()),
+        };
+        assert_eq!(c.kind(), "image");
+        assert_eq!(c.search_text().as_deref(), Some("季度报表"));
+        assert_eq!(c.preview(), "4×4 位图");
+        let plain = ClipContent::Image {
+            w: 4,
+            h: 4,
+            rgba: vec![0; 64],
+            text: None,
+        };
+        assert_ne!(c.hash_hex(), plain.hash_hex());
+    }
+
     /// OCR 空格规整（2026-11-23）：CJK 邻接的空格段是识别噪声整段去除，
     /// 西文词间空格原样保留，换行与空格行结构不动
     #[test]
@@ -2005,7 +2055,8 @@ mod tests {
             ClipContent::Image {
                 w: 1920,
                 h: 1080,
-                rgba: vec![]
+                rgba: vec![],
+                text: None
             }
             .preview(),
             "1920×1080 位图"
@@ -2294,6 +2345,7 @@ MIIE...
                 w: 2,
                 h: 2,
                 rgba: vec![0; 16],
+                text: None,
             },
             1200,
             None,
@@ -2349,7 +2401,21 @@ MIIE...
         let c = mem_db();
         let (w, h) = (2u32, 3u32);
         let rgba = vec![255u8; (w * h * 4) as usize];
-        assert!(ingest(&c, &ClipContent::Image { w, h, rgba }, 1, None, None).unwrap());
+        assert!(
+            ingest(
+                &c,
+                &ClipContent::Image {
+                    w,
+                    h,
+                    rgba,
+                    text: None
+                },
+                1,
+                None,
+                None
+            )
+            .unwrap()
+        );
         let (img, thumb): (Option<Vec<u8>>, Option<Vec<u8>>) = c
             .query_row("SELECT image, thumb FROM clip_items", [], |r| {
                 Ok((r.get(0)?, r.get(1)?))
@@ -2372,7 +2438,21 @@ MIIE...
         // 任一像素带透明 → 缩略保 PNG（dataURL mime 同步为 image/png）
         let mut rgba = vec![255u8; (w * h * 4) as usize];
         rgba[3] = 0;
-        assert!(ingest(&c, &ClipContent::Image { w, h, rgba }, 1, None, None).unwrap());
+        assert!(
+            ingest(
+                &c,
+                &ClipContent::Image {
+                    w,
+                    h,
+                    rgba,
+                    text: None
+                },
+                1,
+                None,
+                None
+            )
+            .unwrap()
+        );
         let thumb: Vec<u8> = c
             .query_row("SELECT thumb FROM clip_items", [], |r| r.get(0))
             .unwrap();
