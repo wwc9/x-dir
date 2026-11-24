@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   Button,
-  ButtonGroup,
   Menu,
   MenuDivider,
   MenuItem,
@@ -43,6 +42,7 @@ import { AboutBadgeDot } from "./AboutDialog";
 import { BrandLogo } from "./BrandLogo";
 import { IslandPill } from "./IslandPill";
 import { PresetPicker, PRESET_LIST } from "./Sidebar";
+import { Seg } from "./ImgDialogs";
 import { DENSITY } from "../lib/tokens";
 import { isUpdateAvailable } from "../lib/update";
 import { useLayout } from "../stores/layout";
@@ -886,36 +886,35 @@ export function TitleBar() {
               <div className="np-qs-row">
                 <AppIcon icon={Moon} size={DENSITY.iconSm} className="np-qs-ic" />
                 <span className="np-qs-label">{t("主题")}</span>
-                <ButtonGroup className="np-seg" size="small" variant="minimal">
-                  <Button active={theme === "light"} onClick={() => setThemeWithFx("light")}>
-                    {t("浅色")}
-                  </Button>
-                  <Button active={theme === "dark"} onClick={() => setThemeWithFx("dark")}>
-                    {t("深色")}
-                  </Button>
-                  <Button active={theme === "system"} onClick={() => setThemeWithFx("system")}>
-                    {t("跟随系统")}
-                  </Button>
-                </ButtonGroup>
+                {/* 共享 Seg（滑块层供 accent 胶囊）；揭示特效取选中按钮圆心 */}
+                <Seg<"light" | "dark" | "system">
+                  value={theme}
+                  options={[
+                    { value: "light", label: t("浅色") },
+                    { value: "dark", label: t("深色") },
+                    { value: "system", label: t("跟随系统") },
+                  ]}
+                  onChange={(th, e) => {
+                    const r = e.currentTarget.getBoundingClientRect();
+                    setThemeWithFx(th, {
+                      x: r.left + r.width / 2,
+                      y: r.top + r.height / 2,
+                    });
+                  }}
+                />
               </div>
               <div className="np-qs-row">
                 <AppIcon icon={Languages} size={DENSITY.iconSm} className="np-qs-ic" />
                 <span className="np-qs-label">{t("语言")}</span>
-                <ButtonGroup className="np-seg" size="small" variant="minimal">
-                  {/* 专属字面量「中文」：不得复用尺寸档的 t("中")（其 EN 词条是 Medium） */}
-                  <Button
-                    active={lang === "zh"}
-                    onClick={() => useSettings.getState().update({ lang: "zh" })}
-                  >
-                    {t("中文")}
-                  </Button>
-                  <Button
-                    active={lang === "en"}
-                    onClick={() => useSettings.getState().update({ lang: "en" })}
-                  >
-                    EN
-                  </Button>
-                </ButtonGroup>
+                {/* 专属字面量「中文」：不得复用尺寸档的 t("中")（其 EN 词条是 Medium） */}
+                <Seg<"zh" | "en">
+                  value={lang}
+                  options={[
+                    { value: "zh", label: t("中文") },
+                    { value: "en", label: "EN" },
+                  ]}
+                  onChange={(l) => useSettings.getState().update({ lang: l })}
+                />
               </div>
               <div className="np-qs-row">
                 <AppIcon icon={Sparkles} size={DENSITY.iconSm} className="np-qs-ic" />

@@ -7,7 +7,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Button,
-  ButtonGroup,
   InputGroup,
   PopoverNext,
   Switch,
@@ -151,6 +150,7 @@ function startLeftResize(e: React.PointerEvent<HTMLDivElement>) {
 import { confirmDialog } from "../stores/ui";
 import { AppIcon, ic } from "./AppIcon";
 import { NpSelect } from "./NpSelect";
+import { Seg } from "./ImgDialogs";
 
 /** 内置功能 → 图标映射（功能库卡片 / 启用菜单行 / 工具栏条带共用；
  *  窗格工具栏渲染端 Pane 也引用此表，新增功能图标只改这一处） */
@@ -255,31 +255,6 @@ function areaOptsFor(fn: BuiltinFn | undefined) {
           ? t("该功能仅选中条目可用")
           : undefined,
   }));
-}
-/** 分段快选（方案 A）：np-seg 语言同设置面板，单击切换、无下拉嵌套 */
-function Seg<T extends string>({
-  value,
-  options,
-  onChange,
-}: {
-  value: T;
-  options: { value: T; label: string; disabled?: boolean; title?: string }[];
-  onChange: (v: T) => void;
-}) {
-  return (
-    <ButtonGroup className="np-seg" size="small" variant="minimal">
-      {options.map((o) => (
-        <Button
-          key={o.value}
-          active={o.value === value}
-          disabled={o.disabled}
-          data-tip={o.title}
-          text={o.label}
-          onClick={() => onChange(o.value)}
-        />
-      ))}
-    </ButtonGroup>
-  );
 }
 /** 条目对应内置功能（sep/未知 id = undefined） */
 function entryFn(en: MenuEntry): BuiltinFn | undefined {

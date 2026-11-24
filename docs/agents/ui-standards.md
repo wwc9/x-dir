@@ -215,11 +215,12 @@
   网格选点（如位置九宫格 np-wm-grid）或连续 Slider（如透明度）。
   Seg 全部 chip **无描边**（2026-11-11 用户两次定案收敛：先去选中 accent
   描边、再去未选灰描边）。**槽式分段两模式统一（2026-11-24 用户定案「参考
-  Tabs/Single-choice 槽式分段」）**：整段 = 一体槽（实底模式 surface-2 浅灰槽、
-  glasswin 模式半透白霜槽 + blur），radius pill；未选 chip 透明只留 muted 字
+  Tabs/Single-choice 槽式分段」）**：整段 = 一体槽（surface-2 token 自适应——
+  实底模式浅灰实槽、glasswin 模式半透白，无独立玻璃配方），radius pill；
+  未选 chip 透明只留 muted 字
   （hover 微亮）；选中 = **实心 accent pill + 白字、不加粗**（实底已足够强调，
   2026-11-24 同日定案退役旧「sel 淡染底 + accent 加粗」与 11-23 玻璃逐片变体）；
-  chip flex 居中、min-height 收窄使组件总高恒 --np-ctl-h；**切换滑块动效**（2026-11-24 同日需求）：内置 accent 滑块层平移到选中 chip（0.18s，首测不动画），槽体/chip/滑块圆角统一 --np-radius-pill；样式不分磨玻璃/实底（surface-2 token 自适应，glasswin 槽体覆写段已删）。配方单源 index.css `.np-seg` 段，新增变体只覆写尺寸、禁止复写选中态或加回边框。
+  chip flex 居中、min-height 收窄使组件总高恒 --np-ctl-h；**切换滑块动效**（2026-11-24 同日需求）：内置 accent 滑块层平移到选中 chip（0.18s，首测不动画），槽体/chip/滑块圆角统一 --np-radius-pill；样式不分磨玻璃/实底（surface-2 token 自适应，glasswin 槽体覆写段已删）。配方单源 index.css `.np-seg` 段，新增变体只覆写尺寸、禁止复写选中态或加回边框。**np-seg 唯一渲染入口 = 共享 `Seg` 组件（2026-11-24 用户复报「分段控件改回胶囊效果」）**：选中胶囊由组件内置滑块层供给、chip 激活态背景 = none——裸 `ButtonGroup` 挂 `np-seg` 类会丢选中胶囊（accent-fg 白字落透明槽），禁止；全部用点（工具箱对话框/顶栏快速面板/设置面板/菜单编辑器）已迁入；`onChange` 第二参透传点击事件（主题圆形揭示特效取按钮圆心）。
 - **默认值**：新增/快速添加一律带合理默认（如 着色规则 *.pdf + 红、合并输出
   合并文档.pdf、水印 黑体/14/黑/右上/透明度 9），减少空表单上手成本。
 - **快速添加**：列表类参数支持输入文本回车即建（Enter 提交 + 默认值兜底），

@@ -31,11 +31,14 @@ import { PosGrid } from "./WmPosGrid";
 import { QueueSection, nameOf, pathsByNames } from "./FileQueue";
 import { joinPath, parentPath } from "../lib/path";
 
-/** np-seg 分段快选（同 SettingsPanel 用法：激活态 = 描边勾选 chip，2026-10-24
- *  定案方案 A——sel 淡染底 + accent 描边 + ✓ 前缀，替代轨道 + accent 实心填充）。
+/** np-seg 分段快选——np-seg 类的唯一合法渲染入口。选中 accent 胶囊由内置滑块层
+ *  供给（2026-11-24 起 chip 激活态背景改 none），裸 ButtonGroup 挂 np-seg 类
+ *  会让选中项失去胶囊底（accent-fg 字落透明槽），全部用点必须走本组件。
+ *  onChange 第二参 = 点击事件（主题切换圆形揭示特效取按钮圆心用）。
  *  2026-10-17 起导出共用（工具箱新对话框同款，避免跨文件复制）；
  *  2026-11-03 增 disabled（整组禁用，用于不适用参数行）；
- *  2026-11-09 增逐项 disabled（组内个别选项不适用，如透明底下的 JPEG） */
+ *  2026-11-09 增逐项 disabled（组内个别选项不适用，如透明底下的 JPEG）；
+ *  2026-11-24 增滑块层动效；同日顶栏快速面板/设置面板/菜单编辑器迁入 */
 // 泛型不带 extends 约束：TS6 下联合约束会让推断回退到约束本身，
 // setState 直传时整体变宽（实测，见体检记录）；无约束则 value 站稳定全流程
 export function Seg<T>({
@@ -46,7 +49,7 @@ export function Seg<T>({
 }: {
   value: T;
   options: { value: T; label: string; title?: string; disabled?: boolean }[];
-  onChange(v: T): void;
+  onChange(v: T, e: React.MouseEvent<HTMLElement>): void;
   /** 整组禁用（关联参数不适用时，如 PNG8/无损目标下的质量档） */
   disabled?: boolean;
 }) {
@@ -95,7 +98,7 @@ export function Seg<T>({
           active={value === o.value}
           disabled={disabled || o.disabled}
           data-tip={o.title}
-          onClick={() => onChange(o.value)}
+          onClick={(e) => onChange(o.value, e)}
         >
           {o.label}
         </Button>

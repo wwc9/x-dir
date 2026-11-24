@@ -6,7 +6,6 @@ import { useEffect, useState, Fragment, type ReactNode } from "react";
 import { t, useT } from "../lib/i18n";
 import {
   Button,
-  ButtonGroup,
   Dialog,
   DialogBody,
   InputGroup,
@@ -298,23 +297,21 @@ export function SettingsPanel() {
         {tab === "appearance" && (
           <>
             <SetRow label={t("主题")} desc={t("跟随 Windows 深浅色自动切换，或固定浅色 / 深色")}>
-              <ButtonGroup className="np-seg" size="small" variant="minimal">
-                {(["system", "light", "dark"] as const).map((th) => (
-                  <Button
-                    key={th}
-                    active={s.theme === th}
-                    onClick={(e) => {
-                      const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                      setThemeWithFx(th, {
-                        x: r.left + r.width / 2,
-                        y: r.top + r.height / 2,
-                      });
-                    }}
-                  >
-                    {th === "system" ? t("跟随系统") : th === "light" ? t("浅色") : t("深色")}
-                  </Button>
-                ))}
-              </ButtonGroup>
+              {/* 共享 Seg（滑块层供 accent 胶囊）；揭示特效取选中按钮圆心 */}
+              <Seg
+                value={s.theme}
+                options={(["system", "light", "dark"] as const).map((th) => ({
+                  value: th,
+                  label: th === "system" ? t("跟随系统") : th === "light" ? t("浅色") : t("深色"),
+                }))}
+                onChange={(th, e) => {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setThemeWithFx(th, {
+                    x: r.left + r.width / 2,
+                    y: r.top + r.height / 2,
+                  });
+                }}
+              />
             </SetRow>
             <SetRow label={t("界面缩放")} desc={t("Ctrl +/−/0 或 Ctrl+滚轮，作用于全部界面")}>
               <NpSelect
