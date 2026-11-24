@@ -1125,15 +1125,21 @@ html.glasswin .np-winedge-top {
   animation: none;
   mix-blend-mode: normal;
 }
-/* 全局按钮焦点态（2026-10-12 修订定案）：所有按钮（Blueprint .bp6-button 与
-   自绘 button）:focus / :focus-visible 一律不画描边——鼠标点击不得残留焦点框。
-   此前用 :focus:not(:focus-visible) 抑制，但 Chromium 的 focus-visible 启发式
-   在脚本回流焦点/连续交互时会误匹配（实测交换钮点选目标后残留蓝环），
-   故不再依赖该伪类；键盘可达性由控件自身的激活/悬停态承担 */
-.bp6-button:focus,
-.bp6-button:focus-visible,
-button:focus,
-button:focus-visible {
+/* 全局焦点态（2026-10-12 定案「按钮不画焦点框」；2026-11-24 用户扩展
+   「所有组件不需要点击后的边框样式」收敛为全局）：全部元素 :focus /
+   :focus-visible 一律 outline:none。Blueprint blueprint.css 自带全局
+   :focus 2px 蓝环（浅 :focus (0,1,0) / 深 .bp6-dark :focus (0,2,0)），
+   本规则同特异性但本文件加载在后故压过——此前仅覆盖按钮，MenuItem（a
+   元素）等漏网：右键菜单项点击后残留蓝环（2026-11-24 用户截图）。
+   不再依赖 :focus-visible 启发式做区分——Chromium 在脚本回流焦点/连续
+   交互时会误匹配（实测交换钮点选目标后残留蓝环）。状态反馈由控件自身
+   的激活/悬停/填充态承担：输入框聚焦 ring 走 box-shadow 不受影响，
+   Switch 开合靠轨道变色，Checkbox/Radio 靠勾选态本身；np-shelf.on 等
+   虚线 outline 是拖拽悬停指示（class 驱动）非焦点态，不在本口径内 */
+:focus,
+:focus-visible,
+.bp6-dark :focus,
+.bp6-dark :focus-visible {
   outline: none;
 }
 /* 全局 Switch 无描边（2026-11-24 用户需求「切换组件不要加边框」）：旋钮退役
@@ -1141,7 +1147,7 @@ button:focus-visible {
    outline——点击即聚焦隐藏 input，蓝圈会残留常驻（同上方按钮焦点态定案
    口径：状态反馈由轨道变色承担，键盘切换的可达性靠轨道开合可见）。浅深
    主题同源；glasswin 玻璃变体同步无描边（见玻璃值组件块）。Checkbox/Radio
-   的焦点 outline 维持 Blueprint 原样 */
+   的焦点 outline 同归上方全局焦点态规则（2026-11-24「所有组件」口径） */
 .bp6-control.bp6-switch .bp6-control-indicator::before {
   box-shadow: none;
 }
