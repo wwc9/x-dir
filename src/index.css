@@ -524,6 +524,11 @@ html.glasswin .np-seg .bp6-button {
   border-radius: var(--np-radius-pill);
   backdrop-filter: none;
   color: var(--np-muted);
+  font-size: var(--np-font-ui);
+  font-weight: 400;
+  /* 芯片收窄 4px：槽体内衬 2px×2 后总高恰回 --np-ctl-h 24px 标准档
+     （旧版 24px 芯片 + 槽内衬 = 28px，在紧凑面板里偏壮） */
+  min-height: calc(var(--np-ctl-h) - 4px);
 }
 html.glasswin .np-seg .bp6-button:hover {
   background: rgb(255 255 255 / 0.28);
@@ -537,6 +542,10 @@ html.glasswin .bp6-button-group.np-seg .bp6-button.bp6-active.bp6-active,
 html.glasswin .bp6-button-group.np-seg .bp6-button.bp6-active.bp6-active:hover {
   background: var(--np-accent);
   color: var(--np-accent-fg);
+  /* 不加粗（2026-11-24 用户定案）：实底 accent pill 已足够强调，
+     加粗白字在细行面板里显突兀；字重回归常规 400 */
+  font-size: var(--np-font-ui);
+  font-weight: 400;
 }
 html.glasswin.bp6-dark .np-seg .bp6-button.bp6-active,
 html.glasswin.bp6-dark .np-seg .bp6-button.bp6-active.bp6-active:hover,
@@ -544,6 +553,7 @@ html.glasswin.bp6-dark .bp6-button-group.np-seg .bp6-button.bp6-active.bp6-activ
 html.glasswin.bp6-dark .bp6-button-group.np-seg .bp6-button.bp6-active.bp6-active:hover {
   background: var(--np-accent);
   color: var(--np-accent-fg);
+  font-weight: 400;
 }
 /* ═══ 玻璃背景图案（2026-11-18 收敛定案：六案比选后用户拍板「除极光外全删」——
    五案〔云隙晨光 dawn/几何构成 geo/绸缎流波 silk/点阵蓝图 blueprint/暮山层影
