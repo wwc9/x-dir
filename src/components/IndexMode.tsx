@@ -4,7 +4,7 @@
 // 开启 = UAC 拉起提权守护（一次授权，后台常驻）；关闭 = 写停止文件优雅退出。
 import { useEffect, useRef, useState } from "react";
 import { Button, PopoverNext, Switch } from "@blueprintjs/core";
-import { Check, LoaderCircle, X } from "lucide-react";
+import { Check, Info, LoaderCircle, X } from "lucide-react";
 
 import { api, type IndexStatus } from "../lib/ipc";
 import {
@@ -17,7 +17,7 @@ import { DENSITY } from "../lib/tokens";
 import { t } from "../lib/i18n";
 import { useSettings } from "../stores/settings";
 import { useUi } from "../stores/ui";
-import { AppIcon } from "./AppIcon";
+import { AppIcon, ic } from "./AppIcon";
 
 /** 索引状态轮询：active 期间 2s 一次（index_status 读本地状态文件，开销可忽略） */
 export function useIndexStatus(active: boolean): IndexStatus | null {
@@ -237,5 +237,46 @@ export function IndexModeBar({ status }: { status: IndexStatus | null }) {
         onChange={(e) => onToggle(e.currentTarget.checked)}
       />
     </span>
+  );
+}
+
+/**
+ * 全盘搜索页顶部的索引模式说明条（2026-11-24 用户需求「普通用户不知道索引模式
+ * 的用处」）：索引未生效（开关未开 / 守护离线）时显示一行说明 + 开启入口；
+ * 索引就绪或建立中不显示（开关已在干活，无需说教）。可关闭，关闭仅本页面
+ * 生命周期——瞬态提示不属用户偏好，不落 settings.json（§12.6）。
+ */
+export function IndexModeNote({ status }: { status: IndexStatus | null }) {
+  const [dismissed, setDismissed] = useState(false);
+  const enabled = useSettings((s) => s.nameIndex.enabled);
+  // status 未回执前不渲染（防首帧闪现后立刻消失的抖动）
+  if (dismissed || status === null || (enabled && status.daemonAlive)) return null;
+  const setEnabled = (v: boolean) =>
+    useSettings.getState().update({ nameIndex: { enabled: v } });
+  return (
+    <div className="np-gsearch-idxnote">
+      <AppIcon icon={Info} size={DENSITY.iconSm} colorVar="--np-accent" />
+      <span className="np-gsearch-idxnote-text">
+        {t(
+          "当前为实时遍历扫描（大目录秒级起）；开启索引模式后，NTFS 名称索引让全盘搜索毫秒级出结果，文件变动实时同步。",
+        )}
+      </span>
+      <Button
+        minimal
+        size="small"
+        intent="primary"
+        onClick={() => toggleIndexMode(true, setEnabled)}
+      >
+        {t("开启索引模式")}
+      </Button>
+      <Button
+        minimal
+        size="small"
+        icon={ic(X)}
+        aria-label={t("关闭提示")}
+        data-tip={t("知道了")}
+        onClick={() => setDismissed(true)}
+      />
+    </div>
   );
 }

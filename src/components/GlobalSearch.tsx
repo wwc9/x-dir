@@ -66,7 +66,7 @@ import { confirmDialog, useUi, type MenuItem } from "../stores/ui";
 import { AppIcon, ic } from "./AppIcon";
 import { ColGrip, type ColResizeCtl } from "./ColGrip";
 import { FadeInIcon } from "./FileList";
-import { IndexModeBar, useIndexStatus } from "./IndexMode";
+import { IndexModeBar, IndexModeNote, useIndexStatus } from "./IndexMode";
 import { NpSelect } from "./NpSelect";
 import { PreviewBody } from "./preview/PreviewBody";
 
@@ -736,6 +736,8 @@ export function GlobalSearchPage() {
             onClick={() => useSettings.getState().update({ gsearchPreview: !previewOpen })}
           />
         </div>
+        {/* 索引模式说明条（索引未生效时显示）：普通用户不知道索引模式用处，一句话讲清价值 + 开启入口 */}
+        <IndexModeNote status={indexStatus} />
         <div className="np-gsearch-main">
           <div
             ref={panelRef}

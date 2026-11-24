@@ -4159,6 +4159,29 @@ body.np-col-resizing * {
   align-items: center;
   gap: var(--np-gap);
 }
+/* 索引模式说明条（IndexModeNote，2026-11-24 用户需求「普通用户不知道索引模式
+   的用处」）：搜索页过滤行下的一行提示——说明价值 + 开启入口 + 可关闭；
+   索引就绪时组件不渲染。玻璃/实底两态都走 surface-2 子面（§4.10 子面口径，
+   实底模式 surface-2 即原样） */
+.np-gsearch-idxnote {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--np-gutter);
+  margin: 0 0 var(--np-gutter);
+  padding: 3px 6px 3px 10px;
+  background: var(--np-surface-2);
+  border-radius: var(--np-radius);
+  color: var(--np-muted);
+  font-size: var(--np-font-sm);
+}
+.np-gsearch-idxnote-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.np-gsearch-idxnote .bp6-button {
+  flex: none;
+}
 .np-gsearch-idxwrap .bp6-switch {
   display: inline-flex;
   align-items: center;
