@@ -484,8 +484,14 @@ html.glasswin .bp6-control input:checked ~ .bp6-control-indicator {
    同源）——旋钮回归实底不再自带 blur，玻璃感由所在霜面承载；仅 Switch 生效
    （Checkbox/Radio 选中仍走上方通配实心 accent） */
 html.glasswin .bp6-control.bp6-switch .bp6-control-indicator::before {
-  background: var(--np-surface);
+  /* 旋钮芯必须不透明实色——glasswin 作用域的 --np-surface 是半透霜色
+     （浅白 .4 / 深紫灰 .4），叠在 accent 轨道上会透成蓝玻璃圆片
+     （2026-11-24 用户实测「不太一样」），故钉死浅白/深灰实色 */
+  background: #ffffff;
   border: 1px solid var(--np-border);
+}
+html.glasswin.bp6-dark .bp6-control.bp6-switch .bp6-control-indicator::before {
+  background: #2b2b2b;
 }
 html.glasswin .bp6-control.bp6-switch input:checked ~ .bp6-control-indicator::before {
   border-color: var(--np-accent);
@@ -1083,11 +1089,18 @@ html.glasswin .np-winedge-top {
    显式钉死防 Blueprint 默认文字色漂移；2026-11-24 用户定案「工具图标颜色
    统一规范」后无例外——活动窗格不翻 accent（激活指示只剩导航栏淡染），
    控件自身激活态（开关开启/排序方向等）在各自规则里单独给 accent */
-.np-titlebar .bp6-button,
+.bp6-titlebar .bp6-button,
 .np-nav .bp6-button,
 .np-sidebar .bp6-button,
 .np-tabbar .bp6-button {
   color: var(--np-fg);
+}
+/* 按钮文字一律不折行（2026-11-24 用户反馈「清空钮窄容器里清/空逐字竖排」）：
+   Blueprint 默认允许换行，长描述挤压 controls 区时按钮被压到字宽以下就
+   逐字竖排——按钮语义要求单行；nowrap 后 min-content = 整行字宽，flex
+   收缩到此为止不再压扁 */
+.bp6-button {
+  white-space: nowrap;
 }
 /* 主题切换圆形扩散（2026-10-15 定案）：View Transitions 承载浅/深切换，
    关闭默认交叉淡化，clip-path 圆形揭示动画在 stores/settings 的
