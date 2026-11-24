@@ -1310,13 +1310,16 @@ body:has(
   container-type: inline-size;
   container-name: np-tb;
 }
-/* 三段网格内衬（2026-11-18）：grid 不直接挂顶栏——容器查询不能样式化容器
-   自身，撤中岛后需把右轨 1fr 转 auto（旧 1fr auto 1fr 的空第三轨按 1fr 白吃
-   一半剩余宽度，深水档左段容量减半提前挤爆）；中段在场时仍 1fr auto 1fr
-   保岛严格水平居中。gap 区窗口拖拽由 TSX 同名内衬层的 drag-region 承载 */
+/* 三段网格内衬（2026-11-18；2026-11-24 用户需求「岛保持在顶栏空白区域中间」
+   改 auto 1fr auto）：旧 1fr auto 1fr 双 1fr 等宽 → 岛严格居中于窗口，但左
+   按钮群远宽于右群，空白区中心偏右，岛在空白区里看着偏左。改 auto 1fr auto
+   后左右轨各自贴合按钮群实宽，中轨 = 按钮群之间全部空白区（自带拖拽区），
+   岛居中于空白区而非窗口；左右按钮群宽度随渐进收纳变化时自动重居中。
+   容器查询不能样式化容器自身，撤中岛后需把列改 1fr auto（见下方收纳段）；
+   gap 区窗口拖拽由 TSX 同名内衬层的 drag-region 承载 */
 .np-tb-grid {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 4px;
   flex: 1 1 auto;
