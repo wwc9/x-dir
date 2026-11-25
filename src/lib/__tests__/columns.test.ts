@@ -29,6 +29,13 @@ describe("clampColWidth", () => {
     expect(clampColWidth(9999, "loc")).toBe(COL_MAX);
   });
 
+  it("长文件名宽度（>旧上限 480）不再被钳（2026-11-25 用户回归）", () => {
+    // 40+ 汉字文件名 ≈ 560px+，须完整可调
+    expect(clampColWidth(560, "name")).toBe(560);
+    expect(clampColWidth(1000, "name")).toBe(1000);
+    expect(clampGsColWidth(560, "name")).toBe(560);
+  });
+
   it("非法值落到该列默认宽", () => {
     expect(clampColWidth(Number.NaN, "mtime")).toBe(COL_DEFAULTS.mtime);
     expect(clampColWidth(Number.POSITIVE_INFINITY, "size")).toBe(COL_DEFAULTS.size);
@@ -38,7 +45,7 @@ describe("clampColWidth", () => {
 describe("sanitizeColWidths", () => {
   it("合法对象按列钳制保留", () => {
     expect(
-      sanitizeColWidths({ name: 300, mtime: 160, type: 999, size: 3, loc: 200 }),
+      sanitizeColWidths({ name: 300, mtime: 160, type: 9999, size: 3, loc: 200 }),
     ).toEqual({
       name: 300,
       mtime: 160,
@@ -86,7 +93,7 @@ describe("clampGsColWidth", () => {
 describe("sanitizeGsColWidths", () => {
   it("合法对象按列钳制保留，缺省键补默认", () => {
     // 旧档无 mtime：sanitize 补默认值
-    expect(sanitizeGsColWidths({ name: 260, loc: 999, size: 1, type: 90 })).toEqual({
+    expect(sanitizeGsColWidths({ name: 260, loc: 9999, size: 1, type: 90 })).toEqual({
       name: 260,
       loc: COL_MAX,
       size: COL_MIN,

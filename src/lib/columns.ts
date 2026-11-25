@@ -20,7 +20,10 @@ export const COL_DEFAULTS: ColWidths = {
 };
 
 export const COL_MIN = 56;
-export const COL_MAX = 480;
+/** 上限 1200（2026-11-25 用户反馈「文件名列可调整宽度有限制，有些长文件名无法
+ *  完整展示」）：旧 480 容不下 40+ 汉字文件名；超窗格部分走既定横滚口径
+ *  （np-scroll-x），上限只拦误拖狂奔，不承担布局职责 */
+export const COL_MAX = 1200;
 
 /* ── 详情视图内容自然宽（Explorer 口径）──
    各列定宽互不影响：拖一列只改这一列；可见列总宽超出窗格容器时 .np-rows
