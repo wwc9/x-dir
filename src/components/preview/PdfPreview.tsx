@@ -200,7 +200,8 @@ export default function PdfPreview({
   }, [matches]);
 
   return (
-    <div ref={scrollRef} className="np-pv-pdf">
+    <div className="np-pv-pdf-wrap">
+      <div ref={scrollRef} className="np-pv-pdf">
       {!doc ? (
         <div className="np-pv-loading">
           <Spinner size={DENSITY.iconMd} />
@@ -238,20 +239,25 @@ export default function PdfPreview({
               </div>
             ))}
           </div>
-          <div className="np-pv-pdf-jump">
-            <input
-              className="np-pv-pdf-jump-input"
-              value={jump}
-              placeholder={`1-${doc.numPages}`}
-              onChange={(e) => setJump(e.target.value.replace(/\D/g, ""))}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") jumpTo();
-                e.stopPropagation();
-              }}
-            />
-            <span>/ {doc.numPages}</span>
-          </div>
         </>
+      )}
+      </div>
+      {/* 页码跳转（2026-11-25 用户定稿挪中下位置）：挂滚动容器外，底部居中
+          悬浮不随内容滚动；输入页码 Enter 直达 */}
+      {doc && (
+      <div className="np-pv-pdf-jump">
+        <input
+          className="np-pv-pdf-jump-input"
+          value={jump}
+          placeholder={`1-${doc.numPages}`}
+          onChange={(e) => setJump(e.target.value.replace(/\D/g, ""))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") jumpTo();
+            e.stopPropagation();
+          }}
+        />
+        <span>/ {doc.numPages}</span>
+      </div>
       )}
     </div>
   );

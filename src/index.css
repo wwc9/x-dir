@@ -3436,7 +3436,7 @@ body.np-col-resizing * {
 }
 /* 缩略图视图（2026-11-25 第三视图模式）：列布局单元格 = 72px 缩略图盒 +
    名标签；行高由 DENSITY.rowHGrid 驱动（104），盒底 surface-2 凹陷层级 */
-.np-cell-grid {
+.np-row.np-cell-grid {
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
@@ -5121,10 +5121,20 @@ body.np-col-resizing * {
 }
 
 /* PDF：独立滚动容器 + 页卡片列（虚拟化，只画可见页） */
-.np-pv-pdf {
+.np-pv-pdf-wrap {
+  /* 定位基准（2026-11-25 页码跳转挪中下）：包住滚动容器，jump 挂此不随滚动 */
+  position: relative;
   flex: 1;
   min-width: 0;
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.np-pv-pdf {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow: auto;
 }
 .np-pv-pdf-inner {
@@ -5158,8 +5168,9 @@ body.np-col-resizing * {
 /* ── PDF 页码跳转（2026-10-18）：右上角浮动小条 ── */
 .np-pv-pdf-jump {
   position: absolute;
-  top: 10px;
-  right: 14px;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 5;
   display: flex;
   align-items: center;
