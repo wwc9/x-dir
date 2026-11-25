@@ -15,6 +15,7 @@ mod ole_dnd;
 mod pdf;
 mod sheet_fmt;
 mod watch;
+mod winstate;
 mod worklog;
 
 use fs::cache::SnapshotCache;
@@ -60,7 +61,7 @@ pub fn run() {
             }
         }
     }
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         // 应用内覆盖更新（2026-11-11）：检查 latest.json → 下载签名安装包 →
@@ -109,6 +110,11 @@ pub fn run() {
             // 上次会话/贴图残留的临时 PNG 清理（截图会话文件随收场即删，
             // 崩溃/强杀残留由此兜底）
             commands::shot::cleanup_stale();
+            // 主窗几何还原（2026-11-25 窗口持久化）：settings.json windowState
+            // → 物理坐标落位 + 最大化回放后 show（主窗 visible:false 建窗，
+            // 几何就绪再显示防默认位置闪现）；保存走关窗 CloseRequested +
+            // 退出 ExitRequested 双钩子
+            winstate::restore(_app.handle());
             // 静默更新完成感知（2026-11-12 用户反馈「更新后没有提示」）：
             // 启动对比上次运行版本，变化即发 app-updated（前端灵动岛回执「已更新到」）
             commands::update::check_app_updated(_app.handle());
@@ -193,6 +199,17 @@ pub fn run() {
                         }
                     });
                 }
+            }
+            // 关闭主窗即持久化几何（最大化/最小化态由 save_current 读恢复
+            // 矩形）；app.exit/更新静默重启等不经窗口 close 的退出路径由
+            // run 回调的 ExitRequested 兜底
+            if let Some(w) = _app.get_webview_window("main") {
+                let ws_app = _app.handle().clone();
+                w.on_window_event(move |e| {
+                    if matches!(e, tauri::WindowEvent::CloseRequested { .. }) {
+                        winstate::save_current(&ws_app);
+                    }
+                });
             }
             // 关闭 WebView2 浏览器加速键（F5/Ctrl+R 重载、Ctrl+F 查找栏、Ctrl+P
             // 打印、Ctrl+±缩放）：全局快捷键由前端 lib/keyboard.ts 全权路由，否则
@@ -389,6 +406,11 @@ pub fn run() {
             commands::shot_scroll::shot_result_save,
             commands::shot_scroll::shot_pin_file,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+    app.run(|_app, event| {
+        if matches!(event, tauri::RunEvent::ExitRequested { .. }) {
+            winstate::save_current(_app);
+        }
+    });
 }

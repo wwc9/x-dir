@@ -99,8 +99,9 @@ fn cliphist_save_size_blocking(width: f64, height: f64) -> Result<(), String> {
         .and_then(|s| std::fs::write(p, s).map_err(|e| e.to_string()))
 }
 
-/// 由轻量窗口补丁命令直写 settings.json 的键（shot_save_prefs 八键 +
-/// cliphist_save_size 两键）。save_settings 落盘时**保留磁盘值**——主窗
+/// 由轻量窗口补丁命令/退出钩子直写 settings.json 的键（shot_save_prefs 八键 +
+/// cliphist_save_size 两键 + winstate::save_current 退出落盘的 windowState）。
+/// save_settings 落盘时**保留磁盘值**——主窗
 /// store 启动时加载、此后不再重读，整对象覆盖会把这些键回滚到启动时的旧值
 /// （2026-11-01 审查修复：截图滚轮调节 → 主窗任意设置变更，调节即被回滚）
 const PATCH_OWNED_KEYS: &[&str] = &[
@@ -114,6 +115,9 @@ const PATCH_OWNED_KEYS: &[&str] = &[
     "shotBlurAlpha",
     "cliphistWinW",
     "cliphistWinH",
+    // 主窗几何（winstate.rs 关窗/退出钩子直写）：前端 store 持有启动时副本，
+    // 整对象覆盖会把上次会话的尺寸位置回滚——与 cliphistWinW/H 同理
+    "windowState",
 ];
 
 #[tauri::command]
