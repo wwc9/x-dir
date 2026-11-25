@@ -58,6 +58,9 @@ export function QuickPreviewHost() {
     infoText: null,
   });
   const [rotateTick, setRotateTick] = useState(0);
+  // 页码跳转槽（2026-11-25 用户定稿放 footer 中央，不遮 PDF 内容）：PdfPreview
+  // 经 portal 渲染进该槽（footer 三段：左 meta / 中跳转 / 右文件序位）
+  const [jumpSlot, setJumpSlot] = useState<HTMLSpanElement | null>(null);
   // 文本自动换行开关（默认开 = 历史行为；关闭后 nowrap + 行号）
   const [textWrap, setTextWrap] = useState(true);
   // 预览内查找（Ctrl+F 唤起；词/活动命中/总数由宿主持有）
@@ -450,9 +453,12 @@ export function QuickPreviewHost() {
             onMeta={setMeta}
             search={searchCtl}
             textWrap={textWrap}
+            jumpSlot={jumpSlot}
           />
           <footer className="np-pv-foot">
             <span className="np-ellipsis">{footerLeft()}</span>
+            <span className="np-pv-foot-spacer" />
+            <span ref={setJumpSlot} className="np-pv-foot-jumpslot" />
             <span className="np-pv-foot-spacer" />
             <span className="np-pv-pos">
               {index + 1} / {queue.length}

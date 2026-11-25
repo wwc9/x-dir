@@ -69,6 +69,7 @@ export function PreviewBody({
   onMeta,
   search,
   textWrap = true,
+  jumpSlot = null,
   emptyHint = "选择文件以预览",
 }: {
   entry: FileEntry | null;
@@ -81,6 +82,9 @@ export function PreviewBody({
   /** 文本自动换行开关（宿主按钮切换） */
   textWrap?: boolean;
   emptyHint?: string;
+  /** 页码跳转槽（宿主 footer 中央；2026-11-25 用户定稿放 footer 不遮内容）。
+   *  不传 = PdfPreview 回退滚动容器底部居中悬浮 */
+  jumpSlot?: HTMLElement | null;
 }) {
   // 文件夹不按扩展名路由（previewKind 是名称纯函数）：isDir 直取 folder 卡
   const kind = entry ? (entry.isDir ? "folder" : previewKind(entry.name)) : "fallback";
@@ -336,6 +340,7 @@ export function PreviewBody({
               onError={(m) => setMediaError(m || t("转换后的 PDF 加载失败"))}
               search={search}
               rotateSignal={rotateSignal}
+              jumpSlot={jumpSlot}
             />
           </Suspense>
         );
@@ -359,6 +364,7 @@ export function PreviewBody({
               }
               search={search}
               rotateSignal={rotateSignal}
+              jumpSlot={jumpSlot}
             />
           </Suspense>
         );

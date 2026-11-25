@@ -4729,6 +4729,19 @@ body.np-col-resizing * {
 .np-pv-foot-spacer {
   flex: 1;
 }
+/* 页码跳转槽（2026-11-25 用户定稿：跳转条放 footer 中央，不遮 PDF 内容）——
+   PdfPreview 经 portal 渲染进槽；两 spacer 夹持水平居中 */
+.np-pv-foot-jumpslot {
+  flex: 0 1 auto;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+.np-pv-pdf-jump-infoot {
+  position: static;
+  transform: none;
+  box-shadow: none;
+}
 .np-pv-pos {
   flex: none;
   font-variant-numeric: tabular-nums;

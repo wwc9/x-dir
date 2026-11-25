@@ -7,6 +7,7 @@
 // PDF 转图片管线共用同一套）。
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { PDFDocumentProxy, RenderTask, TextLayer } from "pdfjs-dist";
 import { Spinner } from "@blueprintjs/core";
@@ -33,6 +34,9 @@ export default function PdfPreview({
   onError,
   search,
   rotateSignal = 0,
+  /** 页码跳转的宿主挂载槽（2026-11-25 用户定稿放 footer 中央，不遮 PDF 内容）；
+   *  不传（无 footer 宿主，如全盘搜索内嵌）= 回退滚动容器右下原位悬浮 */
+  jumpSlot,
 }: {
   url: string;
   /** 文档就绪后回报总页数（footer 展示） */
@@ -41,6 +45,7 @@ export default function PdfPreview({
   search?: PreviewSearchCtl;
   /** 宿主"旋转"按钮的递增信号：每 +1 顺时针转 90°（内部跳过初始值） */
   rotateSignal?: number;
+  jumpSlot?: HTMLElement | null;
 }) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [ratio, setRatio] = useState(1.414); // 首页宽高比估算（A4 竖版），measureElement 修正
@@ -199,6 +204,29 @@ export default function PdfPreview({
     return offsets;
   }, [matches]);
 
+  // 页码跳转（2026-11-25 用户定稿放 footer 中央，不遮 PDF 内容）：宿主传槽时
+  // portal 进 footer 槽（文档流内联，footer 三段之一）；无槽宿主（全盘搜索内嵌）
+  // 回退滚动容器外底部居中悬浮。输入页码 Enter 直达
+  const jumpUi = doc ? (
+    <div
+      className={
+        jumpSlot ? "np-pv-pdf-jump np-pv-pdf-jump-infoot" : "np-pv-pdf-jump"
+      }
+    >
+      <input
+        className="np-pv-pdf-jump-input"
+        value={jump}
+        placeholder={`1-${doc.numPages}`}
+        onChange={(e) => setJump(e.target.value.replace(/\D/g, ""))}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") jumpTo();
+          e.stopPropagation();
+        }}
+      />
+      <span>/ {doc.numPages}</span>
+    </div>
+  ) : null;
+
   return (
     <div className="np-pv-pdf-wrap">
       <div ref={scrollRef} className="np-pv-pdf">
@@ -242,23 +270,9 @@ export default function PdfPreview({
         </>
       )}
       </div>
-      {/* 页码跳转（2026-11-25 用户定稿挪中下位置）：挂滚动容器外，底部居中
-          悬浮不随内容滚动；输入页码 Enter 直达 */}
-      {doc && (
-      <div className="np-pv-pdf-jump">
-        <input
-          className="np-pv-pdf-jump-input"
-          value={jump}
-          placeholder={`1-${doc.numPages}`}
-          onChange={(e) => setJump(e.target.value.replace(/\D/g, ""))}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") jumpTo();
-            e.stopPropagation();
-          }}
-        />
-        <span>/ {doc.numPages}</span>
-      </div>
-      )}
+      {jumpSlot && jumpUi
+        ? createPortal(jumpUi, jumpSlot, "np-pv-pdf-jump")
+        : jumpUi}
     </div>
   );
 }
