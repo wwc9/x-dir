@@ -428,10 +428,13 @@ describe("导航与视图", () => {
     covered.add("refresh");
   });
 
-  it("view-cycle：F3 在 详细信息 ↔ 列表 间循环", () => {
+  it("view-cycle：F3 在 详细信息 → 列表 → 缩略图 间循环", () => {
     expect(usePanes.getState().tabs[tabId]?.viewMode).toBe("details");
     fire({ key: "F3" });
     expect(usePanes.getState().tabs[tabId]?.viewMode).toBe("list");
+    fire({ key: "F3" });
+    // 2026-11-25 加 grid：详细信息 → 列表 → 缩略图 → 详细信息
+    expect(usePanes.getState().tabs[tabId]?.viewMode).toBe("grid");
     fire({ key: "F3" });
     expect(usePanes.getState().tabs[tabId]?.viewMode).toBe("details");
     covered.add("view-cycle");

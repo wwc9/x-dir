@@ -3,6 +3,11 @@
 export const DENSITY = {
   rowH: 28,
   cellWList: 190,
+  // 缩略图视图（2026-11-25 第三视图模式）：单元格宽 / 行高（缩略图 72 + 名
+  // 标签 + 留白），与 index.css .np-thumbbox 尺寸同值条款
+  cellWGrid: 100,
+  rowHGrid: 104,
+  thumbBox: 72,
   overscan: 6,
   // 表格预览多行档行高基线（与 index.css --np-sheet-line-h 同名同值）：
   // 换行/宽松档的行高估算 = 行数 × 此值 + 上下留白（lib/sheetGrid.ts）

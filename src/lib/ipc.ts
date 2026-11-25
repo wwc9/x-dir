@@ -3,13 +3,38 @@ import type { RenameOp } from "./batchRename";
 import { invoke } from "@tauri-apps/api/core";
 
 export const THIS_PC = "::{ThisPC}";
+/** 回收站虚拟页哨兵路径（2026-11-25）：不经 list_dir，走 recyclebin_* 命令族 */
+export const RECYCLE_BIN = "::{RecycleBin}";
+
+/** 回收站条目（Rust recyclebin::RecycleEntry 镜像）：$I 元数据直读 */
+export interface RecycleEntry {
+  /** 原文件名（展示名） */
+  name: string;
+  /** 原完整路径（还原目标 / 原位置列展示） */
+  origPath: string;
+  /** $I 元数据文件路径 */
+  iPath: string;
+  /** $R 数据本体路径（本条目的「路径」标识） */
+  rPath: string;
+  isDir: boolean;
+  /** 原字节数 */
+  size: number;
+  /** 删除时刻（Unix ms） */
+  deletedMs: number;
+}
+
+/** 还原/清空结果：成功数 + 逐项失败（人话 message） */
+export interface RecycleOpResult {
+  ok: number;
+  failed: { path: string; message: string }[];
+}
 
 export type SortKey = "name" | "size" | "mtime" | "type";
 export interface Sort {
   key: SortKey;
   dir: "asc" | "desc";
 }
-export type ViewMode = "list" | "details";
+export type ViewMode = "list" | "details" | "grid";
 export type Policy = "overwrite" | "skip" | "rename";
 /** V2 颜色标记键（与 index.css --np-tag-* token 一一对应） */
 export type TagColor = "red" | "orange" | "yellow" | "green" | "blue" | "purple";
@@ -271,7 +296,7 @@ export interface RenameOutcome {
 export interface DriveInfo {
   letter: string;
   label: string;
-  driveType: "fixed" | "removable" | "cdrom";
+  driveType: "fixed" | "removable" | "cdrom" | "remote";
   totalBytes: number;
   freeBytes: number;
 }
@@ -555,6 +580,13 @@ export interface Settings {
   /** 组件间隔宽度（px，4–24，默认 6）：驱动 --np-gutter——窗格分隔条热区、
    *  卡片间距与画布四周留白同源（分隔条可拖依赖此宽度，下限 4） */
   uiGap: number;
+  /** 强调色预设（2026-11-25 外观 tab）：id = lib/accent ACCENT_PRESETS 成员；
+   *  default = 不覆盖（index.css 回退链字面量），其余经 applyAccent 内联下发
+   *  --np-accent-user(-dark) 浅/深成对变量。脏档回落 default */
+  accent: string;
+  /** 首次启动欢迎引导（2026-11-25）：已看过 = true 不再自动弹出；设置 →
+   *  配置页「重新查看欢迎引导」可重开 */
+  welcomeSeen: boolean;
 }
 
 /** 自定义右键命令：占位符 %f=全部选中路径（逐个引号包裹） %n=首项文件名 %d=所在目录；
@@ -700,6 +732,8 @@ export const DEFAULT_SETTINGS: Settings = {
   cliphistRichText: true,
   uiRadius: 10,
   uiGap: 6,
+  accent: "default",
+  welcomeSeen: false,
 };
 export const PAGE_SIZE = 500;
 
@@ -722,6 +756,12 @@ export interface ClipHistItem {
 export interface ClipHistPage {
   items: ClipHistItem[];
   total: number;
+}
+
+/** 剪贴板来源应用（2026-11-25 浮窗来源筛选）：name = 来源进程名，count = 条目数 */
+export interface ClipSource {
+  name: string;
+  count: number;
 }
 
 /** 全局热键注册项（hotkeysSync 全量重建，回调按 id 分发） */
@@ -1089,6 +1129,17 @@ export const api = {
   getVolume: (path: string) =>
     cmd<{ freeBytes: number; totalBytes: number }>("get_volume", { path }),
   getKnownFolder: (id: string) => cmd<string>("get_known_folder", { id }),
+  /** 批量取缩略图（2026-11-25 grid 视图）：96px PNG data URL，缓存键含 mtime */
+  getThumbnails: (paths: string[]) =>
+    cmd<Record<string, string>>("get_thumbnails", { paths }),
+  /** 回收站（2026-11-25 虚拟页）：条目清单（$I 元数据直读） */
+  recyclebinList: () => cmd<RecycleEntry[]>("recyclebin_list"),
+  /** 回收站还原：$R 移回原路径（原名被占旁写 (2)；原位置缺失重建） */
+  recyclebinRestore: (items: RecycleEntry[]) =>
+    cmd<RecycleOpResult>("recyclebin_restore", { items }),
+  /** 回收站永久删除（$R 递归删除；清空 = 全量 rPaths） */
+  recyclebinDelete: (rPaths: string[]) =>
+    cmd<RecycleOpResult>("recyclebin_delete", { rPaths }),
   getLaunchArgs: () => cmd<string[]>("get_launch_args"),
   /** 关于浮窗更新检查：Rust 侧双源直取 update.json（绕开 WebView CORS/代理态不稳） */
   fetchUpdateManifest: () => cmd<UpdateFetchResult>("fetch_update_manifest"),
@@ -1454,9 +1505,12 @@ export const api = {
       excludeApps,
       richText,
     }),
-  /** 剪贴板历史：分页查询（query 空串=全部；kind 空串=全部类型） */
-  cliphistList: (query: string, kind: string, offset: number, limit: number) =>
-    cmd<ClipHistPage>("cliphist_list", { query, kind, offset, limit }),
+  /** 剪贴板历史：分页查询（query 空串=全部；kind 空串=全部类型；
+   *  source 空串=全部来源，精确等值） */
+  cliphistList: (query: string, kind: string, offset: number, limit: number, source?: string) =>
+    cmd<ClipHistPage>("cliphist_list", { query, kind, offset, limit, source }),
+  /** 来源应用清单（2026-11-25 来源筛选）：去重计数降序，供浮窗筛选下拉 */
+  cliphistSources: () => cmd<ClipSource[]>("cliphist_sources"),
   /** 剪贴板历史：写回系统剪贴板；paste=true 直接粘贴（返回 pasted，失败
    *  由前端降级提示「已复制」） */
   cliphistWriteBack: (id: number, paste: boolean) =>

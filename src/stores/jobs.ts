@@ -19,6 +19,11 @@ export interface JobInfo {
   sourceParents: string[];
   /** 删除任务的 permanent 标志（Shift+Del）：解除占用重试需按原语义重删 */
   deletePermanent: boolean;
+  /** 注册时刻（ETA 外推基准，lib/jobsEta；缺省 = 不估算） */
+  startedAt?: number;
+  /** 删除任务的原始路径清单（2026-11-25 回执「撤销」动作：按原路径精确
+   *  还原回收站条目，独立于撤销栈顶不受期间其他操作影响）；仅删除任务携带 */
+  paths?: string[];
 }
 
 /** 任务类别：copy/move/delete 引擎原生；pdf* = PDF 处理（lopdf）；
@@ -104,6 +109,7 @@ interface JobsStore {
       failed?: { path: string; message: string; reason?: string }[];
     }) => void,
     deletePermanent?: boolean,
+    paths?: string[],
   ): void;
   /** 前端驱动任务（2026-11-11 PDF 转图片等渲染在渲染层的批量活）：负数
    *  jobId 与 Rust u32 永不冲突，进度由发起方经 updateLocal 推进，island/
@@ -195,16 +201,10 @@ export const useJobs = create<JobsStore>()((set, get) => ({
           useIsland.getState().pushReceipt("info", "任务已取消");
         }
       } else if (info) {
-        // 成功回执：灵动岛轻播报；解压/压缩附「打开」目标目录动作与附注
+        // 成功回执：灵动岛轻播报；解压/压缩附「打开」目标目录动作与附注，
+        // 回收站删除附「撤销」动作（2026-11-25 用户需求）
         const label = `${JOB_LABELS[info.mode] ?? "任务"}完成${d.note ? ` · ${d.note}` : ""}`;
-        const dir = info.destDir;
-        useIsland.getState().pushReceipt(
-          "ok",
-          label,
-          dir && (info.mode === "extract" || info.mode === "zip")
-            ? { action: { label: "打开", run: () => void api.openItem(dir) } }
-            : undefined,
-        );
+        useIsland.getState().pushReceipt("ok", label, doneReceiptAction(info));
       }
       // 极快完成的任务：done 事件可能先于 invoke 返回的 jobId（register 尚未执行）。
       // 暂存等待 register；超时仍未等到（高负载下 invoke 可远超原 120ms 窗口）
@@ -242,7 +242,7 @@ export const useJobs = create<JobsStore>()((set, get) => ({
     };
   },
 
-  register(jobId, mode, destDir, sourceParents, onDone, deletePermanent = false) {
+  register(jobId, mode, destDir, sourceParents, onDone, deletePermanent = false, paths?: string[]) {
     if (onDone) doneHooks.set(jobId, onDone);
     set((s) => ({
       jobs: {
@@ -261,6 +261,8 @@ export const useJobs = create<JobsStore>()((set, get) => ({
             destDir,
             sourceParents,
             deletePermanent,
+            startedAt: Date.now(),
+            ...(paths ? { paths } : {}),
           } satisfies JobInfo),
       },
       order: s.order.includes(jobId) ? s.order : [...s.order, jobId],
@@ -290,13 +292,10 @@ export const useJobs = create<JobsStore>()((set, get) => ({
         }
         // 失败/取消回执已在 job-done 监听器播过；这里只补漏掉的成功回执
         if (!d.cancelled && !d.failed?.length) {
-          const dir = info.destDir;
           useIsland.getState().pushReceipt(
             "ok",
             `${JOB_LABELS[info.mode] ?? "任务"}完成${d.note ? ` · ${d.note}` : ""}`,
-            dir && (info.mode === "extract" || info.mode === "zip")
-              ? { action: { label: "打开", run: () => void api.openItem(dir) } }
-              : undefined,
+            doneReceiptAction(info),
           );
         }
       }
@@ -328,6 +327,7 @@ export const useJobs = create<JobsStore>()((set, get) => ({
           destDir,
           sourceParents,
           deletePermanent: false,
+          startedAt: Date.now(),
         } satisfies JobInfo,
       },
       order: [...s.order, jobId],
@@ -393,6 +393,45 @@ export const useJobs = create<JobsStore>()((set, get) => ({
     api.resumeJob(jobId).catch(() => undefined);
   },
 }));
+
+/** 任务成功回执的动作钮（2026-11-25 扩展）：解压/压缩 = 「打开」目标目录；
+ *  回收站删除 = 「撤销」——按原路径精确还原（restore_trash 按原路径匹配回收
+ *  站现存条目），独立于撤销栈顶、不受期间其他操作影响；永久删除不可逆不给钮 */
+function doneReceiptAction(info: JobInfo): {
+  action: { label: string; run: () => void };
+} | undefined {
+  const dir = info.destDir;
+  if (dir && (info.mode === "extract" || info.mode === "zip")) {
+    return { action: { label: "打开", run: () => void api.openItem(dir) } };
+  }
+  if (info.mode === "delete" && !info.deletePermanent && info.paths?.length) {
+    return { action: { label: "撤销", run: () => void undoDelete(info.paths!) } };
+  }
+  return undefined;
+}
+
+/** 删除回执「撤销」：还原 + 灵动岛人话回执（含回收站已清空的部分计数） */
+function undoDelete(paths: string[]) {
+  void api
+    .restoreFromTrash(paths)
+    .then((r) => {
+      void import("./ui").then(({ useUi }) => {
+        useUi
+          .getState()
+          .toast(
+            r.missing
+              ? `已还原 ${r.restored} 项 · ${r.missing} 项已不在回收站`
+              : `已还原 ${r.restored} 项`,
+            "info",
+          );
+      });
+    })
+    .catch((e) => {
+      void import("./ui").then(({ useUi }) => {
+        useUi.getState().toast(`还原失败：${String(e)}`, "error");
+      });
+    });
+}
 
 /** 删除失败含「正被占用」项 → 弹「解除占用」对话框（关句柄后可重删）。
  *  由 job-done 收尾调用（含 done 先于 register 的补漏路径） */

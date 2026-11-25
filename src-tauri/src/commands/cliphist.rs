@@ -45,7 +45,7 @@ pub fn cliphist_configure(
     Ok(())
 }
 
-/// 分页查询（query 空串 = 全部；kind 空串 = 全部类型）
+/// 分页查询（query 空串 = 全部；kind 空串 = 全部类型；source 空串 = 全部来源）
 #[tauri::command]
 pub async fn cliphist_list(
     app: AppHandle,
@@ -53,12 +53,32 @@ pub async fn cliphist_list(
     kind: String,
     offset: i64,
     limit: i64,
+    source: Option<String>,
 ) -> Result<crate::cliphist::ClipHistPage, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let st = app.state::<AppState>();
         let conn = st.cliphist.conn.lock().unwrap_or_else(|p| p.into_inner());
-        crate::cliphist::list_page(&conn, &query, &kind, offset, limit)
-            .map_err(|e| format!("查询剪贴板历史失败：{e}"))
+        crate::cliphist::list_page(
+            &conn,
+            &query,
+            &kind,
+            offset,
+            limit,
+            source.as_deref().unwrap_or(""),
+        )
+        .map_err(|e| format!("查询剪贴板历史失败：{e}"))
+    })
+    .await
+    .map_err(|e| format!("查询线程失败：{e}"))?
+}
+
+/// 来源应用清单（2026-11-25 来源筛选）：去重计数降序，供浮窗筛选下拉
+#[tauri::command]
+pub async fn cliphist_sources(app: AppHandle) -> Result<Vec<crate::cliphist::ClipSource>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let st = app.state::<AppState>();
+        let conn = st.cliphist.conn.lock().unwrap_or_else(|p| p.into_inner());
+        crate::cliphist::distinct_sources(&conn, 24).map_err(|e| format!("查询来源清单失败：{e}"))
     })
     .await
     .map_err(|e| format!("查询线程失败：{e}"))?

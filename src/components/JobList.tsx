@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 
 import { JOB_LABELS } from "../lib/island";
+import { etaSeconds, etaText } from "../lib/jobsEta";
 import { fileNameOf } from "../lib/path";
 import { DENSITY } from "../lib/tokens";
 import { useJobs, type JobInfo, type JobMode } from "../stores/jobs";
@@ -93,6 +94,12 @@ function percentText(j: JobInfo): string {
 
 function JobRow({ job }: { job: JobInfo }) {
   const Icon = MODE_ICONS[job.mode];
+  // ETA：每次进度事件驱动重渲染，现场取 now 即可（无需定时器；
+  // 100ms 聚合的 job-progress 频率足以让估算肉眼平滑）
+  const eta =
+    job.phase === "running"
+      ? etaSeconds(job.startedAt, fractionOf(job), job.phase, Date.now())
+      : null;
   return (
     <div className="np-job-row">
       <span className="np-job-icon">
@@ -104,6 +111,9 @@ function JobRow({ job }: { job: JobInfo }) {
           <span className="np-job-file np-ellipsis">
             {job.currentPath ? fileNameOf(job.currentPath) : t("准备中…")}
           </span>
+          {eta !== null && (
+            <span className="np-job-eta">{t("剩余 {t}", { t: etaText(eta) })}</span>
+          )}
           <span className="np-job-pct">{percentText(job)}</span>
         </div>
         <ProgressBar

@@ -16,6 +16,7 @@ pub mod native;
 pub mod office_cmds;
 pub mod pdf_cmds;
 pub mod preview;
+pub mod recyclebin;
 pub mod search;
 pub mod shot;
 pub mod shot_dxgi;

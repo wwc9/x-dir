@@ -35,6 +35,7 @@ import { initTooltip } from "./lib/tooltip";
 import { t } from "./lib/i18n";
 import { detectTier, resolvePerf } from "./lib/perf";
 import { AboutDialog } from "./components/AboutDialog";
+import { WelcomeDialog } from "./components/WelcomeDialog";
 import { ContextMenu } from "./components/ContextMenu";
 import { CommandPalette } from "./components/CommandPalette";
 import { DialogHost } from "./components/DialogHost";
@@ -179,6 +180,23 @@ export default function App() {
           useIsland
             .getState()
             .pushReceipt("info", t("已恢复上次会话 · {n} 个窗格", { n: dfsPanes(restored).length }));
+        }
+        // 首次启动欢迎引导（2026-11-25 用户需求）：welcomeSeen 门闸一次性弹出，
+        // 延迟让首屏目录先渲染；已有浮层占用时跳过（同更新提示的占位守卫口径）
+        if (!useSettings.getState().welcomeSeen) {
+          window.setTimeout(() => {
+            const ui = useUi.getState();
+            if (
+              ui.dialog ||
+              ui.settingsTab ||
+              ui.menuPage ||
+              ui.globalSearch ||
+              ui.calendarOpen ||
+              ui.aboutOpen
+            )
+              return;
+            ui.openWelcome();
+          }, 900);
         }
         unsubJobs = await useJobs.getState().init();
         if (disposed) {
@@ -383,6 +401,8 @@ export default function App() {
       <SettingsPanel />
       {/* 关于浮窗（Dialog）：常驻挂载，开合由 useUi.aboutOpen 驱动（顶栏信息钮/启动新版提示） */}
       <AboutDialog />
+      {/* 欢迎引导（2026-11-25）：常驻挂载，首启 welcomeSeen 门闸自动弹，配置页可重开 */}
+      <WelcomeDialog />
       <QuickPreviewHost />
       <ContextMenu />
       {/* 功能库快速命令面板（2026-11-11 方案 C）：右键菜单「功能库…」唤起，常驻挂载 */}

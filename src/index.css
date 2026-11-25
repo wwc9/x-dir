@@ -16,13 +16,17 @@
   --np-hairline: rgba(16, 24, 40, 0.06);
   --np-fg: #171d26;
   --np-muted: #66707e;
-  --np-accent: #3574f0;
+  /* 强调色自定义（2026-11-25）：回退链消费用户变量 --np-accent-user(-dark)，
+     settings.applyAccent 内联下发（浅/深两套取值成对，单变量不串主题）；
+     --np-sel / --np-glass-hover 同步改为 accent 派生（color-mix 与原硬编码
+     rgba 逐值等价），换强调色全链联动 */
+  --np-accent: var(--np-accent-user, #3574f0);
   --np-accent-fg: #ffffff;
   --np-hover: rgba(26, 33, 41, 0.055);
   /* 列表斑马纹（2026-10-31 剪贴板浮窗）：用户定案加深一档（0.03→0.05），
      仍低于悬停色保持层级；深色主题白墨增量小一档（0.04）防与 surface-2 趋同 */
   --np-stripe: rgba(26, 33, 41, 0.05);
-  --np-sel: rgba(53, 116, 240, 0.12);
+  --np-sel: color-mix(in srgb, var(--np-accent) 12%, transparent);
   --np-danger: #d1434b;
   --np-danger-fg: #ffffff;
   /* 成功/新增高亮（滚动截图预览新拼接段闪烁，浅色对齐 SHOT_PALETTE 绿） */
@@ -50,7 +54,7 @@
      文件列表行影透过玻璃可辨且正文对比度足 */
   --np-glass: rgba(255, 255, 255, 0.55);
   --np-glass-ring: rgba(20, 28, 40, 0.12);
-  --np-glass-hover: rgba(53, 116, 240, 0.14);
+  --np-glass-hover: color-mix(in srgb, var(--np-accent) 14%, transparent);
   --np-glass-shadow:
     0 12px 32px rgba(20, 28, 40, 0.18),
     0 0 0 0.5px rgba(20, 28, 40, 0.08);
@@ -155,11 +159,11 @@ html.bp6-dark {
   --np-border: #454545;
   --np-fg: #d4d4d4;
   --np-muted: #8f8f8f;
-  --np-accent: #5c9dff;
+  --np-accent: var(--np-accent-user-dark, #5c9dff);
   --np-accent-fg: #101010;
   --np-hover: rgba(255, 255, 255, 0.07);
   --np-stripe: rgba(255, 255, 255, 0.04);
-  --np-sel: rgba(92, 157, 255, 0.16);
+  --np-sel: color-mix(in srgb, var(--np-accent) 16%, transparent);
   --np-danger: #f27073;
   --np-danger-fg: #161616;
   --np-success: #46bf72;
@@ -175,7 +179,7 @@ html.bp6-dark {
     0 2px 12px rgb(0 0 0 / 0.4);
   --np-glass: rgba(32, 34, 38, 0.55);
   --np-glass-ring: rgba(255, 255, 255, 0.12);
-  --np-glass-hover: rgba(92, 157, 255, 0.18);
+  --np-glass-hover: color-mix(in srgb, var(--np-accent) 18%, transparent);
   --np-glass-shadow:
     0 16px 44px rgba(0, 0, 0, 0.55),
     0 0 0 0.5px rgba(0, 0, 0, 0.4);
@@ -646,7 +650,8 @@ html.glasswin .np-tip,
 html.glasswin .np-sugg,
 html.glasswin .np-cal-jump,
 html.glasswin .np-cal-hits,
-html.glasswin .np-palette {
+html.glasswin .np-palette,
+html.glasswin .np-clip-srcmenu {
   background: var(--np-surface-glass-strong);
   border-color: var(--np-glass-ring);
   box-shadow: var(--np-glass-shadow);
@@ -2143,6 +2148,7 @@ body.np-col-resizing .np-menued-grip::after {
    拖入 = OLE 落点命中 [data-shelf]（oleDispatch 前置分流，Explorer 拖入同管线）；
    拖出 = 行拖起 startDrag，落窗格即移动。高度 = 边栏减布局方案卡（.np-side-split 拖定） */
 .np-shelf {
+  position: relative;
   flex: 1 1 0;
   min-height: 104px;
   display: flex;
@@ -2476,6 +2482,130 @@ body.np-col-resizing .np-menued-grip::after {
 .np-settings-nav-item.is-on {
   background: var(--np-sel);
   color: var(--np-accent);
+}
+/* 设置搜索（2026-11-25）：导航栏顶部定宽输入 + 命中清单（标题 + 分类徽标） */
+.np-settings-search {
+  margin: 0 0 6px;
+  flex: 0 0 auto;
+}
+.np-settings-hit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  border-radius: var(--np-radius);
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+  cursor: pointer;
+  text-align: left;
+}
+.np-settings-hit:hover {
+  background: var(--np-hover);
+}
+.np-settings-hit.is-on {
+  background: var(--np-sel);
+  color: var(--np-accent);
+}
+.np-settings-hit-tab {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  padding: 1px 6px;
+  border-radius: var(--np-radius-pill);
+  background: var(--np-surface-2);
+}
+.np-settings-nohit {
+  padding: 8px 10px;
+  font-size: var(--np-font-ui);
+  color: var(--np-muted);
+}
+/* 强调色预设色板（2026-11-25）：圆点取值随浅/深主题切预设对应档（--sw/--sw-d
+   为数据驱动变量，色值来自 lib/accent 预设表，非硬编码样式） */
+.np-accent-swatches {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.np-accent-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--np-radius-pill);
+  background: transparent;
+  cursor: pointer;
+}
+.np-accent-swatch:hover {
+  background: var(--np-hover);
+}
+.np-accent-swatch.is-on {
+  background: var(--np-sel);
+  box-shadow: inset 0 0 0 1px var(--np-accent-border);
+}
+.np-accent-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--np-radius-pill);
+  background: var(--sw, var(--np-accent));
+}
+.dark .np-accent-dot,
+html.bp6-dark .np-accent-dot {
+  background: var(--sw-d, var(--np-accent));
+}
+/* 欢迎引导（2026-11-25）：2×2 亮点卡片 + 页脚提示 */
+.np-welcomedlg .bp6-dialog-body {
+  padding-top: 4px;
+}
+.np-welcome-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--np-gutter);
+}
+.np-welcome-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--np-radius-pane);
+  background: var(--np-surface-2);
+}
+.np-welcome-icon {
+  display: inline-flex;
+  padding: 6px;
+  border-radius: var(--np-radius);
+  background: var(--np-sel);
+  color: var(--np-accent);
+  flex: 0 0 auto;
+}
+.np-welcome-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.np-welcome-title {
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+}
+.np-welcome-desc {
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-welcome-kbd {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+.np-welcome-hint {
+  margin-top: 10px;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
 }
 .np-settings-page {
   flex: 1;
@@ -3303,6 +3433,35 @@ body.np-col-resizing * {
   white-space: nowrap;
   box-shadow: 0 4px 14px color-mix(in srgb, var(--np-accent) 35%, transparent);
   pointer-events: none;
+}
+/* 缩略图视图（2026-11-25 第三视图模式）：列布局单元格 = 72px 缩略图盒 +
+   名标签；行高由 DENSITY.rowHGrid 驱动（104），盒底 surface-2 凹陷层级 */
+.np-cell-grid {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 4px;
+  height: 100%;
+}
+.np-cell-grid .np-name {
+  max-width: 100%;
+}
+.np-thumbbox {
+  width: 72px;
+  height: 72px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: var(--np-radius);
+  background: var(--np-surface-2);
+  overflow: hidden;
+}
+.np-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 /* 框选橡皮筋（虚拟内容层内绝对定位）：强调色细描边 + 极淡填充，不吃指针事件 */
 .np-marquee {
@@ -5350,6 +5509,12 @@ body.np-col-resizing * {
 }
 .np-job-label {
   font-size: var(--np-font-ui);
+  white-space: nowrap;
+}
+.np-job-eta {
+  flex: 0 0 auto;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
   white-space: nowrap;
 }
 .np-job-pct {
@@ -7931,6 +8096,67 @@ body.np-col-resizing * {
   border-color: var(--np-accent);
   color: var(--np-accent-fg);
   font-weight: 600;
+}
+/* 来源筛选（2026-11-25）：激活 pill 显示来源名 + 自绘下拉清单（glasswin 下
+   已入强霜家族见上方 .np-clip-srcmenu 规则） */
+.np-clip-srcwrap {
+  position: relative;
+  display: inline-flex;
+}
+.np-clip-srcbtn {
+  gap: 4px;
+}
+.np-clip-srcbtn .np-clip-srcname {
+  max-width: 110px;
+  font-size: var(--np-font-sm);
+}
+.np-clip-srcmenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  min-width: 200px;
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border-radius: var(--np-radius-lg);
+  border: 1px solid var(--np-hairline);
+  background: var(--np-surface);
+  box-shadow: var(--np-shadow);
+}
+.np-clip-srcitem {
+  display: flex;
+  align-items: center;
+  gap: var(--np-gutter);
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--np-radius);
+  background: transparent;
+  font-size: var(--np-font-ui);
+  color: var(--np-fg);
+  cursor: pointer;
+  text-align: left;
+}
+.np-clip-srcitem:hover {
+  background: var(--np-hover);
+}
+.np-clip-srcitem.is-on {
+  background: var(--np-sel);
+  color: var(--np-accent);
+}
+.np-clip-srccnt {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+}
+.np-clip-srcempty {
+  padding: 8px 10px;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
 }
 .np-clip-list {
   flex: 1;

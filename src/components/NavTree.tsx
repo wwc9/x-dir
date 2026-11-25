@@ -7,9 +7,10 @@ import {
   FolderOpen,
   HardDrive,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 
-import { api, THIS_PC, type DriveInfo } from "../lib/ipc";
+import { api, RECYCLE_BIN, THIS_PC, type DriveInfo } from "../lib/ipc";
 import { DENSITY } from "../lib/tokens";
 import { FadeInIcon } from "./FileList";
 import { useLayout } from "../stores/layout";
@@ -26,7 +27,7 @@ interface FlatNode {
   name: string;
   depth: number;
   open: boolean;
-  kind: "pc" | "drive" | "dir";
+  kind: "pc" | "bin" | "drive" | "dir";
 }
 
 const ROW_H = DENSITY.rowH;
@@ -75,6 +76,8 @@ export function NavTree() {
     };
     // 此电脑 = 固定根，恒展开（展开状态不再读取，旧档残留的折叠记录自然失效）
     out.push({ key: THIS_PC, path: THIS_PC, name: "此电脑", depth: 0, open: true, kind: "pc" });
+    // 回收站 = 第二固定根（2026-11-25 虚拟页）：叶节点（无子可展开）
+    out.push({ key: RECYCLE_BIN, path: RECYCLE_BIN, name: "回收站", depth: 0, open: false, kind: "bin" });
     for (const d of drives) {
       const p = `${d.letter}\\`;
       const open = expanded.has(p);
@@ -222,7 +225,7 @@ export function NavTree() {
                   }
                 }}
               >
-                {n.kind !== "pc" && (
+                {n.kind !== "pc" && n.kind !== "bin" && (
                   <span
                     className={`np-tree-chev${n.open ? " open" : ""}`}
                     data-tip={t(n.open ? "收起" : "展开")}
@@ -239,6 +242,8 @@ export function NavTree() {
                     <FadeInIcon src={realUrl} />
                   ) : n.kind === "pc" ? (
                     <AppIcon icon={Computer} size={DENSITY.iconSm} colorVar="--np-icon-drive" />
+                  ) : n.kind === "bin" ? (
+                    <AppIcon icon={Trash2} size={DENSITY.iconSm} colorVar="--np-muted" />
                   ) : n.kind === "drive" ? (
                     <AppIcon icon={HardDrive} size={DENSITY.iconSm} colorVar="--np-icon-drive" />
                   ) : n.open && n.kind === "dir" ? (

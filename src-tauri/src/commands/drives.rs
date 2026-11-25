@@ -18,6 +18,7 @@ use super::files::AppError;
 
 const DRIVE_REMOVABLE: u32 = 2;
 const DRIVE_FIXED: u32 = 3;
+const DRIVE_REMOTE: u32 = 4;
 const DRIVE_CDROM: u32 = 5;
 
 fn pwstr(s: &str) -> Vec<u16> {
@@ -55,8 +56,8 @@ fn logical_roots_and_info() -> Result<Vec<DriveInfo>, AppError> {
         .collect())
 }
 
-/// 所有逻辑盘根（如 C:\），解析失败的一段直接跳过
-fn logical_roots() -> Vec<String> {
+/// 所有逻辑盘根（如 C:\），解析失败的一段直接跳过；回收站枚举（recyclebin.rs）复用
+pub fn logical_roots() -> Vec<String> {
     let mut buf = [0u16; 512];
     let mut out = Vec::new();
     let n = unsafe { GetLogicalDriveStringsW(Some(&mut buf)) } as usize;
@@ -95,7 +96,11 @@ fn drive_info(root: &str) -> Option<DriveInfo> {
         DRIVE_FIXED => "fixed",
         DRIVE_REMOVABLE => "removable",
         DRIVE_CDROM => "cdrom",
-        _ => return None, // 网络/RAM 盘 V1 不支持（§3.4）
+        // 网络位置（2026-11-25 用户需求）：映射盘（DRIVE_REMOTE）入清单——
+        // std fs 对 UNC/映射盘天然支持，浏览/复制/删除全链路可用；RAM 盘等
+        // 其余类型仍排除。全盘搜索根列表（fixed_drive_roots）继续不扫网络盘
+        DRIVE_REMOTE => "remote",
+        _ => return None,
     };
     let mut label = [0u16; 128];
     let mut fsname = [0u16; 64];

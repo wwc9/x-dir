@@ -57,3 +57,58 @@ pub async fn get_file_icons(
         Ok(HashMap::new())
     }
 }
+
+/// 批量取缩略图（2026-11-25 缩略图视图）：96px PNG data URL；缓存键含 mtime
+/// （文件改动自动失效）。目录不出缩略图（列表侧文件夹走图标管线）。
+#[tauri::command]
+pub async fn get_thumbnails(
+    state: tauri::State<'_, AppState>,
+    paths: Vec<String>,
+) -> Result<HashMap<String, String>, ()> {
+    #[cfg(windows)]
+    {
+        let mut out = HashMap::new();
+        let mut misses: Vec<String> = Vec::new();
+        {
+            let mut store = state.icons.lock().unwrap();
+            for p in &paths {
+                let key = thumb_key(p);
+                if let Some(v) = store.thumbs.get(&key) {
+                    out.insert(p.clone(), v.clone());
+                } else {
+                    misses.push(p.clone());
+                }
+            }
+        }
+        for p in misses {
+            let is_dir = std::fs::metadata(crate::fs::path::to_extended(&p))
+                .map(|m| m.is_dir())
+                .unwrap_or(false);
+            if is_dir {
+                continue;
+            }
+            if let Some(v) = crate::icons::thumbnail_png(&p) {
+                let key = thumb_key(&p);
+                state.icons.lock().unwrap().thumbs.put(key, v.clone());
+                out.insert(p, v);
+            }
+        }
+        Ok(out)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (state, paths);
+        Ok(HashMap::new())
+    }
+}
+
+/// 缩略图缓存键：路径 + mtime（改动即失效；读不到 mtime 用 0 兜底）
+fn thumb_key(path: &str) -> String {
+    let mtime = std::fs::metadata(crate::fs::path::to_extended(path))
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    format!("{path}|{mtime}")
+}

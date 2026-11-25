@@ -17,7 +17,8 @@ import {
   Switch,
 } from "@blueprintjs/core";
 
-import { api, THIS_PC, type FileEntry, type MenuEntry, type ViewMode } from "../lib/ipc";
+import { api, THIS_PC,
+  RECYCLE_BIN, type FileEntry, type MenuEntry, type ViewMode } from "../lib/ipc";
 import { builtinByKey, entryVisible, type BuiltinFn } from "../lib/menuCommands";
 import { getList } from "../lib/listRegistry";
 import { fileNameOf, joinPath } from "../lib/path";
@@ -37,6 +38,8 @@ import {
   Folder,
   FolderOpen,
   HardDrive,
+  Trash2,
+  LayoutGrid,
   List,
   MoreHorizontal,
   Plus,
@@ -54,13 +57,20 @@ import { FN_ICONS } from "./MenuEditor";
 
 const DND_MIME = "application/x-xdir";
 
-const titleOf = (path: string) => (path === THIS_PC ? "此电脑" : fileNameOf(path));
+const titleOf = (path: string) =>
+  path === THIS_PC
+    ? "此电脑"
+    : path === RECYCLE_BIN
+      ? "回收站"
+      : fileNameOf(path);
 
 /** 标签图标（2026-11-11 用户需求）：与导航树同款语义——此电脑=Computer、
  *  盘符根=HardDrive（--np-icon-drive）、目录=Folder/FolderOpen（激活态，
  *  --np-icon-folder）；realIcons 开启时优先真实图标（组件内按路径请求） */
 function tabIconOf(path: string, active: boolean): { icon: LucideIcon; colorVar: string } {
   if (path === THIS_PC) return { icon: Computer, colorVar: "--np-icon-drive" };
+  // 回收站页（2026-11-25 虚拟页）：Trash2 语义色
+  if (path === RECYCLE_BIN) return { icon: Trash2, colorVar: "--np-icon-muted" };
   if (/^[A-Za-z]:\\?$/.test(path)) return { icon: HardDrive, colorVar: "--np-icon-drive" };
   return active
     ? { icon: FolderOpen, colorVar: "--np-icon-folder" }
@@ -70,7 +80,7 @@ function tabIconOf(path: string, active: boolean): { icon: LucideIcon; colorVar:
 /** 地址栏面包屑分段（纯函数）：Windows 路径按 \ 切分，盘符段显示 "E:"（Explorer
  *  口径不带斜杠）。超宽折叠不在此处做（按容器实测宽度在前端折叠态里收进 "…"） */
 function crumbSegs(path: string): { label: string; target: string }[] {
-  if (path === THIS_PC) return [];
+  if (path === THIS_PC || path === RECYCLE_BIN) return [];
   const parts = path.split("\\").filter(Boolean);
   if (!parts.length) return [{ label: path, target: path }];
   return parts.map((p, i) => ({
@@ -97,6 +107,7 @@ function ensureDriveLabels(): Promise<void> {
 const VIEW_META: Record<ViewMode, { icon: typeof List; label: string }> = {
   list: { icon: List, label: "列表视图" },
   details: { icon: Rows3, label: "详细信息视图" },
+  grid: { icon: LayoutGrid, label: "缩略图视图" },
 };
 
 /** 收纳档（仅出厂 12 键分档）：always = 地址栏左侧恒显；mid-wide <430px 收纳；

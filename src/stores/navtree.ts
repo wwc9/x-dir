@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import { api, THIS_PC } from "../lib/ipc";
+import { api, RECYCLE_BIN, THIS_PC } from "../lib/ipc";
 import { useSettings } from "./settings";
 
 // 导航树：children 缓存留在本 store（内存态）；
@@ -70,6 +70,11 @@ export const useNavTree = create<NavTreeStore>()((set, get) => ({
       if (path === THIS_PC) {
         const drives = await api.getDrives();
         set({ children: { ...get().children, [path]: drives.map((d) => d.letter) } });
+        return;
+      }
+      // 回收站哨兵不是真实目录：叶节点不展开（children 恒空）
+      if (path === RECYCLE_BIN) {
+        set({ children: { ...get().children, [path]: [] } });
         return;
       }
       const names = await api.listDirs(path, useSettings.getState().showHidden);

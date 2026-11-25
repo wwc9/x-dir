@@ -13,6 +13,7 @@ mod native_ops;
 mod office;
 mod ole_dnd;
 mod pdf;
+mod recyclebin;
 mod sheet_fmt;
 mod watch;
 mod winstate;
@@ -356,6 +357,7 @@ pub fn run() {
             commands::clipboard::get_clipboard_files,
             commands::clipboard::clear_clipboard,
             commands::icons::get_file_icons,
+            commands::icons::get_thumbnails,
             commands::preview::preview_read_text,
             commands::preview::preview_extract_office,
             commands::preview::preview_list_archive,
@@ -388,8 +390,12 @@ pub fn run() {
             commands::shot::shot_stage_crop,
             commands::shot::shot_stage_raw,
             commands::hotkeys::hotkeys_sync,
+            commands::recyclebin::recyclebin_list,
+            commands::recyclebin::recyclebin_restore,
+            commands::recyclebin::recyclebin_delete,
             commands::cliphist::cliphist_configure,
             commands::cliphist::cliphist_list,
+            commands::cliphist::cliphist_sources,
             commands::cliphist::cliphist_write_back,
             commands::cliphist::cliphist_set_pin,
             commands::cliphist::cliphist_delete,

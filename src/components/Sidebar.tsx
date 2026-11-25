@@ -307,6 +307,13 @@ function Shelf() {
           })}
         </div>
       )}
+      {/* 拖放语义徽标（2026-11-25）：与窗格落点徽标同款 accent pill，居中暂存卡 */}
+      {over && (
+        <span className="np-drop-badge">
+          <AppIcon icon={Inbox} size={DENSITY.iconSm} />
+          {t("释放加入暂存区")}
+        </span>
+      )}
     </div>
   );
 }

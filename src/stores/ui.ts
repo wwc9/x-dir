@@ -194,6 +194,9 @@ interface UiStore {
   calendarOpen: boolean;
   /** 关于浮窗（Dialog）：工具简介/开源地址/作者 + 更新检查（顶栏信息钮与启动检查共用） */
   aboutOpen: boolean;
+  /** 欢迎引导浮窗（2026-11-25）：首次启动自动弹（settings.welcomeSeen 门闸），
+   *  设置 → 配置页「欢迎引导」可重开 */
+  welcomeOpen: boolean;
   /** 更新检查结果：null = 尚未检查过；manifest 为 null = 双源都拉取失败 */
   updateCheck: UpdateCheck | null;
   /** 窗格交换选择模式：非空 = 该窗格已按下"交换"，等待点选目标窗格 */
@@ -220,6 +223,8 @@ interface UiStore {
   closeCalendar(): void;
   openAbout(): void;
   closeAbout(): void;
+  openWelcome(): void;
+  closeWelcome(): void;
   setUpdateCheck(c: UpdateCheck): void;
   beginSwap(paneId: string): void;
   cancelSwap(): void;
@@ -238,6 +243,7 @@ export const useUi = create<UiStore>()((set, get) => ({
   menuPage: false,
   calendarOpen: false,
   aboutOpen: false,
+  welcomeOpen: false,
   updateCheck: null,
   swapFrom: null,
   typeAhead: null,
@@ -327,6 +333,14 @@ export const useUi = create<UiStore>()((set, get) => ({
 
   closeAbout() {
     set({ aboutOpen: false });
+  },
+
+  openWelcome() {
+    set({ welcomeOpen: true });
+  },
+
+  closeWelcome() {
+    set({ welcomeOpen: false });
   },
 
   setUpdateCheck(c) {

@@ -35,10 +35,11 @@ import {
   Square,
   Trash2,
   Type,
+  AppWindow,
   X,
 } from "lucide-react";
 
-import { api, DEFAULT_SETTINGS, type ClipHistItem, type Settings } from "../lib/ipc";
+import { api, DEFAULT_SETTINGS, type ClipHistItem, type ClipSource, type Settings } from "../lib/ipc";
 import { applyGlassParams, applyWindowGlass } from "../stores/settings";
 import { clipKindMeta, pickDigit, relTime } from "../lib/cliphist";
 import { AppIcon } from "../components/AppIcon";
@@ -80,6 +81,10 @@ export function ClipHistWindow() {
   /** 搜索展开态（2026-11-12 用户定案：呼出默认折叠 = 只显图标、不聚焦——
    *  列表模式快捷键即刻全效；键入任意字符或点图标展开，Esc 收起清词） */
   const [searchOpen, setSearchOpen] = useState(false);
+  /** 来源筛选（2026-11-25）：空串 = 全部来源；清单点开时现拉（计数保新鲜） */
+  const [source, setSource] = useState("");
+  const [sources, setSources] = useState<ClipSource[]>([]);
+  const [srcOpen, setSrcOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   // 装载协程防乱序：仅最后一次发起的请求可落盘（搜索防抖/翻页竞态）
@@ -97,17 +102,17 @@ export function ClipHistWindow() {
   // 搜索展开后待补进搜索词的首字符（键入唤起时该字符先于焦点落位被拦下）
   const pendingChar = useRef<string | null>(null);
   // 键盘/事件处理器读取的最新态（避免重绑 window 监听、闭包过期）
-  const stateRef = useRef({ items, sel, query, kind, directPaste, winPinned, isMaxed, picked, viewImg, searchOpen });
-  stateRef.current = { items, sel, query, kind, directPaste, winPinned, isMaxed, picked, viewImg, searchOpen };
+  const stateRef = useRef({ items, sel, query, kind, source, directPaste, winPinned, isMaxed, picked, viewImg, searchOpen });
+  stateRef.current = { items, sel, query, kind, source, directPaste, winPinned, isMaxed, picked, viewImg, searchOpen };
 
   const fetchPage = useCallback(
     async (offset: number, append: boolean, keep: number | null) => {
-      const { query: q, kind: k, items: cur } = stateRef.current;
-      const key = `${q}|${k}|${offset}|${append}`;
+      const { query: q, kind: k, source: src, items: cur } = stateRef.current;
+      const key = `${q}|${k}|${src}|${offset}|${append}`;
       loadKey.current = key;
       busy.current = true;
       try {
-        const page = await api.cliphistList(q, k, offset, PAGE);
+        const page = await api.cliphistList(q, k, offset, PAGE, src);
         if (loadKey.current !== key) return;
         const list = append ? [...cur, ...page.items] : page.items;
         setItems(list);
@@ -129,13 +134,23 @@ export function ClipHistWindow() {
     [],
   );
 
-  /** 搜索词/类型变更（120ms 防抖）：仅在数据通道武装后（首次聚焦）生效，
+  /** 搜索词/类型/来源变更（120ms 防抖）：仅在数据通道武装后（首次聚焦）生效，
    *  停靠态挂载不触发首拉 */
   useEffect(() => {
     if (!armed.current) return;
     const t = window.setTimeout(() => void fetchPage(0, false, null), 120);
     return () => window.clearTimeout(t);
-  }, [query, kind, fetchPage]);
+  }, [query, kind, source, fetchPage]);
+
+  /** 来源下拉点外部收起（capture 阶段判 closest，防按钮自身点击误关） */
+  useEffect(() => {
+    if (!srcOpen) return;
+    const onDown = (e: PointerEvent) => {
+      if (!(e.target as HTMLElement).closest(".np-clip-srcwrap")) setSrcOpen(false);
+    };
+    window.addEventListener("pointerdown", onDown, true);
+    return () => window.removeEventListener("pointerdown", onDown, true);
+  }, [srcOpen]);
 
   /** 搜索展开后落焦点并补首字符（2026-11-12 折叠搜索定案）：focus 与渲染
    *  同 tick 落位；键入唤起时该字符先于焦点被拦下，从这里补进搜索词 */
@@ -260,16 +275,18 @@ export function ClipHistWindow() {
         keepId.current = null;
         // 重开（呼出）时 Rust 已复位默认尺寸，最大化图标同步归零
         setIsMaxed(false);
-        // 每次呼出清空搜索词（2026-10-31 用户定案）：有词时清空即触发
-        // [query] 防抖效应按空词重拉；无词时直接刷新（stateRef 同 tick
-        // 未更新，立即 fetchPage 会带上旧词）
-        if (stateRef.current.query) {
+        // 每次呼出清空搜索词（2026-10-31 用户定案）与来源筛选（2026-11-25）：
+        // 有词/有源时清空即触发防抖效应按空值重拉；全空时直接刷新（stateRef
+        // 同 tick 未更新，立即 fetchPage 会带上旧值）
+        if (stateRef.current.query || stateRef.current.source) {
           setQuery("");
+          setSource("");
         } else {
           void fetchPage(0, false, null);
         }
         // 呼出复位折叠态（2026-11-12 用户定案）：默认只显搜索图标、不聚焦
         setSearchOpen(false);
+        setSrcOpen(false);
       })
       .then((f) => {
         unFocus = f;
@@ -704,6 +721,55 @@ export function ClipHistWindow() {
               <AppIcon icon={t.i} size={DENSITY.iconSm} />
             </button>
           ))}
+          {/* 来源筛选（2026-11-25）：应用图标 pill + 自绘下拉（清单点开现拉，
+              计数保新鲜）；激活态 pill 显示来源名 */}
+          <span className="np-clip-srcwrap">
+            <button
+              className={`np-clip-srcbtn ${source ? "is-on" : ""}`}
+              data-tip={source ? `来源筛选：${source}` : "按来源应用筛选"}
+              aria-label="按来源应用筛选"
+              aria-expanded={srcOpen}
+              onClick={() => {
+                if (!srcOpen) {
+                  void api.cliphistSources().then((list) => setSources(list)).catch(() => undefined);
+                }
+                setSrcOpen(!srcOpen);
+              }}
+            >
+              <AppIcon icon={AppWindow} size={DENSITY.iconSm} />
+              {source && <span className="np-clip-srcname">{source}</span>}
+            </button>
+            {srcOpen && (
+              <div className="np-clip-srcmenu" role="menu">
+                <button
+                  className={`np-clip-srcitem ${!source ? "is-on" : ""}`}
+                  role="menuitem"
+                  onClick={() => {
+                    setSource("");
+                    setSrcOpen(false);
+                  }}
+                >
+                  <span>全部来源</span>
+                </button>
+                {sources.map((s) => (
+                  <button
+                    key={s.name}
+                    className={`np-clip-srcitem ${source === s.name ? "is-on" : ""}`}
+                    role="menuitem"
+                    title={s.name}
+                    onClick={() => {
+                      setSource(s.name);
+                      setSrcOpen(false);
+                    }}
+                  >
+                    <span className="np-ellipsis">{s.name}</span>
+                    <span className="np-clip-srccnt">{s.count}</span>
+                  </button>
+                ))}
+                {sources.length === 0 && <div className="np-clip-srcempty">暂无来源记录</div>}
+              </div>
+            )}
+          </span>
         </div>
       </div>
       <div ref={scrollRef} className="np-clip-list" onScroll={onScroll}>

@@ -707,14 +707,41 @@ pub struct ClipHistPage {
     pub total: usize,
 }
 
+/// 来源应用（2026-11-25 浮窗来源筛选）：name = 来源进程名，count = 条目数
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClipSource {
+    pub name: String,
+    pub count: i64,
+}
+
+/// 去重来源清单（条目数降序，同名合并）；空来源不列出
+pub fn distinct_sources(conn: &Connection, limit: i64) -> rusqlite::Result<Vec<ClipSource>> {
+    let mut stmt = conn.prepare(
+        "SELECT source, COUNT(*) AS c FROM clip_items
+         WHERE source IS NOT NULL AND source != ''
+         GROUP BY source ORDER BY c DESC, source LIMIT ?1",
+    )?;
+    let rows = stmt
+        .query_map(rusqlite::params![limit], |r| {
+            Ok(ClipSource {
+                name: r.get(0)?,
+                count: r.get(1)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
 /// 分页查询（铁律 3：过滤/排序/分页全在 Rust 端）。query 空串 = 全部，
-/// kind 空串 = 全部类型
+/// kind 空串 = 全部类型；source 空串 = 全部来源（精确等值，2026-11-25 来源筛选）
 pub fn list_page(
     conn: &Connection,
     query: &str,
     kind: &str,
     offset: i64,
     limit: i64,
+    source: &str,
 ) -> rusqlite::Result<ClipHistPage> {
     use base64::Engine as _;
     let q = query.trim();
@@ -725,7 +752,8 @@ pub fn list_page(
                        OR (text IS NOT NULL AND text LIKE '%'||?1||'%')
                        OR (py IS NOT NULL AND py LIKE '%'||?1||'%')
                        OR (source IS NOT NULL AND source LIKE '%'||?1||'%'))
-                     AND (?2 = '' OR (?2 = 'fav' AND fav = 1) OR kind = ?2)"
+                     AND (?2 = '' OR (?2 = 'fav' AND fav = 1) OR kind = ?2)
+                     AND (?5 = '' OR source = ?5)"
             .to_string()
     } else {
         // 全文（T3-4）：trigram 任意子串（含中文）；双引号双写转义、单引号
@@ -738,12 +766,15 @@ pub fn list_page(
             "WHERE (id IN (SELECT rowid FROM clip_fts WHERE text MATCH '{fts_sql}')
                    OR (py IS NOT NULL AND py LIKE '%'||?1||'%')
                    OR (source IS NOT NULL AND source LIKE '%'||?1||'%'))
-             AND (?2 = '' OR (?2 = 'fav' AND fav = 1) OR kind = ?2)"
+             AND (?2 = '' OR (?2 = 'fav' AND fav = 1) OR kind = ?2)
+             AND (?5 = '' OR source = ?5)"
         )
     };
+    // COUNT 与 SELECT 共用同一 where_sql（含 ?5 来源档）：占位符按编号取值，
+    // ?3/?4 补零占位（COUNT 不消费 limit/offset）
     let total: i64 = conn.query_row(
         &format!("SELECT COUNT(*) FROM clip_items {where_sql}"),
-        rusqlite::params![q, kind],
+        rusqlite::params![q, kind, 0i64, 0i64, source],
         |r| r.get(0),
     )?;
     let mut stmt = conn.prepare(&format!(
@@ -752,7 +783,7 @@ pub fn list_page(
          ORDER BY fav DESC, pinned DESC, created_at DESC, id DESC LIMIT ?3 OFFSET ?4"
     ))?;
     let items = stmt
-        .query_map(rusqlite::params![q, kind, limit, offset], |r| {
+        .query_map(rusqlite::params![q, kind, limit, offset, source], |r| {
             let thumb: Option<Vec<u8>> = r.get(7)?;
             Ok(ClipHistItemMeta {
                 id: r.get(0)?,
@@ -2267,13 +2298,61 @@ MIIE...
             .unwrap();
         assert!(py.as_deref().is_some_and(|p| p.contains("sjbg")));
         // 首字母命中："sj" 找到「季度审计…」
-        let p = list_page(&c, "sj", "", 0, 50).unwrap();
+        let p = list_page(&c, "sj", "", 0, 50, "").unwrap();
         assert_eq!(p.items.len(), 1);
         assert!(p.items[0].preview.contains("审计"));
         // 全文与英文查询不受影响
-        assert_eq!(list_page(&c, "审计", "", 0, 50).unwrap().items.len(), 1);
-        assert_eq!(list_page(&c, "hello", "", 0, 50).unwrap().items.len(), 1);
-        assert_eq!(list_page(&c, "zzz", "", 0, 50).unwrap().items.len(), 0);
+        assert_eq!(list_page(&c, "审计", "", 0, 50, "").unwrap().items.len(), 1);
+        assert_eq!(
+            list_page(&c, "hello", "", 0, 50, "").unwrap().items.len(),
+            1
+        );
+        assert_eq!(list_page(&c, "zzz", "", 0, 50, "").unwrap().items.len(), 0);
+    }
+
+    #[test]
+    fn source_filter_and_distinct_sources() {
+        let c = mem_db();
+        ingest(&c, &text("报表数据"), 1000, Some("excel.exe"), None).unwrap();
+        ingest(&c, &text("会议纪要"), 2000, Some("excel.exe"), None).unwrap();
+        ingest(&c, &text("终端输出样例"), 3000, Some("wt.exe"), None).unwrap();
+        ingest(&c, &text("无来源条目"), 4000, None, None).unwrap();
+        // 来源筛选：精确等值（非 LIKE），无来源条目被排除
+        assert_eq!(list_page(&c, "", "", 0, 50, "").unwrap().items.len(), 4);
+        assert_eq!(
+            list_page(&c, "", "", 0, 50, "excel.exe")
+                .unwrap()
+                .items
+                .len(),
+            2
+        );
+        assert_eq!(
+            list_page(&c, "", "", 0, 50, "wt.exe").unwrap().items.len(),
+            1
+        );
+        assert_eq!(
+            list_page(&c, "", "", 0, 50, "nosuch.exe")
+                .unwrap()
+                .items
+                .len(),
+            0
+        );
+        // 搜索词与来源筛选叠加（AND）
+        assert_eq!(
+            list_page(&c, "报表", "", 0, 50, "excel.exe")
+                .unwrap()
+                .items
+                .len(),
+            1
+        );
+        // 来源清单：计数降序，空来源不列出
+        let srcs = distinct_sources(&c, 24).unwrap();
+        assert_eq!(srcs.len(), 2);
+        assert_eq!(srcs[0].name, "excel.exe");
+        assert_eq!(srcs[0].count, 2);
+        assert_eq!(srcs[1].name, "wt.exe");
+        // limit 生效
+        assert_eq!(distinct_sources(&c, 1).unwrap().len(), 1);
     }
 
     #[test]
@@ -2290,11 +2369,14 @@ MIIE...
         ingest(&c, &text("报表数据"), 1000, Some("excel.exe"), None).unwrap();
         ingest(&c, &text("plain"), 2000, None, None).unwrap();
         // 存取：返回给前端
-        let p = list_page(&c, "", "", 0, 50).unwrap();
+        let p = list_page(&c, "", "", 0, 50, "").unwrap();
         assert_eq!(p.items[1].source.as_deref(), Some("excel.exe"));
         assert_eq!(p.items[0].source, None);
         // 搜索命中 source：敲 excel 找到从 Excel 复制的条目
-        assert_eq!(list_page(&c, "excel", "", 0, 50).unwrap().items.len(), 1);
+        assert_eq!(
+            list_page(&c, "excel", "", 0, 50, "").unwrap().items.len(),
+            1
+        );
     }
 
     #[test]
@@ -2316,11 +2398,11 @@ MIIE...
             .unwrap();
         assert_eq!(left, vec!["f0", "f2"]);
         // 过滤档 'fav'：只列收藏
-        let p = list_page(&c, "", "fav", 0, 50).unwrap();
+        let p = list_page(&c, "", "fav", 0, 50, "").unwrap();
         assert_eq!(p.items.len(), 1);
         assert!(p.items[0].fav);
         // 排序：fav 最前
-        let all = list_page(&c, "", "", 0, 50).unwrap();
+        let all = list_page(&c, "", "", 0, 50, "").unwrap();
         assert_eq!(all.items[0].preview, "f0");
     }
 
@@ -2552,21 +2634,21 @@ MIIE...
         )
         .unwrap();
         // 全量分页
-        let p1 = list_page(&c, "", "", 0, 5).unwrap();
+        let p1 = list_page(&c, "", "", 0, 5, "").unwrap();
         assert_eq!(p1.items.len(), 5);
         assert_eq!(p1.total, 8);
-        let p2 = list_page(&c, "", "", 5, 5).unwrap();
+        let p2 = list_page(&c, "", "", 5, 5, "").unwrap();
         assert_eq!(p2.items.len(), 3);
         // 搜索：只命中文本条目
-        let ps = list_page(&c, "alpha 3", "", 0, 50).unwrap();
+        let ps = list_page(&c, "alpha 3", "", 0, 50, "").unwrap();
         assert_eq!(ps.items.len(), 1);
         assert_eq!(ps.items[0].preview, "alpha 3");
         // 搜索命中文件路径
-        let pf = list_page(&c, "b.png", "", 0, 50).unwrap();
+        let pf = list_page(&c, "b.png", "", 0, 50, "").unwrap();
         assert_eq!(pf.items.len(), 1);
         assert_eq!(pf.items[0].kind, "files");
         // 类型过滤
-        let pk = list_page(&c, "", "files", 0, 50).unwrap();
+        let pk = list_page(&c, "", "files", 0, 50, "").unwrap();
         assert_eq!(pk.items.len(), 1);
         assert!(pk.items[0].thumb.is_none());
         // 置顶排前（2026-10-31）：pin 住最旧的 alpha 3 → 跳到列表首位
@@ -2575,7 +2657,7 @@ MIIE...
             [],
         )
         .unwrap();
-        let pp = list_page(&c, "", "", 0, 50).unwrap();
+        let pp = list_page(&c, "", "", 0, 50, "").unwrap();
         assert_eq!(pp.items[0].preview, "alpha 3");
         assert!(pp.items[0].pinned);
         assert_eq!(pp.items[1].preview, "b.png");

@@ -2,7 +2,7 @@
 // 右侧内容页（自滚动）。分类：外观 / 浏览 / 文件操作 / 全盘搜索 / 着色规则 / 快捷键 /
 // 配置；取值统一走 settings.update()（settings.json 集中化）；控件与行布局按 §4.7。
 // 右键菜单已独立为整页（MenuEditorPage），不再归属设置分类。
-import { useEffect, useState, Fragment, type ReactNode } from "react";
+import { useEffect, useState, Fragment, type CSSProperties, type ReactNode } from "react";
 import { t, useT } from "../lib/i18n";
 import {
   Button,
@@ -42,12 +42,15 @@ import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { HotkeyRecorder } from "./HotkeyRecorder";
 import { Seg } from "./ImgDialogs";
 import { PERF_TABLE, detectTier, type PerfTier } from "../lib/perf";
+import { ACCENT_PRESETS } from "../lib/accent";
+import { searchSettings } from "../lib/settingsSearch";
 import { NpSelect } from "./NpSelect";
 import { GLASS_BGS, TAG_COLORS } from "../stores/settings";
 
 const VIEW_LABELS: Record<ViewMode, string> = {
   list: "列表",
   details: "详细信息",
+  grid: "缩略图",
 };
 const SORT_LABELS: Record<SortKey, string> = {
   name: "名称",
@@ -169,6 +172,8 @@ export function SettingsPanel() {
   const [quickRule, setQuickRule] = useState("");
   /** 清理历史条目的天数输入（设置 → 剪贴板，2026-11-12 用户需求；0 = 全部） */
   const [clipClearDays, setClipClearDays] = useState(3);
+  /** 设置搜索（2026-11-25）：非空时左栏导航切换为跨分类命中清单 */
+  const [navQuery, setNavQuery] = useState("");
   /** 工作日历分类新增（设置 → 日历，2026-11-13 增强批） */
   useEffect(() => {
     if (settingsTab) setTab(settingsTab);
@@ -291,16 +296,55 @@ export function SettingsPanel() {
       <DialogBody>
         <div className="np-settings">
       <nav className="np-settings-nav">
-        {TABS.map((tb) => (
-          <button
-            key={tb.id}
-            className={`np-settings-nav-item ${tab === tb.id ? "is-on" : ""}`}
-            onClick={() => setTab(tb.id)}
-          >
-            <AppIcon icon={tb.icon} size={DENSITY.iconSm} />
-            <span className="np-ellipsis">{t(tb.label)}</span>
-          </button>
-        ))}
+        {/* 设置搜索（2026-11-25）：跨分类行索引命中清单，点击直跳对应分类页 */}
+        <InputGroup
+          small
+          leftElement={ic(Search)}
+          className="np-settings-search"
+          placeholder={t("搜索设置")}
+          value={navQuery}
+          onChange={(e) => setNavQuery(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setNavQuery("");
+              (e.target as HTMLInputElement).blur();
+            }
+          }}
+        />
+        {navQuery.trim() ? (
+          (() => {
+            const hits = searchSettings(
+              navQuery,
+              Object.fromEntries(TABS.map((x) => [x.id, x.label] as const)),
+            );
+            if (!hits.length)
+              return <div className="np-settings-nohit">{t("没有匹配的设置项")}</div>;
+            return hits.map((h) => {
+              const tabMeta = TABS.find((x) => x.id === h.tab);
+              return (
+                <button
+                  key={`${h.tab}:${h.title}`}
+                  className={`np-settings-hit ${tab === h.tab ? "is-on" : ""}`}
+                  onClick={() => setTab(h.tab)}
+                >
+                  <span className="np-ellipsis">{t(h.title)}</span>
+                  <span className="np-settings-hit-tab">{t(tabMeta?.label ?? "")}</span>
+                </button>
+              );
+            });
+          })()
+        ) : (
+          TABS.map((tb) => (
+            <button
+              key={tb.id}
+              className={`np-settings-nav-item ${tab === tb.id ? "is-on" : ""}`}
+              onClick={() => setTab(tb.id)}
+            >
+              <AppIcon icon={tb.icon} size={DENSITY.iconSm} />
+              <span className="np-ellipsis">{t(tb.label)}</span>
+            </button>
+          ))
+        )}
       </nav>
       <div className="np-settings-page">
         {tab === "appearance" && (
@@ -365,6 +409,29 @@ export function SettingsPanel() {
                   onChange={(v) => s.update({ uiGap: Array.isArray(v) ? v[0] : v })}
                 />
                 <span className="np-set-slider-val">{s.uiGap} px</span>
+              </div>
+            </SetRow>
+            {/* 强调色（2026-11-25 用户需求）：预设色板一键换 --np-accent 全链，
+                default = 回到出厂蓝；圆点取值随浅/深主题切预设对应档 */}
+            <SetRow label={t("强调色")} desc={t("选中态、按钮与高亮的主题色，浅深主题各自适配")}>
+              <div className="np-accent-swatches" role="group" aria-label={t("强调色")}>
+                {ACCENT_PRESETS.map((p) => (
+                  <button
+                    key={p.id}
+                    className={`np-accent-swatch ${s.accent === p.id ? "is-on" : ""}`}
+                    data-tip={t(p.label)}
+                    aria-label={t(p.label)}
+                    aria-pressed={s.accent === p.id}
+                    onClick={() => s.update({ accent: p.id })}
+                  >
+                    <span
+                      className="np-accent-dot"
+                      style={
+                        { "--sw": p.light, "--sw-d": p.dark } as CSSProperties
+                      }
+                    />
+                  </button>
+                ))}
               </div>
             </SetRow>
             <SetRow
@@ -1052,6 +1119,14 @@ export function SettingsPanel() {
             <SetRow label={t("导入配置文件")} desc={t("从导出的 JSON 恢复（覆盖当前设置与同名布局方案）")}>
               <Button minimal size="small" onClick={() => void onImportConfig()}>
                 {t("导入…")}
+              </Button>
+            </SetRow>
+            <SetRow
+              label={t("欢迎引导")}
+              desc={t("重新查看首次启动的功能亮点介绍（多窗格 / 快速预览 / 全盘搜索 / 菜单定制）")}
+            >
+              <Button minimal size="small" onClick={() => useUi.getState().openWelcome()}>
+                {t("查看…")}
               </Button>
             </SetRow>
           </>

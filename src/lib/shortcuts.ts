@@ -96,7 +96,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       },
       { id: "nav-up", keys: ["Backspace"], label: "上级目录", scope: "global" },
       { id: "refresh", keys: ["F5"], label: "刷新活动窗格", scope: "global" },
-      { id: "view-cycle", keys: ["F3"], label: "循环切换视图（详细信息 ↔ 列表）", scope: "global" },
+      { id: "view-cycle", keys: ["F3"], label: "循环切换视图（详细信息 ↔ 列表 ↔ 缩略图）", scope: "global" },
       { id: "mouse-nav", keys: ["鼠标 X1 / X2"], label: "后退 / 前进（活动标签历史）", scope: "component" },
     ],
   },

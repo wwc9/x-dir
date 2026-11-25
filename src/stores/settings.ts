@@ -23,6 +23,7 @@ export const TAG_COLORS: { key: TagColor; label: string }[] = [
   { key: "blue", label: "蓝" },
   { key: "purple", label: "紫" },
 ];
+import { ACCENT_PRESETS, DEFAULT_ACCENT_ID, resolveAccent } from "../lib/accent";
 import { clampGsPreviewW, sanitizeColWidths, sanitizeGsColWidths } from "../lib/columns";
 import { sanitizeDialogPrefs } from "../lib/dialogPrefs";
 import { fileNameOf } from "../lib/path";
@@ -144,6 +145,8 @@ function toPlain(s: SettingsStore): Settings {  return {
     shotBorderColor: s.shotBorderColor,
     uiRadius: s.uiRadius,
     uiGap: s.uiGap,
+    accent: s.accent,
+    welcomeSeen: s.welcomeSeen,
   };
 }
 
@@ -358,6 +361,22 @@ export function applyMetrics(radius: number, gap: number) {
   root.setProperty("--np-gutter", `${gap}px`);
 }
 
+/** 强调色预设下发（2026-11-25 外观 tab）：内联写 --np-accent-user（浅色块
+ *  消费）/ --np-accent-user-dark（深色块消费）两个用户变量——index.css 的
+ *  --np-accent 走 var() 回退链，--np-sel/--np-glass-hover 已改 accent 派生，
+ *  换色全链联动；default = 移除覆盖回到回退链字面量 */
+export function applyAccent(id: string) {
+  const preset = resolveAccent(id);
+  const root = document.documentElement.style;
+  if (preset.id === DEFAULT_ACCENT_ID) {
+    root.removeProperty("--np-accent-user");
+    root.removeProperty("--np-accent-user-dark");
+  } else {
+    root.setProperty("--np-accent-user", preset.light);
+    root.setProperty("--np-accent-user-dark", preset.dark);
+  }
+}
+
 /** 主题圆形揭示时长（ms，2026-10-21 由 450 放缓）：页面揭示动画与原生边色
  *  渐变共用同一常量保证同步，调速只改这里 */
 const THEME_FX_MS = 650;
@@ -484,6 +503,14 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     // 全盘搜索呼出热键（2026-11-25）：非空热键串脏数据回落默认
     if (typeof merged.gsearchHotkey !== "string" || !merged.gsearchHotkey)
       merged.gsearchHotkey = DEFAULT_SETTINGS.gsearchHotkey;
+    // 强调色预设（2026-11-25）：未知 id（手改档/旧版枚举漂移）回落默认
+    if (
+      typeof merged.accent !== "string" ||
+      !ACCENT_PRESETS.some((p) => p.id === merged.accent)
+    )
+      merged.accent = DEFAULT_ACCENT_ID;
+    // 欢迎引导（2026-11-25）：非布尔脏档回落「未看过」
+    if (typeof merged.welcomeSeen !== "boolean") merged.welcomeSeen = false;
     // 分类/着色维度/定期模板（2026-11-13 增强批）：脏档回落默认
     if (!Array.isArray(merged.calendarCategories)) merged.calendarCategories = DEFAULT_SETTINGS.calendarCategories;
     if (merged.calendarColorBy !== "category") merged.calendarColorBy = "status";
@@ -584,6 +611,7 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
       get().glassPopBlur,
       get().glassPopFrost,
     );
+    applyAccent(get().accent);
   },
 
   update(p) {
@@ -620,6 +648,7 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     if (p.uiZoom !== undefined) applyZoom(p.uiZoom);
     if (p.uiRadius !== undefined || p.uiGap !== undefined)
       applyMetrics(get().uiRadius, get().uiGap);
+    if (p.accent !== undefined) applyAccent(p.accent);
     if (p.fxGlass !== undefined || p.fxAnim !== undefined)
       applyPerfFx(get().fxGlass, get().fxAnim);
     // 落盘合并 800ms 防抖（2026-11-01 审查修复）：recentFolders 随每次目录

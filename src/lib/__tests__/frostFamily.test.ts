@@ -38,6 +38,7 @@ const REQUIRED_MEMBERS: [string, string][] = [
   [".np-cal-jump", "日历年月跳转下拉"],
   [".np-cal-hits", "日历命中下拉"],
   [".np-palette", "功能库快速命令面板（2026-11-19 收编）"],
+  [".np-clip-srcmenu", "剪贴板浮窗来源筛选自绘下拉（2026-11-25 来源筛选）"],
 ];
 
 describe("强霜浮层家族成员审计", () => {

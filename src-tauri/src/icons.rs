@@ -23,6 +23,8 @@ use crate::fs::path::file_name_of;
 use crate::fs::sort::ext_of;
 
 const ICON_CACHE_MAX: usize = 512;
+/// 缩略图缓存上限（铁律 2：约 200 张 LRU 淘汰；键含 mtime 自动失效）
+const THUMB_CACHE_MAX: usize = 200;
 
 // ---------- LRU 缓存 ----------
 
@@ -63,12 +65,15 @@ impl ImageCache {
 
 pub struct IconStore {
     pub icons: ImageCache,
+    /// 缩略图（2026-11-25 缩略图视图）：键 = path|mtime，96px PNG data URL
+    pub thumbs: ImageCache,
 }
 
 impl IconStore {
     pub fn new() -> Self {
         Self {
             icons: ImageCache::new(ICON_CACHE_MAX),
+            thumbs: ImageCache::new(THUMB_CACHE_MAX),
         }
     }
 }
@@ -259,6 +264,36 @@ unsafe fn hicon_to_png(icon: HICON) -> Option<Vec<u8>> {
         let _ = DeleteObject(HGDIOBJ(ii.hbmMask.0));
         png
     }
+}
+
+/// 单路径缩略图（2026-11-25 缩略图视图）：IShellItemImageFactory::GetImage
+/// 96×96（SIIGBF_BIGGERSIZEOK = 允许取更大源图由 Shell 缩），系统已装预览
+/// 处理器时对 PDF/视频等同样出图；HBITMAP → PNG data URL 复用图标管线。
+/// 调用方（commands/icons.rs）持有 AppState.thumbs LRU，这里纯提取无缓存。
+#[cfg(windows)]
+pub fn thumbnail_png(path: &str) -> Option<String> {
+    use windows::Win32::Foundation::SIZE;
+    use windows::Win32::Graphics::Gdi::DeleteObject;
+    use windows::Win32::UI::Shell::{
+        IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK,
+    };
+    use windows::core::PCWSTR;
+    unsafe {
+        let w = wide(path);
+        let factory: IShellItemImageFactory =
+            SHCreateItemFromParsingName(PCWSTR::from_raw(w.as_ptr()), None).ok()?;
+        let hbm = factory
+            .GetImage(SIZE { cx: 96, cy: 96 }, SIIGBF_BIGGERSIZEOK)
+            .ok()?;
+        let png = hbitmap_to_png(hbm);
+        let _ = DeleteObject(hbm.into());
+        png.map(|b| png_data_url(&b))
+    }
+}
+
+#[cfg(not(windows))]
+pub fn thumbnail_png(_path: &str) -> Option<String> {
+    None
 }
 
 #[cfg(test)]

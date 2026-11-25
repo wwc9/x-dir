@@ -442,9 +442,9 @@ export function onGlobalKeyDown(e: KeyboardEvent): void {
     e.preventDefault();
     return;
   }
-  // F3：循环切换活动窗格视图（详细信息 → 列表）
+  // F3：循环切换活动窗格视图（详细信息 → 列表 → 缩略图，2026-11-25 加 grid）
   if (k === "F3" && pane && tabId) {
-    const order: ViewMode[] = ["details", "list"];
+    const order: ViewMode[] = ["details", "list", "grid"];
     const cur = usePanes.getState().tabs[tabId]?.viewMode ?? "details";
     usePanes.getState().setView(tabId, order[(order.indexOf(cur) + 1) % order.length]);
     e.preventDefault();

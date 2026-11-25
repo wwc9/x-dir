@@ -557,6 +557,24 @@
 - **实现坑**：探针句柄必须先于表快照开（借其在快照内自身条目取「文件」类型索引）；只碰 GetFileType=DISK 的句柄（"File" 类型涵盖命名管道/设备，挂未决读会永久阻塞）；病态句柄单次查询实测卡 33s——按 pid 分桶 + 并行 worker（≤8）+ 5s 预算截断，truncated 标记随结果下发、卡死线程不 join（有界泄漏，handle.exe 同款取舍）；本应用自身句柄排除；AppError 新运行时码 E_LOCKS。
 - **权限类失败的人话归因 + 树内深探测（2026-11-17 用户反馈「需管理员权限才能删的文件夹提示不清晰」）**：① trash（IFileOperation + FOF_NO_UI）对顶层被拒回 Os 码可归因，但对**树内嵌套被拒**只回无语义 `Unknown{"Some operations were aborted"}`，顶层 DELETE 探测（句柄能开）随即失灵 → 用户直接看到英文调试串；永久删除 remove_dir_all 同场景虽归因正确却不知堵在哪个子项。② 定案 = `probe_delete_open`（探测泛化为返回原始 Win32 码）+ `probe_tree_denial` 树内深探测：顶层探测不出时逐项 DELETE 探测定位第一个被拒子项（深度优先、预算 500 条防超大树拖慢回执、跳过 reparse 防联接环），explain_trash/explain_permanent 双链路接入，回执形如「文件夹内的「sub\deeper\f.txt」需要管理员权限才能删除（拒绝访问），请以管理员身份重试或修改该项的安全权限」。③ 文案口径定案：Win32 5 = 「需要管理员权限才能删除」（不再说「没有删除权限」），32/33 = 占用、2/3 = 已消失保持不变；文案不带主语——顶层失败 toast 前缀自带文件名，树内失败由 explain_* 加「文件夹内的「子项」」前缀。④ 测试用 icacls `*S-1-1-0:(D)`（Everyone 拒绝删除，deny ACE 对含管理员的一切令牌生效 = allow-only 型 ACL 的同码模拟）真实落 ACL 锁行为：回收站嵌套被拒归因子项、永久删除归因子项、顶层被拒走无前缀管理员文案。
 
+### 13.5 便利性增强十一连批（2026-11-25 用户点名全做，逐项截图验收）
+
+**范围**：文件管理主链路与全局工具的 11 项用户友好性改造；全部带回归测试。
+
+1. **F2 重命名 Tab 跳转**：行内重命名输入框 Tab/Shift+Tab = 提交并跳下一个/上一个文件继续改名（Explorer 惯例，首尾循环；非法名原地 toast 不跳；stopPropagation 防全局 type-ahead Tab 循环抢键）。FileList np-rename onKeyDown。
+2. **删除回执「撤销」**：register 增可选 `paths`（delete 任务寄存原始路径清单，JobInfo.paths），成功回执 `doneReceiptAction` 对 delete&&!permanent 附「撤销」动作钮（与解压/压缩「打开」同通道，含 late-done 补漏分支）——`restore_trash` 按原路径精确还原，独立于撤销栈顶不受期间其他操作影响；回执人话计数（含已不在回收站的缺失项）。
+3. **长任务 ETA**：`lib/jobsEta.ts`（etaSeconds/etaText 配 vitest）比例外推 `elapsed×(1-f)/f`——f≤2%、f≥1、启动 <2s、非 running 不估算；JobInfo 增 `startedAt`；JobList 行内「剩余约 X」（进度事件驱动重渲染免定时器）。
+4. **拖拽落点语义角标**：窗格落点徽标从「释放以放入」升级为「释放移动到此处 / 释放复制到此处」（`components/DropBadge.tsx` 的 useDragCtrl = OLE 拖拽期间 window keydown/keyup 捕获跟踪 Ctrl，Chromium 拖拽循环转发键盘事件）；暂存卡落点新增同款「释放加入暂存区」徽标（.np-shelf 加 position:relative）。
+5. **强调色自定义**：`lib/accent.ts` 七套预设（默认蓝/青碧/苔绿/黛紫/玫红/琥珀/石墨，浅/深成对取值，vitest 锁 default 与 CSS 回退链字面量一致防漂移）；index.css `--np-accent` 改 `var(--np-accent-user(-dark))` 回退链消费，`--np-sel`/`--np-glass-hover` 从硬编码 rgba 改 accent color-mix 派生（逐值等价）——换色 143 处直用 + 33 处 color-mix 全链联动；`settings.accent` + `applyAccent` 内联下发浅/深两变量；设置 → 外观「强调色」色板行（圆点随浅/深主题切档）。
+6. **首次启动欢迎引导**：`WelcomeDialog`（AboutDialog 式独立 Dialog，useUi.welcomeOpen）四亮点卡片（多窗格/空格预览/全盘秒搜/菜单定制 + kbd）；`settings.welcomeSeen` 门闸（App 启动延迟 900ms + 占位守卫同更新提示口径），任何关闭路径落 welcomeSeen；设置 → 配置页「欢迎引导」可重开；文案模块级 t() 定值（动态键防漏翻）。
+7. **设置页搜索框**：`lib/settingsSearch.ts` 手维护跨分类行索引（~53 行，vitest）；SettingsPanel 导航栏顶部搜索框，非空查询切命中清单（标题+分类徽标，点击直跳分类页，Esc 清词）。
+8. **剪贴板来源筛选**：`cliphist_list` 增 `source` 精确等值参数（COUNT/SELECT 共用 where_sql，?3/?4 占位补零）；新命令 `cliphist_sources`（DISTINCT source 计数降序，LIMIT 24，cargo test source_filter_and_distinct_sources）；浮窗过滤行尾「应用窗口」pill + 自绘下拉（点开现拉清单、呼出复位、点外收起）；`.np-clip-srcmenu` 入强霜家族（frostFamily 名单 +1）。
+9. **网络位置**：drives.rs DRIVE_REMOTE=4 → `drive_type:"remote"`（原 `_=>None` 整盘滤除），此电脑页网络映射盘可见、类型列「网络磁盘」；std fs 全链对 UNC 天然支持（path.rs parent_of/to_extended 早已 UNC-aware 配测试），地址栏键入 `\srv\share` 直达；全盘搜索根列表（fixed_drive_roots）继续不扫网络盘。
+10. **回收站虚拟页**：Rust `recyclebin.rs` 直读各盘 `$Recycle.Bin\<SID>\$I*` 元数据（v1 定长名/v2 带长度两代格式，parse_i_file 配 4 组 cargo test；其他用户 SID 桶 ACL 拒读自然跳过；MAX 2000 护栏）——还原 = $R 移回原路径（原父目录逐级补建、原名被占 available_name (2) 旁写、$I 同步清理），永久删除 = $R 递归删除；命令三件 `recyclebin_list/restore/delete`（async spawn_blocking）。前端 `RECYCLE_BIN` 哨兵虚拟页（FileList 全套守卫：load/search/free/watch/分页/计数/entryAt；列组 = 名称/原位置/删除时间/大小；右键还原/永久删除、空白清空回收站 danger 确认；Delete/F2/Enter 全禁用防误操作）+ 导航树第二固定根（Trash2）+ 此电脑页首行入口行。
+11. **图片缩略图视图**：ViewMode 增 `"grid"`（F3 三档循环，Pane 视图下拉 + 设置默认视图三选）；Rust `get_thumbnails` = IShellItemImageFactory::GetImage 96×96（SIIGBF_BIGGERSIZEOK，系统预览处理器对 PDF/视频同样出图）→ hbitmap_to_png 复用图标管线，IconStore.thumbs LRU 200 键含 mtime 自动失效（铁律 2）；前端可见窗口批量拉取（≤40/批，tried 集防无图类型反复重试，换目录即清），单元格 = 72px 缩略图盒（surface-2 凹陷）+ 名标签，行高 104（DENSITY.cellWGrid/rowHGrid）。
+
+**验收**：vitest 720 / cargo test 430（+5）/ clippy -D warnings / build 全绿；CDP 驱动真实窗口逐项截图验收（见提交说明）。
+
 ### 13.4 本体整体审查修复批（数据安全 / 性能 / 安全加固）
 
 **范围**：`fs/*` / `jobs/mod.rs` / `commands/*` / `index/` / `stores/icons|settings|jobs` / FileList/Pane/NavTree。

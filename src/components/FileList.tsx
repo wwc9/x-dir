@@ -5,10 +5,12 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   api,
   PAGE_SIZE,
+  RECYCLE_BIN,
   THIS_PC,
   type CmdError,
   type DriveInfo,
   type FileEntry,
+  type RecycleEntry,
   type SearchBatchEvent,
   type SearchResult,
   type SortKey,
@@ -79,7 +81,7 @@ import { pickStartIndex, usePreview } from "../stores/preview";
 import { composeTypeFilterQuery } from "../lib/searchStream";
 import { t } from "../lib/i18n";
 import { useSettings } from "../stores/settings";
-import { useUi, type MenuItem, type TypeAheadState } from "../stores/ui";
+import { confirmDialog, useUi, type MenuItem, type TypeAheadState } from "../stores/ui";
 import { matchRangeOf } from "../lib/typeAhead";
 import {
   COL_DEFAULTS,
@@ -91,7 +93,8 @@ import {
   type ColWidths,
 } from "../lib/columns";
 import { AppIcon } from "./AppIcon";
-import { HardDrive, Monitor, Move } from "lucide-react";
+import { useDragCtrl } from "./DropBadge";
+import { Copy, HardDrive, Monitor, Move, Trash2 } from "lucide-react";
 import { ColGrip, colDragClickGuard, type ColResizeCtl } from "./ColGrip";
 
 const DND_MIME = "application/x-xdir";
@@ -127,6 +130,35 @@ function driveEntries(drives: DriveInfo[]): FileEntry[] {
     isDir: true,
     size: d.totalBytes,
     mtimeMs: 0,
+    ctimeMs: 0,
+    attrs: { hidden: false, system: false, readonly: false },
+    py: null,
+  }));
+}
+
+/** 此电脑页首行的回收站入口行（哨兵路径，双击进入回收站虚拟页） */
+function recycleBinRow(): FileEntry {
+  return {
+    name: t("回收站"),
+    path: RECYCLE_BIN,
+    isDir: true,
+    size: 0,
+    mtimeMs: 0,
+    ctimeMs: 0,
+    attrs: { hidden: false, system: false, readonly: false },
+    py: null,
+  };
+}
+
+/** 回收站条目 → 列表行（path = $R 数据体路径，天然唯一；mtimeMs = 删除时刻
+ *  供「删除时间」列复用 formatTime） */
+function recycleEntries(items: RecycleEntry[]): FileEntry[] {
+  return items.map((e) => ({
+    name: e.name,
+    path: e.rPath,
+    isDir: e.isDir,
+    size: e.size,
+    mtimeMs: e.deletedMs,
     ctimeMs: 0,
     attrs: { hidden: false, system: false, readonly: false },
     py: null,
@@ -227,6 +259,9 @@ function RowFileIcon({
     const spec = fileIcon(entry.name, entry.isDir, isThisPc && entry.isDir);
     return <AppIcon icon={spec.icon} size={DENSITY.iconMd} colorVar={spec.colorVar} />;
   }
+  // 此电脑页的回收站入口行：Trash2 语义图标（哨兵无真实图标可提取）
+  if (entry.path === RECYCLE_BIN)
+    return <AppIcon icon={Trash2} size={DENSITY.iconMd} colorVar="--np-muted" />;
   // 此电脑页盘符只查路径表：盘符根在 Rust 端有专属真实提取（icons.rs icon_key），
   // 扩展名共享表对 "(C:)" 这类名称无意义
   if (realIcons) {
@@ -309,6 +344,8 @@ export function FileList({
   const filterActive = filter !== null && !!filter.trim();
 
   const isThisPc = path === THIS_PC;
+  // 回收站虚拟页（2026-11-25）：$I 元数据清单直读，不走 list_dir
+  const isRecycleBin = path === RECYCLE_BIN;
   // 窗格序号（状态条左端标志）：本窗格在布局树 DFS 序中的位次（1 起），
   // 分裂/关闭窗格后按新树重排
   const paneNo = useLayout((s) =>
@@ -319,11 +356,13 @@ export function FileList({
   const searchActive = searching && !!search?.trim();
   const [pages, setPages] = useState(new Map<number, FileEntry[]>());
   const [drives, setDrives] = useState<DriveInfo[] | null>(null);
+  const [rbItems, setRbItems] = useState<RecycleEntry[] | null>(null);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<CmdError | null>(null);
   const [free, setFree] = useState<number | null>(null);
   const [width, setWidth] = useState(600);
   const dndPoint = useDnd((s) => s.point);
+  const dragCtrl = useDragCtrl();
   const [searchRes, setSearchRes] = useState<SearchResult | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLDivElement>(null);
@@ -375,11 +414,12 @@ export function FileList({
 
   const baseEntries: FileEntry[] = useMemo(() => {
     if (searchActive) return searchRes?.entries ?? [];
-    if (isThisPc) return driveEntries(drives ?? []);
+    if (isThisPc) return [recycleBinRow(), ...driveEntries(drives ?? [])];
+    if (isRecycleBin) return recycleEntries(rbItems ?? []);
     const flat: FileEntry[] = [];
     for (const es of pages.values()) flat.push(...es);
     return flat;
-  }, [pages, drives, isThisPc, searchActive, searchRes]);
+  }, [pages, drives, isThisPc, isRecycleBin, rbItems, searchActive, searchRes]);
 
   // 乐观插入（2026-11-11 Explorer 式新建文件夹）：createDir 在途时合成行追加
   // 在清单尾立即上屏（点击到出现零延迟）；软刷新带回真实条目（同 path）后
@@ -392,10 +432,12 @@ export function FileList({
   );
   const count =
     isThisPc
-      ? (drives?.length ?? 0)
-      : searchActive
-        ? entries.length
-        : total + (optimisticActive ? 1 : 0);
+      ? (drives?.length ?? 0) + 1
+      : isRecycleBin
+        ? (rbItems?.length ?? 0)
+        : searchActive
+          ? entries.length
+          : total + (optimisticActive ? 1 : 0);
 
   // 真实条目随软刷新到达 → 合成行让位
   useEffect(() => {
@@ -414,9 +456,106 @@ export function FileList({
     return m;
   }, [drives]);
 
+  // 盘类型（2026-11-25 网络位置）：此电脑页类型列文案按实际类型渲染
+  const drivesType = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const d of drives ?? []) m.set(`${d.letter}\\`, d.driveType);
+    return m;
+  }, [drives]);
+
+  // 回收站 $R 路径 → 原条目（原位置列 + 还原/删除动作按行取元数据）
+  const rbMeta = useMemo(() => {
+    const m = new Map<string, RecycleEntry>();
+    for (const e of rbItems ?? []) m.set(e.rPath, e);
+    return m;
+  }, [rbItems]);
+
+  /** 回收站还原：按原路径送回 + 相关目录立即刷新 + 本页重拉 */
+  function recycleRestore(items: RecycleEntry[]) {
+    if (!items.length) return;
+    void api
+      .recyclebinRestore(items)
+      .then((r) => {
+        const dirs = [
+          ...new Set(
+            items
+              .map((i) => parentPath(i.origPath))
+              .filter((p): p is string => !!p),
+          ),
+        ];
+        if (dirs.length) usePanes.getState().bumpAffected(dirs, { immediate: true });
+        useUi
+          .getState()
+          .toast(
+            r.failed.length
+              ? t("已还原 {n} 项 · {m} 项失败：{first}", {
+                  n: r.ok,
+                  m: r.failed.length,
+                  first: r.failed[0].message,
+                })
+              : t("已还原 {n} 项", { n: r.ok }),
+          );
+        usePanes.getState().bumpRefresh(tabId);
+      })
+      .catch((e) => useUi.getState().toast(String(e), "error"));
+  }
+
+  /** 回收站永久删除（danger 确认；清空 = 全量本命令） */
+  async function recycleDelete(items: RecycleEntry[]) {
+    if (!items.length) return;
+    const ok = await confirmDialog({
+      title: t("永久删除"),
+      message:
+        items.length === 1
+          ? t("确定要永久删除「{name}」吗？此操作不可恢复。", { name: items[0].name })
+          : t("确定要永久删除这 {n} 项吗？此操作不可恢复。", { n: items.length }),
+      kind: "warn",
+      okText: t("删除"),
+    });
+    if (!ok) return;
+    void api
+      .recyclebinDelete(items.map((i) => i.rPath))
+      .then((r) => {
+        useUi
+          .getState()
+          .toast(
+            r.failed.length
+              ? t("已删除 {n} 项 · {m} 项失败：{first}", {
+                  n: r.ok,
+                  m: r.failed.length,
+                  first: r.failed[0].message,
+                })
+              : t("已删除 {n} 项", { n: r.ok }),
+          );
+        usePanes.getState().bumpRefresh(tabId);
+      })
+      .catch((e) => useUi.getState().toast(String(e), "error"));
+  }
+
+  /** 清空回收站 = 全量永久删除 */
+  async function recycleEmpty() {
+    const items = rbItems ?? [];
+    if (!items.length) return;
+    const ok = await confirmDialog({
+      title: t("清空回收站"),
+      message: t("确定要永久删除回收站中的全部 {n} 项吗？此操作不可恢复。", { n: items.length }),
+      kind: "warn",
+      okText: t("清空"),
+    });
+    if (!ok) return;
+    void api
+      .recyclebinDelete(items.map((i) => i.rPath))
+      .then(() => {
+        useUi.getState().toast(t("回收站已清空"));
+        usePanes.getState().bumpRefresh(tabId);
+      })
+      .catch((e) => useUi.getState().toast(String(e), "error"));
+  }
+
   const entryAt = (i: number): FileEntry | undefined => {
     if (searchActive) return entries[i];
     if (isThisPc) return entries[i];
+    if (isRecycleBin) return entries[i];
     const fromPage = pages.get(Math.floor(i / PAGE_SIZE))?.[i % PAGE_SIZE];
     if (fromPage) return fromPage;
     // 乐观插入的合成行在已加载页之后
@@ -461,6 +600,24 @@ export function FileList({
           setDrives(ds);
           setLoaded(true);
           prefetchIcons(driveEntries(ds));
+        })
+        .catch((e) => {
+          if (loadGenRef.current !== gen) return;
+          setError(e);
+          setLoaded(true);
+        });
+      return;
+    }
+    if (isRecycleBin) {
+      api
+        .recyclebinList()
+        .then((items) => {
+          if (loadGenRef.current !== gen) return;
+          // 删除时刻降序（最新删的排最前）
+          const sorted = [...items].sort((a, b) => b.deletedMs - a.deletedMs);
+          setRbItems(sorted);
+          setLoaded(true);
+          prefetchIcons(recycleEntries(sorted));
         })
         .catch((e) => {
           if (loadGenRef.current !== gen) return;
@@ -543,7 +700,7 @@ export function FileList({
   const searchDeep = usePanes((s) => s.tabs[tabId]?.searchDeep === true);
 
   useEffect(() => {
-    if (!searching || isThisPc) {
+    if (!searching || isThisPc || isRecycleBin) {
       cancelSearchReq();
       setSearchRes(null);
       return;
@@ -592,13 +749,13 @@ export function FileList({
       cancelSearchReq();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, search, searching, isThisPc, refreshTick, searchType, searchDeep]);
+  }, [path, search, searching, isThisPc, isRecycleBin, refreshTick, searchType, searchDeep]);
 
   // 可用空间（窗格状态条）。闭包捕获请求时的 path，响应到达时与当前路径
   // 比对——快速导航下旧盘的慢响应不得覆盖新盘读数（2026-11-01 审查修复：
   // 列表/搜索主链路都有 loadGen 守卫，唯这里漏了）
   useEffect(() => {
-    if (isThisPc) {
+    if (isThisPc || isRecycleBin) {
       setFree(null);
       return;
     }
@@ -620,16 +777,16 @@ export function FileList({
       })
       .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, isThisPc, tabId]);
+  }, [path, isThisPc, isRecycleBin, tabId]);
 
   // 目录监控：仅可见窗格挂 watcher，生命周期随路径（§6.8，铁律 3）
   useEffect(() => {
-    if (isThisPc) return;
+    if (isThisPc || isRecycleBin) return;
     api.watchDir(path).catch(() => undefined);
     return () => {
       api.unwatchDir(path).catch(() => undefined);
     };
-  }, [path, isThisPc]);
+  }, [path, isThisPc, isRecycleBin]);
 
   useEffect(() => {
     usePanes.getState().setTotal(tabId, count);
@@ -653,8 +810,9 @@ export function FileList({
     if (el && head) head.style.transform = `translateX(${-el.scrollLeft}px)`;
   }
 
-  const cellW = DENSITY.cellWList;
-  const rowH = DENSITY.rowH;
+  // 缩略图视图（2026-11-25 grid）：单元格 100 / 行高 104（DENSITY 同名条款）
+  const cellW = viewMode === "grid" ? DENSITY.cellWGrid : DENSITY.cellWList;
+  const rowH = viewMode === "grid" ? DENSITY.rowHGrid : DENSITY.rowH;
   const perRow = viewMode === "details" ? 1 : Math.max(1, Math.floor((width - 8) / cellW));
   const rowCount = Math.ceil(count / perRow);
 
@@ -716,7 +874,7 @@ export function FileList({
     ? (rows[rows.length - 1].index + 1) * perRow - 1
     : 0;
   useEffect(() => {
-    if (isThisPc || searchActive) return;
+    if (isThisPc || searchActive || isRecycleBin) return;
     const gen = loadGenRef.current; // 补页归属当前加载代；换目录后的旧响应直接丢弃
     const fp = Math.floor(firstIdx / PAGE_SIZE);
     const lp = Math.floor(lastIdx / PAGE_SIZE);
@@ -748,7 +906,7 @@ export function FileList({
         });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firstIdx, lastIdx, isThisPc, searchActive, path, sort, showHidden, refreshTick, pages, filter]);
+  }, [firstIdx, lastIdx, isThisPc, isRecycleBin, searchActive, path, sort, showHidden, refreshTick, pages, filter]);
 
   // 真实图标 / 缩略图：只对可见窗口请求（铁律 3），批量去重交给 stores/icons
   const visibleEntries = useMemo(() => {
@@ -768,6 +926,33 @@ export function FileList({
       .requestIcons(visibleEntries.slice(0, 60).map((e) => e.path));
   }, [visibleEntries, realIcons, searchActive]);
 
+  // 缩略图（2026-11-25 grid 视图）：可见窗口批量拉取（铁律 2/3）——取不到的
+  // 类型（无预览处理器）记入 tried 集防滚动反复重试；换目录即清
+  const [thumbMap, setThumbMap] = useState<Record<string, string>>({});
+  const thumbTriedRef = useRef(new Set<string>());
+  useEffect(() => {
+    setThumbMap({});
+    thumbTriedRef.current = new Set();
+  }, [path]);
+  const gridMode = viewMode === "grid" && !isThisPc && !isRecycleBin && !searchActive;
+  useEffect(() => {
+    if (!gridMode) return;
+    const missing: string[] = [];
+    for (const e of visibleEntries) {
+      if (e.isDir || thumbMap[e.path] || thumbTriedRef.current.has(e.path)) continue;
+      missing.push(e.path);
+      if (missing.length >= 40) break;
+    }
+    if (!missing.length) return;
+    for (const p of missing) thumbTriedRef.current.add(p);
+    void api
+      .getThumbnails(missing)
+      .then((m) => {
+        if (Object.keys(m).length) setThumbMap((prev) => ({ ...prev, ...m }));
+      })
+      .catch(() => undefined);
+  }, [visibleEntries, gridMode, thumbMap]);
+
   const selectedEntries = (): FileEntry[] => {
     // listRegistry 处理器（Ctrl+C/V/X、Enter、F2、Delete、Alt+Enter）走本组件
     // 闭包，而 registerList 依赖数组不含 selected——此处必须实时读 store，否则
@@ -781,6 +966,7 @@ export function FileList({
   const selectedPaths = (): string[] => selectedEntries().map((e) => e.path);
 
   function openEntry(entry: FileEntry) {
+    if (isRecycleBin) return; // $R 数据体不可打开：动作只经右键还原/删除
     if (entry.isDir) {
       usePanes.getState().navigate(tabId, entry.path);
     } else {
@@ -1577,6 +1763,29 @@ export function FileList({
   }
 
   function rowMenuItems(entry: FileEntry): MenuItem[] {
+    // 回收站页：还原 / 永久删除（按选中集批量；右键行不在选中集时单行）
+    if (isRecycleBin) {
+      const nowSel = usePanes.getState().tabs[tabId]?.selected ?? [];
+      const targets = (
+        nowSel.includes(entry.path) ? selectedEntries() : [entry]
+      )
+        .map((e) => rbMeta.get(e.path))
+        .filter((e): e is RecycleEntry => !!e);
+      return [
+        {
+          label: t("还原"),
+          disabled: targets.length === 0,
+          action: () => recycleRestore(targets),
+        },
+        { sep: true },
+        {
+          label: t("永久删除"),
+          disabled: targets.length === 0,
+          danger: true,
+          action: () => void recycleDelete(targets),
+        },
+      ];
+    }
     const nowSel = usePanes.getState().tabs[tabId]?.selected ?? [];
     const sel = nowSel.includes(entry.path) ? selectedEntries() : [entry];
     return specMenuItems("sel", sel);
@@ -1713,8 +1922,13 @@ export function FileList({
           for (const entry of selectedEntries()) openEntry(entry);
         },
         onBackspace: () => usePanes.getState().up(tabId),
-        onDelete: (permanent) => deletePaths(selectedPaths(), confirmDelete, permanent),
+        onDelete: (permanent) => {
+          // 回收站页 Delete 不语义化（永久删除走右键，防一键误清）
+          if (isRecycleBin) return;
+          deletePaths(selectedPaths(), confirmDelete, permanent);
+        },
         onRename: () => {
+          if (isRecycleBin) return;
           const es = selectedEntries();
           if (es.length === 1) usePanes.getState().setEditing(tabId, es[0].path);
         },
@@ -1838,6 +2052,21 @@ export function FileList({
                 {t("可用空间")}<ColGrip col="size" ctl={paneCtl} />
               </span>
             </>
+          ) : isRecycleBin ? (
+            <>
+              <span className="np-col-name">
+                {t("名称")}<ColGrip col="name" ctl={paneCtl} />
+              </span>
+              <span className="np-col-loc">
+                {t("原位置")}<ColGrip col="loc" ctl={paneCtl} />
+              </span>
+              <span className="np-col-mtime">
+                {t("删除时间")}<ColGrip col="mtime" ctl={paneCtl} />
+              </span>
+              <span className="np-col-size">
+                {t("大小")}<ColGrip col="size" ctl={paneCtl} />
+              </span>
+            </>
           ) : searchCols ? (
             <>
               <span className="np-col-name">
@@ -1910,7 +2139,24 @@ export function FileList({
           e.preventDefault();
           // Explorer 惯例：右键空白处清空选择（空白菜单针对目录本身）
           usePanes.getState().setSelected(tabId, [], null);
-          if (isThisPc) {
+          if (isRecycleBin) {
+            useUi
+              .getState()
+              .openMenu(
+                [
+                  {
+                    label: t("刷新 F5"),
+                    action: () => usePanes.getState().bumpRefresh(tabId),
+                  },
+                  {
+                    label: t("清空回收站"),
+                    action: () => void recycleEmpty(),
+                  },
+                ],
+                e.clientX,
+                e.clientY,
+              );
+          } else if (isThisPc) {
             useUi
               .getState()
               .openMenu(
@@ -1971,7 +2217,9 @@ export function FileList({
           <div className="np-list-empty">
             {isThisPc
               ? t("正在读取驱动器…")
-              : searchActive
+              : isRecycleBin
+                ? t("回收站是空的")
+                : searchActive
                 ? t("没有匹配的结果")
                 : filterActive
                   ? t("没有匹配过滤词的条目")
@@ -2030,6 +2278,28 @@ export function FileList({
                           commitRename(entry, (e.target as HTMLInputElement).value);
                         if (e.key === "Escape")
                           usePanes.getState().setEditing(tabId, null);
+                        // Tab / Shift+Tab = 提交并跳下一个/上一个文件继续改名
+                        // （Explorer 惯例，2026-11-25 用户需求）：非法名不跳、
+                        // 原地报错；首尾循环。stopPropagation 防全局 type-ahead
+                        // 的 Tab 循环抢键
+                        if (e.key === "Tab") {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const value = (e.target as HTMLInputElement).value;
+                          if (!isValidName(value)) {
+                            useUi.getState().toast(t("名称含非法字符或为 Windows 保留名"), "error");
+                            return;
+                          }
+                          const cur = pathIndex.get(entry.path) ?? -1;
+                          const raw = e.shiftKey ? cur - 1 : cur + 1;
+                          const nextIdx = raw < 0 ? count - 1 : raw >= count ? 0 : raw;
+                          const next = nextIdx !== cur ? entryAt(nextIdx) : null;
+                          void commitRename(entry, value);
+                          if (next) {
+                            usePanes.getState().setSelected(tabId, [next.path], next.path);
+                            usePanes.getState().setEditing(tabId, next.path);
+                          }
+                        }
                       }}
                     />
                   ) : (
@@ -2087,6 +2357,21 @@ export function FileList({
                               {sizeTextOf(entry)}
                             </span>
                           </>
+                        ) : isRecycleBin ? (
+                          <>
+                            <span
+                              className="np-cell-muted np-col-loc np-ellipsis"
+                              title={rbMeta.get(entry.path)?.origPath}
+                            >
+                              {rbMeta.get(entry.path)?.origPath ?? ""}
+                            </span>
+                            <span className="np-cell-muted np-col-mtime">
+                              {formatTime(entry.mtimeMs)}
+                            </span>
+                            <span className="np-cell-muted np-col-size">
+                              {sizeTextOf(entry)}
+                            </span>
+                          </>
                         ) : !isThisPc ? (
                           <>
                             <span className="np-cell-muted np-col-mtime">
@@ -2103,15 +2388,61 @@ export function FileList({
                           </>
                         ) : (
                           <>
-                            <span className="np-cell-muted np-col-type">{t("本地磁盘")}</span>
+                            <span className="np-cell-muted np-col-type">
+                              {entry.path === RECYCLE_BIN
+                                ? t("系统文件夹")
+                                : t(drivesType.get(entry.path) === "remote" ? "网络磁盘" : "本地磁盘")}
+                            </span>
                             <span className="np-cell-muted np-col-size">
                               {sizeTextOf(entry)}
                             </span>
                             <span className="np-cell-muted np-col-size">
-                              {formatBytes(drivesFree.get(entry.path) ?? 0)}
+                              {entry.path === RECYCLE_BIN
+                                ? "—"
+                                : formatBytes(drivesFree.get(entry.path) ?? 0)}
                             </span>
                           </>
                         )}
+                      </div>
+                    );
+                  }
+                  if (viewMode === "grid") {
+                    return (
+                      <div
+                        key={col}
+                        data-idx={idx}
+                        data-path={entry.path}
+                        data-dir={entry.isDir ? "1" : undefined}
+                        className={`np-row np-cell-grid ${sel ? "is-sel" : ""} ${
+                          entry.path === dropRowPath ? "is-drop" : ""
+                        }`}
+                        style={{ width: cellW, flex: "0 0 auto" }}
+                        onMouseDown={(e) => rowMouseDown(e, entry)}
+                        onDoubleClick={(e) => {
+                          // 框内双击 = 选词，不冒泡成「打开该项」
+                          if (!(e.target as HTMLElement).closest(".np-rename")) openEntry(entry);
+                        }}
+                        onContextMenu={(e) => openRowMenu(e, entry)}
+                      >
+                        <span className="np-thumbbox">
+                          {!entry.isDir && thumbMap[entry.path] ? (
+                            <img
+                              className="np-thumb"
+                              src={thumbMap[entry.path]}
+                              alt=""
+                              draggable={false}
+                            />
+                          ) : (
+                            <RowFileIcon
+                              entry={entry}
+                              isThisPc={isThisPc}
+                              realIcons={realIcons}
+                              iconMap={iconMap}
+                              exts={extMap}
+                            />
+                          )}
+                        </span>
+                        {nameEl}
                       </div>
                     );
                   }
@@ -2149,12 +2480,13 @@ export function FileList({
         )}
       </div>
 
-      {/* 拖放徽标（S2 浮标）：accent 实底 pill 直述动作；pointer-events none
-          不吃拖放/点击；文案与状态条提示逐字一致（§4.8 镜像） */}
+      {/* 拖放语义徽标（2026-11-25 升级）：accent 实底 pill 直述落点动作——
+          移动为默认语义、按住 Ctrl 切「复制」（与 OLE 修饰键协商同语义）；
+          pointer-events none 不吃拖放/点击 */}
       {dropHover && (
         <span className="np-drop-badge">
-          <AppIcon icon={Move} size={DENSITY.iconSm} />
-          {t("释放以放入")}
+          <AppIcon icon={dragCtrl ? Copy : Move} size={DENSITY.iconSm} />
+          {dragCtrl ? t("释放复制到此处") : t("释放移动到此处")}
         </span>
       )}
       </div>

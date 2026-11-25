@@ -137,7 +137,10 @@ export async function enqueueDelete(paths: string[], permanent: boolean): Promis
         : ({ ok, cancelled }: { ok: boolean; cancelled: boolean }) => {
             if (ok && !cancelled) useUndo.getState().push({ kind: "trash", paths });
           };
-    useJobs.getState().register(jobId, "delete", null, sourceParents, onDone, permanent);
+    // paths 随任务寄存：成功回执「撤销」动作按原路径精确还原（2026-11-25）
+    useJobs
+      .getState()
+      .register(jobId, "delete", null, sourceParents, onDone, permanent, paths);
   } catch (e) {
     useUi.getState().toast(t("删除失败：{e}", { e: String(e) }), "error");
   }
