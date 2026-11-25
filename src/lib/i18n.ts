@@ -1853,8 +1853,6 @@ export const EN: Record<string, string> = {
   "工作日历": "Work Calendar",
   "上一月": "Previous month",
   "下一月": "Next month",
-  "上一月（PageUp）": "Previous month (PageUp)",
-  "下一月（PageDown）": "Next month (PageDown)",
   "今天": "Today",
   "按月度 / 年度 / 自定义日期范围导出工作 Markdown": "Export work notes as Markdown by month / year / custom date range",
   "休": "Off",

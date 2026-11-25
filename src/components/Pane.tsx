@@ -131,7 +131,12 @@ const TOOL_TIER: Record<string, "always" | "mid-wide" | "only-wide"> = {
  *  取代此前内嵌文案的全角括号式（§4.8 快捷键统一走键帽）。
  *  组合与 lib/shortcuts.ts 清单逐条对应：up=nav-up / newFolder=new-folder /
  *  search=search-pane / refresh=refresh / view=view-cycle / splitH·V=pane-split，
- *  改键位先改清单再同步本表 */
+ *  改键位先改清单再同步本表。
+ *  2026-11-25 全量收编（用户需求「存在快捷键的功能，按钮 tooltip 都要带键位」）：
+ *  工具栏是用户可编排的（全部内置功能可拖入），凡清单里有快捷键的内置功能
+ *  全部入表——open=Enter / cut·copy·paste=Ctrl+X/C/V / rename=F2 /
+ *  delete=Delete / deletePerm=Shift+Delete / properties=Alt+Enter /
+ *  selectAll=Ctrl+A / preview=Space / copyToPane·moveToPane=Ctrl+Shift+C/X */
 const TOOL_KBD: Record<string, string> = {
   up: "Backspace",
   newFolder: "Ctrl+Shift+N",
@@ -140,6 +145,18 @@ const TOOL_KBD: Record<string, string> = {
   view: "F3",
   splitH: "Ctrl+Shift+H",
   splitV: "Ctrl+Shift+V",
+  open: "Enter",
+  cut: "Ctrl+X",
+  copy: "Ctrl+C",
+  paste: "Ctrl+V",
+  rename: "F2",
+  delete: "Delete",
+  deletePerm: "Shift+Delete",
+  properties: "Alt+Enter",
+  selectAll: "Ctrl+A",
+  preview: "Space",
+  copyToPane: "Ctrl+Shift+C",
+  moveToPane: "Ctrl+Shift+X",
 };
 
 export function Pane({ pane }: { pane: PaneNode }) {
@@ -844,6 +861,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
           icon={ic(FN_ICONS[key] ?? List)}
           disabled={off}
           data-tip={`${toolTitle(key)}${ready ? "" : t("（启用条件未满足）")}`}
+          data-kbd={TOOL_KBD[key]}
           onClick={(e) => {
             // 功能库面板按按钮锚位直开（其余走 FileList 执行器按选中上下文解析）
             if (key === "palette") {
@@ -872,6 +890,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
         }
         disabled={off}
         data-tip={`${toolTitle(key)}${ready ? "" : t("（启用条件未满足）")}`}
+        data-kbd={TOOL_KBD[key]}
         onClick={() => runTool(key)}
       />
     );
@@ -1133,6 +1152,9 @@ export function Pane({ pane }: { pane: PaneNode }) {
             <span className="np-ellipsis">{titleOf(tab.path)}</span>
             <span
               className="np-tab-close"
+              aria-label={t("关闭标签")}
+              data-tip={t("关闭标签")}
+              data-kbd="Ctrl+W"
               onClick={(e) => {
                 e.stopPropagation();
                 useLayout.getState().closeTab(pane.id, i);

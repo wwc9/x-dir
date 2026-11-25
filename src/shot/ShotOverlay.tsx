@@ -2711,6 +2711,7 @@ export function ShotOverlay({ boot }: { boot: ShotBoot }) {
             <button
               className="np-shot-tool np-shot-primary"
               data-tip="贴图：钉在屏幕上"
+              data-kbd="Ctrl+P"
               onClick={() => void finish("pin")}
             >
               <AppIcon icon={Pin} size={DENSITY.iconLg} />

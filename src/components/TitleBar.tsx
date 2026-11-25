@@ -861,6 +861,7 @@ export function TitleBar() {
                     className="np-qs-stepbtn"
                     aria-label={t("缩小")}
                     data-tip={t("缩小")}
+                    data-kbd="Ctrl+-"
                     onClick={() => useSettings.getState().update({ uiZoom: zoomStep(uiZoom, -1) })}
                   >
                     −
@@ -869,6 +870,7 @@ export function TitleBar() {
                     className="np-qs-val"
                     aria-label={t("点击重置 100%")}
                     data-tip={t("点击重置 100%")}
+                    data-kbd="Ctrl+0"
                     onClick={() => useSettings.getState().update({ uiZoom: 1 })}
                   >
                     {Math.round(uiZoom * 100)}%
@@ -877,6 +879,7 @@ export function TitleBar() {
                     className="np-qs-stepbtn"
                     aria-label={t("放大")}
                     data-tip={t("放大")}
+                    data-kbd="Ctrl+="
                     onClick={() => useSettings.getState().update({ uiZoom: zoomStep(uiZoom, 1) })}
                   >
                     +

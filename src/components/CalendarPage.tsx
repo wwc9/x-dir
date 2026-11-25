@@ -777,7 +777,8 @@ export function CalendarPage() {
             size="small"
             icon={ic(ChevronLeft)}
             aria-label={view === "year" ? t("上一年") : t("上一月")}
-            data-tip={view === "year" ? t("上一年") : t("上一月（PageUp）")}
+            data-tip={view === "year" ? t("上一年") : t("上一月")}
+            data-kbd="PageUp"
             onClick={() => stepMonth(-1)}
           />
           <button
@@ -807,6 +808,7 @@ export function CalendarPage() {
                   size="small"
                   className="np-cal-todaybtn"
                   data-tip={t("回到今天所在月份")}
+                  data-kbd="T"
                   onClick={() => {
                     jumpTo(TODAY.getFullYear(), TODAY.getMonth() + 1);
                     setSel(TODAY_KEY);
@@ -849,10 +851,18 @@ export function CalendarPage() {
             size="small"
             icon={ic(ChevronRight)}
             aria-label={view === "year" ? t("下一年") : t("下一月")}
-            data-tip={view === "year" ? t("下一年") : t("下一月（PageDown）")}
+            data-tip={view === "year" ? t("下一年") : t("下一月")}
+            data-kbd="PageDown"
             onClick={() => stepMonth(1)}
           />
-          <Button minimal size="small" className="np-cal-todaybtn" onClick={gotoToday}>
+          <Button
+            minimal
+            size="small"
+            className="np-cal-todaybtn"
+            data-tip={t("回到今天所在月份")}
+            data-kbd="T"
+            onClick={gotoToday}
+          >
             {t("今天")}
           </Button>
           {/* 任务分类 / 定期任务模板管理（2026-11-18 自设置「日历」分页迁入）：
@@ -1068,6 +1078,7 @@ export function CalendarPage() {
                             className="np-cal-qa"
                             aria-label={t("添加一条工作")}
                             data-tip={t("添加一条工作")}
+                            data-kbd="Enter"
                             tabIndex={-1}
                           >
                             {t("＋")}

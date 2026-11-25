@@ -874,6 +874,7 @@ export function ClipHistWindow() {
                         </button>
                         <button
                           data-tip={it.pinned ? "取消置顶" : "置顶（豁免清理）"}
+                          data-kbd="Ctrl+P"
                           onClick={(e) => {
                             e.stopPropagation();
                             pinItem(it);
@@ -895,6 +896,7 @@ export function ClipHistWindow() {
                         {(it.kind === "files" || it.kind === "dirs") && (
                           <button
                             data-tip="粘贴到当前窗格（主窗活动目录）"
+                            data-kbd="Enter"
                             onClick={(e) => {
                               e.stopPropagation();
                               pasteToPane(it);
@@ -906,6 +908,7 @@ export function ClipHistWindow() {
                         <button
                           className="np-clip-del"
                           data-tip="删除"
+                          data-kbd="Del"
                           onClick={(e) => {
                             e.stopPropagation();
                             delItem(it);

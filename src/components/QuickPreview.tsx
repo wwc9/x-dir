@@ -412,14 +412,14 @@ export function QuickPreviewHost() {
               minimal
               size="small"
               icon={ic(ClipboardCopy)}
-              data-tip={t("复制文件（可在窗格中粘贴）")}
+              data-tip={t("复制文件（可在窗格中粘贴）")} data-kbd="Ctrl+C"
               onClick={() => copyFile(entry)}
             />
             <Button
               minimal
               size="small"
               icon={ic(Trash2)}
-              data-tip={t("删除到回收站")}
+              data-tip={t("删除到回收站")} data-kbd="Delete"
               className="np-pv-danger"
               onClick={() => removeFile(entry)}
             />

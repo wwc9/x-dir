@@ -190,7 +190,7 @@ export function ShotResult({ boot }: { boot: ResultBoot }) {
         {gifPlayable && (
           <button
             className="np-shot-btn"
-            data-tip={playing ? "暂停动画（空格）" : "播放动画（空格）"}
+            data-tip={playing ? "暂停动画" : "播放动画"}
             data-kbd="Space"
             disabled={busy !== ""}
             onClick={() => setPlaying((p) => !p)}
