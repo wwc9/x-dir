@@ -4737,11 +4737,21 @@ body.np-col-resizing * {
   align-items: center;
   min-width: 0;
 }
-.np-pv-pdf-jump-infoot {
+/* 内嵌 footer 态（2026-11-25 用户三轮定稿「页码组件直接嵌入到预览窗口的底栏
+   中」）：彻底去药丸外观——透明底/无边框/无圆角/无阴影，仅剩填充式输入 +
+   "/ N" 文本随 footer 同层排布，成为状态条的原生控件而非浮在其上的胶囊。
+   ⚠ 必须带 .np-pv-foot 祖先提特异性：(0,2,0) 压过文件更靠后的基础规则
+   .np-pv-pdf-jump (0,1,0)——同特异性时后者胜，旧版覆盖被整体吞掉，跳转条
+   一直以 absolute bottom:16px 悬浮骑在底栏上（用户截图实绩）；
+   悬浮药丸脸只保留给无 footer 宿主的回退态（全盘搜索内嵌） */
+.np-pv-foot .np-pv-pdf-jump-infoot {
   position: static;
   transform: none;
+  background: none;
+  border: none;
+  border-radius: 0;
   box-shadow: none;
-  padding: 0 8px;
+  padding: 0;
 }
 .np-pv-pos {
   flex: none;

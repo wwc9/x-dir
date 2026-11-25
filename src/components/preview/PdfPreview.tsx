@@ -35,8 +35,9 @@ export default function PdfPreview({
   onError,
   search,
   rotateSignal = 0,
-  /** 页码跳转的宿主挂载槽（2026-11-25 用户定稿放 footer 中央，不遮 PDF 内容）；
-   *  不传（无 footer 宿主，如全盘搜索内嵌）= 回退滚动容器右下原位悬浮 */
+  /** 页码跳转的宿主挂载槽（2026-11-25 用户定稿「直接嵌入预览底栏」中央，
+   *  infoot 态去药丸外观 = 状态条原生控件）；不传（无 footer 宿主，如全盘
+   *  搜索内嵌）= 回退滚动容器底部居中悬浮 */
   jumpSlot,
 }: {
   url: string;
@@ -205,9 +206,10 @@ export default function PdfPreview({
     return offsets;
   }, [matches]);
 
-  // 页码跳转（2026-11-25 用户定稿放 footer 中央，不遮 PDF 内容）：宿主传槽时
-  // portal 进 footer 槽（文档流内联，footer 三段之一）；无槽宿主（全盘搜索内嵌）
-  // 回退滚动容器外底部居中悬浮。输入页码 Enter 直达
+  // 页码跳转（2026-11-25 用户三轮定稿「直接嵌入预览底栏」）：宿主传槽时
+  // portal 进 footer 中央槽（np-pv-pdf-jump-infoot 去药丸外观，与 footer 同层
+  // 排布）；无槽宿主（全盘搜索内嵌）回退滚动容器外底部居中悬浮。输入页码
+  // Enter 直达
   const jumpUi = doc ? (
     <div
       className={
