@@ -37,12 +37,12 @@ function typeAheadReset(): void {
   useUi.getState().setTypeAhead(null);
 }
 
-function focusNearest(activePaneId: string, dir: Dir) {
+function focusNearest(activePaneId: string, dir: Dir): boolean {
   const nodes = Array.from(
     document.querySelectorAll<HTMLElement>("[data-pane-id]"),
   );
   const mine = nodes.find((n) => n.dataset.paneId === activePaneId);
-  if (!mine) return;
+  if (!mine) return false;
   const r0 = mine.getBoundingClientRect();
   const cx0 = r0.left + r0.width / 2;
   const cy0 = r0.top + r0.height / 2;
@@ -70,7 +70,11 @@ function focusNearest(activePaneId: string, dir: Dir) {
     }
     if (ok && d >= 0 && (!best || d < best.d)) best = { id, d };
   }
-  if (best) useLayout.getState().setActive(best.id);
+  if (best) {
+    useLayout.getState().setActive(best.id);
+    return true;
+  }
+  return false;
 }
 
 export function onGlobalKeyDown(e: KeyboardEvent): void {
@@ -358,7 +362,19 @@ export function onGlobalKeyDown(e: KeyboardEvent): void {
     return;
   }
   if (e.altKey && k.startsWith("Arrow")) {
-    focusNearest(activePaneId, k.slice(5).toLowerCase() as Dir);
+    const moved = focusNearest(activePaneId, k.slice(5).toLowerCase() as Dir);
+    if (!moved) {
+      // Explorer 兼容退化（2026-11-25 规范化）：唯一窗格 / 该方向无邻居窗格时，
+      // Alt+← = 后退、Alt+→ = 前进、Alt+↑ = 上级目录（Win11 Alt+↑ 惯例）——
+      // 多窗格下方向键仍优先切焦点（Q-Dir 核心），不受影响
+      if (tabId) {
+        if (k === "ArrowLeft") usePanes.getState().back(tabId);
+        else if (k === "ArrowRight") usePanes.getState().forward(tabId);
+        else if (k === "ArrowUp") list?.onBackspace();
+      }
+      e.preventDefault();
+      return;
+    }
     e.preventDefault();
     return;
   }
@@ -398,7 +414,8 @@ export function onGlobalKeyDown(e: KeyboardEvent): void {
     e.preventDefault();
     return;
   }
-  if (e.altKey && lower === "d") {
+  // Alt+D（Explorer 惯例）/ Ctrl+L（浏览器惯例，2026-11-25 规范化补齐）：聚焦地址栏
+  if ((e.altKey && lower === "d") || (ctrl && !e.altKey && !e.shiftKey && lower === "l")) {
     (
       document.querySelector(`[data-address="${activePaneId}"]`) as
         | HTMLInputElement

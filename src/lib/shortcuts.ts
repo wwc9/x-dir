@@ -57,7 +57,12 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     title: "窗格与布局",
     items: [
       { id: "pane-focus-n", keys: ["Ctrl+1 ~ 9"], label: "聚焦第 N 窗格（布局 DFS 序）", scope: "global" },
-      { id: "pane-focus-dir", keys: ["Alt+← / → / ↑ / ↓"], label: "焦点移至该方向最近的窗格", scope: "global" },
+      {
+        id: "pane-focus-dir",
+        keys: ["Alt+← / → / ↑ / ↓"],
+        label: "焦点移至该方向最近的窗格；该方向无邻居窗格时退化为导航：Alt+← 后退 / Alt+→ 前进 / Alt+↑ 上级目录（资源管理器兼容）",
+        scope: "global",
+      },
       { id: "pane-split", keys: ["Ctrl+Shift+H", "Ctrl+Shift+V"], label: "活动窗格横向 / 纵向分裂", scope: "global" },
       { id: "pane-close", keys: ["Ctrl+Shift+W"], label: "关闭活动窗格", scope: "global" },
       {
@@ -86,7 +91,12 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     title: "导航与视图",
     items: [
-      { id: "addr-focus", keys: ["Alt+D"], label: "聚焦活动窗格的地址栏", scope: "global" },
+      {
+        id: "addr-focus",
+        keys: ["Alt+D", "Ctrl+L"],
+        label: "聚焦活动窗格的地址栏（Alt+D = 资源管理器惯例，Ctrl+L = 浏览器惯例）",
+        scope: "global",
+      },
       { id: "search-pane", keys: ["Ctrl+F"], label: "搜索当前文件夹（递归）", scope: "global" },
       {
         id: "view-filter",
