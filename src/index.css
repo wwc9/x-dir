@@ -4741,6 +4741,7 @@ body.np-col-resizing * {
   position: static;
   transform: none;
   box-shadow: none;
+  padding: 0 8px;
 }
 .np-pv-pos {
   flex: none;
@@ -5197,7 +5198,7 @@ body.np-col-resizing * {
   font-size: var(--np-font-sm);
 }
 .np-pv-pdf-jump-input {
-  width: 48px;
+  width: 64px;
   border: none;
   background: var(--np-surface-2);
   border-radius: var(--np-radius);

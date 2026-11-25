@@ -8,6 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { t } from "../../lib/i18n";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { PDFDocumentProxy, RenderTask, TextLayer } from "pdfjs-dist";
 import { Spinner } from "@blueprintjs/core";
@@ -212,11 +213,14 @@ export default function PdfPreview({
       className={
         jumpSlot ? "np-pv-pdf-jump np-pv-pdf-jump-infoot" : "np-pv-pdf-jump"
       }
+      data-tip={t("输入页码后按 Enter 跳转")}
+      aria-label={t("输入页码后按 Enter 跳转")}
     >
       <input
         className="np-pv-pdf-jump-input"
         value={jump}
-        placeholder={`1-${doc.numPages}`}
+        placeholder={t("跳转")}
+        aria-label={t("跳转页码")}
         onChange={(e) => setJump(e.target.value.replace(/\D/g, ""))}
         onKeyDown={(e) => {
           if (e.key === "Enter") jumpTo();
