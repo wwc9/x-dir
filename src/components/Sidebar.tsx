@@ -70,7 +70,9 @@ const PRESET_TREES = Object.fromEntries(
   PRESET_LIST.map((p) => [p.id, applyPreset(mkPane(THIS_PC), p.id)]),
 ) as Record<Preset, LayoutNode>;
 
-const W_MIN = 120;
+// 下限与默认宽同值：标题「布局方案」+ 三钮单行最小需求 ≈146，取 168
+//（2026-11-25 用户反馈拖窄/默认 136 时标题折两行）
+const W_MIN = 168;
 const W_MAX = 340;
 /** 上下分割比例钳制（布局方案卡占比）：两侧各保 20% 可用高度 */
 const SPLIT_MIN = 0.2;

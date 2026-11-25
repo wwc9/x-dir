@@ -680,7 +680,10 @@ export const DEFAULT_SETTINGS: Settings = {
   colorTags: {},
   colorRules: [],
   uiZoom: 1,
-  sidebarWidth: 136,
+  // 布局方案边栏默认宽（2026-11-25 用户反馈 136 时标题「布局方案」折两行）：
+  // 标题行最小需求 ≈146（卡 padding 12 + 行 padding 10 + 四字 52 + 三钮 70 + gap），
+  // 取 168 留余量；旧档 136 由 settings.load 一次性迁移
+  sidebarWidth: 168,
   sidebarCollapsed: false,
   sideSplitRatio: 0.5,
   colWidths: { name: 240, mtime: 130, type: 110, size: 80, loc: 160 },

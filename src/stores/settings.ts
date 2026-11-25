@@ -500,6 +500,10 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     if (typeof merged.calendarShowLunar !== "boolean") merged.calendarShowLunar = true;
     if (typeof merged.calendarHotkey !== "string" || !merged.calendarHotkey)
       merged.calendarHotkey = DEFAULT_SETTINGS.calendarHotkey;
+    // 布局方案边栏宽度（2026-11-25 用户反馈 136 标题折两行）：旧默认 136
+    // 一次性上调为 168（用户拖过其他宽度视为偏好保留）；越界脏值回落新默认
+    if (merged.sidebarWidth === 136 || !(merged.sidebarWidth >= 168 && merged.sidebarWidth <= 340))
+      merged.sidebarWidth = DEFAULT_SETTINGS.sidebarWidth;
     // 全盘搜索呼出热键（2026-11-25）：非空热键串脏数据回落默认
     if (typeof merged.gsearchHotkey !== "string" || !merged.gsearchHotkey)
       merged.gsearchHotkey = DEFAULT_SETTINGS.gsearchHotkey;

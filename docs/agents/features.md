@@ -481,6 +481,10 @@
 - **是否展示文件夹的大小（2026-11-17 用户定案，两次迭代措辞+语义）**：设置 → 文件操作「是否展示文件夹的大小」（`settings.showFolderSize`，默认开；旧档 `folderSizePlaceholder` 由 load 同布尔迁移）。**开启 = 窗格列表异步计算并显示文件夹递归体积**：列表就绪后 `useDirSizes.request(parent)` 整批拉取直接子项体积（复用 `analyze::dir_sizes`，spawn_blocking + 单文件夹 20 万文件上限 best-effort），LRU 500 条缓存（`stores/dirSizes.ts`），到位前留空；导航/刷新（refreshTick）即重算，在飞去重防连发重复拉。**关闭 = 大小列留空**。全盘搜索/压缩包预览无逐项计算，开启显示「—」、关闭留空；FolderPreview 的「—」是递归体积未算出的槽位（不同语义，不受此开关管）。`lib/path.ts::normKey`（去尾反斜杠+小写，与 Rust norm_key 同语义）为缓存键单源。
 - **导出** = 设置 →「配置」区：`export_config` 打包两者为单 JSON（version 字段供导入对齐）；**导入** = `import_config` 校验 app/version 后整体覆盖 settings.json 与 workspaces/*.json（前端热重载设置 + 事件刷新方案列表）；成功后广播 `config-imported` 事件——常驻剪贴板浮窗重读设置热同步主题/直接粘贴（浮窗是独立 WebView 不随主窗重载）。
 - **不随导出**：剪贴板历史 = config/clipboard.db（SQLite 单独存储）、全盘索引 = config/index/（可重建缓存）、update-state.json（运行态）。
+- **布局方案边栏默认宽 136→168（2026-11-25 用户反馈「布局方案」标题折两行）**：标题行
+  最小需求 ≈146（卡 padding 12 + 行 padding 10 + 「布局方案」四字 52 + 三钮 70 + gap），136 必折。
+  DEFAULT → 168；旧档恰为 136（未拖动过）由 settings.load 一次性迁移，拖过其他宽度视为偏好保留；
+  拖拽下限 W_MIN 120→168 同步（拖不进折行区）；越界脏值回落新默认。
 - **主窗 save_settings = 合并落盘并保留补丁键**：截图八键 + cliphistWinW/H 由轻量窗直写磁盘，主窗 store 启动后不重读——整对象覆盖会把它们回滚到启动旧值（settings 落盘另有 800ms 防抖 + pagehide 冲刷）。
 - **开机自启（2026-11-15）**：设置 →「配置」页开关，`autostart_set` 命令经 tauri-plugin-autostart（MIT/Apache-2.0）写 Windows HKCU Run 键。**单一事实源 = settings.json `autostart` 字段**（随导出迁移），注册表是派生态：每次启动 `apply_autostart_pref` 幂等回放（手动删键/清理工具漂移自动拉齐），导入配置后前端显式重放；开关写注册表失败回滚 UI 并 toast。
 - **打开配置保存位置（2026-11-15）**：设置 →「配置」页按钮，`open_config_folder` 命令 Rust 侧直调 opener 插件 `reveal_item_in_dir` 在资源管理器定位 settings.json（不经前端 JS 通道，无 ACL/权限面），返回路径供灵动岛回执。
