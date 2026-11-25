@@ -276,7 +276,7 @@ export const EN: Record<string, string> = {
   "复制选中项到对侧窗格": "Copy selection to the other pane",
   "移动选中项到对侧窗格": "Move selection to the other pane",
   "回到上一级目录": "Go up one level",
-  "切换详细信息/列表/图标视图": "Switch details/list/icons view",
+  "切换详细信息/列表/缩略图视图": "Switch details/list/thumbnails view",
   "显示地址栏（固定条目）": "Show the address bar (fixed)",
   "在当前文件夹范围内搜索": "Search within this folder",
   "横向分裂出新窗格": "Split pane horizontally",

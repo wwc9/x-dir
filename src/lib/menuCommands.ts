@@ -153,6 +153,9 @@ export const BUILTIN_FNS: BuiltinFn[] = [
   { key: "preview", label: "预览", desc: "快速预览浮层（Space 同效）", group: "新建与视图", icon: Eye, area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
   { key: "refresh", label: "刷新", desc: "重新读取当前目录", group: "新建与视图", icon: RefreshCw, area: "blank", supportsSel: true, supportsBlank: true, cond: C({}) },
   { key: "toggleHidden", label: "切换隐藏文件", desc: "显示或隐藏隐藏文件", group: "新建与视图", icon: EyeOff, area: "blank", supportsSel: false, supportsBlank: true, cond: C({}) },
+  // 视图类型归「新建与视图」组（2026-11-25 用户定稿：视图是浏览形态不是窗格操作——
+  // 原在「窗格」组与地址框/分裂等窗格工具混排）；窗格工具仅工具栏能力位不变
+  { key: "view", label: "视图类型", desc: "切换详细信息/列表/缩略图视图", group: "新建与视图", icon: List, area: "blank", supportsSel: false, supportsBlank: false, cond: C({}) },
   // ── 窗格：互传（菜单/工具栏两面共享）+ 窗格工具 ──
   { key: "copyToPane", label: "复制到窗格", desc: "复制选中项到对侧窗格", group: "窗格", icon: CopyPlus, area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
   { key: "moveToPane", label: "移动到窗格", desc: "移动选中项到对侧窗格", group: "窗格", icon: ArrowRightToLine, area: "sel", supportsSel: true, supportsBlank: false, cond: C({}) },
@@ -160,7 +163,6 @@ export const BUILTIN_FNS: BuiltinFn[] = [
   // 无选中语义，supportsSel/Blank 双 false 使其不可拖入右键菜单；
   // 工具栏条目默认「当前文件夹」恒可用（见 builtinToolbarEntry 的作用域区分）
   { key: "up", label: "上一级", desc: "回到上一级目录", group: "窗格", icon: ArrowUp, area: "blank", supportsSel: false, supportsBlank: false, cond: C({}) },
-  { key: "view", label: "视图类型", desc: "切换详细信息/列表/图标视图", group: "窗格", icon: List, area: "blank", supportsSel: false, supportsBlank: false, cond: C({}) },
   { key: "addr", label: "地址框", desc: "显示地址栏（固定条目）", group: "窗格", icon: PanelTop, area: "blank", supportsSel: false, supportsBlank: false, cond: C({}) },
   { key: "search", label: "搜索当前文件夹", desc: "在当前文件夹范围内搜索", group: "窗格", icon: Search, area: "blank", supportsSel: false, supportsBlank: false, cond: C({}) },
   { key: "splitH", label: "横向分裂", desc: "横向分裂出新窗格", group: "窗格", icon: Columns2, area: "blank", supportsSel: false, supportsBlank: false, cond: C({}) },

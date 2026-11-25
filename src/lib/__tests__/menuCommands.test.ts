@@ -232,7 +232,9 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
     });
     // 仅工具栏能力位（双 false）= 窗格工具七键——「窗格」组不再区分两面，
     // 能力位语义改按 key 集合锁定（2026-11-09 分组合并后分组名不承载能力信息）
-    const TOOLBAR_ONLY = ["up", "view", "addr", "search", "splitH", "splitV", "swap"];
+    // view 归「新建与视图」组（2026-11-25）：注册表位置前移至新建与视图区，
+    // 双 false 过滤序 = [view, up, addr, ...]
+    const TOOLBAR_ONLY = ["view", "up", "addr", "search", "splitH", "splitV", "swap"];
     expect(
       BUILTIN_FNS.filter((x) => !x.supportsSel && !x.supportsBlank).map((x) => x.key),
     ).toEqual(TOOLBAR_ONLY);
