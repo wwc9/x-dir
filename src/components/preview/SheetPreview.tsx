@@ -7,9 +7,15 @@
 // 2026-11-03：行高三档（单行省略 / 换行自适应 / 宽松留白）——多行档行高由
 // lib/sheetGrid.sheetRowHeights 按列宽折行估算，经 gridTemplateRows 显式轨道
 // 下发（合并区跨行高度 = 各行轨道之和仍正确），virtualizer 按同一数组估高。
+// 2026-11-25：行高切换 Seg 迁 QuickPreview footer 中央槽（portal，同 PDF 页码
+// 跳转槽位复用）——原右上悬浮药丸必挡表格右上格内容，退役；无槽宿主（全盘
+// 搜索内嵌预览）回退表头上方文档流工具行。三档选择随 settings.json
+// pvSheetRowMode 持久化（原会话级）。
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { t } from "../../lib/i18n";
+import { useSettings } from "../../stores/settings";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import type { OfficeSection } from "../../lib/ipc";
@@ -38,14 +44,19 @@ const ROW_MODE_OPTS: { value: SheetRowMode; label: string; title: string }[] = [
 export function SheetPreview({
   sections,
   search,
+  jumpSlot,
 }: {
   sections: OfficeSection[];
   search?: PreviewSearchCtl;
+  /** QuickPreview footer 中央槽（np-pv-foot-jumpslot）：行高切换 Seg 经 portal
+   *  注入，与 PDF 页码跳转同槽复用；无槽宿主回退文档流工具行（不悬浮遮挡） */
+  jumpSlot?: HTMLElement | null;
 }) {
   const [active, setActive] = useState(0);
-  // 行高模式（会话级，不持久化）：默认换行自适应（2026-11-03 用户定案——
-  // 长文本格完整可读优先于紧凑恒高；单行省略/宽松仍可一键切换）
-  const [rowMode, setRowMode] = useState<SheetRowMode>("wrap");
+  // 行高模式（2026-11-25 持久化进 settings.json，原会话级）：默认换行
+  // （2026-11-03 用户定案——长文本格完整可读优先于紧凑恒高），记住上次选择
+  const rowMode = useSettings((s) => s.pvSheetRowMode);
+  const updateSettings = useSettings((s) => s.update);
   const sec = sections[Math.min(active, sections.length - 1)];
   const baseRows = useMemo(() => parseSheetRows(sec.text), [sec.text]);
   const baseCols = useMemo(() => sheetColumnCount(baseRows), [baseRows]);
@@ -161,19 +172,30 @@ export function SheetPreview({
     }
   }
 
+  // 行高切换 Seg：有槽 portal 进 footer 中央槽（PDF 页码跳转同款，外包装
+  // np-pv-sheet-modeseg 供 footer 紧凑档尺寸），无槽宿主（全盘搜索内嵌预览）
+  // 文档流工具行——任何宿主都不再悬浮遮挡表格
+  const modeSeg = (
+    <Seg
+      value={rowMode}
+      onChange={(m) => updateSettings({ pvSheetRowMode: m })}
+      options={ROW_MODE_OPTS.map((o) => ({
+        ...o,
+        label: t(o.label),
+        title: t(o.title),
+      }))}
+    />
+  );
+
   return (
     <div className="np-pv-sheet">
-      <div className="np-pv-sheet-bar">
-        <Seg
-          value={rowMode}
-          onChange={setRowMode}
-          options={ROW_MODE_OPTS.map((o) => ({
-            ...o,
-            label: t(o.label),
-            title: t(o.title),
-          }))}
-        />
-      </div>
+      {jumpSlot
+        ? createPortal(
+            <div className="np-pv-sheet-modeseg">{modeSeg}</div>,
+            jumpSlot,
+            "np-pv-sheet-modeseg",
+          )
+        : <div className="np-pv-sheet-moderow">{modeSeg}</div>}
       {/* 冻结表头条：默认隐藏，滚动越过表头底缘后出现，横向随滚动条平移 */}
       {headRow >= 0 && rows.length > headRow + 1 && (
         <div

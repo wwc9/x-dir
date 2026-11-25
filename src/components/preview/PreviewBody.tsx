@@ -83,7 +83,8 @@ export function PreviewBody({
   textWrap?: boolean;
   emptyHint?: string;
   /** 页码跳转槽（宿主 footer 中央；2026-11-25 用户定稿放 footer 不遮内容）。
-   *  不传 = PdfPreview 回退滚动容器底部居中悬浮 */
+   *  PDF 注入页码跳转条、表格注入行高三档 Seg（同槽按类型复用）；
+   *  不传 = 各自回退（PdfPreview 底部悬浮 / SheetPreview 文档流工具行） */
   jumpSlot?: HTMLElement | null;
 }) {
   // 文件夹不按扩展名路由（previewKind 是名称纯函数）：isDir 直取 folder 卡
@@ -292,7 +293,12 @@ export function PreviewBody({
         // 表格走专用虚拟网格（整幅铺满，多 sheet 切换条）
         if (kind === "officeSheet" && load.stage === "office")
           return (
-            <SheetPreview key={entry.path} sections={load.data.sections} search={search} />
+            <SheetPreview
+              key={entry.path}
+              sections={load.data.sections}
+              search={search}
+              jumpSlot={jumpSlot}
+            />
           );
         return (
           <DocPreview

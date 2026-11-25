@@ -1,5 +1,6 @@
 // 与 Rust 结构体一一对应的 IPC 类型与封装（serde rename_all = "camelCase"）
 import type { RenameOp } from "./batchRename";
+import type { SheetRowMode } from "./sheetGrid";
 import { invoke } from "@tauri-apps/api/core";
 
 export const THIS_PC = "::{ThisPC}";
@@ -486,6 +487,10 @@ export interface Settings {
   /** 全盘搜索呼出热键（系统级全局热键，2026-11-25；功能常驻无开关，
    *  tauri-plugin-global-shortcut 字符串，可自定义录制） */
   gsearchHotkey: string;
+  /** 表格预览行高三档（2026-11-25 持久化，原会话级）：SheetPreview 行高切换
+   *  Seg（单行省略/换行自适应/宽松留白），默认换行 = 2026-11-03 定案；
+   *  控件驻 QuickPreview footer 中央槽（无槽宿主回退文档流工具行） */
+  pvSheetRowMode: SheetRowMode;
   navTreeWidth: number;
   navTreeVisible: boolean;
   navTreeExpanded: string[];
@@ -691,6 +696,7 @@ export const DEFAULT_SETTINGS: Settings = {
   gsearchPreview: true,
   gsearchPreviewWidth: 400,
   gsearchHotkey: "Ctrl+Alt+F",
+  pvSheetRowMode: "wrap",
   navTreeWidth: 200,
   navTreeVisible: true,
   navTreeExpanded: [THIS_PC],

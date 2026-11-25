@@ -134,6 +134,7 @@ function toPlain(s: SettingsStore): Settings {  return {
     cliphistWinW: s.cliphistWinW,
     cliphistWinH: s.cliphistWinH,
     gsearchHotkey: s.gsearchHotkey,
+    pvSheetRowMode: s.pvSheetRowMode,
     calendarEnabled: s.calendarEnabled,
     calendarHotkey: s.calendarHotkey,
     calendarShowLunar: s.calendarShowLunar,
@@ -507,6 +508,14 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     // 全盘搜索呼出热键（2026-11-25）：非空热键串脏数据回落默认
     if (typeof merged.gsearchHotkey !== "string" || !merged.gsearchHotkey)
       merged.gsearchHotkey = DEFAULT_SETTINGS.gsearchHotkey;
+    // 表格预览行高三档（2026-11-25 持久化）：旧档缺键由 DEFAULT 兜底，
+    // 手改档/枚举漂移脏值回落默认换行
+    if (
+      merged.pvSheetRowMode !== "single" &&
+      merged.pvSheetRowMode !== "wrap" &&
+      merged.pvSheetRowMode !== "relaxed"
+    )
+      merged.pvSheetRowMode = DEFAULT_SETTINGS.pvSheetRowMode;
     // 强调色预设（2026-11-25）：未知 id（手改档/旧版枚举漂移）回落默认
     if (
       typeof merged.accent !== "string" ||

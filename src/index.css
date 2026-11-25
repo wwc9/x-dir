@@ -5046,20 +5046,24 @@ body.np-col-resizing * {
 .np-pv-sheet-inner.is-wrap .np-pv-sheet-cell.is-num {
   align-items: flex-end;
 }
-/* 行高切换条（2026-11-03）：右上浮动 Seg（单行省略 / 换行自适应 / 宽松留白） */
-.np-pv-sheet {
-  position: relative;
+/* 行高切换 Seg（2026-11-25 迁 QuickPreview footer 中央槽，portal 注入，与 PDF
+   页码跳转同槽复用；原 2026-11-03 右上悬浮药丸退役——absolute 悬浮必挡表格
+   右上格内容）。无槽宿主（全盘搜索内嵌预览）回退表头上方文档流工具行 */
+.np-pv-sheet-moderow {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--np-hairline);
 }
-.np-pv-sheet-bar {
-  position: absolute;
-  top: 6px;
-  right: 16px;
-  z-index: 5;
-  padding: 2px;
-  border-radius: var(--np-radius-lg);
-  background: var(--np-surface);
-  border: 1px solid var(--np-hairline);
-  box-shadow: var(--np-shadow);
+/* footer 内嵌紧凑档：仅收紧尺寸（chip min-height 16 + 字号 sm，组件总高 20px），
+   不撑高 footer——与 PDF 页码跳转输入同层排布（ui-standards np-seg 条款：
+   变体只覆写尺寸，禁止复写选中态）。特异性 (0,4,0) 稳压 chip 基础规则
+   .bp6-button-group.np-seg .bp6-button (0,3,0)，不依赖文件顺序 */
+.np-pv-sheet-modeseg .bp6-button-group.np-seg .bp6-button {
+  min-height: 16px;
+  padding: 0 10px;
+  font-size: var(--np-font-sm);
 }
 
 /* 压缩包清单：虚拟行列表（图标 + 名称 + 大小） */
