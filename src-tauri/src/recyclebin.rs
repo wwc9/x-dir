@@ -54,35 +54,43 @@ const MAX_ENTRIES: usize = 2000;
 /// 还原/删除批量护栏
 const MAX_OPS: usize = 2000;
 
-/// 解析 $I 元数据字节（纯函数，配 cargo test）。不认识的头/版本返回 None。
+/// 解析 $I 元数据字节（纯函数，配 cargo test）。真实文件头 = u64 魔数 2
+/// （+4..+8 恒 0——trash crate 与资源管理器实删样本均如此，无独立版本字段）；
+/// v2（Win10+）= +24 u32 名长（wchar 数含 NUL）+ 名字，v1（Vista~8.x）=
+/// +24 定长 520 字节名。两者按「名长合法性」判别：+24 的 u32 若是 v1 名字的
+/// 前两个 wchar 拼合（ANSI 首字母 ≈0x4x、CJK ≈0x4E00+），数值必然远超
+/// 「剩余字节可容纳的 wchar 数」→ 落 v1 分支；真实名长必然 ≤ 剩余字节数。
+/// 无法识别返回 None。
 pub fn parse_i_file(bytes: &[u8]) -> Option<(String, u64, i64)> {
     if bytes.len() < 24 {
         return None;
     }
-    let header = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+    let header = u64::from_le_bytes(bytes[0..8].try_into().ok()?);
     if header != 2 {
         return None;
     }
-    let version = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
     let size = u64::from_le_bytes(bytes[8..16].try_into().ok()?);
     let filetime = u64::from_le_bytes(bytes[16..24].try_into().ok()?);
-    let name = match version {
-        1 => {
-            // 定长 520 字节（260 wchar）NUL 止
+    // v2 尝试：名长字段必须能被完整容纳（len 含 NUL，≥2）
+    let name_v2 = if bytes.len() >= 28 {
+        let len = u32::from_le_bytes(bytes[24..28].try_into().unwrap()) as usize;
+        if len >= 2 && len <= (bytes.len() - 28) / 2 && bytes.len() >= 28 + len * 2 {
+            read_wide_nul(&bytes[28..28 + len * 2])
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    let name = match name_v2 {
+        Some(n) if !n.is_empty() => n,
+        _ => {
+            // v1：定长 520 字节（260 wchar）NUL 止
             if bytes.len() < 24 + 520 {
                 return None;
             }
             read_wide_nul(&bytes[24..24 + 520])?
         }
-        2 => {
-            let len = u32::from_le_bytes(bytes[24..28].try_into().ok()?) as usize;
-            // len 含结尾 NUL；防谎报长度越界
-            if len == 0 || bytes.len() < 28 + len * 2 {
-                return None;
-            }
-            read_wide_nul(&bytes[28..28 + len * 2])?
-        }
-        _ => return None,
     };
     if name.is_empty() {
         return None;
@@ -238,13 +246,13 @@ mod tests {
 
     #[test]
     fn parse_v2_i_file() {
-        // Win10+ $I：头 2 / 版本 2 / size 0x1234 / filetime / len+name
-        let name = "报表_final.xlsx";
+        // 真实 Win10+ $I（trash crate / 资源管理器实删样本一致）：
+        // header u64=2 → size u64 → filetime u64 → u32 名长（含 NUL）→ 名字
+        let name = r"C:\Users\PRIME\AppData\Local\Temp\x\blat.txt";
         let mut b = Vec::new();
-        b.extend_from_slice(&2u32.to_le_bytes());
-        b.extend_from_slice(&2u32.to_le_bytes());
-        b.extend_from_slice(&0x1234u64.to_le_bytes());
-        b.extend_from_slice(&133_500_000_000_000_000u64.to_le_bytes()); // 2009-06-08ish
+        b.extend_from_slice(&2u64.to_le_bytes());
+        b.extend_from_slice(&4u64.to_le_bytes());
+        b.extend_from_slice(&133_500_000_000_000_000u64.to_le_bytes());
         let w: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
         b.extend_from_slice(&(w.len() as u32).to_le_bytes());
         for c in &w {
@@ -252,8 +260,7 @@ mod tests {
         }
         let (n, size, ms) = parse_i_file(&b).expect("v2 可解析");
         assert_eq!(n, name);
-        assert_eq!(size, 0x1234);
-        // 133500000000000000 ×100ns → 2009-05-30T??Z 量级：仅校验换算公式
+        assert_eq!(size, 4);
         assert_eq!(
             ms,
             (133_500_000_000_000_000u64 / 10_000) as i64 - 11_644_473_600_000
@@ -262,10 +269,10 @@ mod tests {
 
     #[test]
     fn parse_v1_i_file_fixed_name() {
-        // Vista $I：头 2 / 版本 1 / size / filetime / 定长 520B 名
+        // Vista $I：header u64=2 → size → filetime → 定长 520 字节名。
+        // 名字首两 wchar 拼成的 u32（"no" ≈ 0x6F6E）远超剩余容量 → 落 v1 分支
         let mut b = Vec::new();
-        b.extend_from_slice(&2u32.to_le_bytes());
-        b.extend_from_slice(&1u32.to_le_bytes());
+        b.extend_from_slice(&2u64.to_le_bytes());
         b.extend_from_slice(&7u64.to_le_bytes());
         b.extend_from_slice(&0u64.to_le_bytes());
         let mut w: Vec<u16> = "notes.txt".encode_utf16().collect();
@@ -282,22 +289,20 @@ mod tests {
     fn parse_rejects_garbage() {
         assert!(parse_i_file(&[]).is_none());
         assert!(parse_i_file(&[0u8; 24]).is_none()); // header 0
+        // 未知魔数（u64 ≠ 2）
         let mut b = Vec::new();
-        b.extend_from_slice(&2u32.to_le_bytes());
-        b.extend_from_slice(&9u32.to_le_bytes()); // 未知版本
+        b.extend_from_slice(&9u64.to_le_bytes());
         b.extend_from_slice(&[0u8; 16]);
         assert!(parse_i_file(&b).is_none());
-        // v2 谎报长度越界
+        // v2 名长谎报越界 → v1 槽也不足（总长 28 < 544）→ None
         let mut b2 = Vec::new();
-        b2.extend_from_slice(&2u32.to_le_bytes());
-        b2.extend_from_slice(&2u32.to_le_bytes());
+        b2.extend_from_slice(&2u64.to_le_bytes());
         b2.extend_from_slice(&[0u8; 16]);
         b2.extend_from_slice(&9999u32.to_le_bytes());
         assert!(parse_i_file(&b2).is_none());
-        // 名字空段（len=1 只含 NUL）
+        // 名字空段（len=1 只含 NUL）→ v2 过滤 → v1 槽不足 → None
         let mut b3 = Vec::new();
-        b3.extend_from_slice(&2u32.to_le_bytes());
-        b3.extend_from_slice(&2u32.to_le_bytes());
+        b3.extend_from_slice(&2u64.to_le_bytes());
         b3.extend_from_slice(&[0u8; 16]);
         b3.extend_from_slice(&1u32.to_le_bytes());
         b3.extend_from_slice(&0u16.to_le_bytes());

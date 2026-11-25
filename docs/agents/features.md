@@ -573,7 +573,8 @@
 10. **回收站虚拟页**：Rust `recyclebin.rs` 直读各盘 `$Recycle.Bin\<SID>\$I*` 元数据（v1 定长名/v2 带长度两代格式，parse_i_file 配 4 组 cargo test；其他用户 SID 桶 ACL 拒读自然跳过；MAX 2000 护栏）——还原 = $R 移回原路径（原父目录逐级补建、原名被占 available_name (2) 旁写、$I 同步清理），永久删除 = $R 递归删除；命令三件 `recyclebin_list/restore/delete`（async spawn_blocking）。前端 `RECYCLE_BIN` 哨兵虚拟页（FileList 全套守卫：load/search/free/watch/分页/计数/entryAt；列组 = 名称/原位置/删除时间/大小；右键还原/永久删除、空白清空回收站 danger 确认；Delete/F2/Enter 全禁用防误操作）+ 导航树第二固定根（Trash2）+ 此电脑页首行入口行。
 11. **图片缩略图视图**：ViewMode 增 `"grid"`（F3 三档循环，Pane 视图下拉 + 设置默认视图三选）；Rust `get_thumbnails` = IShellItemImageFactory::GetImage 96×96（SIIGBF_BIGGERSIZEOK，系统预览处理器对 PDF/视频同样出图）→ hbitmap_to_png 复用图标管线，IconStore.thumbs LRU 200 键含 mtime 自动失效（铁律 2）；前端可见窗口批量拉取（≤40/批，tried 集防无图类型反复重试，换目录即清），单元格 = 72px 缩略图盒（surface-2 凹陷）+ 名标签，行高 104（DENSITY.cellWGrid/rowHGrid）。
 
-**验收**：vitest 720 / cargo test 430（+5）/ clippy -D warnings / build 全绿；CDP 驱动真实窗口逐项截图验收（见提交说明）。
+**验收**：vitest 721 / cargo test 430+ / clippy -D warnings / build 全绿，CDP 真实窗口逐项截图（verify-out/x11-*.png）。
+**验收实绩与后续修复（同日截图验收批）**：CDP 驱动 release 单体（--features custom-protocol 嵌入前端，WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333 直跑，绕开 tauri dev 包装链的进程管理不稳定）真实窗口逐项截图 19 张（verify-out/x11-*.png）。验收中发现并修复：① **$I 格式实测定案**：trash crate 与资源管理器实删样本均为「header u64=2 → size u64 → filetime u64 → v2: u32 名长 + 名字 / v1: 定长 520B 名」，**无独立版本字段**（初版误读 +4 为版本号致列表恒空）——parse_i_file 改按「名长合法性」判别 v2/v1（+24 的 u32 若为 v1 名字前两 wchar 拼合必超剩余容量），测试向量同步重写（4 组 cargo test）；② **sanitizeColWidths 对 ≤0 回落默认**：窗格级 colWidths 旧档脏值 loc=0 使回收站页「原位置」列渲染成 0 宽消失（clampColWidth w<=0 → 默认，配 columns.test 用例）；③ **.np-cell-grid 高度选择器升 .np-row.np-cell-grid**（(0,2,0) 压过 .np-row 的 height:28），网格行高 104 才真正生效。
 
 ### 13.4 本体整体审查修复批（数据安全 / 性能 / 安全加固）
 

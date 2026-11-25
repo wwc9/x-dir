@@ -18,6 +18,17 @@ import {
   visibleColWidths,
 } from "../columns";
 
+describe("列宽 ≤0 脏值回落默认（2026-11-25 回收站页 loc 列消失实绩）", () => {
+  it("sanitizeColWidths 对 0/负值回落该列默认宽", () => {
+    const out = sanitizeColWidths({ name: 300, loc: 0, mtime: -5, size: Number.NaN, type: 90 });
+    expect(out.name).toBe(300);
+    expect(out.loc).toBe(COL_DEFAULTS.loc);
+    expect(out.mtime).toBe(COL_DEFAULTS.mtime);
+    expect(out.size).toBe(COL_DEFAULTS.size);
+    expect(out.type).toBe(90);
+  });
+});
+
 describe("clampColWidth", () => {
   it("区间内保持取整原值", () => {
     expect(clampColWidth(130.4, "mtime")).toBe(130);

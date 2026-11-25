@@ -75,7 +75,9 @@ export function detailsContentWidth(w: number, c: ColWidths, group: ColGroup): n
 
 /** 拖拽/载入统一钳制；非法值落到该列默认宽 */
 export function clampColWidth(w: number, key: ColKey): number {
-  if (!Number.isFinite(w)) return COL_DEFAULTS[key];
+  // ≤0 = 旧档脏值/隐藏列残留（列宽语义上无 0 宽列）：一并回落默认宽，
+  // 防列被静默渲染成 0 宽（2026-11-25 回收站页「原位置」列消失实绩）
+  if (!Number.isFinite(w) || w <= 0) return COL_DEFAULTS[key];
   return Math.min(COL_MAX, Math.max(COL_MIN, Math.round(w)));
 }
 
