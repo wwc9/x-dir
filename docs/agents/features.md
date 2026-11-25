@@ -145,7 +145,7 @@
 - **导出文件清单** = 参数面板 ExportListingDialog（穿透子文件夹 / 导出内容三档 / 格式四档 XLSX 默认 / 文件名内联校验，参数随 dialogPrefs 记忆）；列集十列（CSV/MD 同列集，txt = 完整路径）；免保存框直写当前文件夹（默认名 = 文件夹名-文件清单，重名 (2) 递增）；Rust `fs/listing.rs` 单源（行上限 20 万中止）+ `lib/listing.ts` 配 vitest。
 - **新建子菜单**：文件夹/文本/Word/Excel/**CSV**/PowerPoint/Markdown/**RTF**/**Python**（2026-11-12 用户选型扩充 CSV/RTF/Python 三项；纯文本系 0 字节与资源管理器 NullFile 同轨，docx/xlsx/pptx 由 Rust `create_file` 落盘最小合法 OOXML 模板、rtf 带规范头 `{\rtf1\ansi}`——方案 A，Office/WPS 干净打开不报修复）；**新建文件夹 = Explorer 式**：不走弹窗——直接落盘「新建文件夹」（重名 (2) 递增，搜索/过滤态由 Rust 同名报错兜底）并立即行内重命名（pendingRevealRef 滚动定位），工具栏钮/右键菜单/Ctrl+Shift+N/「新建」子菜单四入口同口径。
 - **基础固定功能**：open/cut/copy/paste/rename/delete/properties 七项常驻——不可移除/清空/被预设丢失（`ensureFixedEntries` 在加载/导入/预设应用/清空后归一化补齐）；「编辑菜单…」恒定尾项直达编辑页（「功能库…」2026-11-12 起入库为普通功能不再固定注入）。
-- **出厂默认（2026-11-12 用户定版 = 现用方案收编为出厂默认，新装自动使用）**：菜单 10 条（打开/预览/剪切/复制/粘贴两用 + 分割线 + 删除/重命名/新建/属性 + 分割线 + 「功能库…」尾段两用）；PDF 功能族与 copyPath/copyName 块退出出厂布局（仍可从功能库拖入）。存量档迁移 = menuSeedV 版本化补种（v2=PDF 组仅对已有自定义布局的存量档送达，新装档不再自带；v3=功能库入口 sep+palette 尾段一次性送达，`seedPaletteEntry` 幂等）；此后菜单级新功能入库 = 版本 +1。
+- **出厂默认（2026-11-12 用户定版 = 现用方案收编为出厂默认，新装自动使用；2026-11-25 二次收编）**：菜单 11 条（打开/预览/剪切/复制/粘贴两用 + 分割线 + 删除/重命名/新建/属性 + 分割线 + 「功能库…」尾段两用 + **「更多系统选项」sel 尾条**——用户现用方案整体收编，窗格工具栏 8 键与初版收编一致未动）；PDF 功能族与 copyPath/copyName 块退出出厂布局（仍可从功能库拖入）。存量档迁移 = menuSeedV 版本化补种（v2=PDF 组仅对已有自定义布局的存量档送达，新装档不再自带；v3=功能库入口 sep+palette 尾段一次性送达，`seedPaletteEntry` 幂等；v4=更多系统选项 sep+sysMenu 尾段一次性送达，`seedSysMenuEntry` 幂等——末尾已是分割线不重复加，已有条目/补种后删减不回填）；此后菜单级新功能入库 = 版本 +1。
 - **同一内置功能全布局唯一**（id = `builtin:<key>`）；「重置为默认方案」与「清空」驻「启用菜单」标题行右侧，均经确认弹窗；多套预设已下线（重置 = defaultMenuEntries + ensureFixedEntries 归一化）；旧档由 settings.load 迁移。
 
 ### 3.2 定制页

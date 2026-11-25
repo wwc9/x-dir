@@ -57,7 +57,7 @@
 
 ### 3.3 V3
 
-- ~~系统右键菜单（IContextMenu）~~（**已实现 2026-10-11，双轨方案**）：默认仍为自绘菜单（视觉一致），**Shift+右键**或自绘菜单末项"更多系统选项"弹出系统原生菜单——含"打开方式"与全部第三方扩展动词；多选限同目录（Shell 数组绑定惯例）；空白处原生菜单未做（自绘已覆盖）
+- ~~系统右键菜单（IContextMenu）~~（**已实现 2026-10-11，双轨方案**）：默认仍为自绘菜单（视觉一致），**Shift+右键**或自绘菜单末项"更多系统选项"弹出系统原生菜单——含"打开方式"与全部第三方扩展动词；多选限同目录（Shell 数组绑定惯例）；空白处原生菜单未做（自绘已覆盖）。**呼出提速（2026-11-25）**：查询/弹出迁至常驻 STA 工作线程（`native_menu.rs`，一次性 CoInitializeEx 且线程退出才反初始化——第三方 shell 扩展 DLL 首载后常驻进程，免去每次 CoInit/CoUninit 的卸载重载；QueryContextMenu 全量枚举扩展动词离开主线程，重型扩展枚举期间 UI 不再冻结）+ 启动空闲 3s 对 exe 自身预热一次（DLL 首载成本移出第一次右键）；`show_context_menu` 改 async 命令（任务交工作线程、blocking 等待挪 spawn_blocking，前端 await 语义不变）；菜单线程 ≠ owner 线程，TrackPopupMenu 收场补 PostMessage WM_NULL 走完焦点收尾
 - ~~拖拽出窗口（OLE 拖拽源）~~（**已实现 2026-10-11，统一 OLE 管线**）：行拖拽改为 mousedown 阈值触发 Rust 端 `DoDragDrop`（IDataObject = CF_HDROP + Preferred DropEffect + IDropSource，**主线程 STA 发起**——跨线程会因键状态取不到而卡死），可拖到资源管理器/桌面/外部程序；**拖入与窗格间落点走 Tauri `onDragDropEvent`**（WebView2 原生拖放目标携带完整路径），前端按窗格命中分发（标签条 = 新标签打开文件夹、列表区 = transfer），窗内高亮由 ole-drag 状态驱动；同目录守护防自复制
 - 双栏/多窗格间的文件对比（未做）
 - 主题系统扩展、多语言（未做）

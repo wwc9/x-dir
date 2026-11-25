@@ -244,8 +244,9 @@ export const PDF_MENU_KEYS: string[] = BUILTIN_FNS.filter((f) => f.group === "PD
 export const PDF_MENU_SEED_VERSION = 2;
 
 /** 菜单补种总版本：v3 = 功能库入口（builtin:palette）入库默认菜单，存量档
- *  一次性补种到末尾（2026-11-12）。此后菜单级新功能入库 = 版本 +1 */
-export const MENU_SEED_VERSION = 3;
+ *  一次性补种到末尾（2026-11-12）；v4 = 更多系统选项（builtin:sysMenu）入库
+ *  默认菜单尾段，存量档幂等补种（2026-11-25）。此后菜单级新功能入库 = 版本 +1 */
+export const MENU_SEED_VERSION = 4;
 
 /** 功能库分组（2026-10-15 A+B 改版）：展示顺序 = 注册表首现顺序（同组连续，
  *  vitest 固定断言）；目录跳转与胶囊墙按此渲染 */
@@ -512,7 +513,9 @@ function presetBuilder() {
  *  PDF 组/copyPath/copyName 块随本次收编退出出厂布局——仍可从功能库拖入；
  *  互传/标记等进阶功能同样留功能库自行拖入。
  *  粘贴一条两用（area=both）：选中语境排在复制旁，空白语境排在新建前；
- *  功能库两用（both）尾段：选中/空白右键均可唤起 */
+ *  功能库两用（both）尾段：选中/空白右键均可唤起。
+ *  2026-11-25 二次收编：「更多系统选项」（sysMenu，选中时）入默认尾段——
+ *  打开方式/第三方扩展动词一键直达 */
 export function defaultMenuEntries(): MenuEntry[] {
   const { e, sep } = presetBuilder();
   return [
@@ -528,6 +531,7 @@ export function defaultMenuEntries(): MenuEntry[] {
     e("properties", "sel"),
     sep("both"),
     e("palette", "both"),
+    e("sysMenu", "sel"),
   ];
 }
 
@@ -544,6 +548,24 @@ export function seedPaletteEntry(entries: MenuEntry[]): MenuEntry[] {
     ...entries,
     ...(needSep ? [{ id: newMenuId("sep"), kind: "sep" as const, area: "both" as const, cond: C({}) }] : []),
     { id: "builtin:palette", kind: "builtin", area: fn.area, cond: { ...fn.cond } },
+  ];
+}
+
+/** 更多系统选项补种（2026-11-25 定案）：builtin:sysMenu 入库默认菜单尾段后，
+ *  已保存布局一次性在末尾追加（注册表默认区域/条件——仅选中语境，空白处
+ *  无系统菜单可弹；可在编辑器拖动/移除）。与 seedPaletteEntry 同口径：缺尾
+ *  分割线先补一条（分隔「功能库…」与系统选项）；已有该条目（含手动拖入过、
+ *  或补种后在编辑器删除）幂等跳过/不回填。由 settings.load 的 MENU_SEED_VERSION
+ *  v4 门闸保证只跑一次 */
+export function seedSysMenuEntry(entries: MenuEntry[]): MenuEntry[] {
+  if (entries.some((en) => en.id === "builtin:sysMenu")) return entries;
+  const fn = builtinByKey("sysMenu");
+  if (!fn) return entries;
+  const needSep = entries.length > 0 && entries[entries.length - 1].kind !== "sep";
+  return [
+    ...entries,
+    ...(needSep ? [{ id: newMenuId("sep"), kind: "sep" as const, area: "both" as const, cond: C({}) }] : []),
+    { id: "builtin:sysMenu", kind: "builtin", area: fn.area, cond: { ...fn.cond } },
   ];
 }
 

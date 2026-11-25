@@ -19,6 +19,7 @@ import {
   PDF_MENU_KEYS,
   seedPaletteEntry,
   seedPdfEntries,
+  seedSysMenuEntry,
   spyGroup,
   stripCustomEntries,
 } from "../menuCommands";
@@ -185,7 +186,7 @@ describe("出厂菜单布局（defaultMenuEntries）", () => {
 
   it("含关键功能与两个区域", () => {
     const ids = defaultMenuEntries().map((e) => e.id);
-    for (const key of ["open", "delete", "properties", "paste", "new", "rename", "palette"]) {
+    for (const key of ["open", "delete", "properties", "paste", "new", "rename", "palette", "sysMenu"]) {
       expect(ids).toContain(`builtin:${key}`);
     }
     const areas = new Set(defaultMenuEntries().map((e) => e.area));
@@ -320,7 +321,7 @@ describe("PDF 功能族入驻默认菜单（PDF_MENU_KEYS / seedPdfEntries，202
     ]);
   });
 
-  it("出厂布局尾段 = 功能库入口（2026-11-12 定案）；PDF 组退出出厂布局", () => {
+  it("出厂布局尾段 = sep + 功能库入口 + 更多系统选项（2026-11-12/11-25 两次收编）；PDF 组退出出厂布局", () => {
     const entries = defaultMenuEntries();
     const ids = entries.map((e) => e.id);
     // 2026-11-12 收编用户现用方案：PDF 组与 copyPath/copyName 块不再默认入驻，
@@ -328,15 +329,16 @@ describe("PDF 功能族入驻默认菜单（PDF_MENU_KEYS / seedPdfEntries，202
     for (const key of [...PDF_MENU_KEYS, "copyPath", "copyName"]) {
       expect(ids).not.toContain(`builtin:${key}`);
     }
-    // 尾段 = sep + 功能库入口（both，注册表默认条件），此前是 properties
+    // 尾段 = sep + 功能库入口（both）+ 更多系统选项（sel，2026-11-25 二次收编）
     expect(entries[entries.length - 1]).toMatchObject({
-      id: "builtin:palette",
+      id: "builtin:sysMenu",
       kind: "builtin",
-      area: "both",
+      area: "sel",
     });
-    expect(entries[entries.length - 2]?.kind).toBe("sep");
-    expect(ids[entries.length - 3]).toBe("builtin:properties");
-    expect(entries[entries.length - 1].cond).toEqual(builtinByKey("palette")!.cond);
+    expect(entries[entries.length - 1].cond).toEqual(builtinByKey("sysMenu")!.cond);
+    expect(entries[entries.length - 2]).toMatchObject({ id: "builtin:palette", area: "both" });
+    expect(entries[entries.length - 3]?.kind).toBe("sep");
+    expect(ids[entries.length - 4]).toBe("builtin:properties");
   });
 
   it("seedPdfEntries：存量布局缺失的 PDF 键按注册表默认追加在末尾", () => {
@@ -496,7 +498,11 @@ describe("功能库入口补种（seedPaletteEntry，2026-11-12 定案）", () =
   });
 
   it("末尾已是分割线不重复加，只补条目", () => {
-    const legacy = defaultMenuEntries().filter((e) => e.id !== "builtin:palette");
+    // 2026-11-25 起出厂尾段为 sep+palette+sysMenu——同时去掉 palette 与
+    // sysMenu 才回到「末尾是分割线」的旧档形态
+    const legacy = defaultMenuEntries().filter(
+      (e) => e.id !== "builtin:palette" && e.id !== "builtin:sysMenu",
+    );
     expect(legacy[legacy.length - 1]?.kind).toBe("sep");
     const seeded = seedPaletteEntry(legacy);
     expect(seeded.length).toBe(legacy.length + 1);
@@ -508,6 +514,43 @@ describe("功能库入口补种（seedPaletteEntry，2026-11-12 定案）", () =
     expect(seedPaletteEntry(withPalette)).toEqual(withPalette);
     const d = defaultMenuEntries();
     expect(seedPaletteEntry(d)).toEqual(d);
+  });
+});
+
+describe("更多系统选项补种（seedSysMenuEntry，2026-11-25 定案）", () => {
+  it("缺失时末尾追加 sep + sysMenu（sel，注册表默认条件）", () => {
+    // 模拟 v3 存量档：默认布局去掉尾条目 sysMenu，尾条目 = palette
+    const full = defaultMenuEntries();
+    const legacy = full.slice(0, full.length - 1);
+    const seeded = seedSysMenuEntry(legacy);
+    expect(seeded.slice(0, legacy.length)).toEqual(legacy);
+    expect(seeded[seeded.length - 1]).toMatchObject({
+      id: "builtin:sysMenu",
+      kind: "builtin",
+      area: "sel",
+    });
+    expect(seeded[seeded.length - 1].cond).toEqual(builtinByKey("sysMenu")!.cond);
+    expect(seeded[seeded.length - 2]?.kind).toBe("sep");
+  });
+
+  it("末尾已是分割线不重复加，只补条目", () => {
+    const legacy = defaultMenuEntries().filter((e) => e.id !== "builtin:sysMenu");
+    expect(legacy[legacy.length - 1]?.id).toBe("builtin:palette");
+    const noTail = legacy.slice(0, legacy.length - 1);
+    noTail.push({ id: "sep:x", kind: "sep", area: "both", cond: { target: "all", minCount: 1, maxCount: 0, exts: "" } });
+    const seeded = seedSysMenuEntry(noTail);
+    expect(seeded.length).toBe(noTail.length + 1);
+    expect(seeded[seeded.length - 1]?.id).toBe("builtin:sysMenu");
+  });
+
+  it("已有条目原样返回（等值，幂等）", () => {
+    const d = defaultMenuEntries();
+    expect(seedSysMenuEntry(d)).toEqual(d);
+    const withSys = [...d, builtinToolbarEntry("sysMenu")];
+    expect(seedSysMenuEntry(withSys)).toEqual(withSys);
+    // 空布局（ensureFixedEntries 归一化前不会出现）补条目、不加分割线——与
+    // seedPaletteEntry 同语义
+    expect(seedSysMenuEntry([]).map((e) => e.id)).toEqual(["builtin:sysMenu"]);
   });
 });
 

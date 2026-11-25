@@ -159,6 +159,16 @@ pub fn run() {
                 // 驱动/首帧合成全部热好，消掉首按 380ms 初始化罚金
                 commands::shot_dxgi::prewarm();
             });
+            // 原生右键菜单预热（2026-11-25 呼出提速）：启动空闲 3s 后对 exe
+            // 自身跑一次 QueryContextMenu 即弃——第三方 shell 扩展 DLL 的首载
+            // 成本移出用户第一次「更多系统选项」的关键路径（常驻 STA 工作线程
+            // native_menu 上执行，不影响主线程）。fire-and-forget，失败静默
+            std::thread::spawn(|| {
+                std::thread::sleep(std::time::Duration::from_secs(3));
+                if let Ok(exe) = std::env::current_exe() {
+                    crate::native_menu::warm(&exe.to_string_lossy());
+                }
+            });
             // 索引模式预热：后台把已建索引 mmap prefault 进文件缓存，消除首次查询冷映射
             crate::index::warm_views_async();
             // 无边框窗口带阴影时，tao 在 Win11 顶部留 1px 非客户区（WM_NCCALCSIZE

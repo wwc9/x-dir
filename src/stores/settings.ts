@@ -37,6 +37,7 @@ import {
   PDF_MENU_SEED_VERSION,
   seedPaletteEntry,
   seedPdfEntries,
+  seedSysMenuEntry,
   stripCustomEntries,
 } from "../lib/menuCommands";
 import { zoomClamp } from "../lib/zoom";
@@ -513,6 +514,8 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     // 2026-11-12 出厂默认收编用户现用方案后出厂布局不再自带 PDF 组，
     // 新装档（saved.menuEntries 缺失 → 走 defaultMenuEntries）不再补种。
     // v3 = 功能库入口（builtin:palette）尾段补种（2026-11-12）。
+    // v4 = 更多系统选项（builtin:sysMenu）尾段补种（2026-11-25，2026-11-12
+    // 出厂默认二次收编——现用方案含 sysMenu）。
     // 补种过后编辑器里删减的条目重启不回填（尊重自定义，区别于固定项）。
     // 旧档仅存上午的布尔标记 pdfMenuSeeded=true 时视为 v1（九件已送达）
     const legacySeeded = (saved as { pdfMenuSeeded?: unknown } | null)?.pdfMenuSeeded === true;
@@ -527,6 +530,7 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
         merged.menuEntries = seedPdfEntries(merged.menuEntries ?? []);
       }
       merged.menuEntries = seedPaletteEntry(merged.menuEntries ?? []);
+      merged.menuEntries = seedSysMenuEntry(merged.menuEntries ?? []);
       merged.menuSeedV = MENU_SEED_VERSION;
     }
     // 窗格工具栏迁移（2026-10-15）：旧 paneTools（key 表）→ toolbarEntries（MenuEntry）；
