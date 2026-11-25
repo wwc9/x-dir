@@ -52,6 +52,16 @@ pub fn hotkeys_sync(app: AppHandle, hotkeys: Vec<HotkeySpec>) -> Result<(), Stri
                     }
                     let _ = app2.emit_to("main", "calendar-open", ());
                 }
+                // 全盘搜索（主窗整页，2026-11-25）：同 calendar-open 先唤主窗
+                // 再发事件，前端开页后光标直达搜索框
+                "gsearch-open" => {
+                    if let Some(w) = app2.get_webview_window("main") {
+                        let _ = w.unminimize();
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                    let _ = app2.emit_to("main", "gsearch-open", ());
+                }
                 other => log::debug!("未知全局热键 id：{other}"),
             });
         })

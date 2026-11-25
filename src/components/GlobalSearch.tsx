@@ -215,6 +215,19 @@ export function GlobalSearchPage() {
     requestAnimationFrame(() => inputRef.current?.focus());
   }, [open]);
 
+  // 系统热键/重复激活（2026-11-25）：页面已开时 App 的开页监听是空操作
+  // （globalSearch 已 true 不触发重挂载），由本监听把光标定位回搜索框——
+  // 「激活之后直接定位到搜索框」在冷开（挂载 effect 聚焦）与热开两路都成立
+  useEffect(() => {
+    if (!open) return;
+    const un = listen("gsearch-open", () => {
+      requestAnimationFrame(() => inputRef.current?.focus());
+    });
+    return () => {
+      void un.then((f) => f());
+    };
+  }, [open]);
+
   // 关闭即取消在途搜索 + 复位灵动岛。必须挂卸载 cleanup：关闭页面时
   // App 条件渲染直接卸载本组件，[open] 收尾 effect 永远不会执行——
   // 在途扫描会继续烧 IO 直到扫完，且灵动岛恒显「全盘搜索… N 项」

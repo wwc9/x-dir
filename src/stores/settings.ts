@@ -131,6 +131,7 @@ function toPlain(s: SettingsStore): Settings {  return {
     cliphistRichText: s.cliphistRichText,
     cliphistWinW: s.cliphistWinW,
     cliphistWinH: s.cliphistWinH,
+    gsearchHotkey: s.gsearchHotkey,
     calendarEnabled: s.calendarEnabled,
     calendarHotkey: s.calendarHotkey,
     calendarShowLunar: s.calendarShowLunar,
@@ -479,6 +480,9 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     if (typeof merged.calendarShowLunar !== "boolean") merged.calendarShowLunar = true;
     if (typeof merged.calendarHotkey !== "string" || !merged.calendarHotkey)
       merged.calendarHotkey = DEFAULT_SETTINGS.calendarHotkey;
+    // 全盘搜索呼出热键（2026-11-25）：非空热键串脏数据回落默认
+    if (typeof merged.gsearchHotkey !== "string" || !merged.gsearchHotkey)
+      merged.gsearchHotkey = DEFAULT_SETTINGS.gsearchHotkey;
     // 分类/着色维度/定期模板（2026-11-13 增强批）：脏档回落默认
     if (!Array.isArray(merged.calendarCategories)) merged.calendarCategories = DEFAULT_SETTINGS.calendarCategories;
     if (merged.calendarColorBy !== "category") merged.calendarColorBy = "status";

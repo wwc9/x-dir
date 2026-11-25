@@ -247,6 +247,15 @@ export function SettingsPanel() {
     );
   };
 
+  /** 全盘搜索呼出热键变更：落盘并全量重注册（2026-11-25 新功能；功能常驻
+   *  无开关，热键恒注册） */
+  const applyGsearchHotkey = (hotkey: string) => {
+    s.update({ gsearchHotkey: hotkey });
+    api.hotkeysSync(hotkeySpecs(useSettings.getState())).catch((e) =>
+      useUi.getState().toast(t("全盘搜索热键未生效：{e}", { e: String(e) }), "error"),
+    );
+  };
+
   /** 容量/天数护栏变更：落盘并推送后端 */
   const applyClipLimits = (
     capacity: number,
@@ -658,6 +667,16 @@ export function SettingsPanel() {
         )}
         {tab === "search" && (
           <>
+            <SetRow
+              label={t("呼出热键（自定义）")}
+              desc={t("系统级全局热键，任意界面可按：聚焦主窗并打开全盘搜索，光标直达搜索框；点击后直接按下组合键录制，更改即时生效")}
+            >
+              <HotkeyRecorder
+                value={s.gsearchHotkey}
+                onApply={(h) => applyGsearchHotkey(h)}
+                notify={(msg) => useUi.getState().toast(msg, "error")}
+              />
+            </SetRow>
             <SetRow label={t("预览面板")} desc={t("结果右侧内嵌文件预览，分隔条可拖宽")}>
               <Switch
                 checked={s.gsearchPreview}

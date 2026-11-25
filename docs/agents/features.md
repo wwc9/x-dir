@@ -175,6 +175,7 @@
 **组件与模块**：`components/GlobalSearch.tsx` 导出 `GlobalSearchPage`（整页 `np-gsearchpage`，App.tsx 按页条件挂载）+ TanStack Virtual 自绘行。
 
 - 唤起 = 顶栏按钮 / Ctrl+Shift+F；Esc 关闭（shortcuts `gsearch-page-close`，输入框内由页面 onKeyDown 直接关并 stopPropagation）；Ctrl+F 仍是窗格内递归搜索。
+- **系统级呼出热键（2026-11-25 用户需求「添加一个全局激活快捷键，激活之后可以直接定位到搜索框里面。并且在设置中支持修改快捷键」）**：默认 `Ctrl+Alt+F`（与内置 Ctrl+Shift+F 错开——系统级热键会吞掉同组合），settings `gsearchHotkey` 脏档回落默认；**无功能开关、热键恒注册**（全盘搜索常驻，与 shot/cliphist/calendar 的 Enabled 门控不同）；链路复用 §3.7 hotkeys_sync 单点全量重建（`hotkeySpecs` 恒 push `gsearch-open` 项）→ 后端 `hotkeys.rs` 分发 = 唤主窗（unminimize+show+focus，同 calendar-open）+ `emit_to("main", "gsearch-open")` → App.tsx 监听 `openGlobalSearch`；**聚焦两路**：冷开 = GlobalSearch 挂载 `[open]` effect 自动聚焦搜索框（既有）；热开（页面已开，App 开页监听不触发重挂载）= GlobalSearch 自身监听同名事件把光标定位回搜索框。设置 → 全盘搜索「呼出热键（自定义）」= HotkeyRecorder 录制（`applyGsearchHotkey` 落盘 + hotkeys_sync 全量重注册，冲突经灵动岛 error 回执）；快捷键清单「全局」组增 `gsearch-sys-open` system 条目（与应用内 `gsearch-open` id 错开）。
 - **整页与主界面同语言**：surface 卡 + 1px border + radius-pane，无额外内边距；头部行 = 返回钮 + 标题 + 最近搜索 chips（出现/消失不推挤布局）；**单行紧凑控制条** = 搜索框（360）→ 类型 → 结果过滤 → 上限 →（弹性）→ 预览开关驻右（窄窗 flex-wrap 兜底）。
 - 返回钮定稿 = 28px 高 pill 全圆角、sel 淡染底 + accent 箭头文字（`np-menupage-back`，与定制页共用）。
 - **整页互斥**：`openGlobalSearch`/`openMenuPage` 互斥（打开其一即关另一页）；`ui.exitPages()` 供顶栏主界面类按钮先回主界面再执行动作；顶栏两页按钮带 active 态且再点即关；Ctrl+Shift+F 在定制页内 = 切换到全盘搜索页。

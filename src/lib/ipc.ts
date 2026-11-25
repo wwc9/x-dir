@@ -458,6 +458,9 @@ export interface Settings {
   gsearchPreview: boolean;
   /** 全盘搜索预览面板宽（px，分隔条可拖，钳制 280–640） */
   gsearchPreviewWidth: number;
+  /** 全盘搜索呼出热键（系统级全局热键，2026-11-25；功能常驻无开关，
+   *  tauri-plugin-global-shortcut 字符串，可自定义录制） */
+  gsearchHotkey: string;
   navTreeWidth: number;
   navTreeVisible: boolean;
   navTreeExpanded: string[];
@@ -652,6 +655,7 @@ export const DEFAULT_SETTINGS: Settings = {
   gsearchColWidths: { name: 168, loc: 134, size: 72, type: 72, mtime: 132 },
   gsearchPreview: true,
   gsearchPreviewWidth: 400,
+  gsearchHotkey: "Ctrl+Alt+F",
   navTreeWidth: 200,
   navTreeVisible: true,
   navTreeExpanded: [THIS_PC],

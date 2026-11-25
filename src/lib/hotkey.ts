@@ -60,8 +60,9 @@ export function captureHotkey(e: HotkeyEventLike): HotkeyCapture {
 }
 
 /** 组装当前全部系统级热键（§3.7 hotkeys_sync 单点全量重建）：截图 +
- *  剪贴板历史；关闭的功能不入册（后端 unregister_all 后按本表重建）。
- *  App.tsx 启动与 SettingsPanel 改动共用，防止两处各写一份漂移 */
+ *  剪贴板历史 + 工作日历 + 全盘搜索；关闭的功能不入册（后端
+ *  unregister_all 后按本表重建）。App.tsx 启动与 SettingsPanel 改动共用，
+ *  防止两处各写一份漂移 */
 export function hotkeySpecs(
   st: Pick<
     Settings,
@@ -71,6 +72,7 @@ export function hotkeySpecs(
     | "cliphistHotkey"
     | "calendarEnabled"
     | "calendarHotkey"
+    | "gsearchHotkey"
   >,
 ): HotkeySpec[] {
   const specs: HotkeySpec[] = [];
@@ -78,5 +80,8 @@ export function hotkeySpecs(
   if (st.cliphistEnabled) specs.push({ id: "cliphist-toggle", hotkey: st.cliphistHotkey });
   // 工作日历（2026-11-13）：唤起主窗直达日历整页
   if (st.calendarEnabled) specs.push({ id: "calendar-open", hotkey: st.calendarHotkey });
+  // 全盘搜索（2026-11-25）：唤起主窗直达全盘搜索页并聚焦搜索框；功能常驻
+  // 无开关，热键恒注册
+  specs.push({ id: "gsearch-open", hotkey: st.gsearchHotkey });
   return specs;
 }

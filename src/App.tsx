@@ -68,6 +68,7 @@ export default function App() {
     let unsubSettings: (() => void) | undefined;
     let unsubPastePane: (() => void) | undefined;
     let unsubCalendar: (() => void) | undefined;
+    let unsubGsearch: (() => void) | undefined;
     (async () => {
       try {
         await useSettings.getState().load();
@@ -194,6 +195,12 @@ export default function App() {
         const unCalendar = await listen("calendar-open", () => {
           useUi.getState().openCalendar();
         });
+        // 全盘搜索系统热键（Ctrl+Alt+F 默认，2026-11-25）：Rust 已 show+focus
+        // 主窗，这里开全盘搜索整页——组件挂载即自动聚焦搜索框；页面已开时由
+        // GlobalSearch 自身的同名事件监听把光标定位回搜索框
+        const unGsearch = await listen("gsearch-open", () => {
+          useUi.getState().openGlobalSearch();
+        });
         // 浮窗文件条目「粘贴到当前窗格」（T1-2）：Rust 已把 CF_HDROP 写回
         // 系统剪贴板，这里走 Ctrl+V 同款路由（活动窗格 FileList.onPaste →
         // doPaste 会先 syncFromSystem 再 transfer）
@@ -207,11 +214,13 @@ export default function App() {
         if (disposed) {
           unSettings();
           unCalendar();
+          unGsearch();
           unPastePane();
         } else {
           unsubSettings = unSettings;
           unsubPastePane = unPastePane;
           unsubCalendar = unCalendar;
+          unsubGsearch = unGsearch;
         }
         unsubOle = await initOleDnd();
         if (disposed) {
@@ -282,6 +291,7 @@ export default function App() {
       unsubSettings?.();
       unsubPastePane?.();
       unsubCalendar?.();
+      unsubGsearch?.();
       window.removeEventListener("keydown", onGlobalKeyDown);
       window.removeEventListener("wheel", onZoomWheel);
       window.removeEventListener("focus", onFocusSyncClipboard);
