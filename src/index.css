@@ -2030,13 +2030,16 @@ body.np-col-resizing .np-menued-grip::after {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 边栏三卡共用标题行（布局方案 / 暂存区 / 导航树）。字号 = 正文 13px 与文件
+   窗格标签标题一致（2026-11-25 用户需求；图标两侧本同 iconSm 14 档，仅字号
+   偏差），ui-standards §4.7「各级标题一律正文 13px」同口径 */
 .np-side-h {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 2px;
   padding: 2px 4px 2px 6px;
-  font-size: var(--np-font-sm);
+  font-size: var(--np-font-ui);
   color: var(--np-muted);
   flex: 0 0 auto;
 }
