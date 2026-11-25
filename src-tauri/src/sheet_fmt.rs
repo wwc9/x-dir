@@ -195,11 +195,15 @@ fn parse_section(sec: &str) -> ParsedCode {
             '_' if !in_quote => {
                 // 占位宽度符 _：渲染为「下一个字符的宽度」——定宽预览输出一个
                 // 空格字面量并吞掉参照字符（会计格式 _(* …_) 的 _(/_) 即此，
-                // 否则落兜底分支按字面量输出 _ ( 产生 "_ * … _" 脏字符）
+                // 否则落兜底分支按字面量输出 _ ( 产生 "_ * … _" 脏字符）。
+                // ⚠ 不置 seen_placeholder：_/* 是格式骨架装饰而非数字占位——
+                // 会计负区 `_ * -#,##0_ ` 的字面负号排在 _/* 之后、# 之前，
+                // 若 _ 置位会把该负号错归「数字之后」桶 → 渲染成尾负号
+                // "71,275-"（2026-11-25 用户实绩）。字面量前后归属以真实
+                // 数字占位符（0 # ?）为界。
                 flush(&mut p, &mut lit, !seen_placeholder);
                 i += 1;
                 p.lits.push((!seen_placeholder, " ".into()));
-                seen_placeholder = true;
             }
             '*' if !in_quote => {
                 // 填充符 *：Excel 以其后字符平铺填充剩余列宽——定宽预览无填充
@@ -647,5 +651,18 @@ mod tests {
         assert_eq!(render_num(4426586.2, code), " 4,426,586.20 ");
         assert_eq!(render_num(-1234.5, code), " (1,234.50) ");
         assert_eq!(render_num(7442.85, code), " 7,442.85 ");
+    }
+
+    #[test]
+    fn accounting_negative_literal_minus_stays_prefix() {
+        // 负区 `_ * -#,##0_ `：字面负号排在 _/* 骨架之后、数字占位之前，
+        // 必须内插在数字**前**（Excel 显示 -71,275）——_ 置位 seen_placeholder
+        // 曾把它错归「数字之后」桶渲染成尾负号 "71,275-"（2026-11-25 用户实绩：
+        // 广义经营现金流流出一列全部尾负号）
+        let code = "_ * #,##0_ ;_ * -#,##0_ ;_ * \"-\"??_ ;_ @_ ";
+        assert_eq!(render_num(-71275.0, code).trim(), "-71,275");
+        assert_eq!(render_num(-1994726.0, code).trim(), "-1,994,726");
+        // 正区不受影响：前后 _ 空格保留、数字千分位
+        assert_eq!(render_num(71275.0, code).trim(), "71,275");
     }
 }

@@ -4422,6 +4422,36 @@ mod office_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// 端到端（2026-11-25 用户实绩「71,275- 尾负号」）：会计格式负区
+    /// `_ * -#,##0_ ` 的字面负号必须内插在数字前（_/* 骨架不占占位符位）
+    #[test]
+    fn sheet_preview_accounting_negative_minus_prefix() {
+        use super::sheet_sections;
+        use rust_xlsxwriter::{Format, Workbook};
+        let dir = std::env::temp_dir().join("xdir_sheet_fmt_neg_e2e");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("fmt_neg_e2e.xlsx");
+        let mut wb = Workbook::new();
+        let ws = wb.add_worksheet();
+        let fmt = Format::new().set_num_format("_ * #,##0_ ;_ * -#,##0_ ;_ * \"-\"??_ ;_ @_ ");
+        ws.write_number_with_format(0, 0, -71275.0, &fmt).unwrap();
+        ws.write_number_with_format(1, 0, -1994726.0, &fmt).unwrap();
+        ws.write_number_with_format(2, 0, 71275.0, &fmt).unwrap();
+        wb.save(&path).unwrap();
+        let (sections, _) = sheet_sections(path.to_str().unwrap()).unwrap();
+        let text = &sections[0].text;
+        assert!(text.contains("-71,275"), "neg prefix: {text:?}");
+        assert!(text.contains("-1,994,726"), "neg prefix 2: {text:?}");
+        assert!(!text.contains("71,275-"), "no trailing minus: {text:?}");
+        assert!(
+            !text.contains("1,994,726-"),
+            "no trailing minus 2: {text:?}"
+        );
+        assert!(text.contains("71,275"), "positive kept: {text:?}");
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn cell_display_renders_dates_not_serials() {
         use crate::sheet_fmt::display_for;
