@@ -93,17 +93,18 @@ pub fn apply_rounded_corners(app: &AppHandle) {
     let _ = app;
 }
 
-/// 弹出系统原生右键菜单（Shift+右键 / “显示更多选项”入口）。async：任务交给
+/// 弹出系统原生右键菜单（Shift+右键 / “显示更多选项”入口）。async：枚举交给
 /// 常驻 STA 工作线程（native_menu，2026-11-25 呼出提速——扩展枚举期间主线程
-/// 事件循环不冻结，扩展 DLL 随首次调用常驻进程），菜单关闭后回执，前端 await
-/// 语义不变；坐标取实时光标位置。
+/// 事件循环不冻结，扩展 DLL 随首次调用常驻进程），显示经 run_on_main_thread
+/// 挪回主线程（2026-11-26 修复：跨线程 TrackPopupMenu 秒回 cmd=0 静默无菜单），
+/// 菜单关闭后回执，前端 await 语义不变。
 #[tauri::command]
 pub async fn show_context_menu(paths: Vec<String>, app: AppHandle) -> Result<(), AppError> {
     let hwnd = app
         .get_webview_window("main")
         .and_then(|w| w.hwnd().ok())
         .ok_or_else(|| AppError::new("E_UNKNOWN", "主窗口句柄不可用"))?;
-    crate::native_menu::show_async(paths, hwnd.0 as isize)
+    crate::native_menu::show_async(paths, hwnd.0 as isize, app)
         .await
         .map_err(|e| AppError::new("E_UNSUPPORTED", e))
 }

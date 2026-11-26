@@ -2,18 +2,27 @@
 //! “显示更多选项”弹出系统原生 IContextMenu——包含“打开方式”、第三方扩展
 //! （7-Zip / Git / 杀毒等）全部动词。多选要求同目录（Shell 数组绑定的惯例限制）。
 //!
-//! 呼出提速（2026-11-25 用户需求「优化打开更多系统选项的速度」）：查询与弹出
-//! 全程走**常驻 STA 工作线程**——① 线程一次性 CoInitializeEx 且永不反初始化，
+//! 呼出提速（2026-11-25 用户需求「优化打开更多系统选项的速度」）：绑定与查询
+//! 走**常驻 STA 工作线程**——① 线程一次性 CoInitializeEx 且永不反初始化，
 //! 第三方 shell 扩展进程内服务器（DLL）随首次调用常驻，免去每次 CoInit/CoUninit
 //! 的卸载重载抖动；② QueryContextMenu（全量枚举扩展动词，重型扩展可达秒级）
 //! 离开主线程，枚举期间 UI 不再冻结；③ 启动空闲预热（`warm`）把 DLL 首载成本
-//! 移出用户第一次右键的关键路径。命令侧 async：主线程事件循环全程空闲，跨线程
-//! 菜单通知（WM_INITMENUPOPUP 等经 owner HWND 的 SendMessage）可即时送达。
+//! 移出用户第一次右键的关键路径。
+//!
+//! ⚠ 显示必须在 owner 窗口线程（2026-11-26 修复「更多系统选项没有反应」）：
+//! TrackPopupMenu 的菜单模态循环绑死调用线程与 owner 窗口的输入队列——
+//! 在工作线程上跨线程跟踪 owner=主窗时**立即返回 cmd=0 且静默成功**（实测
+//! 复现：SetForegroundWindow 成功、QueryContextMenu 正常，TrackPopupMenu
+//! 秒回，无菜单无报错，前端 await 收到 Ok）。故流程 = 工作线程枚举 →
+//! `run_on_main_thread` 主线程 SetForeground + TrackPopupMenu → 回传命令号 →
+//! 工作线程 InvokeCommand（IContextMenu 所在 STA，跨套间直调有死锁风险）。
+//! 菜单弹出的模态时长内主线程停驻在 TrackPopupMenu，与历史同步命令版行为一致。
 
 use std::sync::OnceLock;
 use std::sync::mpsc::{Receiver, Sender, channel};
 
-use windows::Win32::Foundation::{HWND, LPARAM, POINT, WPARAM};
+use tauri::AppHandle;
+use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx, CoUninitialize};
 use windows::Win32::UI::Shell::Common::ITEMIDLIST;
 use windows::Win32::UI::Shell::{
@@ -21,8 +30,8 @@ use windows::Win32::UI::Shell::{
     IContextMenu, SHCreateShellItemArrayFromIDLists, SHParseDisplayName,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreatePopupMenu, DestroyMenu, GetCursorPos, PostMessageW, SetForegroundWindow, TPM_LEFTALIGN,
-    TPM_RETURNCMD, TPM_RIGHTBUTTON, TPM_TOPALIGN, TrackPopupMenuEx, WM_NULL,
+    CreatePopupMenu, DestroyMenu, GetCursorPos, HMENU, SetForegroundWindow, TPM_LEFTALIGN,
+    TPM_RETURNCMD, TPM_RIGHTBUTTON, TPM_TOPALIGN, TrackPopupMenuEx,
 };
 use windows::core::{PCSTR, PCWSTR};
 
@@ -35,6 +44,7 @@ enum Job {
     Show {
         paths: Vec<String>,
         owner: isize,
+        app: AppHandle,
         reply: Sender<Result<(), String>>,
     },
     Warm {
@@ -64,9 +74,10 @@ fn worker_loop(rx: Receiver<Job>) {
             Job::Show {
                 paths,
                 owner,
+                app,
                 reply,
             } => {
-                let r = show(&paths, HWND(owner as *mut _));
+                let r = show(&paths, HWND(owner as *mut _), &app);
                 let _ = reply.send(r);
             }
             Job::Warm { path } => {
@@ -81,12 +92,13 @@ fn worker_loop(rx: Receiver<Job>) {
 
 /// 命令入口（async）：任务交给工作线程并等待回执。前端 await 语义不变
 /// （菜单关闭后才 resolve；失败文案走既有 catch → 灵动岛回执）
-pub async fn show_async(paths: Vec<String>, owner: isize) -> Result<(), String> {
+pub async fn show_async(paths: Vec<String>, owner: isize, app: AppHandle) -> Result<(), String> {
     let (reply_tx, reply_rx) = channel();
     menu_sender()
         .send(Job::Show {
             paths,
             owner,
+            app,
             reply: reply_tx,
         })
         .map_err(|_| "菜单线程不可用".to_string())?;
@@ -132,10 +144,11 @@ fn bind_context_menu(paths: &[String]) -> Result<IContextMenu, String> {
     }
 }
 
-/// 在 STA 工作线程上弹出原生菜单并执行所选动词；模态直至用户关闭（工作线程
-/// 阻塞是预期行为，主线程不受影响）。坐标取实时光标位置（右键动作与光标天然
-/// 同点，免去 DPI 换算）。
-fn show(paths: &[String], owner: HWND) -> Result<(), String> {
+/// 在 STA 工作线程上完成枚举，把显示挪到主线程（owner 窗口线程）模态跟踪，
+/// 用户收场后回工作线程执行动词。工作线程阻塞至菜单关闭是预期行为，枚举期
+/// 间主线程全程空闲。坐标取实时光标位置（右键动作与光标天然同点，免去 DPI
+/// 换算）。
+fn show(paths: &[String], owner: HWND, app: &AppHandle) -> Result<(), String> {
     unsafe {
         let _co = crate::native_ops::CoGuard::new().ok_or("COM 初始化失败")?;
         let cm = bind_context_menu(paths)?;
@@ -143,31 +156,38 @@ fn show(paths: &[String], owner: HWND) -> Result<(), String> {
             Ok(m) => m,
             Err(e) => return Err(format!("CreatePopupMenu：{e}")),
         };
+        // 重活在常驻线程：枚举期间主线程事件循环不受影响（2026-11-25 提速的
+        // 核心目标；此前同步命令跑主线程，重型扩展秒级枚举会整体冻结 UI）
         if let Err(e) = cm.QueryContextMenu(menu, 0, 1, 0x7FFF, CMF_NORMAL).ok() {
             let _ = DestroyMenu(menu);
             return Err(format!("QueryContextMenu：{e}"));
         }
 
-        // 原生菜单要求前台窗口，否则可能立即自动关闭（TrackPopupMenu 老坑）
-        let _ = SetForegroundWindow(owner);
+        // 显示挪回 owner 窗口线程：跨线程 TrackPopupMenu 立即返回 cmd=0 且
+        // 静默成功（模块头注释——2026-11-26「更多系统选项没有反应」病灶）。
+        // 光标在此捕获一次：菜单落点与 InvokeCommand 的 ptInvoke 同点共用
+        // （右键动作与光标天然同点，免去 DPI 换算）
         let mut pt = POINT::default();
-        if let Err(e) = GetCursorPos(&mut pt) {
+        if GetCursorPos(&mut pt).is_err() {
             let _ = DestroyMenu(menu);
-            return Err(format!("GetCursorPos：{e}"));
+            return Err("GetCursorPos".into());
         }
-        let cmd = TrackPopupMenuEx(
-            menu,
-            (TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_LEFTALIGN | TPM_TOPALIGN).0,
-            pt.x,
-            pt.y,
-            owner,
-            None,
-        )
-        .0 as u32;
-        let _ = DestroyMenu(menu);
-        // 菜单线程 ≠ owner 线程：补一发 WM_NULL 让 owner 走完焦点收尾
-        // （TrackPopupMenu 老坑后半段，防收场后前台状态滞留菜单线程）
-        let _ = PostMessageW(Some(owner), WM_NULL, WPARAM(0), LPARAM(0));
+        // 句柄以 isize 交接（HWND/HMENU 含裸指针不可 Send；句柄值全局有效，
+        // 独占所有权随闭包移动，主线程收场即销毁菜单）
+        let (track_tx, track_rx) = channel();
+        let menu_h = menu.0 as isize;
+        let owner_h = owner.0 as isize;
+        let dispatched = app.run_on_main_thread(move || {
+            let cmd = track_menu(menu_h, owner_h, pt);
+            let _ = track_tx.send(cmd);
+        });
+        if dispatched.is_err() {
+            let _ = DestroyMenu(menu);
+            return Err("主线程不可调度（应用正在退出）".into());
+        }
+        let cmd = track_rx
+            .recv()
+            .map_err(|_| "菜单回执通道已断".to_string())?;
         if cmd == 0 {
             return Ok(()); // 用户取消
         }
@@ -186,6 +206,30 @@ fn show(paths: &[String], owner: HWND) -> Result<(), String> {
         };
         cm.InvokeCommand(&ici as *const CMINVOKECOMMANDINFOEX as *const CMINVOKECOMMANDINFO)
             .map_err(|e| format!("InvokeCommand：{e}"))
+    }
+}
+
+/// 主线程执行：前台化 owner + 模态跟踪（直至用户收场）+ 销毁菜单。菜单落在
+/// 呼出点 pt（右键时光标位置）。返回所选命令号（0 = 取消或失败）。模态期间
+/// 主线程停驻，与历史同步命令版一致；枚举已提前在常驻线程完成，菜单即时弹出。
+/// menu/owner 以 isize 交接（句柄含裸指针不可 Send；值本身全局有效）
+fn track_menu(menu: isize, owner: isize, pt: POINT) -> u32 {
+    let menu = HMENU(menu as *mut _);
+    let owner = HWND(owner as *mut _);
+    unsafe {
+        // 原生菜单要求前台窗口，否则可能立即自动关闭（TrackPopupMenu 老坑）
+        let _ = SetForegroundWindow(owner);
+        let cmd = TrackPopupMenuEx(
+            menu,
+            (TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_LEFTALIGN | TPM_TOPALIGN).0,
+            pt.x,
+            pt.y,
+            owner,
+            None,
+        )
+        .0 as u32;
+        let _ = DestroyMenu(menu);
+        cmd
     }
 }
 
