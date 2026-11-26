@@ -89,22 +89,50 @@ export function QuickPreviewHost() {
   // 记忆——开窗读 quickPreview 档（缺省走 CSS var 响应式默认），用户拖拽
   // （pointerdown 落在右下 grip 角）触发的尺寸变化防抖写档；浏览器拖拽会直写
   // element.style，React 侧经 ResizeObserver 同步 state 保持一致，导航换文件
-  // 不重置（窗口尺寸跟随会话），关窗重开 = 上次尺寸
+  // 不重置（窗口尺寸跟随会话），关窗重开 = 上次尺寸。
+  // 比例档（2026-11-26 用户需求「默认尺寸要和工具整体尺寸的比例要固定——
+  // 有时候工具界面缩放之后预览界面变得很小」）：dialogPrefs 改存**相对主窗
+  // 比例**（rw/rh = 预览 px / 主窗 inner 宽高）而非绝对像素——旧档存 px 在
+  // 主窗缩放/换大屏后比例失衡（小窗开大档溢出、大窗开小档缩成一点）。开窗
+  // 与主窗 resize 都按比例 × 当前窗尺寸重算（钳 360×280 下限 / 主窗留 24px
+  // 边距上限）；旧 px 档沿用一次，下次拖拽保存即迁移为比例档；从未拖拽过
+  // 走 CSS var（86vw/78vh，本身即响应式比例）
   const [pvSize, setPvSize] = useState<{ w?: number; h?: number }>({});
+  const pvRatioRef = useRef<{ rw: number; rh: number } | null>(null);
   const pvOpenRef = useRef(false);
+  const clampPvRatio = (v: number, lo: number, hi: number) =>
+    Math.min(hi, Math.max(lo, v));
+  const applyPvRatio = (rw: number, rh: number) => {
+    pvRatioRef.current = { rw, rh };
+    setPvSize({
+      w: clampPvRatio(Math.round(rw * window.innerWidth), 360, window.innerWidth - 24),
+      h: clampPvRatio(Math.round(rh * window.innerHeight), 280, window.innerHeight - 24),
+    });
+  };
   useEffect(() => {
     const isOpen = !!entry;
     if (isOpen && !pvOpenRef.current) {
       // ⚠ fallback 必须含键（mergeDialogPrefs 只拷 fallback 已有的键），
-      // 空对象会静默吞掉全部保存值；0 由下方映射回 undefined 走响应式默认
-      const p = loadDialogPrefs<{ w: number; h: number }>("quickPreview", {
-        w: 0,
-        h: 0,
-      });
-      setPvSize({
-        w: p.w > 0 ? p.w : undefined,
-        h: p.h > 0 ? p.h : undefined,
-      });
+      // 空对象会静默吞掉全部保存值；缺 rw/rh 键比例档同样被剥掉；0 由下方
+      // 映射回 undefined 走响应式默认
+      const p = loadDialogPrefs<{ w: number; h: number; rw?: number; rh?: number }>(
+        "quickPreview",
+        { w: 0, h: 0, rw: 0, rh: 0 },
+      );
+      if (p.rw && p.rh) {
+        applyPvRatio(p.rw, p.rh);
+      } else if (p.w > 0 && p.h > 0) {
+        // 旧版绝对像素档：沿用一次（saveDialogPrefs 整键替换，下次拖拽保存
+        // 即整体迁移为比例档）
+        pvRatioRef.current = {
+          rw: clampPvRatio(p.w / window.innerWidth, 0.15, 0.95),
+          rh: clampPvRatio(p.h / window.innerHeight, 0.15, 0.95),
+        };
+        setPvSize({ w: p.w, h: p.h });
+      } else {
+        pvRatioRef.current = null;
+        setPvSize({});
+      }
     }
     pvOpenRef.current = isOpen;
   }, [entry]);
@@ -137,7 +165,11 @@ export function QuickPreviewHost() {
       if (w === w0 && h === h0) return;
       pending = false;
       setPvSize({ w, h });
-      saveDialogPrefs("quickPreview", { w, h });
+      // 比例档落盘（相对主窗 inner 尺寸，2026-11-26）
+      const rw = clampPvRatio(w / window.innerWidth, 0.15, 0.95);
+      const rh = clampPvRatio(h / window.innerHeight, 0.15, 0.95);
+      pvRatioRef.current = { rw, rh };
+      saveDialogPrefs("quickPreview", { rw, rh });
     };
     window.addEventListener("pointerdown", onDown, true);
     window.addEventListener("pointerup", commit, true);
@@ -148,6 +180,18 @@ export function QuickPreviewHost() {
       window.clearInterval(t);
     };
   }, [entry !== null]);
+
+  // 主窗缩放 → 预览按记忆比例跟随重排（比例恒定；从未拖拽过的纯默认档走
+  // CSS var vw/vh 天然跟随，无需处理）
+  useEffect(() => {
+    const onWinResize = () => {
+      const r = pvRatioRef.current;
+      if (!r || !pvOpenRef.current) return;
+      applyPvRatio(r.rw, r.rh);
+    };
+    window.addEventListener("resize", onWinResize);
+    return () => window.removeEventListener("resize", onWinResize);
+  }, []);
 
   // Ctrl+F（keyboard 路由）唤起后聚焦输入框
   useEffect(() => {
