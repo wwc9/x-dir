@@ -282,8 +282,9 @@ unsafe fn hicon_to_png(icon: HICON) -> Option<Vec<u8>> {
 /// SHParseDisplayName 解析成 pidl，再 SHGFI_PIDL 提取——shell 按当前态解析，
 /// 空/满两态图标自动跟随（Windows 回收站图标随是否含项目翻面）。
 /// 线程 COM best-effort 自初始化（命令/测试线程未初始化时 SHParseDisplayName
-/// 会 CO_E_NOTINITIALIZED，目录图标注释同坑）——仅 S_OK（本线程首次初始化）
-/// 时配对 CoUninitialize，已有初始化/换模式错误不动现态
+/// 会 CO_E_NOTINITIALIZED，目录图标注释同坑）——is_ok() 配对 CoUninitialize
+/// 与 COM 契约逐字一致：成功码都要平衡反初始化（S_OK 首初始化 + S_FALSE 已
+/// 初始化，官方文档明确含 S_FALSE），仅换模式失败码 RPC_E_CHANGED_MODE 不配对
 #[cfg(windows)]
 fn recycle_bin_png() -> Option<String> {
     use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx, CoUninitialize};

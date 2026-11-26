@@ -1237,14 +1237,13 @@ const WIN_MAX_W: f64 = 1200.0;
 const WIN_MAX_H: f64 = 1500.0;
 
 /// 读回持久化的浮窗尺寸（settings.json cliphistWinW/H，逻辑 px；缺省/越界
-/// 回默认 460×540）——边缘拖拽调宽高后跨会话保持（2026-10-31）
+/// 回默认 460×540）——边缘拖拽调宽高后跨会话保持（2026-10-31）。
+/// 读经 load_settings_doc：主档缺失/损坏自动从 .bak 自愈，坏档不再静默
+/// 回落默认尺寸一次（2026-11-26 设置审计补漏）
 fn persisted_win_size() -> (f64, f64) {
-    let read = |k: &str| -> Option<f64> {
-        std::fs::read_to_string(crate::config::config_root().join("settings.json"))
-            .ok()
-            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-            .and_then(|v| v.get(k).and_then(|x| x.as_f64()))
-    };
+    let doc = crate::config::load_settings_doc();
+    let read =
+        |k: &str| -> Option<f64> { doc.as_ref().and_then(|v| v.get(k)).and_then(|x| x.as_f64()) };
     let w = read("cliphistWinW").unwrap_or(WIN_W as f64);
     let h = read("cliphistWinH").unwrap_or(WIN_H as f64);
     (w.clamp(WIN_MIN_W, WIN_MAX_W), h.clamp(WIN_MIN_H, WIN_MAX_H))

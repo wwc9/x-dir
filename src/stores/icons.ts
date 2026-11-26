@@ -25,9 +25,10 @@ interface IconsStore {
   exts: Record<string, string>;
   /** immediate=true 跳过防抖直接发 IPC（目录数据到达时的首屏预热） */
   requestIcons(paths: string[], immediate?: boolean): void;
-  /** 回收站图标强制刷新（2026-11-26 跟随系统空/满态）：icons/missed 两表的
-   *  常规去重都会挡住同路径重复请求，必须先剔旧图再重发；Rust 端对该路径
-   *  跳过 LRU 现提（shell 当前态），每次都拿到最新空/满图标 */
+  /** 回收站图标强制刷新（2026-11-26 跟随系统空/满态）：直发 IPC 现提
+   *  （绕过 icons/missed/pending 三处去重——任一处都会挡住同路径重取；
+   *  Rust 端对该路径跳过 LRU，每次拿最新空/满图标），值变才写 state——
+   *  3s 轮询期未翻面零重渲染，翻面时旧图保留至新图抵达不闪 Lucide */
   refreshBin(): void;
 }
 
@@ -124,11 +125,19 @@ export const useIcons = create<IconsStore>()(() => ({
   },
 
   refreshBin() {
-    const icons = { ...useIcons.getState().icons };
-    delete icons[RECYCLE_BIN];
+    // 现提比较式：不走 schedule（三处去重会挡住同路径重取），直发单条 IPC；
+    // 失败不落负缓存——下轮轮询自重试，常规请求也不被拉黑
     missed.delete(RECYCLE_BIN);
     pending.delete(RECYCLE_BIN);
-    useIcons.setState({ icons });
-    schedule([RECYCLE_BIN], true);
+    api
+      .getFileIcons([RECYCLE_BIN])
+      .then((map) => {
+        const url = map[RECYCLE_BIN];
+        if (!url) return;
+        const s = useIcons.getState();
+        if (s.icons[RECYCLE_BIN] === url) return;
+        useIcons.setState({ icons: { ...s.icons, [RECYCLE_BIN]: url } });
+      })
+      .catch(() => undefined);
   },
 }));
