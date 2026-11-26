@@ -114,7 +114,10 @@ export function SheetPreview({
           : headerMode - 1,
     [headerMode, rows, colCount],
   );
-  const colWidths = useMemo(() => sheetColumnWidths(rows, colCount), [rows, colCount]);
+  const colWidths = useMemo(
+    () => sheetColumnWidths(rows, colCount, trimmed.merges),
+    [rows, colCount, trimmed.merges],
+  );
   // 手拖列宽覆写（2026-11-26，会话级，切 sheet 重置）合入启发式列宽
   const [colOverride, setColOverride] = useState<Record<number, number>>({});
   const effWidths = useMemo(
@@ -132,13 +135,13 @@ export function SheetPreview({
     [trimmed.merges, rows.length, colCount],
   );
   const rowHeights = useMemo(
-    () => (rowMode === "single" ? null : sheetRowHeights(rows, effWidths, rowMode)),
-    [rowMode, rows, effWidths],
+    () => (rowMode === "single" ? null : sheetRowHeights(rows, effWidths, rowMode, trimmed.merges)),
+    [rowMode, rows, effWidths, trimmed.merges],
   );
   // 截断格集合（2026-11-26）：多行档被 6 行上限静默裁切的格 → 角标提示
   const truncSet = useMemo(
-    () => (rowMode === "single" ? null : sheetTruncatedCells(rows, effWidths, rowMode)),
-    [rowMode, rows, effWidths],
+    () => (rowMode === "single" ? null : sheetTruncatedCells(rows, effWidths, rowMode, trimmed.merges)),
+    [rowMode, rows, effWidths, trimmed.merges],
   );
 
   // 冻结首列（2026-11-26）：总宽超出视口才启用（不超时首列本来可见）；
@@ -212,6 +215,8 @@ export function SheetPreview({
     }
     if (frozenRef.current) {
       frozenRef.current.style.transform = `translateY(${-el.scrollTop}px)`;
+      // scrollLeft=0 时首列本来就完整可见，覆盖层隐藏（免与主网格首列重影双绘）
+      frozenRef.current.parentElement!.style.visibility = el.scrollLeft > 1 ? "visible" : "hidden";
     }
     const win = sheetColumnWindow(colPrefixRef.current, el.scrollLeft, el.clientWidth, COL_OVERSCAN);
     setColWin((prev) => (prev.start === win.start && prev.end === win.end ? prev : win));

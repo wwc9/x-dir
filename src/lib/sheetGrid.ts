@@ -61,15 +61,31 @@ export function parseSheetRows(text: string): SheetRows {
   return lines.map((line) => line.split("\t"));
 }
 
-/** 行矩阵 → 列宽（px）。采样前 500 行足矣；空列取下限；超宽列截到上限（省略号兜底） */
-export function sheetColumnWidths(rows: SheetRows, colCount: number): number[] {
+/** 行矩阵 → 列宽（px）。采样前 500 行足矣；空列取下限；超宽列截到上限（省略号兜底）。
+ *  合并区感知（2026-11-26）：跨列合并锚点与被覆盖格不参与逐列宽累计——
+ *  46 列宽的信息行按第 1 列宽估算会把首列撑到 360 上限（标题列虚肥，
+ *  冻结首列跟着变宽挤占正文）；合并文本对行高的贡献改在行高估算里按
+ *  跨度总宽计算。 */
+export function sheetColumnWidths(
+  rows: SheetRows,
+  colCount: number,
+  merges: SheetMerge[] = [],
+): number[] {
   const PAD = 16;
   const MIN = 56;
   const MAX = 360;
+  const skip = new Set<string>();
+  for (const m of merges) {
+    for (let r = m.row; r < m.row + m.rowSpan; r++) {
+      for (let c = m.col; c < m.col + m.colSpan; c++) skip.add(key(r, c));
+    }
+  }
   const widths = new Array(colCount).fill(MIN) as number[];
   const sample = rows.length > 500 ? rows.slice(0, 500) : rows;
-  for (const row of sample) {
+  for (let r = 0; r < sample.length; r++) {
+    const row = sample[r];
     for (let c = 0; c < colCount && c < row.length; c++) {
+      if (skip.has(key(r, c))) continue;
       const v = row[c];
       if (!v) continue;
       const px = PAD + textWidthPx(v);
@@ -97,26 +113,64 @@ export const SHEET_WRAP_MAX_LINES = 6;
 
 /** 行矩阵 + 列宽 → 逐行像素高（多行档）。行内取各格折行数的最大值：
  *  lines = ceil((文本宽 + 内边距 16) / 列宽)；行高 = lines × 行高基线 + 上下留白。
- *  单行结果不低于 --np-row-h（与单行档视觉连续）。 */
+ *  单行结果不低于 --np-row-h（与单行档视觉连续）。
+ *  合并区感知（2026-11-26）：跨列锚点按跨度总宽折行（46 列信息行不再按第 1 列
+ *  宽误折 6 行——标题行虚高挤掉正文视口）；跨行锚点的行数需求按行Span 均摊
+ *  （跨 N 行的块每行只承担 1/N 文本）；被覆盖格不参与。 */
 export function sheetRowHeights(
   rows: SheetRows,
   colWidths: number[],
   mode: Exclude<SheetRowMode, "single">,
+  merges: SheetMerge[] = [],
 ): number[] {
   const LINE_H = DENSITY.sheetLineH;
   const PAD = mode === "relaxed" ? 10 : 4;
   const MIN = mode === "relaxed" ? LINE_H + 20 : DENSITY.rowH;
+  const prefix = sheetColPrefix(colWidths);
+  const spanWidth = (c: number, colSpan: number) => {
+    const to = Math.min(c + colSpan, colWidths.length);
+    return prefix[Math.max(to, c + 1)] - prefix[c];
+  };
+  const skip = new Set<string>();
+  const anchorAt = new Map<string, SheetMerge>();
+  const shared = new Map<string, number>(); // 跨行锚点的覆盖格 → 均摊行数需求
+  for (const m of merges) {
+    anchorAt.set(key(m.row, m.col), m);
+    // 跨行块先算锚点均摊值，让覆盖行也按同份承担（总高 ≥ 文本需求，块内
+    // 垂直居中不裁切）；单行合并的覆盖格纯跳过
+    let sharedEff = -1;
+    if (m.rowSpan > 1) {
+      const v = rows[m.row]?.[m.col];
+      const w = spanWidth(m.col, m.colSpan);
+      const need = v && w > 0 ? Math.ceil((textWidthPx(v) + 16) / w) : 1;
+      sharedEff = Math.min(Math.ceil(need / m.rowSpan), SHEET_WRAP_MAX_LINES);
+    }
+    for (let r = m.row; r < m.row + m.rowSpan; r++) {
+      for (let c = m.col; c < m.col + m.colSpan; c++) {
+        if (r === m.row && c === m.col) continue;
+        skip.add(key(r, c));
+        if (sharedEff > 0) shared.set(key(r, c), sharedEff);
+      }
+    }
+  }
   const out = new Array(rows.length);
   for (let r = 0; r < rows.length; r++) {
     let lines = 1;
     const row = rows[r];
     for (let c = 0; c < row.length && c < colWidths.length; c++) {
+      if (skip.has(key(r, c))) {
+        const s = shared.get(key(r, c));
+        if (s && s > lines) lines = s;
+        continue;
+      }
       const v = row[c];
       if (!v) continue;
-      const w = colWidths[c];
+      const m = anchorAt.get(key(r, c));
+      const w = m ? spanWidth(c, m.colSpan) : colWidths[c];
       if (w <= 0) continue;
       const need = Math.ceil((textWidthPx(v) + 16) / w);
-      if (need > lines) lines = need;
+      const eff = m && m.rowSpan > 1 ? Math.ceil(need / m.rowSpan) : need;
+      if (eff > lines) lines = eff;
     }
     lines = Math.min(lines, SHEET_WRAP_MAX_LINES);
     out[r] = Math.max(MIN, lines * LINE_H + PAD * 2);
@@ -313,28 +367,52 @@ export function sheetColumnWindow(
   };
 }
 
-/** 多行档截断格集合（纯函数）：与 sheetRowHeights 同源折行启发——格内需要
- *  的行数超过该行实际分配行数（= 行内最大折行数钳 SHEET_WRAP_MAX_LINES）
+/** 多行档截断格集合（纯函数）：与 sheetRowHeights 同源折行启发（含同一套合并
+ *  区感知——跨列锚点按跨度总宽、跨行锚点按行Span 均摊、覆盖格不参与）——格内
+ *  需要的行数超过该行实际分配行数（= 行内最大折行数钳 SHEET_WRAP_MAX_LINES）
  *  即被静默裁切，渲染层据此打截断角标。key = "row:col"。 */
 export function sheetTruncatedCells(
   rows: SheetRows,
   colWidths: number[],
   mode: Exclude<SheetRowMode, "single">,
+  merges: SheetMerge[] = [],
 ): Set<string> {
   const LINE_H = DENSITY.sheetLineH;
   const PAD = mode === "relaxed" ? 10 : 4;
   const MIN = mode === "relaxed" ? LINE_H + 20 : DENSITY.rowH;
+  const prefix = sheetColPrefix(colWidths);
+  const spanWidth = (c: number, colSpan: number) => {
+    const to = Math.min(c + colSpan, colWidths.length);
+    return prefix[Math.max(to, c + 1)] - prefix[c];
+  };
+  const skip = new Set<string>();
+  const anchorAt = new Map<string, SheetMerge>();
+  for (const m of merges) {
+    anchorAt.set(key(m.row, m.col), m);
+    for (let r = m.row; r < m.row + m.rowSpan; r++) {
+      for (let c = m.col; c < m.col + m.colSpan; c++) {
+        if (r === m.row && c === m.col) continue;
+        skip.add(key(r, c));
+      }
+    }
+  }
   const out = new Set<string>();
   for (let r = 0; r < rows.length; r++) {
     const row = rows[r];
     let maxNeed = 1;
     const needs: number[] = [];
     for (let c = 0; c < row.length && c < colWidths.length; c++) {
+      if (skip.has(key(r, c))) {
+        needs.push(1);
+        continue;
+      }
       const v = row[c];
-      const w = colWidths[c];
+      const m = anchorAt.get(key(r, c));
+      const w = m ? spanWidth(c, m.colSpan) : colWidths[c];
       const need = v && w > 0 ? Math.ceil((textWidthPx(v) + 16) / w) : 1;
-      needs.push(need);
-      if (need > maxNeed) maxNeed = need;
+      const eff = m && m.rowSpan > 1 ? Math.ceil(need / m.rowSpan) : need;
+      needs.push(eff);
+      if (eff > maxNeed) maxNeed = eff;
     }
     const allotted = Math.min(maxNeed, SHEET_WRAP_MAX_LINES);
     if (allotted * LINE_H + PAD * 2 <= MIN) continue; // 行高被 MIN 托底且未达折行数，无截断

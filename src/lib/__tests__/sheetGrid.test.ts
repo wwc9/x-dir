@@ -7,6 +7,7 @@ import {
   parseSheetRows,
   isNumericLike,
   sheetNumericCols,
+  sheetColumnWidths,
   sheetMatches,
   sheetRowHeights,
   sheetHeaderRow,
@@ -301,5 +302,47 @@ describe("手拖列宽钳制（clampSheetColWidth，2026-11-26 列宽手拖）",
     expect(clampSheetColWidth(5000)).toBe(1000);
     expect(clampSheetColWidth(120.6)).toBe(121);
     expect(clampSheetColWidth(Number.NaN)).toBe(120);
+  });
+});
+
+describe("合并区感知估算（2026-11-26 标题行/列虚肥修复）", () => {
+  it("列宽：跨列合并锚点与覆盖格不参与逐列累计（46 列信息行不撑肥首列）", () => {
+    // 40 个 CJK = 520px + 16 = 536 → 若参与累计首列 = 360 上限；跳过后按普通格算
+    const rows = [["跨列合并的超长信息行内容跨列合并的超长信息行内容跨列合并的超长信息行内容跨列合并的超长", "普通格"]];
+    const noMerge = sheetColumnWidths(rows, 2);
+    const withMerge = sheetColumnWidths(rows, 2, [{ row: 0, col: 0, rowSpan: 1, colSpan: 2 }]);
+    expect(noMerge[0]).toBe(360);
+    expect(withMerge[0]).toBe(56); // 回落 MIN（无其他贡献）
+    expect(withMerge[1]).toBe(56);
+  });
+
+  it("行高：跨列锚点按跨度总宽折行（标题行一行放得下就不再误折 6 行）", () => {
+    // 文本 400px（约 30 CJK），跨 4 列总宽 400 → 1 行；若按单列 100 宽则折 5 行
+    const text = "跨列标题行内容跨列标题行内容跨列标题行内容跨列";
+    const rows = [[text, "", "", ""], ["数据", "", "", ""]];
+    const merges = [{ row: 0, col: 0, rowSpan: 1, colSpan: 4 }];
+    const h = sheetRowHeights(rows, [100, 100, 100, 100], "wrap", merges);
+    expect(h[0]).toBe(28); // 单行基线（relaxed 才是 40）
+  });
+
+  it("行高：跨行锚点按行Span 均摊文本行数需求", () => {
+    // 文本 800px（60 CJK），跨 2 行 × 总宽 400：need=3 → 每行承担 ceil(3/2)=2 行
+    const text = "跨行合并块内容".repeat(10); // 70 CJK = 910px
+    const rows = [[text], [""], ["数据"]];
+    const merges = [{ row: 0, col: 0, rowSpan: 2, colSpan: 1 }];
+    const h = sheetRowHeights(rows, [400], "wrap", merges);
+    // need = ceil((910+16)/400) = 3；均摊 ceil(3/2) = 2 → 每行 2×20+8 = 48
+    expect(h[0]).toBe(48);
+    expect(h[1]).toBe(48);
+    expect(h[2]).toBe(28);
+  });
+
+  it("截断集合：合并感知后与行高一致（跨列锚点装得下不打标）", () => {
+    const text = "跨列标题行内容跨列标题行内容跨列标题行内容跨列";
+    const rows = [[text, "", "", ""]];
+    const trunc = sheetTruncatedCells(rows, [100, 100, 100, 100], "wrap", [
+      { row: 0, col: 0, rowSpan: 1, colSpan: 4 },
+    ]);
+    expect(trunc.size).toBe(0);
   });
 });
