@@ -468,8 +468,8 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
       typeof merged.sideSplitRatio === "number" && Number.isFinite(merged.sideSplitRatio)
         ? Math.min(0.8, Math.max(0.2, merged.sideSplitRatio))
         : DEFAULT_SETTINGS.sideSplitRatio;
-    // 界面度量钳制：圆角 0–24 / 间隔 4–24（分隔条可拖热区依赖间隔，下限 4）；
-    // 脏数据（非有限数/越界）回落默认
+    // 界面度量钳制：圆角 0–24 / 间隔 0–24（0 = 窗格贴合，分隔条热区悬跨
+    // 缝隙仍可拖拽，设置滑杆两档同口径）；脏数据（非有限数/越界）回落默认
     const clampMetric = (v: number | undefined, lo: number, hi: number, dflt: number) =>
       typeof v === "number" && Number.isFinite(v)
         ? Math.min(hi, Math.max(lo, Math.round(v)))
@@ -669,6 +669,7 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
     // 可达上百 KB）+ 整店订阅组件（SettingsPanel）逐次重渲染；UI 态仍即时
     window.clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => {
+      saveTimer = undefined;
       api.saveSettings(toPlain(get())).catch(() => undefined);
     }, 800);
   },
@@ -718,13 +719,23 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
   },
 }));
 
+/** 冲刷/丢弃防抖窗内的待写盘批量（配置导出/导入前置，2026-11-26 审计修复）：
+ *  导出取冲刷口径——export_config 读磁盘，不先落盘则 800ms 窗口内的最新改动
+ *  不进导出包；导入取丢弃口径（cancel=true）——导入整体覆盖，挂起的旧态写盘
+ *  必须作废，防其落在「导入已覆盖磁盘、load 未读到」的窗口内把导入整体回滚。
+ *  无挂起批量时立即返回 */
+export function settlePendingSave(cancel = false): Promise<void> {
+  if (saveTimer === undefined) return Promise.resolve();
+  window.clearTimeout(saveTimer);
+  saveTimer = undefined;
+  if (cancel) return Promise.resolve();
+  return api.saveSettings(toPlain(useSettings.getState())).catch(() => undefined);
+}
+
 // 卸载前冲刷未落盘的防抖批量（同截图偏好 flushPrefs 口径）：防抖窗内关窗
 // 不丢末次改动（recentFolders 等）。window 守卫 = vitest 的 node 环境无 window
 if (typeof window !== "undefined") {
   window.addEventListener("pagehide", () => {
-    if (saveTimer === undefined) return;
-    window.clearTimeout(saveTimer);
-    saveTimer = undefined;
-    api.saveSettings(toPlain(useSettings.getState())).catch(() => undefined);
+    void settlePendingSave();
   });
 }

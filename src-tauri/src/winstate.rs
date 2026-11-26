@@ -59,8 +59,7 @@ pub fn valid_on(monitors: &[(i64, i64, i64, i64)], s: &WindowState) -> bool {
 }
 
 fn load(root: &std::path::Path) -> Option<WindowState> {
-    let v: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(root.join("settings.json")).ok()?).ok()?;
+    let v = crate::config::load_settings_doc_at(root)?;
     from_value(v.get("windowState")?)
 }
 
@@ -131,18 +130,14 @@ pub fn save_current(app: &tauri::AppHandle) {
 }
 
 fn write_patch(st: &WindowState) {
-    let p = crate::config::config_root().join("settings.json");
-    let mut v: serde_json::Value = std::fs::read_to_string(&p)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_else(|| serde_json::json!({}));
+    // 读经 load_settings_doc（损坏自愈）、写经 write_settings_doc（原子 +
+    // 写前快照 .bak）——旧直写路径断电即全档损坏（2026-11-26 审计修复）
+    let mut v = crate::config::load_settings_doc().unwrap_or_else(|| serde_json::json!({}));
     let Some(o) = v.as_object_mut() else {
         return;
     };
     o.insert("windowState".into(), serde_json::json!(st));
-    if let Ok(s) = serde_json::to_string_pretty(&v) {
-        let _ = std::fs::write(p, s);
-    }
+    let _ = crate::config::write_settings_doc(&v);
 }
 
 /// Windows 恢复矩形（rcNormalPosition，物理 px 工作区坐标，实际等于屏幕

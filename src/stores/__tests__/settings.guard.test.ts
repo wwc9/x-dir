@@ -14,7 +14,7 @@ vi.mock("../../lib/ipc", async (importOriginal) => {
   };
 });
 
-import { useSettings } from "../../stores/settings";
+import { useSettings, settlePendingSave } from "../../stores/settings";
 
 // migrateLegacyPrefs 触碰 localStorage：node 环境补桩
 vi.stubGlobal("localStorage", {
@@ -85,4 +85,48 @@ describe("设置守卫：load 前不写盘", () => {
     useSettings.getState().update({ staging: [] });
     expect(saveSettings).not.toHaveBeenCalled();
   });
+});
+
+describe("settlePendingSave：防抖批量冲刷/丢弃（配置导出/导入前置，2026-11-26）", () => {
+  // 文件级 setTimeout 桩是同步触发（update 后批量即刻落盘），本组用例换
+  // 非触发的计时器桩让批量真正挂起，再验证冲刷/丢弃两种口径
+  function withPendingTimer(fn: () => void) {
+    const syncStub = window.setTimeout;
+    window.setTimeout = ((_cb: () => void) => 7) as typeof window.setTimeout;
+    return Promise.resolve(fn()).finally(() => {
+      window.setTimeout = syncStub;
+      // 清掉挂起批量，防泄漏进后续用例
+      return settlePendingSave(true);
+    });
+  }
+
+  beforeEach(() => {
+    saveSettings.mockClear();
+    useSettings.setState({
+      ...useSettings.getInitialState(),
+      loaded: true,
+    });
+  });
+
+  it("冲刷口径：挂起批量立即落盘一次，无挂起时不重复写", () =>
+    withPendingTimer(() => {
+      useSettings.getState().update({ uiZoom: 1.2 });
+      expect(saveSettings).not.toHaveBeenCalled();
+      void settlePendingSave();
+      expect(saveSettings).toHaveBeenCalledTimes(1);
+      expect(useSettings.getState().uiZoom).toBe(1.2);
+      // 批量已清（saveTimer 复位）：再次冲刷不产生第二次写盘
+      void settlePendingSave();
+      expect(saveSettings).toHaveBeenCalledTimes(1);
+    }));
+
+  it("丢弃口径（cancel=true）：挂起批量作废不写盘", () =>
+    withPendingTimer(() => {
+      useSettings.getState().update({ uiZoom: 1.3 });
+      void settlePendingSave(true);
+      expect(saveSettings).not.toHaveBeenCalled();
+      // 批量已清：后续冲刷同样无写盘
+      void settlePendingSave();
+      expect(saveSettings).not.toHaveBeenCalled();
+    }));
 });

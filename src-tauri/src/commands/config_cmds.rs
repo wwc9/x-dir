@@ -2,7 +2,10 @@
 
 use serde_json::Value;
 
-use crate::config::{config_root, sanitize_name, workspaces_dir};
+use crate::config::{
+    atomic_write_json, config_root, load_settings_doc, load_settings_doc_at, sanitize_name,
+    workspaces_dir, write_settings_doc, write_settings_doc_at,
+};
 
 /// 启动参数（--bench <dir> 内存基准模式等）
 #[tauri::command]
@@ -10,13 +13,11 @@ pub fn get_launch_args() -> Vec<String> {
     crate::LAUNCH_ARGS.get().cloned().unwrap_or_default()
 }
 
+/// 主档缺失/损坏自动从 .bak 自愈（config::load_settings_doc）；两边都不可用
+/// 返回 Null（IPC 契约：前端以 DEFAULT_SETTINGS 兜底）
 #[tauri::command]
 pub fn get_settings() -> Value {
-    let p = config_root().join("settings.json");
-    std::fs::read_to_string(p)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or(Value::Null)
+    load_settings_doc().unwrap_or(Value::Null)
 }
 
 /// 截图标注偏好：白名单键补丁式 read-modify-write——轻量截图页拿不到主窗
@@ -47,23 +48,14 @@ fn shot_save_prefs_blocking(prefs: Value) -> Result<(), String> {
     let Some(map) = prefs.as_object() else {
         return Err("prefs 必须是键值对象".into());
     };
-    let p = config_root().join("settings.json");
-    let mut v: Value = std::fs::read_to_string(&p)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or(Value::Null);
-    if !v.is_object() {
-        v = serde_json::json!({});
-    }
+    let mut v = load_settings_doc().unwrap_or_else(|| serde_json::json!({}));
     let obj = v.as_object_mut().ok_or("settings.json 结构异常")?;
     for (k, val) in map {
         if ALLOWED.contains(&k.as_str()) {
             obj.insert(k.clone(), val.clone());
         }
     }
-    serde_json::to_string_pretty(&v)
-        .map_err(|e| e.to_string())
-        .and_then(|s| std::fs::write(p, s).map_err(|e| e.to_string()))
+    write_settings_doc(&v)
 }
 
 /// 剪贴板浮窗尺寸持久化（§3.7，2026-10-31 边缘拖拽调宽高）：白名单补丁
@@ -77,14 +69,7 @@ pub async fn cliphist_save_size(width: f64, height: f64) -> Result<(), String> {
 }
 
 fn cliphist_save_size_blocking(width: f64, height: f64) -> Result<(), String> {
-    let p = config_root().join("settings.json");
-    let mut v: Value = std::fs::read_to_string(&p)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or(Value::Null);
-    if !v.is_object() {
-        v = serde_json::json!({});
-    }
+    let mut v = load_settings_doc().unwrap_or_else(|| serde_json::json!({}));
     let obj = v.as_object_mut().ok_or("settings.json 结构异常")?;
     obj.insert(
         "cliphistWinW".into(),
@@ -94,9 +79,7 @@ fn cliphist_save_size_blocking(width: f64, height: f64) -> Result<(), String> {
         "cliphistWinH".into(),
         Value::from(height.round().clamp(300.0, 1500.0)),
     );
-    serde_json::to_string_pretty(&v)
-        .map_err(|e| e.to_string())
-        .and_then(|s| std::fs::write(p, s).map_err(|e| e.to_string()))
+    write_settings_doc(&v)
 }
 
 /// 由轻量窗口补丁命令/退出钩子直写 settings.json 的键（shot_save_prefs 八键 +
@@ -128,12 +111,9 @@ pub async fn save_settings(json: Value) -> Result<(), String> {
 }
 
 fn save_settings_blocking(json: Value) -> Result<(), String> {
-    let p = config_root().join("settings.json");
-    // 合并落盘：以磁盘现档为底、incoming 覆盖，补丁键回填磁盘值
-    let disk: Value = std::fs::read_to_string(&p)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_else(|| serde_json::json!({}));
+    // 合并落盘：以磁盘现档为底（损坏时自动从 .bak 自愈）、incoming 覆盖，
+    // 补丁键回填磁盘值；原子写 + 写前快照 .bak
+    let disk = load_settings_doc().unwrap_or_else(|| serde_json::json!({}));
     let mut merged = disk.clone();
     if let (Some(m), Some(n)) = (merged.as_object_mut(), json.as_object()) {
         for (k, v) in n {
@@ -149,9 +129,7 @@ fn save_settings_blocking(json: Value) -> Result<(), String> {
             }
         }
     }
-    serde_json::to_string_pretty(&merged)
-        .map_err(|e| e.to_string())
-        .and_then(|s| std::fs::write(p, s).map_err(|e| e.to_string()))
+    write_settings_doc(&merged)
 }
 
 #[tauri::command]
@@ -270,16 +248,12 @@ pub struct ExportSummary {
     pub source_settings_path: String,
 }
 
-/// 导出配置：settings.json + 全部工作区打包为单个 JSON（version 字段供后续导入对齐）。
-#[tauri::command]
-pub fn export_config(path: String) -> Result<ExportSummary, String> {
-    let root = config_root();
-    let settings = serde_json::from_str::<Value>(
-        &std::fs::read_to_string(root.join("settings.json")).unwrap_or_else(|_| "{}".into()),
-    )
-    .unwrap_or_else(|_| serde_json::json!({}));
+/// 组装配置包（root 可注入供 cargo test）：settings.json（损坏时 .bak 自愈）
+/// + 全部工作区 + 工作日历日志；返回 (包, 方案数)。坏档方案跳过不阻断
+fn build_bundle(root: &std::path::Path) -> (Value, usize) {
+    let settings = load_settings_doc_at(root).unwrap_or_else(|| serde_json::json!({}));
 
-    let dir = workspaces_dir();
+    let dir = root.join("workspaces");
     let mut workspaces = serde_json::Map::new();
     if let Ok(rd) = std::fs::read_dir(&dir) {
         for entry in rd.flatten() {
@@ -295,13 +269,14 @@ pub fn export_config(path: String) -> Result<ExportSummary, String> {
             }
         }
     }
+    let ws_count = workspaces.len();
 
     let exported_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
     // 工作日历日志（2026-11-13 新功能）随配置包导出：无文件/损坏 → null 不阻断
-    let worklog = std::fs::read_to_string(config_root().join("worklog.json"))
+    let worklog = std::fs::read_to_string(root.join("worklog.json"))
         .ok()
         .and_then(|s| serde_json::from_str::<Value>(&s).ok());
     let bundle = serde_json::json!({
@@ -312,6 +287,14 @@ pub fn export_config(path: String) -> Result<ExportSummary, String> {
         "workspaces": workspaces,
         "worklog": worklog,
     });
+    (bundle, ws_count)
+}
+
+/// 导出配置：settings.json + 全部工作区打包为单个 JSON（version 字段供后续导入对齐）。
+#[tauri::command]
+pub fn export_config(path: String) -> Result<ExportSummary, String> {
+    let root = config_root();
+    let (bundle, ws_count) = build_bundle(&root);
     // 原子写：临时文件 + rename
     let tmp = std::path::Path::new(&path).with_extension("json.tmp");
     serde_json::to_string_pretty(&bundle)
@@ -320,12 +303,12 @@ pub fn export_config(path: String) -> Result<ExportSummary, String> {
     std::fs::rename(&tmp, &path).map_err(|e| format!("写入失败：{e}"))?;
 
     Ok(ExportSummary {
-        workspaces: workspaces.len(),
+        workspaces: ws_count,
         source_settings_path: root.join("settings.json").to_string_lossy().into_owned(),
     })
 }
 
-#[derive(serde::Serialize)]
+#[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportSummary {
     pub workspaces: usize,
@@ -343,11 +326,11 @@ pub fn autostart_set(app: tauri::AppHandle, enabled: bool) -> Result<(), String>
     r.map_err(|e| format!("开机自启写入失败：{e}"))
 }
 
-/// 读取 settings.json 的 autostart 偏好（纯函数，缺键/损坏回落 false）
+/// 读取 settings.json 的 autostart 偏好（纯函数，缺键/损坏回落 false；
+/// 损坏时经 load_settings_doc_at 从 .bak 自愈——否则启动回放会把注册表
+/// 键误抹成 false，重启一次就丢一项偏好）
 fn autostart_pref(root: &std::path::Path) -> bool {
-    std::fs::read_to_string(root.join("settings.json"))
-        .ok()
-        .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+    load_settings_doc_at(root)
         .and_then(|v| v.get("autostart").and_then(|x| x.as_bool()))
         .unwrap_or(false)
 }
@@ -391,6 +374,145 @@ mod autostart_tests {
     }
 }
 
+#[cfg(test)]
+mod bundle_tests {
+    use super::{apply_bundle, build_bundle};
+    use crate::config::write_settings_doc_at;
+    use serde_json::{Value, json};
+
+    fn tmp_root(tag: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!("xdir_bundle_{tag}_{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    fn write_ws(root: &std::path::Path, name: &str, v: &Value) {
+        let dir = root.join("workspaces");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(format!("{name}.json")), v.to_string()).unwrap();
+    }
+
+    fn read_json(p: &std::path::Path) -> Value {
+        serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn build_bundle_roundtrips_settings_workspaces_worklog() {
+        let root = tmp_root("build");
+        write_settings_doc_at(&root, &json!({"theme": "dark"})).unwrap();
+        write_ws(&root, "方案A", &json!({"name": "方案A", "tree": {"x": 1}}));
+        // 坏档方案跳过不阻断
+        std::fs::write(root.join("workspaces").join("broken.json"), "{bad").unwrap();
+        std::fs::write(root.join("worklog.json"), r#"{"days":[]}"#).unwrap();
+
+        let (bundle, count) = build_bundle(&root);
+        assert_eq!(count, 1);
+        assert_eq!(bundle.get("app"), Some(&json!("x-dir")));
+        assert_eq!(bundle.get("version"), Some(&json!(1)));
+        assert_eq!(bundle.get("settings"), Some(&json!({"theme": "dark"})));
+        assert_eq!(bundle.get("worklog"), Some(&json!({"days":[]})));
+        let wss = bundle.get("workspaces").unwrap().as_object().unwrap();
+        assert_eq!(wss.len(), 1);
+        assert!(wss.contains_key("方案A"));
+        assert!(!wss.contains_key("broken"));
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn apply_bundle_writes_workspaces_then_settings_and_counts() {
+        let root = tmp_root("apply");
+        let bundle = json!({
+            "app": "x-dir",
+            "version": 1,
+            "settings": {"theme": "light", "uiZoom": 1.2},
+            "workspaces": {
+                "方案A": {"name": "方案A", "tree": {}},
+                "b": {"name": "b", "tree": {}}
+            },
+            "worklog": {"days": [{"date": "2026-11-26"}]}
+        });
+        let summary = apply_bundle(&root, &bundle).unwrap();
+        assert_eq!(summary.workspaces, 2);
+        assert!(summary.imported_settings);
+        let ws_dir = root.join("workspaces");
+        assert_eq!(
+            read_json(&ws_dir.join("方案A.json")),
+            json!({"name": "方案A", "tree": {}})
+        );
+        assert!(ws_dir.join("b.json").exists());
+        assert_eq!(
+            read_json(&root.join("worklog.json")),
+            json!({"days": [{"date": "2026-11-26"}]})
+        );
+        // settings 走 write_settings_doc_at（内容一致）
+        assert_eq!(
+            read_json(&root.join("settings.json")),
+            json!({"theme": "light", "uiZoom": 1.2})
+        );
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn apply_bundle_rejects_wrong_app_newer_version_and_bad_settings() {
+        let root = tmp_root("reject");
+        let wrong_app = json!({"app": "other", "version": 1, "settings": {}});
+        assert!(
+            apply_bundle(&root, &wrong_app)
+                .unwrap_err()
+                .contains("不是 x-dir")
+        );
+        let newer = json!({"app": "x-dir", "version": 2, "settings": {}});
+        assert!(
+            apply_bundle(&root, &newer)
+                .unwrap_err()
+                .contains("版本过新")
+        );
+        let bad_settings = json!({"app": "x-dir", "version": 1, "settings": 123});
+        assert!(
+            apply_bundle(&root, &bad_settings)
+                .unwrap_err()
+                .contains("settings 字段")
+        );
+        // 三种拒绝都不得动磁盘
+        assert!(!root.join("settings.json").exists());
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn apply_bundle_rejects_sanitized_name_collision_without_touching_disk() {
+        let root = tmp_root("collision");
+        let bundle = json!({
+            "app": "x-dir",
+            "version": 1,
+            "settings": {"theme": "dark"},
+            "workspaces": {"a/b": {"name": "a/b"}, "a:b": {"name": "a:b"}}
+        });
+        let err = apply_bundle(&root, &bundle).unwrap_err();
+        assert!(err.contains("a/b") && err.contains("a:b"));
+        // 碰撞拒绝 = 整包不落地（方案与主档都未写入）
+        assert!(!root.join("workspaces").exists());
+        assert!(!root.join("settings.json").exists());
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn apply_bundle_skips_unnamed_and_allows_missing_settings() {
+        let root = tmp_root("skip");
+        let bundle = json!({
+            "app": "x-dir",
+            "version": 1,
+            "workspaces": {"未命名": {"name": "未命名"}, "keep": {"name": "keep"}}
+        });
+        let summary = apply_bundle(&root, &bundle).unwrap();
+        assert_eq!(summary.workspaces, 1);
+        assert!(!summary.imported_settings);
+        assert!(root.join("workspaces").join("keep.json").exists());
+        assert!(!root.join("workspaces").join("未命名.json").exists());
+        assert!(!root.join("settings.json").exists());
+        std::fs::remove_dir_all(&root).ok();
+    }
+}
+
 /// 在资源管理器中定位集中配置文件（settings.json）：配置域的「打开位置」入口
 /// （设置 → 配置）。Rust 侧直调 opener 插件 API，不经前端 revealItemInDir
 /// 的 ACL/JS 通道；返回完整路径供前端回执
@@ -401,24 +523,13 @@ pub fn open_config_folder() -> Result<String, String> {
     Ok(p.to_string_lossy().into_owned())
 }
 
-/// 原子写 JSON 文件：临时文件 + rename（与 export_config 同款）
-fn atomic_write_json(p: &std::path::Path, v: &Value) -> Result<(), String> {
-    let s = serde_json::to_string_pretty(v).map_err(|e| e.to_string())?;
-    let tmp = p.with_extension("json.tmp");
-    std::fs::write(&tmp, s).map_err(|e| format!("写入失败：{e}"))?;
-    std::fs::rename(&tmp, p).map_err(|e| format!("写入失败：{e}"))
-}
-
-/// 导入配置包（export_config 的逆向）：整体覆盖 settings.json 与 workspaces/*.json。
-/// 仅接受 app == "x-dir" 的导出；version 高于当前实现时拒绝（防未知结构静默破坏）。
-/// 成功后广播 config-imported（2026-11-11 审计补）：常驻剪贴板浮窗是独立
-/// WebView、不随主窗设置热重载——导入含主题/直接粘贴偏好变更时由本事件
-/// 触发浮窗重读 settings 立即跟随
-#[tauri::command]
-pub fn import_config(app: tauri::AppHandle, path: String) -> Result<ImportSummary, String> {
-    use tauri::Emitter;
-    let text = std::fs::read_to_string(&path).map_err(|e| format!("读取失败：{e}"))?;
-    let v: Value = serde_json::from_str(&text).map_err(|e| format!("不是有效的 JSON：{e}"))?;
+/// 应用配置包到指定配置根（root 可注入供 cargo test；export 的逆向）。
+/// 写入顺序 = 方案 → worklog → **settings 最后（提交点）**：方案/日志写失败时
+/// 主档不动，前端不会 load 到半包状态、也不会拿旧态把半包覆盖回磁盘（旧序
+/// settings 先落，中途失败即设置已换、方案缺失的不一致态）。仅接受
+/// app == "x-dir" 的导出；version 高于当前实现时拒绝（防未知结构静默破坏）；
+/// 方案名清洗后碰撞（手改包才可能出现）直接拒绝，不静默后者覆盖前者
+fn apply_bundle(root: &std::path::Path, v: &Value) -> Result<ImportSummary, String> {
     if v.get("app").and_then(|x| x.as_str()) != Some("x-dir") {
         return Err("不是 x-dir 导出的配置文件".into());
     }
@@ -426,15 +537,29 @@ pub fn import_config(app: tauri::AppHandle, path: String) -> Result<ImportSummar
     if ver > 1 {
         return Err(format!("配置版本过新（v{ver}），请升级程序后再导入"));
     }
-    if let Some(settings) = v.get("settings") {
-        if !settings.is_object() {
-            return Err("配置包缺少有效的 settings 字段".into());
-        }
-        atomic_write_json(&config_root().join("settings.json"), settings)?;
+    if let Some(settings) = v.get("settings")
+        && !settings.is_object()
+    {
+        return Err("配置包缺少有效的 settings 字段".into());
     }
     let mut ws_count = 0usize;
     if let Some(wss) = v.get("workspaces").and_then(|x| x.as_object()) {
-        let dir = workspaces_dir();
+        // 清洗碰撞预检：两个不同原名清洗出同一文件名时拒绝整包导入
+        // （serde_json 解析后键必唯一，命中即意味着跨名碰撞）
+        let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        for name in wss.keys() {
+            let safe = sanitize_name(name);
+            if safe == "未命名" {
+                continue;
+            }
+            if let Some(prev) = seen.get(&safe) {
+                return Err(format!(
+                    "配置包内方案名「{prev}」与「{name}」处理后同名，请修正后再导入"
+                ));
+            }
+            seen.insert(safe, name.clone());
+        }
+        let dir = root.join("workspaces");
         std::fs::create_dir_all(&dir).map_err(|e| format!("创建目录失败：{e}"))?;
         for (name, tree) in wss {
             let safe = sanitize_name(name);
@@ -447,11 +572,28 @@ pub fn import_config(app: tauri::AppHandle, path: String) -> Result<ImportSummar
     }
     // 工作日历日志可选恢复：包内无 worklog 键（旧版导出）时不动现有日志
     if let Some(wl) = v.get("worklog").filter(|wl| wl.is_object()) {
-        atomic_write_json(&config_root().join("worklog.json"), wl)?;
+        atomic_write_json(&root.join("worklog.json"), wl)?;
     }
-    let _ = app.emit("config-imported", ());
+    // settings 最后写 = 提交点（带 .bak 快照的原子写）
+    if let Some(settings) = v.get("settings") {
+        write_settings_doc_at(root, settings)?;
+    }
     Ok(ImportSummary {
         workspaces: ws_count,
         imported_settings: v.get("settings").is_some(),
     })
+}
+
+/// 导入配置包：校验后整体覆盖 settings.json 与 workspaces/*.json。
+/// 成功后广播 config-imported（2026-11-11 审计补）：常驻剪贴板浮窗是独立
+/// WebView、不随主窗设置热重载——导入含主题/直接粘贴偏好变更时由本事件
+/// 触发浮窗重读 settings 立即跟随
+#[tauri::command]
+pub fn import_config(app: tauri::AppHandle, path: String) -> Result<ImportSummary, String> {
+    use tauri::Emitter;
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("读取失败：{e}"))?;
+    let v: Value = serde_json::from_str(&text).map_err(|e| format!("不是有效的 JSON：{e}"))?;
+    let summary = apply_bundle(&config_root(), &v)?;
+    let _ = app.emit("config-imported", ());
+    Ok(summary)
 }

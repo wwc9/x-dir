@@ -35,7 +35,7 @@ import { ZOOM_STEPS } from "../lib/zoom";
 import { DENSITY } from "../lib/tokens";
 import { SHORTCUT_GROUPS } from "../lib/shortcuts";
 import { hotkeySpecs } from "../lib/hotkey";
-import { setThemeWithFx, useSettings } from "../stores/settings";
+import { setThemeWithFx, settlePendingSave, useSettings } from "../stores/settings";
 import { confirmDialog, useUi } from "../stores/ui";
 import { AppIcon, ic } from "./AppIcon";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
@@ -1193,6 +1193,8 @@ async function onExportConfig() {
   });
   if (!path) return;
   try {
+    // 导出读磁盘：先冲刷防抖窗内的待写批量，最新改动才进导出包（2026-11-26 审计修复）
+    await settlePendingSave();
     const r = await api.exportConfig(path);
     useUi
       .getState()
@@ -1220,10 +1222,27 @@ async function onImportConfig() {
   });
   if (!ok) return;
   try {
+    // 丢弃挂起的防抖批量（导入整体覆盖语义）：挂起旧态若落在「导入已覆盖
+    // 磁盘、load 未读到」窗口内会把导入整体回滚（2026-11-26 审计修复）
+    await settlePendingSave(true);
     const r = await api.importConfig(path);
     // 热重载：设置重读（主题/缩放/右键菜单即时生效），布局方案列表经事件刷新
     await useSettings.getState().load();
     window.dispatchEvent(new Event("xdir-workspaces-changed"));
+    // 导入回放（2026-11-26 审计修复）：热键全量重建 + 剪贴板监听/护栏重推——
+    // 两者只在启动与设置页显式改动时推送，导入换档后不重推则旧键位仍生效、
+    // 已禁用的剪贴板继续采集，直到重启才对齐
+    const st = useSettings.getState();
+    void api.hotkeysSync(hotkeySpecs(st)).catch(() => undefined);
+    void api
+      .cliphistConfigure(
+        st.cliphistEnabled,
+        st.cliphistCapacity,
+        st.cliphistKeepDays,
+        st.cliphistExcludeApps,
+        st.cliphistRichText,
+      )
+      .catch(() => undefined);
     // 开机自启重放（2026-11-15）：导入可能换档——注册表按新事实源拉齐
     void api
       .autostartSet(useSettings.getState().autostart)
