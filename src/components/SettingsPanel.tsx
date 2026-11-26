@@ -176,7 +176,11 @@ export function SettingsPanel() {
   const [navQuery, setNavQuery] = useState("");
   /** 工作日历分类新增（设置 → 日历，2026-11-13 增强批） */
   useEffect(() => {
-    if (settingsTab) setTab(settingsTab);
+    if (settingsTab) {
+      setTab(settingsTab);
+      // 每次打开设置重置搜索词（2026-11-26 用户需求），否则下次打开仍停留在上次命中清单
+      setNavQuery("");
+    }
   }, [settingsTab]);
 
   /** 清空最近 N 天剪贴板条目：确认弹窗 → 命令（置顶/收藏豁免）→ 回执条数 */
