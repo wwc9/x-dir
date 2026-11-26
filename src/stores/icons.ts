@@ -5,7 +5,7 @@
 
 import { create } from "zustand";
 
-import { api } from "../lib/ipc";
+import { api, RECYCLE_BIN } from "../lib/ipc";
 import { extOf } from "../lib/fileIcons";
 import { fileNameOf } from "../lib/path";
 
@@ -25,6 +25,10 @@ interface IconsStore {
   exts: Record<string, string>;
   /** immediate=true 跳过防抖直接发 IPC（目录数据到达时的首屏预热） */
   requestIcons(paths: string[], immediate?: boolean): void;
+  /** 回收站图标强制刷新（2026-11-26 跟随系统空/满态）：icons/missed 两表的
+   *  常规去重都会挡住同路径重复请求，必须先剔旧图再重发；Rust 端对该路径
+   *  跳过 LRU 现提（shell 当前态），每次都拿到最新空/满图标 */
+  refreshBin(): void;
 }
 
 const pending = new Set<string>();
@@ -117,5 +121,14 @@ export const useIcons = create<IconsStore>()(() => ({
 
   requestIcons(paths, immediate = false) {
     schedule(paths, immediate);
+  },
+
+  refreshBin() {
+    const icons = { ...useIcons.getState().icons };
+    delete icons[RECYCLE_BIN];
+    missed.delete(RECYCLE_BIN);
+    pending.delete(RECYCLE_BIN);
+    useIcons.setState({ icons });
+    schedule([RECYCLE_BIN], true);
   },
 }));

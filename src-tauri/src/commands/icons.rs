@@ -30,9 +30,14 @@ pub async fn get_file_icons(
         {
             let mut store = state.icons.lock().unwrap();
             for (p, is_dir) in &infos {
-                let key = icon_key(p, *is_dir);
-                if let Some(v) = store.icons.get(&key) {
-                    out.insert(p.clone(), v.clone());
+                // 回收站哨兵跳过缓存读：图标随系统空/满态翻面，必须每次现提
+                let hit = if p.as_str() == crate::icons::RECYCLE_BIN_PSEUDO {
+                    None
+                } else {
+                    store.icons.get(&icon_key(p, *is_dir)).cloned()
+                };
+                if let Some(v) = hit {
+                    out.insert(p.clone(), v);
                 } else {
                     misses.push((p.clone(), *is_dir));
                 }
@@ -40,12 +45,15 @@ pub async fn get_file_icons(
         }
         for (p, is_dir) in misses {
             if let Some(v) = crate::icons::file_icon_png(&p, is_dir) {
-                state
-                    .icons
-                    .lock()
-                    .unwrap()
-                    .icons
-                    .put(icon_key(&p, is_dir), v.clone());
+                // 回收站现提结果不写缓存（同因：写缓存会把旧态图标钉死一个会话）
+                if p.as_str() != crate::icons::RECYCLE_BIN_PSEUDO {
+                    state
+                        .icons
+                        .lock()
+                        .unwrap()
+                        .icons
+                        .put(icon_key(&p, is_dir), v.clone());
+                }
                 out.insert(p, v);
             }
         }

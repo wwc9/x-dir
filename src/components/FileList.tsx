@@ -259,8 +259,10 @@ function RowFileIcon({
     const spec = fileIcon(entry.name, entry.isDir, isThisPc && entry.isDir);
     return <AppIcon icon={spec.icon} size={DENSITY.iconMd} colorVar={spec.colorVar} />;
   }
-  // 此电脑页的回收站入口行：Trash2 语义图标（哨兵无真实图标可提取）
-  if (entry.path === RECYCLE_BIN)
+  // 此电脑页的回收站入口行：realIcons 开时走路径表现提（Rust 对哨兵映射
+  // shell: 真身现提，空/满随系统态翻面）；关时 Trash2 语义色。列表不轮询，
+  // 翻面跟随到下一次刷新（导航回此电脑页/refreshTick）
+  if (entry.path === RECYCLE_BIN && !realIcons)
     return <AppIcon icon={Trash2} size={DENSITY.iconMd} colorVar="--np-muted" />;
   // 此电脑页盘符只查路径表：盘符根在 Rust 端有专属真实提取（icons.rs icon_key），
   // 扩展名共享表对 "(C:)" 这类名称无意义

@@ -80,6 +80,7 @@
 
 - 尺寸走 `--np-realicon: 18px`（真实图标源为 32px 系统大图标，放大不糊）；文件行 Lucide 兜底经 CSS 对齐同尺寸；"此电脑"页盘符同走真实图标（Rust 端专属提取）。
 - 导航树"此电脑"根节点固定 Lucide `Computer`（伪路径 `::{ThisPC}` 无真实图标可取）。
+- **回收站真实图标跟随系统空/满态（2026-11-26 用户需求）**：`::{RecycleBin}` 哨兵（导航树/此电脑页入口行/窗格标签三处同路径）在 realIcons 开启时接入真实图标——Rust `recycle_bin_png`：`shell:RecycleBinFolder` 经 SHParseDisplayName 解析 pidl 后 SHGFI_PIDL 提取（**不能用原始 CLSID 串 `::{645FF040-5081-101B-9F56-08002B2F9FB4}`**，实测 Win11 24H2 SHParseDisplayName 对其报 E_INVALIDARG）；线程 COM best-effort 自初始化（仅 S_OK 配对 CoUninitialize）。`get_file_icons` 对哨兵跳过 LRU 读与写（shell 按当前态解析，缓存会把旧态钉死一个会话）；前端 `icons.refreshBin()` 剔旧图/清 missed/pending 后重发（三处去重都会挡住同路径重取），导航树在行处于可见窗口期间 3s 轮询（滚出/关真实图标/树隐藏停表零开销），此电脑页入口行走常规请求、翻面跟随到下次刷新；窗格标签页保持 Lucide `Trash2`（标签列全部 Lucide 语义色口径不变）。关「真实图标」时全部回落 Lucide `Trash2` 不变。cargo test 真机锁定提取链路、vitest 锁定 refreshBin 重取语义。
 - 图标/类型映射单一来源 `lib/fileIcons.ts`：375+ 扩展名、38 种图标按语义细分（分类常量 + `BY_EXT`（含 dotfile）+ `BY_NAME`（Dockerfile 等）+ `TYPE_GROUPS`）；新文件类型 = 对应分类常量加一格 + `TYPE_GROUPS` 补类型名；预览页 `node tools/gen-file-icon-preview.mjs` 生成。
 
 ### 2.2 效率增强包

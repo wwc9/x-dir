@@ -26,6 +26,14 @@ const ICON_CACHE_MAX: usize = 512;
 /// 缩略图缓存上限（铁律 2：约 200 张 LRU 淘汰；键含 mtime 自动失效）
 const THUMB_CACHE_MAX: usize = 200;
 
+/// 回收站前端伪路径（lib/ipc.ts RECYCLE_BIN，虚拟页/入口行哨兵）——不是可
+/// 解析的 shell 路径，提取须映射到下方 shell 协议串
+pub const RECYCLE_BIN_PSEUDO: &str = "::{RecycleBin}";
+/// 回收站真身（shell 协议串 = 桌面命名空间里的回收站项）。注意不能直接用
+/// 原始 CLSID 串 "::{645FF040-5081-101B-9F56-08002B2F9FB4}"——SHParseDisplayName
+/// 在实测（Win11 24H2）对原始 GUID 串报 E_INVALIDARG，shell: 协议串解析可靠
+const RECYCLE_BIN_SHELL_PATH: &str = "shell:RecycleBinFolder";
+
 // ---------- LRU 缓存 ----------
 
 pub struct ImageCache {
@@ -218,6 +226,10 @@ unsafe fn hbitmap_to_png(hbm: HBITMAP) -> Option<Vec<u8>> {
 /// 目录图标的 Shell 提取（IShellFolder）需要 COM 初始化，命令线程未初始化时会失败。
 #[cfg(windows)]
 pub fn file_icon_png(path: &str, is_dir: bool) -> Option<String> {
+    // 回收站哨兵走真身提取（跟随系统空/满态；调用方对其跳过 LRU 现提）
+    if path == RECYCLE_BIN_PSEUDO {
+        return recycle_bin_png();
+    }
     unsafe {
         let w = wide(path);
         let mut info = SHFILEINFOW::default();
@@ -263,6 +275,56 @@ unsafe fn hicon_to_png(icon: HICON) -> Option<Vec<u8>> {
         let _ = DeleteObject(HGDIOBJ(ii.hbmColor.0));
         let _ = DeleteObject(HGDIOBJ(ii.hbmMask.0));
         png
+    }
+}
+
+/// 回收站真身图标（2026-11-26 用户需求「跟随系统状态」）：shell: 协议串经
+/// SHParseDisplayName 解析成 pidl，再 SHGFI_PIDL 提取——shell 按当前态解析，
+/// 空/满两态图标自动跟随（Windows 回收站图标随是否含项目翻面）。
+/// 线程 COM best-effort 自初始化（命令/测试线程未初始化时 SHParseDisplayName
+/// 会 CO_E_NOTINITIALIZED，目录图标注释同坑）——仅 S_OK（本线程首次初始化）
+/// 时配对 CoUninitialize，已有初始化/换模式错误不动现态
+#[cfg(windows)]
+fn recycle_bin_png() -> Option<String> {
+    use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx, CoUninitialize};
+    unsafe {
+        let com_self_init = CoInitializeEx(None, COINIT_APARTMENTTHREADED).is_ok();
+        let png = recycle_bin_png_inner();
+        if com_self_init {
+            CoUninitialize();
+        }
+        png
+    }
+}
+
+#[cfg(windows)]
+unsafe fn recycle_bin_png_inner() -> Option<String> {
+    use windows::Win32::UI::Shell::Common::ITEMIDLIST;
+    use windows::Win32::UI::Shell::{ILFree, SHGFI_PIDL, SHParseDisplayName};
+    unsafe {
+        let w = wide(RECYCLE_BIN_SHELL_PATH);
+        let mut pidl: *mut ITEMIDLIST = std::ptr::null_mut();
+        SHParseDisplayName(PCWSTR::from_raw(w.as_ptr()), None, &mut pidl, 0, None).ok()?;
+        if pidl.is_null() {
+            return None;
+        }
+        let mut info = SHFILEINFOW::default();
+        let ok = SHGetFileInfoW(
+            PCWSTR::from_raw(pidl.cast()),
+            FILE_FLAGS_AND_ATTRIBUTES(0),
+            Some(std::ptr::from_mut(&mut info)),
+            std::mem::size_of::<SHFILEINFOW>() as u32,
+            SHGFI_ICON | SHGFI_LARGEICON | SHGFI_PIDL,
+        );
+        let png = if ok == 0 || info.hIcon.is_invalid() {
+            None
+        } else {
+            let png = hicon_to_png(info.hIcon);
+            let _ = DestroyIcon(info.hIcon);
+            png
+        };
+        ILFree(Some(pidl));
+        png.map(|p| png_data_url(&p))
     }
 }
 
@@ -341,6 +403,15 @@ mod tests {
             png.is_some(),
             "SHGetFileInfo directory icon extraction failed"
         );
+    }
+
+    #[test]
+    fn recycle_bin_pseudo_extracts_real_icon() {
+        // 回收站伪路径须映射 shell: 协议串经 pidl 提取出图（空/满两态均有效）；
+        // 失败即 SHParseDisplayName/SHGFI_PIDL 链路损坏，前端会永久回退 lucide
+        let png = super::file_icon_png(super::RECYCLE_BIN_PSEUDO, false);
+        let png = png.expect("recycle bin icon extraction failed");
+        assert!(png.starts_with("data:image/png;base64,"));
     }
 
     #[test]

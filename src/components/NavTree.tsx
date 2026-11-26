@@ -31,6 +31,9 @@ interface FlatNode {
 }
 
 const ROW_H = DENSITY.rowH;
+/** 回收站空/满态轮询间隔：真实图标现提成本低（单路径 SHGetFileInfo），
+ *  3s 跟随系统翻面足够及时 */
+const BIN_ICON_POLL_MS = 3000;
 
 /** 全局目录导航树（所有窗格共用；挂在左侧边栏右侧，可拖宽）。
  *  点击节点 = 在活动窗格打开；箭头 = 展开/收起（盘符/目录），展开时经 list_dirs
@@ -121,6 +124,18 @@ export function NavTree() {
     if (paths.length) useIcons.getState().requestIcons(paths, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [winKey, flat, realIcons]);
+
+  // 回收站真实图标跟随系统空/满态（2026-11-26 用户需求）：Rust 端对该哨兵
+  // 跳过 LRU 每次现提，前端在行处于可见窗口期间 3s 轮询强制刷新——翻面
+  // 3 秒内跟随；滚出可见区/关真实图标/树隐藏时停表零开销。入窗即刻刷一次
+  // （补轮询停摆期间错过的翻面）
+  const binInView = visItems.some((v) => flat[v.index]?.kind === "bin");
+  useEffect(() => {
+    if (!visible || !realIcons || !binInView) return;
+    useIcons.getState().refreshBin();
+    const t = window.setInterval(() => useIcons.getState().refreshBin(), BIN_ICON_POLL_MS);
+    return () => window.clearInterval(t);
+  }, [visible, realIcons, binInView]);
 
   // 定位联动：目标节点进入扁平列表后滚动到可见区（子目录懒加载完成后自动补滚）
   useEffect(() => {
