@@ -20,6 +20,9 @@ export interface SheetMergeMap {
   anchors: Map<string, SheetMerge>;
   /** 被合并区覆盖的非锚点格（渲染时跳过），key = "row:col" */
   covered: Set<string>;
+  /** 被覆盖格 → 所在合并区锚点（2026-11-26 单元格选中态：方向键移进覆盖格
+   *  时落到锚点上，与视觉块一致） */
+  anchorOf: Map<string, SheetMerge>;
 }
 
 const key = (r: number, c: number) => `${r}:${c}`;
@@ -32,6 +35,7 @@ export function buildMergeMap(
 ): SheetMergeMap {
   const anchors = new Map<string, SheetMerge>();
   const covered = new Set<string>();
+  const anchorOf = new Map<string, SheetMerge>();
   for (const m of merges) {
     const rowSpan = Math.min(m.rowSpan, rowCount - m.row);
     const colSpan = Math.min(m.colSpan, colCount - m.col);
@@ -42,10 +46,11 @@ export function buildMergeMap(
       for (let c = m.col; c < m.col + colSpan; c++) {
         if (r === m.row && c === m.col) continue;
         covered.add(key(r, c));
+        anchorOf.set(key(r, c), anchors.get(key(m.row, m.col))!);
       }
     }
   }
-  return { anchors, covered };
+  return { anchors, covered, anchorOf };
 }
 
 /** 制表符分隔文本 → 行矩阵；丢弃末尾空行（Rust 端每行以 \n 结尾） */
@@ -130,6 +135,10 @@ export interface SheetTrimResult {
   rows: SheetRows;
   colCount: number;
   merges: SheetMerge[];
+  /** 裁掉的顶部/左侧行列数（2026-11-26）：单元格 A1 坐标还原用——
+   *  展示坐标 = 网格内索引 + 偏移，与源文件真实坐标一致 */
+  rowOffset: number;
+  colOffset: number;
 }
 
 /** 边缘空行/空列裁剪（纯函数，2026-11-24 表格预览增强）：源文件样式化的
@@ -177,7 +186,13 @@ export function trimSheetEdges(
     if (row < 0 || col < 0 || rowSpan < 1 || colSpan < 1) continue;
     newMerges.push({ row, col, rowSpan, colSpan });
   }
-  return { rows: cut, colCount: newCount, merges: newMerges };
+  return {
+    rows: cut,
+    colCount: newCount,
+    merges: newMerges,
+    rowOffset: top,
+    colOffset: left,
+  };
 }
 
 /** 表头行判定（纯函数）：前 5 行内首个非空占比 ≥0.6 的行；跨列合并的装饰
@@ -252,4 +267,124 @@ export function sheetMatches(
     }
   }
   return out;
+}
+
+/** ── 列虚拟化（2026-11-26 表格预览八项增强）：行虚拟化只覆盖纵向，宽表
+ *  （百列级）仍全量渲染格子——DOM = 可见行 × 全列，横向重绘全量 diff。
+ *  列窗口与行虚拟化同机制：显式轨道不产生 DOM，只渲染视窗内格子。── */
+
+/** 列宽 → 前缀和（px，长度 n+1，prefix[0]=0）：窗口定位与横向滚动跟随共用 */
+export function sheetColPrefix(colWidths: number[]): number[] {
+  const out = new Array(colWidths.length + 1).fill(0) as number[];
+  for (let i = 0; i < colWidths.length; i++) out[i + 1] = out[i] + colWidths[i];
+  return out;
+}
+
+/** 前缀和 + 滚动偏移 + 视口宽 → 可见列窗口（含首尾，闭区间）。
+ *  start = 右缘越过 scrollLeft 的首列；end = 右缘到达视口右缘的列；
+ *  overscan = 两侧外扩列数（横向斜读预渲染，滚动不出白）。 */
+export function sheetColumnWindow(
+  prefix: number[],
+  scrollLeft: number,
+  viewW: number,
+  overscan = 3,
+): { start: number; end: number } {
+  const n = prefix.length - 1;
+  if (n <= 0) return { start: 0, end: -1 };
+  const right = scrollLeft + Math.max(0, viewW);
+  // 二分：首个右缘 > scrollLeft 的列
+  let lo = 0;
+  let hi = n - 1;
+  let start = n - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (prefix[mid + 1] > scrollLeft) {
+      start = mid;
+      hi = mid - 1;
+    } else {
+      lo = mid + 1;
+    }
+  }
+  let end = start;
+  while (end + 1 < n && prefix[end + 1] < right) end++;
+  return {
+    start: Math.max(0, start - overscan),
+    end: Math.min(n - 1, end + overscan),
+  };
+}
+
+/** 多行档截断格集合（纯函数）：与 sheetRowHeights 同源折行启发——格内需要
+ *  的行数超过该行实际分配行数（= 行内最大折行数钳 SHEET_WRAP_MAX_LINES）
+ *  即被静默裁切，渲染层据此打截断角标。key = "row:col"。 */
+export function sheetTruncatedCells(
+  rows: SheetRows,
+  colWidths: number[],
+  mode: Exclude<SheetRowMode, "single">,
+): Set<string> {
+  const LINE_H = DENSITY.sheetLineH;
+  const PAD = mode === "relaxed" ? 10 : 4;
+  const MIN = mode === "relaxed" ? LINE_H + 20 : DENSITY.rowH;
+  const out = new Set<string>();
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r];
+    let maxNeed = 1;
+    const needs: number[] = [];
+    for (let c = 0; c < row.length && c < colWidths.length; c++) {
+      const v = row[c];
+      const w = colWidths[c];
+      const need = v && w > 0 ? Math.ceil((textWidthPx(v) + 16) / w) : 1;
+      needs.push(need);
+      if (need > maxNeed) maxNeed = need;
+    }
+    const allotted = Math.min(maxNeed, SHEET_WRAP_MAX_LINES);
+    if (allotted * LINE_H + PAD * 2 <= MIN) continue; // 行高被 MIN 托底且未达折行数，无截断
+    for (let c = 0; c < needs.length; c++) {
+      if (needs[c] > allotted) out.add(key(r, c));
+    }
+  }
+  return out;
+}
+
+/** 合并锚点视窗过滤（纯函数）：列/行双向虚拟化后，锚点行或列任一端在窗口
+ *  外即整块消失、覆盖格又必须跳过 → 网格出现空洞。凡矩形与可见窗口相交的
+ *  锚点都返回，渲染层按原跨度放置（轨道始终全量存在，放置不依赖窗口）。 */
+export function mergesInView(
+  anchors: Map<string, SheetMerge>,
+  r0: number,
+  r1: number,
+  c0: number,
+  c1: number,
+): [string, SheetMerge][] {
+  const out: [string, SheetMerge][] = [];
+  for (const [k, m] of anchors) {
+    if (
+      m.row <= r1 &&
+      m.row + m.rowSpan - 1 >= r0 &&
+      m.col <= c1 &&
+      m.col + m.colSpan - 1 >= c0
+    ) {
+      out.push([k, m]);
+    }
+  }
+  return out;
+}
+
+/** 网格内索引 → A1 坐标（纯函数）：列字母 A..Z、AA..（Excel 同款 26 进制
+ *  无零表示），行号 1 起；配合裁剪偏移还原源文件真实坐标。 */
+export function sheetA1(row: number, col: number): string {
+  let n = col + 1;
+  let letters = "";
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    letters = String.fromCharCode(65 + rem) + letters;
+    n = Math.floor((n - 1) / 26);
+  }
+  return `${letters}${row + 1}`;
+}
+
+/** 手拖列宽钳制（纯函数）：下限保一个汉字 + 边距可辨，上限放开到长文本
+ *  可读（远超启发式 360 上限——手动拉开就是为看全文）；脏值回落 120。 */
+export function clampSheetColWidth(w: number): number {
+  if (!Number.isFinite(w)) return 120;
+  return Math.min(1000, Math.max(48, Math.round(w)));
 }

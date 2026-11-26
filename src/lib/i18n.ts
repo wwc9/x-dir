@@ -572,6 +572,17 @@ export const EN: Record<string, string> = {
   "「自动」按设备判定（远程会话/CPU/内存/显卡），切换即应用下表差异，可随时改回":
     "“Auto” picks a tier from your device (remote session / CPU / memory / GPU); switching applies the differences below, change back anytime",
   "自动": "Auto",
+  "无": "None",
+  "1 行": "1 row",
+  "2 行": "2 rows",
+  "自动判定表头行（前 5 行内非空占比 ≥60% 的首行）":
+    "Auto-detect the header row (first row within top 5 with ≥60% non-empty cells)",
+  "无表头：首行即数据，不冻结表头条": "No header: the first row is data, no header strip",
+  "首行为表头": "First row is the header",
+  "前两行为表头（带装饰标题的表）": "First two rows are the header (decorated-title sheets)",
+  "单元格内容详情": "Cell content details",
+  "双击查看全文 · Ctrl+C 复制": "Double-click for full text · Ctrl+C to copy",
+  "拖动调列宽 · 双击复位": "Drag to resize · double-click to reset",
   "高性能": "High performance",
   "低性能": "Low resources",
   "设置项": "Setting",

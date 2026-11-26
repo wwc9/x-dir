@@ -639,7 +639,9 @@ html.glasswin.bp6-dark .np-shelf {
    年月跳转（np-cal-jump）/ 日历命中（np-cal-hits）/ 功能库面板（np-palette，
    2026-11-19 用户反馈「右键菜单点击功能库以后的磨玻璃效果和二级弹窗不一致，
    应该要直接用二级弹窗的参数」——旧版走 --np-surface 卡片霜面且无 blur，
-   经 token 继承拿到半透明底即穿透病，收编入族随弹层模糊/弹层浓度参数）——
+   经 token 继承拿到半透明底即穿透病，收编入族随弹层模糊/弹层浓度参数）/
+   表格预览单元格详情浮层（np-pv-sheet-detail，2026-11-26 八项增强：
+   Enter/双击看全文的浮层面板，浮于网格之上）——
    前三者为 2026-11-18 全量审计扩员（旧版半透明面无模糊，背后内容锐利穿透
    同病）；ctx 子菜单弹层外壳按定稿保持透明（菜单自带霜面），:not 排除防
    双重霜。弹窗已升级染色极光玻璃（下方独立规则），不再共用本段。
@@ -651,7 +653,8 @@ html.glasswin .np-sugg,
 html.glasswin .np-cal-jump,
 html.glasswin .np-cal-hits,
 html.glasswin .np-palette,
-html.glasswin .np-clip-srcmenu {
+html.glasswin .np-clip-srcmenu,
+html.glasswin .np-pv-sheet-detail {
   background: var(--np-surface-glass-strong);
   border-color: var(--np-glass-ring);
   box-shadow: var(--np-glass-shadow);
@@ -4918,8 +4921,10 @@ body.np-col-resizing * {
   font-size: var(--np-font-sm);
 }
 
-/* 表格预览：虚拟网格铺满 + 顶部 sheet 切换条（chips） */
+/* 表格预览：虚拟网格铺满 + 顶部 sheet 切换条（chips）。
+   position:relative = 详情浮层（np-pv-sheet-detail）定位基准（2026-11-26） */
 .np-pv-sheet {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -4956,10 +4961,24 @@ body.np-col-resizing * {
   color: var(--np-accent);
   font-weight: 600;
 }
-.np-pv-sheet-scroll {
+/* 视口包装（2026-11-26）：滚动容器 + 冻结首列覆盖层的定位基准——覆盖层是
+   滚动容器的兄弟（absolute 子元素随内容滚，钉不住左缘），须挂在 vp 上 */
+.np-pv-sheet-vp {
+  position: relative;
   flex: 1;
   min-height: 0;
+  display: flex;
+}
+.np-pv-sheet-scroll {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow: auto;
+}
+/* 网格容器可聚焦（单元格选中态的方向键/Ctrl+C 本地拦截，2026-11-26）：
+   焦点环由选中格描边承担，容器自身不画 */
+.np-pv-sheet-scroll:focus {
+  outline: none;
 }
 .np-pv-sheet-scroll .np-pv-empty {
   padding: 14px;
@@ -5046,9 +5065,10 @@ body.np-col-resizing * {
 .np-pv-sheet-inner.is-wrap .np-pv-sheet-cell.is-num {
   align-items: flex-end;
 }
-/* 行高切换 Seg（2026-11-25 迁 QuickPreview footer 中央槽，portal 注入，与 PDF
-   页码跳转同槽复用；原 2026-11-03 右上悬浮药丸退役——absolute 悬浮必挡表格
-   右上格内容）。无槽宿主（全盘搜索内嵌预览）回退表头上方文档流工具行 */
+/* 行高/表头控件行（2026-11-25 迁 QuickPreview footer 中央槽，2026-11-26 扩为
+   footctl = 坐标条 + 行高三档 + 表头行数 Seg；portal 注入，与 PDF 页码跳转同
+   槽复用；原 2026-11-03 右上悬浮药丸退役——absolute 悬浮必挡表格右上格内容）。
+   无槽宿主（全盘搜索内嵌预览）回退表头上方文档流工具行 */
 .np-pv-sheet-moderow {
   flex: none;
   display: flex;
@@ -5056,14 +5076,133 @@ body.np-col-resizing * {
   padding: 4px 10px;
   border-bottom: 1px solid var(--np-hairline);
 }
+.np-pv-sheet-footctl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+/* 选中格坐标条（2026-11-26 单元格选中态）：A1 坐标 + 内容摘要，muted 弱化 */
+.np-pv-sheet-coord {
+  max-width: 180px;
+  font-size: var(--np-font-sm);
+  color: var(--np-muted);
+  font-variant-numeric: tabular-nums;
+}
 /* footer 内嵌紧凑档：仅收紧尺寸（chip min-height 16 + 字号 sm，组件总高 20px），
    不撑高 footer——与 PDF 页码跳转输入同层排布（ui-standards np-seg 条款：
    变体只覆写尺寸，禁止复写选中态）。特异性 (0,4,0) 稳压 chip 基础规则
    .bp6-button-group.np-seg .bp6-button (0,3,0)，不依赖文件顺序 */
-.np-pv-sheet-modeseg .bp6-button-group.np-seg .bp6-button {
+.np-pv-sheet-footctl .bp6-button-group.np-seg .bp6-button {
   min-height: 16px;
   padding: 0 10px;
   font-size: var(--np-font-sm);
+}
+
+/* ── 表格预览八项增强（2026-11-26）：宽表基建 + 单元格交互 ── */
+
+/* 冻结首列（#7）：总宽超视口时左缘钉住标识列。滚动容器的 absolute 兄弟层
+   （滚动容器内的绝对定位子元素随内容滚，钉不住）；行方向随滚动 transform
+   平移（同表头条机制），行窗口与主网格同源（只渲染可见行切片） */
+.np-pv-sheet-frozen {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 3;
+  overflow: hidden;
+  background: var(--np-surface);
+  border-right: 1px solid var(--np-border);
+  box-shadow: 4px 0 8px rgba(20, 28, 40, 0.08);
+}
+.np-pv-sheet-frozen .np-pv-sheet-inner {
+  will-change: transform;
+}
+/* 列宽拖拽热区（#8）：每列右缘 7px，悬停显 accent 细条；会话级覆写，
+   双击复位 */
+.np-pv-sheet-colhandle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  z-index: 3;
+  cursor: col-resize;
+}
+.np-pv-sheet-colhandle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 1px;
+  background: transparent;
+}
+.np-pv-sheet-colhandle:hover::after {
+  background: var(--np-accent);
+}
+/* 选中格描边（#6）：inset 环不随滚动错位，压过斑马纹/命中底 */
+.np-pv-sheet-cell.is-sel {
+  box-shadow: inset 0 0 0 2px var(--np-accent);
+}
+/* 多行档截断角标（#3）：内容超出行高上限被静默裁切的格，右上角 accent
+   小三角提示（悬停 title 有全文；单行档省略号本身即截断语义，不打标） */
+.np-pv-sheet-cell {
+  position: relative;
+}
+.np-pv-sheet-cell.is-trunc::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-top: 6px solid var(--np-accent);
+  border-left: 6px solid transparent;
+}
+/* 单元格详情浮层（#6）：Enter/双击开启，全文 pre-wrap 展示 + 复制；
+   glasswin 下入强霜家族（规则见「浮层强霜」段，frostFamily.test 锁定） */
+.np-pv-sheet-detail {
+  position: absolute;
+  z-index: 6;
+  width: 440px;
+  max-width: calc(100% - 16px);
+  max-height: 50%;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--np-radius-lg);
+  background: var(--np-surface);
+  border: 1px solid var(--np-hairline);
+  box-shadow: var(--np-shadow);
+  overflow: hidden;
+}
+.np-pv-sheet-detail-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  border-bottom: 1px solid var(--np-hairline);
+}
+.np-pv-sheet-detail-a1 {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--np-font-sm);
+  font-weight: 600;
+  color: var(--np-accent);
+  font-variant-numeric: tabular-nums;
+}
+.np-pv-sheet-detail-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+  font-size: var(--np-font-ui);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  color: var(--np-fg);
+  user-select: text;
 }
 
 /* 压缩包清单：虚拟行列表（图标 + 名称 + 大小） */

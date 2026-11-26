@@ -2,12 +2,18 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildMergeMap,
+  clampSheetColWidth,
+  mergesInView,
   parseSheetRows,
   isNumericLike,
   sheetNumericCols,
   sheetMatches,
   sheetRowHeights,
   sheetHeaderRow,
+  sheetA1,
+  sheetColPrefix,
+  sheetColumnWindow,
+  sheetTruncatedCells,
   textWidthPx,
   trimSheetEdges,
 } from "../sheetGrid";
@@ -185,5 +191,115 @@ describe("行高估算（textWidthPx / sheetRowHeights，2026-11-03）", () => {
   it("空单元格不参与估高", () => {
     const rows = [["a", "", undefined as unknown as string]];
     expect(sheetRowHeights(rows, [100, 100, 100], "wrap")).toEqual([28]);
+  });
+});
+
+describe("裁剪偏移（trimSheetEdges rowOffset/colOffset，2026-11-26）", () => {
+  it("返回裁掉的顶部/左侧行列数，A1 坐标还原用", () => {
+    const rows = [
+      ["", "", ""],
+      ["", "名称", "数量"],
+      ["", "苹果", "3"],
+    ];
+    const r = trimSheetEdges(rows, 3, []);
+    expect(r.rowOffset).toBe(1);
+    expect(r.colOffset).toBe(1);
+  });
+
+  it("无裁剪时偏移为 0", () => {
+    const r = trimSheetEdges([["a", "b"]], 2, []);
+    expect(r.rowOffset).toBe(0);
+    expect(r.colOffset).toBe(0);
+  });
+});
+
+describe("列前缀和与列窗口（sheetColPrefix/sheetColumnWindow，2026-11-26 列虚拟化）", () => {
+  it("前缀和：长度 n+1，首项 0", () => {
+    expect(sheetColPrefix([100, 80, 60])).toEqual([0, 100, 180, 240]);
+    expect(sheetColPrefix([])).toEqual([0]);
+  });
+
+  it("列窗口：视口落在首列内", () => {
+    const prefix = sheetColPrefix([100, 100, 100, 100]);
+    expect(sheetColumnWindow(prefix, 0, 250, 1)).toEqual({ start: 0, end: 3 });
+  });
+
+  it("列窗口：横向滚动到中段，两侧外扩 overscan", () => {
+    const prefix = sheetColPrefix(Array.from({ length: 50 }, () => 100));
+    // scrollLeft=2000 → 视口覆盖列 20..29，外扩 1 列 → 19..30
+    expect(sheetColumnWindow(prefix, 2000, 1000, 1)).toEqual({ start: 19, end: 30 });
+  });
+
+  it("列窗口：滚动到最右端不越界", () => {
+    const prefix = sheetColPrefix(Array.from({ length: 10 }, () => 100));
+    expect(sheetColumnWindow(prefix, 900, 400, 3)).toEqual({ start: 6, end: 9 });
+  });
+
+  it("列窗口：空表返回空窗口", () => {
+    expect(sheetColumnWindow([0], 0, 500, 3)).toEqual({ start: 0, end: -1 });
+  });
+});
+
+describe("截断格集合（sheetTruncatedCells，2026-11-26 截断角标）", () => {
+  it("超过行内分配行数的格被标记，同行的矮格不标", () => {
+    // 列宽 100：48 个 CJK = 624px → 折 7 行（>上限 6 被截停 allot=6），短格 1 行不标
+    const long = "十个汉字".repeat(12);
+    const rows = [["短", long]];
+    const trunc = sheetTruncatedCells(rows, [100, 100], "wrap");
+    expect(trunc.has("0:1")).toBe(true);
+    expect(trunc.has("0:0")).toBe(false);
+  });
+
+  it("行内全部格都装得下 → 空集合", () => {
+    const trunc = sheetTruncatedCells([["短文本", "abc"]], [120, 120], "wrap");
+    expect(trunc.size).toBe(0);
+  });
+
+  it("恰好装满分配行数的格不标（无视觉裁切）", () => {
+    // 列宽 100：20 个汉字 = 260px + 16 → ceil = 3 行；allotted = 3 → 不标
+    const v = "十个汉字十个汉字";
+    const trunc = sheetTruncatedCells([[v]], [100], "wrap");
+    expect(trunc.size).toBe(0);
+  });
+});
+
+describe("合并锚点视窗过滤（mergesInView，2026-11-26 合并区视窗可见）", () => {
+  const anchors = buildMergeMap(
+    [
+      { row: 0, col: 0, rowSpan: 2, colSpan: 2 },
+      { row: 10, col: 10, rowSpan: 3, colSpan: 3 },
+    ],
+    100,
+    100,
+  ).anchors;
+
+  it("锚点矩形与窗口相交即返回（含锚点在窗口外的跨界块）", () => {
+    // 锚点 (0,0) 跨 2×2，窗口行 1..3 / 列 1..3 与其相交（锚点本体在窗外）
+    const hit = mergesInView(anchors, 1, 3, 1, 3);
+    expect(hit.map(([k]) => k)).toEqual(["0:0"]);
+  });
+
+  it("不相交的合并区被滤掉", () => {
+    const hit = mergesInView(anchors, 0, 5, 0, 5);
+    expect(hit.map(([k]) => k)).toEqual(["0:0"]);
+  });
+});
+
+describe("A1 坐标（sheetA1，2026-11-26 单元格选中态）", () => {
+  it("列字母进位与行号 1 起", () => {
+    expect(sheetA1(0, 0)).toBe("A1");
+    expect(sheetA1(9, 25)).toBe("Z10");
+    expect(sheetA1(0, 26)).toBe("AA1");
+    expect(sheetA1(11, 701)).toBe("ZZ12");
+    expect(sheetA1(0, 702)).toBe("AAA1");
+  });
+});
+
+describe("手拖列宽钳制（clampSheetColWidth，2026-11-26 列宽手拖）", () => {
+  it("钳到 48..1000 并取整；脏值回落 120", () => {
+    expect(clampSheetColWidth(10)).toBe(48);
+    expect(clampSheetColWidth(5000)).toBe(1000);
+    expect(clampSheetColWidth(120.6)).toBe(121);
+    expect(clampSheetColWidth(Number.NaN)).toBe(120);
   });
 });
