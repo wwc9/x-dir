@@ -61,36 +61,66 @@ export function parseSheetRows(text: string): SheetRows {
   return lines.map((line) => line.split("\t"));
 }
 
-/** 行矩阵 → 列宽（px）。采样前 500 行足矣；空列取下限；超宽列截到上限（省略号兜底）。
+/** 列宽启发参数（2026-11-26 用户需求「列宽不用展示太宽」）：
+ *  取样内 90% 格子放得下即为本列宽（P90 分位）——单格离局长文本不再把整列
+ *  撑到上限（离局格交由多行档换行/单行档省略兜底，全文走双击详情浮层；
+ *  用户手拖可单独加宽）；上限 360 → 240 进一步收窄。 */
+export const SHEET_COL_QUANTILE = 0.9;
+
+/** 行矩阵 → 列宽（px）。采样前 500 行足矣；空列取下限。
  *  合并区感知（2026-11-26）：跨列合并锚点与被覆盖格不参与逐列宽累计——
- *  46 列宽的信息行按第 1 列宽估算会把首列撑到 360 上限（标题列虚肥，
- *  冻结首列跟着变宽挤占正文）；合并文本对行高的贡献改在行高估算里按
- *  跨度总宽计算。 */
+ *  46 列宽的信息行按第 1 列宽估算会把首列撑到上限（标题列虚肥，
+ *  冻结首列跟着变宽挤占正文）；合并文本对行高的贡献在行高估算里按
+ *  跨度总宽计算。宽度 = PAD + 列内格子文本宽的 P90 分位，钳 [MIN, MAX]。 */
 export function sheetColumnWidths(
   rows: SheetRows,
   colCount: number,
   merges: SheetMerge[] = [],
 ): number[] {
   const PAD = 16;
-  const MIN = 56;
-  const MAX = 360;
+  // MIN 96（2026-11-26 P90 配套上调，原 56）：56px 会让 6 字列头竖排一字一行；
+  // 96px 容 6 个汉字一行（8 字列头最多两行），稀疏代码列也保持可读
+  const MIN = 96;
+  const MAX = 240;
   const skip = new Set<string>();
   for (const m of merges) {
     for (let r = m.row; r < m.row + m.rowSpan; r++) {
       for (let c = m.col; c < m.col + m.colSpan; c++) skip.add(key(r, c));
     }
   }
-  const widths = new Array(colCount).fill(MIN) as number[];
   const sample = rows.length > 500 ? rows.slice(0, 500) : rows;
+  const cells: number[][] = Array.from({ length: colCount }, () => []);
   for (let r = 0; r < sample.length; r++) {
     const row = sample[r];
     for (let c = 0; c < colCount && c < row.length; c++) {
       if (skip.has(key(r, c))) continue;
       const v = row[c];
       if (!v) continue;
-      const px = PAD + textWidthPx(v);
-      if (px > widths[c]) widths[c] = Math.min(MAX, px);
+      cells[c].push(textWidthPx(v));
     }
+  }
+  // 表头宽度兜底：P90 只保 90% 数据格，稀疏列会缩到 MIN——列宽不小于表头
+  // 文本一行宽（表头换行/省略都显破碎；表头超宽时仍被 MAX 钳住）
+  const headRow = sheetHeaderRow(rows, colCount);
+  const widths = new Array(colCount).fill(MIN) as number[];
+  for (let c = 0; c < colCount; c++) {
+    const arr = cells[c];
+    let headerW = 0;
+    if (headRow >= 0) {
+      for (let r = 0; r <= headRow && r < sample.length; r++) {
+        if (skip.has(key(r, c))) continue;
+        const v = sample[r][c];
+        if (v) headerW = Math.max(headerW, textWidthPx(v));
+      }
+    }
+    let w = MIN;
+    if (arr.length) {
+      arr.sort((a, b) => a - b);
+      // ceil(n×0.9)-1：真正剔除顶部 10% 最长格（floor 在 n=10 时索引落在最大值上）
+      const p90 = arr[Math.max(0, Math.ceil(arr.length * SHEET_COL_QUANTILE) - 1)];
+      w = PAD + p90;
+    }
+    widths[c] = Math.min(MAX, Math.max(MIN, w, PAD + headerW));
   }
   return widths;
 }

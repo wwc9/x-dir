@@ -307,13 +307,29 @@ describe("手拖列宽钳制（clampSheetColWidth，2026-11-26 列宽手拖）",
 
 describe("合并区感知估算（2026-11-26 标题行/列虚肥修复）", () => {
   it("列宽：跨列合并锚点与覆盖格不参与逐列累计（46 列信息行不撑肥首列）", () => {
-    // 40 个 CJK = 520px + 16 = 536 → 若参与累计首列 = 360 上限；跳过后按普通格算
+    // 43 个 CJK = 559px + 16 → 参与累计首列 = 240 上限；跳过后按普通格算
     const rows = [["跨列合并的超长信息行内容跨列合并的超长信息行内容跨列合并的超长信息行内容跨列合并的超长", "普通格"]];
     const noMerge = sheetColumnWidths(rows, 2);
     const withMerge = sheetColumnWidths(rows, 2, [{ row: 0, col: 0, rowSpan: 1, colSpan: 2 }]);
-    expect(noMerge[0]).toBe(360);
-    expect(withMerge[0]).toBe(56); // 回落 MIN（无其他贡献）
-    expect(withMerge[1]).toBe(56);
+    expect(noMerge[0]).toBe(240);
+    expect(withMerge[0]).toBe(96); // 回落 MIN（无其他贡献）
+    expect(withMerge[1]).toBe(96);
+  });
+
+  it("列宽：P90 分位——单格离局长文本不撑宽整列（2026-11-26 列宽优化）", () => {
+    // 9 个普通格（15 CJK = 195px）+ 1 个离局格（60 CJK = 780px）→ P90 取 195
+    const short = "十五个汉字十五个字"; // 9 CJK = 117px → 16+117 = 133
+    const rows: string[][] = [];
+    for (let i = 0; i < 9; i++) rows.push([short]);
+    rows.push(["离局长文本".repeat(10)]); // 50 CJK = 650px
+    const w = sheetColumnWidths(rows, 1);
+    expect(w[0]).toBe(133); // 不是 650+16 的离局值
+  });
+
+  it("列宽：P90 不误伤均匀列——全部同长文本仍按该宽度取", () => {
+    const rows = Array.from({ length: 20 }, () => ["十个汉字十个汉字"]); // 8 CJK = 104px
+    const w = sheetColumnWidths(rows, 1);
+    expect(w[0]).toBe(120); // 16+104 = 120（P90 = 该均匀宽度）
   });
 
   it("行高：跨列锚点按跨度总宽折行（标题行一行放得下就不再误折 6 行）", () => {
@@ -344,5 +360,22 @@ describe("合并区感知估算（2026-11-26 标题行/列虚肥修复）", () =
       { row: 0, col: 0, rowSpan: 1, colSpan: 4 },
     ]);
     expect(trunc.size).toBe(0);
+  });
+});
+
+describe("列宽表头兜底（2026-11-26 P90 配套）", () => {
+  it("稀疏列 P90 缩到下限时，表头一行宽兜底（表头不破碎）", () => {
+    // 稠密表头行（非空占比 1.0 ≥ 0.6 成立）+ 40 行短代码（28px）：P90 →
+    // 16+28 = 44 → MIN 96；表头兜底 16+78 = 94 → 列宽 96
+    const rows: string[][] = [["具体问题描述", "列二", "列三"]];
+    for (let i = 0; i < 40; i++) rows.push(["1-3", "", ""]);
+    const w = sheetColumnWidths(rows, 3);
+    expect(w[0]).toBe(96);
+  });
+
+  it("表头超宽仍被 MAX 钳住", () => {
+    const rows: string[][] = [["跨列合并的超长信息行内容跨列合并的超长信息行内容跨列合并的超长信息行内容跨列合并的超长"]];
+    const w = sheetColumnWidths(rows, 1);
+    expect(w[0]).toBe(240);
   });
 });
