@@ -581,6 +581,8 @@ export const EN: Record<string, string> = {
   "首行为表头": "First row is the header",
   "前两行为表头（带装饰标题的表）": "First two rows are the header (decorated-title sheets)",
   "单元格内容详情": "Cell content details",
+  "冻结首列：内容超宽时左缘钉住标识列": "Freeze first column: pin the identifier column at the left edge when content overflows",
+  "不冻结首列（横向滚动时标识列随之滚走）": "Don't freeze the first column (it scrolls away with horizontal scrolling)",
   "双击查看全文 · Ctrl+C 复制": "Double-click for full text · Ctrl+C to copy",
   "拖动调列宽 · 双击复位": "Drag to resize · double-click to reset",
   "高性能": "High performance",

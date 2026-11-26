@@ -71,6 +71,14 @@ const HEADER_MODE_OPTS: { value: SheetHeaderMode; label: string; title: string }
   { value: 2, label: "2 行", title: "前两行为表头（带装饰标题的表）" },
 ];
 
+/** 冻结首列（2026-11-26 用户需求「标题列是否冻结也要在预览下方选择」）：
+ *  auto = 内容超宽时自动左缘钉住（默认，同上线行为）；off = 不冻结 */
+type SheetFrozenMode = "auto" | "off";
+const FROZEN_MODE_OPTS: { value: SheetFrozenMode; label: string; title: string }[] = [
+  { value: "auto", label: "自动", title: "冻结首列：内容超宽时左缘钉住标识列" },
+  { value: "off", label: "关闭", title: "不冻结首列（横向滚动时标识列随之滚走）" },
+];
+
 /** 列虚拟化两侧外扩列数（横向斜读预渲染，滚动不出白） */
 const COL_OVERSCAN = 3;
 
@@ -145,10 +153,18 @@ export function SheetPreview({
   );
 
   // 冻结首列（2026-11-26）：总宽超出视口才启用（不超时首列本来可见）；
-  // viewW > 0 = 已完成视口测量（SSR/首帧前不渲染，输出确定性）
+  // frozenMode off = 用户在 footer 关闭冻结；viewW > 0 = 已完成视口测量
+  // （SSR/首帧前不渲染，输出确定性）
   const [viewW, setViewW] = useState(0);
+  const [frozenMode, setFrozenMode] = useState<SheetFrozenMode>("auto");
   const frozenW =
-    viewW > 0 && colCount > 1 && totalWidth > viewW + 1 && rows.length > 0 ? effWidths[0] : 0;
+    frozenMode === "auto" &&
+    viewW > 0 &&
+    colCount > 1 &&
+    totalWidth > viewW + 1 &&
+    rows.length > 0
+      ? effWidths[0]
+      : 0;
   const frozenRef = useRef<HTMLDivElement>(null);
   const frozenWRef = useRef(0);
   frozenWRef.current = frozenW;
@@ -573,6 +589,11 @@ export function SheetPreview({
         value={headerMode}
         onChange={setHeaderMode}
         options={HEADER_MODE_OPTS.map((o) => ({ ...o, label: t(o.label), title: t(o.title) }))}
+      />
+      <Seg
+        value={frozenMode}
+        onChange={setFrozenMode}
+        options={FROZEN_MODE_OPTS.map((o) => ({ ...o, label: t(o.label), title: t(o.title) }))}
       />
     </div>
   );

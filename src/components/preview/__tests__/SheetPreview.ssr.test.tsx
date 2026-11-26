@@ -28,7 +28,7 @@ describe("SheetPreview footer 控件宿主", () => {
     expect(html).not.toContain("np-pv-sheet-detail");
   });
 
-  it("控件行含行高三档 + 表头行数 Seg（单行/换行/宽松 · 自动/无/1 行/2 行）", () => {
+  it("控件行含行高三档 + 表头行数 + 冻结首列 Seg（单行/换行/宽松 · 自动/无/1 行/2 行 · 自动/关闭）", () => {
     const html = renderToStaticMarkup(<SheetPreview sections={[SEC]} />);
     expect(html).toContain("单行");
     expect(html).toContain("换行");
@@ -36,5 +36,6 @@ describe("SheetPreview footer 控件宿主", () => {
     expect(html).toContain("自动");
     expect(html).toContain("1 行");
     expect(html).toContain("2 行");
+    expect(html).toContain("关闭");
   });
 });
