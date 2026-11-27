@@ -2,7 +2,7 @@
 // V2：nativeFileOps 开启时走 IFileOperation，冲突由系统对话框处理，
 // 此处跳过预检对话框（policy 传 rename 仅作原生失败回退时的兜底语义）。
 
-import { api, type Policy, type RenameOutcome } from "./ipc";
+import { api, RECYCLE_BIN, THIS_PC, type Policy, type RenameOutcome } from "./ipc";
 import type { ExportListingOptions } from "./listing";
 import { fileNameOf, isValidName, joinPath, parentPath } from "./path";
 import { montageOutputName } from "./imgOps";
@@ -30,6 +30,14 @@ export async function transfer(
   mode: "copy" | "move",
 ): Promise<void> {
   if (!sources.length) return;
+  // 伪页哨兵不是文件系统目录（::{ThisPC} / ::{RecycleBin}）：Ctrl+V / 拖放
+  // 落点命中时给人话提示，而不是把哨兵串发给后端报「目标目录不存在：::{…}」
+  // （2026-11-27 审查修复；transferToPane 已有同口径检查）
+  const dd = destDir.replace(/\\+$/, "");
+  if (dd === THIS_PC || dd === RECYCLE_BIN) {
+    useUi.getState().toast(t("此位置不支持粘贴"), "error");
+    return;
+  }
   try {
     const native = useSettings.getState().nativeFileOps;
     let policy: Policy = native ? "rename" : "skip";
@@ -130,13 +138,15 @@ export async function enqueueDelete(paths: string[], permanent: boolean): Promis
     const sourceParents = paths
       .map((s) => parentPath(s))
       .filter((p): p is string => !!p);
-    // 回收站删除可逆（还原）；永久删除不入撤销栈
-    const onDone =
-      permanent
-        ? undefined
-        : ({ ok, cancelled }: { ok: boolean; cancelled: boolean }) => {
-            if (ok && !cancelled) useUndo.getState().push({ kind: "trash", paths });
-          };
+    // 删除收尾（全量成功且未取消）：撤销入栈（回收站删除可逆）+ 全局修剪
+    // 选中集（2026-11-27 幽灵选中修复——已删路径留在 selected 里会让状态条
+    // 显示「选中 N 项」而 Delete 落空）。部分失败 / 中途取消不动选中（保守：
+    // 未删成功的项不该被剔出选中，残留幽灵由 onDelete 的空命中提示兜底）
+    const onDone = ({ ok, cancelled }: { ok: boolean; cancelled: boolean }) => {
+      if (!ok || cancelled) return;
+      if (!permanent) useUndo.getState().push({ kind: "trash", paths });
+      usePanes.getState().purgeSelection(paths);
+    };
     // paths 随任务寄存：成功回执「撤销」动作按原路径精确还原（2026-11-25）
     useJobs
       .getState()
@@ -176,6 +186,47 @@ export async function createEntry(
   }
 }
 
+/** Esc 取消登记（2026-11-27 Explorer 语义修复）：行内重命名中按 Esc = 取消
+ *  创建，覆盖两个窗口——① createDir 在途：登记后由 createFolderInline 在落盘
+ *  返回时检查，把刚创建的目录永久删除；② createDir 已完成（合成行让位）：
+ *  目录仍在「行内编辑未提交」状态，cancelCreatedFolder 直接删（撤销栈同步
+ *  弹出 newfolder 条目）。改名提交（commitNewEntry）解除登记 */
+const cancelledNews = new Set<string>();
+const newlyCreated = new Set<string>();
+
+const normPathLo = (p: string): string => p.replace(/\\+$/, "").toLowerCase();
+
+export function cancelPendingNew(path: string): void {
+  const norm = normPathLo(path);
+  cancelledNews.add(norm);
+  newlyCreated.add(norm);
+}
+
+/** 提交（改名成功 / 失焦保留原名）：解除取消登记 */
+export function commitNewEntry(path: string): void {
+  const norm = normPathLo(path);
+  cancelledNews.delete(norm);
+  newlyCreated.delete(norm);
+}
+
+/** 目录是否还在「新建未提交」登记中（编辑期 Esc 判定用） */
+export function isNewEntry(path: string): boolean {
+  return newlyCreated.has(normPathLo(path));
+}
+
+/** 取消已落盘的新目录：永久删除（空目录走回收站徒增脏条目）+ 撤销栈弹出
+ *  newfolder 条目 + 刷新 */
+export function cancelCreatedFolder(path: string, tabId: string): void {
+  const norm = normPathLo(path);
+  newlyCreated.delete(norm);
+  cancelledNews.delete(norm);
+  useUndo.getState().dropNewfolder(path);
+  void api
+    .deleteItems([path], true)
+    .catch(() => undefined)
+    .finally(() => usePanes.getState().bumpRefresh(tabId));
+}
+
 /** 新建文件夹 Explorer 式（2026-11-11 用户定案）：不走弹窗——乐观插入合成行
  *  立即上屏并进入行内重命名（点击到出现零延迟，同 Explorer 体感），createDir
  *  在途；成功后软刷新 reconcile（真实条目同 path，合成行自动让位），失败撤
@@ -209,6 +260,17 @@ export async function createFolderInline(
   panes.setEditing(tabId, full);
   try {
     await api.createDir(parentDir, name);
+    // Esc 取消（createDir 在途窗口按下）：落盘完成即删，撤销栈不入
+    if (cancelledNews.delete(full.toLowerCase())) {
+      newlyCreated.delete(full.toLowerCase());
+      panes.setPendingNew(tabId, null);
+      panes.setEditing(tabId, null);
+      await api.deleteItems([full], true).catch(() => undefined);
+      panes.bumpRefresh(tabId);
+      return;
+    }
+    // 登记为「新建未提交」：行内编辑期间（合成行让位后）按 Esc 仍可取消
+    newlyCreated.add(full.toLowerCase());
     // 新建可逆：撤销 = 移入回收站（与弹窗链路同 undo 结构）
     useUndo.getState().push({ kind: "newfolder", path: full });
     panes.bumpRefresh(tabId);

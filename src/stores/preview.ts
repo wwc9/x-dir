@@ -20,6 +20,9 @@ interface PreviewStore {
   prev(): void;
   goto(i: number): void;
   current(): FileEntry | null;
+  /** 删除当前预览项后前进（回收站删除 / Delete 键与删除钮共用）：队列移除
+   *  当前项，序号 wrap 到同位（原下一项）或回绕末项；队列空即关预览 */
+  removeCurrent(): void;
   setSearchOpen(v: boolean): void;
 }
 
@@ -28,12 +31,14 @@ function wrap(i: number, n: number): number {
 }
 
 /** Space 唤起时的起始下标（纯函数）：选中集合中第一个命中队列的条目（按路径匹配，
- *  搜索结果跨目录同名时路径才唯一）；无命中回落 0 */
+ *  搜索结果跨目录同名时路径才唯一）；无选中 / 选中不在队列 = -1（调用方不开预览）。
+ *  空选不响应是 Quick Look 惯例——回落 0 会「预览第一项」，配合 Delete 键即构成
+ *  「没选任何东西却删掉了第一项」的误删链（2026-11-27 实测事故定案） */
 export function pickStartIndex(files: FileEntry[], selectedPaths: string[]): number {
-  if (!selectedPaths.length) return 0;
+  if (!selectedPaths.length) return -1;
   const sel = new Set(selectedPaths);
   const i = files.findIndex((f) => sel.has(f.path));
-  return i >= 0 ? i : 0;
+  return i >= 0 ? i : -1;
 }
 
 export const usePreview = create<PreviewStore>()((set, get) => ({
@@ -70,6 +75,17 @@ export const usePreview = create<PreviewStore>()((set, get) => ({
   current() {
     const { queue, index } = get();
     return queue[index] ?? null;
+  },
+
+  removeCurrent() {
+    const { queue, index } = get();
+    if (!queue.length) return;
+    const next = queue.filter((_, i) => i !== index);
+    if (!next.length) {
+      set({ queue: [], index: 0, searchOpen: false });
+      return;
+    }
+    set({ queue: next, index: wrap(index, next.length) });
   },
 
   setSearchOpen(v) {

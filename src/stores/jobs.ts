@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
 
 import { api, type FailReason } from "../lib/ipc";
+import { t } from "../lib/i18n";
 import { JOB_LABELS } from "../lib/island";
 import { useIsland } from "./island";
 import { usePanes } from "./panes";
@@ -90,8 +91,12 @@ interface JobDonePayload {
 interface JobsStore {
   jobs: Record<number, JobInfo>;
   order: number[];
-  /** 任务卡列表展开（灵动岛 pill 与其下方任务面板共用同一开关） */
+  /** 任务面板列表展开（灵动岛 pill 与其下方任务面板共用同一开关） */
   expanded: boolean;
+  /** 会话级失败项清单（2026-11-27 审查修复：此前失败只 toast 首条、failed
+   *  数组即丢——批量失败时无法定位其余失败项）。上限 500 条，新的顶前 */
+  failures: { mode: JobMode; path: string; message: string; reason?: string }[];
+  clearFailures(): void;
   toggleExpanded(): void;
   init(): Promise<() => void>;
   /** onDone：任务终态回调（ok/cancelled/items/failed），撤销栈用它在任务成功
@@ -135,6 +140,11 @@ export const useJobs = create<JobsStore>()((set, get) => ({
   jobs: {},
   order: [],
   expanded: false,
+  failures: [],
+
+  clearFailures() {
+    set({ failures: [] });
+  },
 
   toggleExpanded() {
     set((s) => ({ expanded: !s.expanded }));
@@ -180,14 +190,36 @@ export const useJobs = create<JobsStore>()((set, get) => ({
       if (d.failed?.length) {
         // 取消不算错误（§6.7：取消也是终态）
         if (!d.cancelled) {
-          useIsland.getState().pushReceipt("fail", `${d.failed!.length} 项操作失败`);
+          // 失败清单留存（会话级，上限 500）：失败回执/对话框可回看全部
+          // 失败项——此前只 toast 首条，批量失败无法定位其余（2026-11-27 修复）
+          set((s) => ({
+            failures: [
+              ...d.failed!.map((f) => ({
+                mode: (info?.mode ?? "copy") as JobMode,
+                path: f.path,
+                message: f.message,
+                reason: f.reason,
+              })),
+              ...s.failures,
+            ].slice(0, 500),
+          }));
+          useIsland.getState().pushReceipt("fail", t("{n} 项操作失败", { n: d.failed!.length }), {
+            action: {
+              label: t("查看详情"),
+              run: () => {
+                void import("./ui").then(({ useUi }) => {
+                  useUi.getState().openDialog({ type: "jobFailures" });
+                });
+              },
+            },
+          });
           import("./ui").then(({ useUi }) => {
             // 带上首个失败项的文件名与原因，假失败/真失败都能一眼定位
             const first = d.failed![0];
             const name = first.path.split(/[\\/]/).pop() ?? first.path;
             const more = d.failed!.length > 1 ? ` 等 ${d.failed!.length} 项` : "";
             useUi.getState().toast(
-              `${d.failed!.length} 项操作失败：${name}${more}（${first.message}）`,
+              `${t("{n} 项操作失败", { n: d.failed!.length })}：${name}${more}（${first.message}）`,
               "error",
             );
           });
@@ -198,12 +230,12 @@ export const useJobs = create<JobsStore>()((set, get) => ({
             offerUnlock(d.failed, info.deletePermanent);
           }
         } else {
-          useIsland.getState().pushReceipt("info", "任务已取消");
+          useIsland.getState().pushReceipt("info", t("任务已取消"));
         }
       } else if (info) {
         // 成功回执：灵动岛轻播报；解压/压缩附「打开」目标目录动作与附注，
         // 回收站删除附「撤销」动作（2026-11-25 用户需求）
-        const label = `${JOB_LABELS[info.mode] ?? "任务"}完成${d.note ? ` · ${d.note}` : ""}`;
+        const label = `${t(JOB_LABELS[info.mode] ?? "任务")}${t("完成")}${d.note ? ` · ${d.note}` : ""}`;
         useIsland.getState().pushReceipt("ok", label, doneReceiptAction(info));
       }
       // 极快完成的任务：done 事件可能先于 invoke 返回的 jobId（register 尚未执行）。
@@ -294,7 +326,7 @@ export const useJobs = create<JobsStore>()((set, get) => ({
         if (!d.cancelled && !d.failed?.length) {
           useIsland.getState().pushReceipt(
             "ok",
-            `${JOB_LABELS[info.mode] ?? "任务"}完成${d.note ? ` · ${d.note}` : ""}`,
+            `${t(JOB_LABELS[info.mode] ?? "任务")}${t("完成")}${d.note ? ` · ${d.note}` : ""}`,
             doneReceiptAction(info),
           );
         }
@@ -357,19 +389,40 @@ export const useJobs = create<JobsStore>()((set, get) => ({
       order: s.order.filter((id) => id !== jobId),
     }));
     bumpAffectedOf(info);
-    const label = JOB_LABELS[info.mode] ?? "任务";
+    const label = t(JOB_LABELS[info.mode] ?? "任务");
     if (opts?.cancelled) {
-      useIsland.getState().pushReceipt("info", `${label}已取消`);
+      useIsland.getState().pushReceipt("info", `${label}${t("已取消")}`);
     } else if (ok) {
-      useIsland.getState().pushReceipt("ok", `${label}完成${opts?.note ? ` · ${opts.note}` : ""}`);
+      useIsland.getState().pushReceipt("ok", `${label}${t("完成")}${opts?.note ? ` · ${opts.note}` : ""}`);
     } else {
-      useIsland.getState().pushReceipt("fail", `${label}失败`);
+      if (opts?.failed?.length) {
+        set((s1) => ({
+          failures: [
+            ...opts.failed!.map((f) => ({
+              mode: info.mode,
+              path: f.path,
+              message: f.message,
+            })),
+            ...s1.failures,
+          ].slice(0, 500),
+        }));
+      }
+      useIsland.getState().pushReceipt("fail", `${label}${t("失败")}`, {
+        action: {
+          label: t("查看详情"),
+          run: () => {
+            void import("./ui").then(({ useUi }) => {
+              useUi.getState().openDialog({ type: "jobFailures" });
+            });
+          },
+        },
+      });
       const first = opts?.failed?.[0];
       if (first) {
         import("./ui").then(({ useUi }) => {
           const name = first.path.split(/[\\/]/).pop() ?? first.path;
           const more = (opts?.failed?.length ?? 0) > 1 ? ` 等 ${opts?.failed?.length} 项` : "";
-          useUi.getState().toast(`${label}失败：${name}${more}（${first.message}）`, "error");
+          useUi.getState().toast(`${label}${t("失败")}：${name}${more}（${first.message}）`, "error");
         });
       }
     }
@@ -402,10 +455,10 @@ function doneReceiptAction(info: JobInfo): {
 } | undefined {
   const dir = info.destDir;
   if (dir && (info.mode === "extract" || info.mode === "zip")) {
-    return { action: { label: "打开", run: () => void api.openItem(dir) } };
+    return { action: { label: t("打开"), run: () => void api.openItem(dir) } };
   }
   if (info.mode === "delete" && !info.deletePermanent && info.paths?.length) {
-    return { action: { label: "撤销", run: () => void undoDelete(info.paths!) } };
+    return { action: { label: t("撤销"), run: () => void undoDelete(info.paths!) } };
   }
   return undefined;
 }
@@ -420,15 +473,15 @@ function undoDelete(paths: string[]) {
           .getState()
           .toast(
             r.missing
-              ? `已还原 ${r.restored} 项 · ${r.missing} 项已不在回收站`
-              : `已还原 ${r.restored} 项`,
+              ? t("已还原 {n} 项 · {m} 项已不在回收站", { n: r.restored, m: r.missing })
+              : t("已还原 {n} 项", { n: r.restored }),
             "info",
           );
       });
     })
     .catch((e) => {
       void import("./ui").then(({ useUi }) => {
-        useUi.getState().toast(`还原失败：${String(e)}`, "error");
+        useUi.getState().toast(t("还原失败：{e}", { e: String(e) }), "error");
       });
     });
 }

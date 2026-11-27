@@ -126,6 +126,9 @@ pub fn run() {
             // 开机自启偏好回放（settings.json 单一事实源 → HKCU Run 键；
             // 幂等，手动删键/清理工具的漂移在每次启动拉齐）
             commands::config_cmds::apply_autostart_pref(_app.handle());
+            // 盘符插拔感知（2026-11-27 审查修复）：message-only 窗收
+            // WM_DEVICECHANGE，事件驱动前端重拉盘符清单（导航树/收藏/面包屑）
+            commands::drive_watch::spawn_drive_watch(_app.handle().clone());
             // 截图覆盖窗预热（§3.6 性能，2026-10-27）：常驻隐藏窗在启动
             // 2.5s 后后台建好、页面 idle 待命，热键按下只剩捕获+贴图，首按
             // 即达百毫秒级（PixPin 口径）。预热失败不致命，热键路径会现场补建

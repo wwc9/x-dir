@@ -169,8 +169,10 @@ fn norm_path(p: &str) -> String {
     p.trim_end_matches('\\').to_ascii_lowercase()
 }
 
-/// 为每个待恢复路径在回收站条目里找全部匹配：返回 (命中条目下标, 未命中路径数)。
-/// 同一原路径可能删过多次（多条回收站记录），全部命中一并恢复。
+/// 为每个待恢复路径在回收站条目里找匹配：返回 (命中条目下标, 未命中路径数)。
+/// 同一原路径可能删过多次（多条回收站记录）——只还原**一条**（2026-11-27
+/// 审查修复：全部命中一并恢复时，第二条必然撞上第一条刚落位的路径而失败，
+/// 却把整批记为出错）。其余同名记录留在回收站，可在回收站页精确处理。
 fn partition_matches(want: &[String], item_paths: &[String]) -> (Vec<usize>, usize) {
     let mut hits = Vec::new();
     let mut missing = 0usize;
@@ -181,6 +183,7 @@ fn partition_matches(want: &[String], item_paths: &[String]) -> (Vec<usize>, usi
             if norm_path(p) == wn {
                 hits.push(i);
                 any = true;
+                break;
             }
         }
         if !any {
@@ -220,7 +223,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn trash_match_normalizes_and_keeps_duplicates() {
+    fn trash_match_normalizes_and_picks_single_duplicate() {
         let want = vec![
             "E:\\a\\测试.TXT".to_string(),
             "E:\\".to_string(),
@@ -228,11 +231,12 @@ mod tests {
         ];
         let items = vec![
             "e:\\a\\测试.txt".to_string(),   // 大小写折叠命中
-            "E:\\a\\测试.txt\\".to_string(), // 尾反斜杠归一命中（同路径删两次）
+            "E:\\a\\测试.txt\\".to_string(), // 尾反斜杠归一（同路径删两次）
             "c:\\".to_string(),              // 不命中 want[1]（盘符不同）
         ];
         let (hits, missing) = partition_matches(&want, &items);
-        assert_eq!(hits, vec![0, 1]);
+        // 同原路径多条记录只取第一条（2026-11-27：全部还原会撞落点）
+        assert_eq!(hits, vec![0]);
         assert_eq!(missing, 2); // E:\ 与 E:\gone.txt 均无匹配
     }
 

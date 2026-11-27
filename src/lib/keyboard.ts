@@ -14,6 +14,7 @@ import { closePaneConfirmed, useUi } from "../stores/ui";
 import { useSettings } from "../stores/settings";
 import { pickStartIndex, usePreview } from "../stores/preview";
 import { typeAheadCycle, typeAheadRematch, typeAheadStep, type TypeAheadMatch } from "./typeAhead";
+import { deletePaths } from "./operations";
 import { api } from "./ipc";
 
 type Dir = "up" | "down" | "left" | "right";
@@ -35,6 +36,12 @@ function typeAheadReset(): void {
     taTimer = undefined;
   }
   useUi.getState().setTypeAhead(null);
+}
+
+/** 供列表组件在硬切换目录（load 上下文变化）时清缓冲：缓冲是模块级会话态，
+ *  换目录后旧缓冲继续接续匹配、旧回显 pill 残留到超时（2026-11-27 审查修复） */
+export function resetTypeAhead(): void {
+  typeAheadReset();
 }
 
 function focusNearest(activePaneId: string, dir: Dir): boolean {
@@ -208,6 +215,22 @@ export function onGlobalKeyDown(e: KeyboardEvent): void {
       e.preventDefault();
       return;
     }
+    // Delete：删除当前预览项并前进（与头部删除钮同语义、同任务引擎——走
+    // enqueueDelete 带进度/撤销回执，删后队列前进而非关闭，可连续清点）。
+    // 2026-11-27 审查修复：此前该键落到背后列表 list.onDelete，预览对象与
+    // 选中集脱节时空选中也能删掉列表条目，且删除不入任务引擎无撤销
+    if (k === "Delete") {
+      const cur = pv.current();
+      if (cur) {
+        const confirmDelete = useSettings.getState().confirmDelete;
+        e.preventDefault();
+        void deletePaths([cur.path], confirmDelete, e.shiftKey).then(() => {
+          // 确认流程（若弹）结束后前进：取消确认也前进，预览是浏览流语义
+          usePreview.getState().removeCurrent();
+        });
+        return;
+      }
+    }
     if (k === "ArrowDown" || k === "ArrowUp") {
       k === "ArrowDown" ? pv.next() : pv.prev();
       e.preventDefault();
@@ -221,10 +244,13 @@ export function onGlobalKeyDown(e: KeyboardEvent): void {
     }
   } else if (k === " " && !e.repeat && !e.ctrlKey && !e.altKey && !e.metaKey) {
     const snap = list?.getSnapshot();
-    // 队列含文件夹：走文件夹元信息卡（子项数/体积，preview/PreviewBody 路由）
+    // 队列含文件夹：走文件夹元信息卡（子项数/体积，preview/PreviewBody 路由）。
+    // 空选中不开（pickStartIndex 回落 -1）：Quick Look 惯例，杜绝「空选预览
+    // 第一项 + Delete 误删首项」的误删链（2026-11-27 实测事故定案）
     const files = snap ? snap.entries : [];
-    if (files.length) {
-      pv.openPreview(files, pickStartIndex(files, snap?.selected ?? []));
+    const start = snap ? pickStartIndex(files, snap.selected) : -1;
+    if (files.length && start >= 0) {
+      pv.openPreview(files, start);
     }
     e.preventDefault();
     return;

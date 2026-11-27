@@ -10,7 +10,8 @@ import {
   Trash2,
 } from "lucide-react";
 
-import { api, RECYCLE_BIN, THIS_PC, type DriveInfo } from "../lib/ipc";
+import { RECYCLE_BIN, THIS_PC } from "../lib/ipc";
+import { useDrives } from "../stores/drives";
 import { DENSITY } from "../lib/tokens";
 import { FadeInIcon } from "./FileList";
 import { useLayout } from "../stores/layout";
@@ -48,7 +49,7 @@ export function NavTree() {
   const iconMap = useIcons((s) => s.icons);
   const located = useNavTree((s) => s.located);
   const children = useNavTree((s) => s.children);
-  const [drives, setDrives] = useState<DriveInfo[]>([]);
+  const drives = useDrives((s) => s.drives);
   const [dragW, setDragW] = useState<number | null>(null);
   const dragWRef = useRef<number | null>(null);
   const scrolledRef = useRef<string | null>(null);
@@ -61,10 +62,6 @@ export function NavTree() {
     () => new Set(expandedList),
     [expandedList],
   );
-
-  useEffect(() => {
-    api.getDrives().then(setDrives).catch(() => undefined);
-  }, []);
 
   // 展开状态 → 可见节点扁平列表（虚拟滚动数据源）
   const flat = useMemo(() => {

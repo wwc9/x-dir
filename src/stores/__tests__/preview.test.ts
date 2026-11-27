@@ -71,8 +71,8 @@ describe("预览队列 store（Quick Look 模型）", () => {
 });
 
 describe("pickStartIndex（Space 唤起起始下标）", () => {
-  it("无选中 → 从第一个文件开始", () => {
-    expect(pickStartIndex(FILES, [])).toBe(0);
+  it("无选中 → -1（不开预览：空选回落首项配合 Delete 会误删第一项）", () => {
+    expect(pickStartIndex(FILES, [])).toBe(-1);
   });
 
   it("选中的文件命中队列 → 从它开始（按路径匹配）", () => {
@@ -80,8 +80,8 @@ describe("pickStartIndex（Space 唤起起始下标）", () => {
     expect(pickStartIndex(FILES, ["C:\\dir\\d.mp4"])).toBe(3);
   });
 
-  it("选中路径不在队列（如选中的是文件夹）→ 回落 0", () => {
-    expect(pickStartIndex(FILES, ["C:\\other\\子文件夹"])).toBe(0);
+  it("选中路径不在队列（如选中的是文件夹）→ -1（不开预览）", () => {
+    expect(pickStartIndex(FILES, ["C:\\other\\子文件夹"])).toBe(-1);
   });
 
   it("多选时取第一个命中", () => {

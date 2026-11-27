@@ -36,7 +36,7 @@ import {
 import { parentPath } from "../lib/path";
 import { DENSITY } from "../lib/tokens";
 import { dfsPanes } from "../lib/layoutTree";
-import { transfer } from "../lib/operations";
+import { enqueueDelete, transfer } from "../lib/operations";
 import {
   EMPTY_STREAM,
   applyBatch,
@@ -356,7 +356,9 @@ export function GlobalSearchPage() {
     close();
   }
 
-  /** 多选批量删除到回收站：确认后走任务引擎（灵动岛进度 + 回执） */
+  /** 多选批量删除到回收站：确认后走任务引擎（灵动岛进度 + 回执 + 选中修剪 +
+   *  撤销入栈，2026-11-27 审查修复——此前直调 api.deleteItems 绕过任务引擎，
+   *  无进度卡、无「撤销」回执、不入撤销栈，与列表删除行为不等价） */
   async function deleteBatch(selEntries: FileEntry[]) {
     const ok = await confirmDialog({
       title: t("删除到回收站"),
@@ -365,13 +367,11 @@ export function GlobalSearchPage() {
       okText: t("删除"),
     });
     if (!ok) return;
-    api
-      .deleteItems(
-        selEntries.map((e) => e.path),
-        false,
-      )
-      .then(() => setChecked(new Set()))
-      .catch((err) => useUi.getState().toast(String(err), "error"));
+    await enqueueDelete(
+      selEntries.map((e) => e.path),
+      false,
+    );
+    setChecked(new Set());
   }
 
   /** 复制/移动到窗格 ▸（同 FileList 菜单：点选子菜单即记忆目标窗格） */

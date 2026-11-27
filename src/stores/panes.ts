@@ -4,7 +4,16 @@ import { dfsPanes } from "../lib/layoutTree";
 import { parentPath } from "../lib/path";
 import { useHistory } from "./history";
 import { useLayout } from "./layout";
+import { useNavTree } from "./navtree";
 import { useSettings } from "./settings";
+
+/** 导航树联动定位（树可见时把展开/高亮对齐到新路径）：统一从导航动作进入，
+ *  不再跟随行点击——点文件行会把用户手动展开的树分支折叠掉（2026-11-27
+ *  审查修复），只有真正的目录切换才改写树状态 */
+function relocateTree(path: string): void {
+  if (!useSettings.getState().navTreeVisible) return;
+  useNavTree.getState().locate(path);
+}
 
 export interface TabUi {
   history: string[];
@@ -91,6 +100,13 @@ interface PanesStore {
   setView(tabId: string, viewMode: ViewMode): void;
   setSort(tabId: string, sort: Sort): void;
   setSelected(tabId: string, selected: string[], anchor: string | null): void;
+  /** 重命名后修剪选中：from 路径（含锚点）原地替换为 to，其余不动（2026-11-27
+   *  幽灵选中修复：不替换则状态条继续显示旧路径、Delete 落空） */
+  replaceSelection(tabId: string, from: string, to: string): void;
+  /** 删除收尾后全局修剪选中：所有标签的选中集 / 锚点剔除已删路径（不区分
+   *  标签——删除动作可能来自搜索结果、其他窗格；跨目录的旧记忆条目不在此
+   *  清理，恢复时未命中自然失效） */
+  purgeSelection(paths: string[]): void;
   setEditing(tabId: string, editing: string | null): void;
   /** 乐观插入合成行（新建文件夹 Explorer 式）：null = 清除 */
   setPendingNew(tabId: string, entry: FileEntry | null): void;
@@ -197,6 +213,7 @@ export const usePanes = create<PanesStore>()((set, get) => ({
       }),
     }));
     useLayout.getState().setTabPath(tabId, path);
+    relocateTree(path);
     useHistory.getState().record(path); // 全局浏览历史（顶栏下拉）
   },
 
@@ -210,6 +227,7 @@ export const usePanes = create<PanesStore>()((set, get) => ({
       tabs: patch(s.tabs, tabId, { historyIndex: idx, ...swapSelection(s.tabs, tabId, from, to) }),
     }));
     useLayout.getState().setTabPath(tabId, to);
+    relocateTree(to);
   },
 
   forward(tabId) {
@@ -222,6 +240,7 @@ export const usePanes = create<PanesStore>()((set, get) => ({
       tabs: patch(s.tabs, tabId, { historyIndex: idx, ...swapSelection(s.tabs, tabId, from, to) }),
     }));
     useLayout.getState().setTabPath(tabId, to);
+    relocateTree(to);
   },
 
   up(tabId) {
@@ -240,14 +259,44 @@ export const usePanes = create<PanesStore>()((set, get) => ({
 
   setView(tabId, viewMode) {
     set((s) => ({ tabs: patch(s.tabs, tabId, { viewMode }) }));
+    // 同步写 layout 树 Tab：排序/视图随工作区持久化（重启/方案重建不回默认）
+    useLayout.getState().setTabViewMode(tabId, viewMode);
   },
 
   setSort(tabId, sort) {
     set((s) => ({ tabs: patch(s.tabs, tabId, { sort }) }));
+    useLayout.getState().setTabSort(tabId, sort);
   },
 
   setSelected(tabId, selected, anchor) {
     set((s) => ({ tabs: patch(s.tabs, tabId, { selected, anchor }) }));
+  },
+
+  replaceSelection(tabId, from, to) {
+    const cur = get().tabs[tabId];
+    if (!cur || !cur.selected.includes(from)) return;
+    const norm = (p: string) => p.replace(/\\+$/, "").toLowerCase();
+    const f = norm(from);
+    const selected = cur.selected.map((p) => (norm(p) === f ? to : p));
+    const anchor = cur.anchor && norm(cur.anchor) === f ? to : cur.anchor;
+    set((s) => ({ tabs: patch(s.tabs, tabId, { selected, anchor }) }));
+  },
+
+  purgeSelection(paths) {
+    if (!paths.length) return;
+    const dead = new Set(paths.map((p) => p.replace(/\\+$/, "").toLowerCase()));
+    let changed = false;
+    const tabs = { ...get().tabs };
+    for (const [id, ui] of Object.entries(tabs)) {
+      const selected = ui.selected.filter((p) => !dead.has(p.replace(/\\+$/, "").toLowerCase()));
+      const anchor =
+        ui.anchor && !dead.has(ui.anchor.replace(/\\+$/, "").toLowerCase()) ? ui.anchor : null;
+      if (selected.length !== ui.selected.length || anchor !== ui.anchor) {
+        tabs[id] = { ...ui, selected, anchor };
+        changed = true;
+      }
+    }
+    if (changed) set({ tabs });
   },
 
   setEditing(tabId, editing) {

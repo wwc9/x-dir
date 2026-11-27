@@ -6,6 +6,7 @@ import {
   dfsPanes,
   mkTab,
   moveTab as treeMoveTab,
+  reorderTab as treeReorderTab,
   paneIds,
   setPaneColWidths as treeSetPaneColWidths,
   setSizes as treeSetSizes,
@@ -50,8 +51,17 @@ interface LayoutStore {
   /** 关闭 fromIndex 及其右侧的全部标签（右键菜单） */
   closeTabsRight(paneId: string, fromIndex: number): void;
   moveTab(fromPaneId: string, tabIndex: number, toPaneId: string): void;
+  /** 窗格内标签重排（指针拖拽排序落位，2026-11-27） */
+  reorderTab(paneId: string, fromIdx: number, toIdx: number): void;
   activateTab(paneId: string, tabIndex: number): void;
   setTabPath(tabId: string, path: string): void;
+  /** 标签级排序/视图持久（2026-11-27 审查修复）：panes.setView/setSort 收口
+   *  同步写树——Tab 字段随工作区树落盘，重启/方案重建后不再回全局默认 */
+  setTabSort(
+    tabId: string,
+    sort: { key: "name" | "mtime" | "size" | "type"; dir: "asc" | "desc" },
+  ): void;
+  setTabViewMode(tabId: string, viewMode: "details" | "list" | "grid"): void;
   setSizes(splitId: string, sizes: number[]): void;
   /** 窗格级列宽（每窗格独立，随工作区树持久化；拖拽中只写内存树，
    *  「上次会话」1s 防抖自动保存兜底落盘） */
@@ -242,6 +252,12 @@ export const useLayout = create<LayoutStore>()((set, get) => ({
     set({ tree: next, activePaneId: toPaneId });
   },
 
+  reorderTab(paneId, fromIdx, toIdx) {
+    const { tree } = get();
+    if (!tree) return;
+    set({ tree: treeReorderTab(tree, paneId, fromIdx, toIdx) });
+  },
+
   activateTab(paneId, tabIndex) {
     const { tree } = get();
     if (!tree) return;
@@ -255,6 +271,18 @@ export const useLayout = create<LayoutStore>()((set, get) => ({
     const { tree } = get();
     if (!tree) return;
     set({ tree: updateTab(tree, tabId, (t) => ({ ...t, path })) });
+  },
+
+  setTabSort(tabId, sort) {
+    const { tree } = get();
+    if (!tree) return;
+    set({ tree: updateTab(tree, tabId, (t) => ({ ...t, sort })) });
+  },
+
+  setTabViewMode(tabId, viewMode) {
+    const { tree } = get();
+    if (!tree) return;
+    set({ tree: updateTab(tree, tabId, (t) => ({ ...t, viewMode })) });
   },
 
   setSizes(splitId, sizes) {

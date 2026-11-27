@@ -300,6 +300,9 @@ export interface DriveInfo {
   driveType: "fixed" | "removable" | "cdrom" | "remote";
   totalBytes: number;
   freeBytes: number;
+  /** 卷信息是否可读（2026-11-27）：断连网络盘/未就绪设备 false，此电脑页
+   *  「可用空间」列显示「不可用」而非误导的 0 B */
+  reachable: boolean;
 }
 
 export interface ConflictInfo {

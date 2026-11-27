@@ -26,6 +26,7 @@ import {
 // --bench 基准模式下跳过会话恢复/自动保存（内存验收专用）
 let benchMode = false;
 import { useClipboard } from "./stores/clipboard";
+import { useDrives } from "./stores/drives";
 import { useJobs } from "./stores/jobs";
 import { useLayout } from "./stores/layout";
 import { useUi } from "./stores/ui";
@@ -65,6 +66,7 @@ export default function App() {
     const offAutoScrollbar = setupAutoScrollbar();
     const offMouseNav = installMouseNav();
     let unsubJobs: (() => void) | undefined;
+    let unsubDrives: (() => void) | undefined;
     let unsubOle: (() => void) | undefined;
     let unsubSettings: (() => void) | undefined;
     let unsubPastePane: (() => void) | undefined;
@@ -199,6 +201,15 @@ export default function App() {
           }, 900);
         }
         unsubJobs = await useJobs.getState().init();
+        // 盘符插拔感知（2026-11-27）：drive_watch(WM_DEVICECHANGE) → 重拉
+        // 盘符清单，导航树/收藏/面包屑卷标共享同一份 useDrives
+        const unsubDrives = await useDrives.getState().init();
+        if (disposed) {
+          unsubDrives();
+          unsubJobs();
+          unsubJobs = undefined;
+          return;
+        }
         if (disposed) {
           unsubJobs();
           unsubJobs = undefined;
@@ -305,6 +316,7 @@ export default function App() {
       offAutoScrollbar();
       offMouseNav();
       unsubJobs?.();
+      unsubDrives?.();
       unsubOle?.();
       unsubSettings?.();
       unsubPastePane?.();

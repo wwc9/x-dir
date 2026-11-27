@@ -67,7 +67,12 @@ import {
   transfer,
   watermarkPdfs,
   zipEntries,
+  cancelCreatedFolder,
+  cancelPendingNew,
+  commitNewEntry,
+  isNewEntry,
 } from "../lib/operations";
+import { resetTypeAhead } from "../lib/keyboard";
 import type { ExportListingOptions } from "../lib/listing";
 import type { PdfSplitOptions } from "../lib/pdfOps";
 import { builtinByKey, entryVisible, type MenuArea } from "../lib/menuCommands";
@@ -75,7 +80,6 @@ import { dfsPanes } from "../lib/layoutTree";
 import { useClipboard } from "../stores/clipboard";
 import { useIcons } from "../stores/icons";
 import { useLayout } from "../stores/layout";
-import { useNavTree } from "../stores/navtree";
 import { usePanes } from "../stores/panes";
 import { pickStartIndex, usePreview } from "../stores/preview";
 import { composeTypeFilterQuery } from "../lib/searchStream";
@@ -94,9 +98,8 @@ import {
 } from "../lib/columns";
 import { AppIcon } from "./AppIcon";
 import { useDragCtrl } from "./DropBadge";
-import { Copy, HardDrive, Monitor, Move, Trash2 } from "lucide-react";
+import { Copy, CornerLeftUp, HardDrive, Monitor, Move, Trash2 } from "lucide-react";
 import { ColGrip, colDragClickGuard, type ColResizeCtl } from "./ColGrip";
-
 const DND_MIME = "application/x-xdir";
 const freeCache = new Map<string, number>();
 /** 磁盘可用空间缓存上限：长会话不无界增长（LRU 淘汰，Map 保持插入序） */
@@ -419,7 +422,9 @@ export function FileList({
     if (isThisPc) return [recycleBinRow(), ...driveEntries(drives ?? [])];
     if (isRecycleBin) return recycleEntries(rbItems ?? []);
     const flat: FileEntry[] = [];
-    for (const es of pages.values()) flat.push(...es);
+    // 按页号升序拼装：补页按滚动顺序到达（快速 PageDown / 跳滚会让后页先于
+    // 前页入表），插入序拼装会让路径索引与视觉顺序错位（范围选/定位落错行）
+    for (const pi of [...pages.keys()].sort((a, b) => a - b)) flat.push(...pages.get(pi)!);
     return flat;
   }, [pages, drives, isThisPc, isRecycleBin, rbItems, searchActive, searchRes]);
 
@@ -455,6 +460,14 @@ export function FileList({
   const drivesFree = useMemo(() => {
     const m = new Map<string, number>();
     for (const d of drives ?? []) m.set(`${d.letter}\\`, d.freeBytes);
+    return m;
+  }, [drives]);
+
+  // 卷可达性（2026-11-27 审查修复）：断连网络盘/未就绪设备 GetDiskFreeSpaceExW
+  // 失败静默 0 值——此电脑页「可用空间」列显式标「不可用」，不再显示误导的 0 B
+  const drivesReachable = useMemo(() => {
+    const m = new Map<string, boolean>();
+    for (const d of drives ?? []) m.set(`${d.letter}\\`, d.reachable !== false);
     return m;
   }, [drives]);
 
@@ -564,6 +577,20 @@ export function FileList({
     return optimisticActive && i === baseEntries.length ? pendingNew : undefined;
   };
 
+  // 键盘导航跨页补选中（2026-11-27 停摆修复）：方向键落进未加载页时补页在途，
+  // entryAt 取不到条目——先记 pendingFocus，页到达后补上选中（此前选中与滚动
+  // 脱节，按住方向键会在页边界反复空转）
+  const [pendingFocus, setPendingFocus] = useState<number | null>(null);
+  useEffect(() => {
+    if (pendingFocus === null) return;
+    const en = entryAt(pendingFocus);
+    if (en) {
+      usePanes.getState().setSelected(tabId, [en.path], en.path);
+      setPendingFocus(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pages, pendingFocus, tabId]);
+
   // 选中/定位用：路径 → 当前视图位置（搜索结果跨目录同名时名字会撞，必须按路径）
   const pathIndex = useMemo(() => {
     const m = new Map<string, number>();
@@ -586,6 +613,10 @@ export function FileList({
     loadCtxRef.current = ctx;
     const gen = ++loadGenRef.current;
     if (!soft) {
+      // 换目录/换排序/过滤切换：清 type-ahead 缓冲与回显 pill（模块级会话态，
+      // 不清则旧缓冲接续匹配、旧 pill 残留到超时——2026-11-27 审查修复）
+      resetTypeAhead();
+      setPendingFocus(null);
       setPages(new Map());
       setTotal(0);
       if (scrollRef.current) scrollRef.current.scrollTop = 0;
@@ -990,20 +1021,102 @@ export function FileList({
     } else {
       usePanes.getState().setSelected(tabId, [entry.path], entry.path);
     }
-    // 导航树联动定位：点文件夹 → 定位该文件夹；点文件 → 定位其所在文件夹
-    const target = entry.isDir ? entry.path : parentPath(entry.path) ?? path;
-    useNavTree.getState().locate(target);
+    // 导航树联动已随选择移动收敛到真正的目录切换（panes.navigate/back/forward
+    // → relocateTree）：点文件行不再改写树展开态——此前每次点击都把展开集
+    // 整链替换为目标祖先链，手动展开的旁支会被折叠（2026-11-27 审查修复）
   }
 
   function selectRange(anchorPath: string, toIdx: number) {
     const a = pathIndex.get(anchorPath) ?? toIdx;
     const [lo, hi] = [Math.min(a, toIdx), Math.max(a, toIdx)];
-    const paths: string[] = [];
-    for (let i = lo; i <= hi; i++) {
-      const en = entryAt(i);
-      if (en) paths.push(en.path);
+    // 范围跨未加载页：先补齐范围内的页再取路径（Shift+End 到大目录末尾时
+    // 未加载项不再被静默跳过——2026-11-27 半选修复）
+    void ensureRangeLoaded(lo, hi).then((nextPages) => {
+      if (!nextPages) return;
+      const paths: string[] = [];
+      for (let i = lo; i <= hi; i++) {
+        const en = entryAtFrom(nextPages, i);
+        if (en) paths.push(en.path);
+      }
+      usePanes.getState().setSelected(tabId, paths, anchorPath);
+    });
+  }
+
+  /** 指定页表下的按索引取条目（selectRange 补页回调用：闭包 entryAt 读的还是
+   *  渲染时的旧 pages，刚补的页不在其中） */
+  const entryAtFrom = (src: Map<number, FileEntry[]>, i: number): FileEntry | undefined => {
+    if (searchActive || isThisPc || isRecycleBin) return entries[i];
+    const fromPage = src.get(Math.floor(i / PAGE_SIZE))?.[i % PAGE_SIZE];
+    if (fromPage) return fromPage;
+    return optimisticActive && i === baseEntries.length ? pendingNew : undefined;
+  };
+
+  /** 大目录补页护栏：全选/范围选触发补齐的总条目上限（超过只选已加载部分
+   *  并提示——10 万路径 ≈ 数 MB IPC 参数，再大就该按目录整体操作而非逐路径） */
+  const SELECT_ALL_CAP = 100_000;
+
+  /** 补齐 [lo, hi] 索引范围内的缺失页（全选/范围选用）；gen 守卫防换目录后
+   *  旧页写入新视图。返回最新页表（无缺页时原表）；失败 / 换目录返回 null。
+   *  setPages 交由调用方按需执行（闭包 pages 不随 setState 立即更新） */
+  const ensureRangeLoaded = async (
+    lo: number,
+    hi: number,
+  ): Promise<Map<number, FileEntry[]> | null> => {
+    if (isThisPc || isRecycleBin || searchActive) return pages;
+    const gen = loadGenRef.current;
+    const next = new Map(pages);
+    let pulled = false;
+    for (let pi = Math.floor(lo / PAGE_SIZE); pi * PAGE_SIZE <= hi; pi++) {
+      if (next.has(pi)) continue;
+      try {
+        const r = await api.listDir({
+          path,
+          sort,
+          showHidden,
+          offset: pi * PAGE_SIZE,
+          limit: PAGE_SIZE,
+        });
+        if (loadGenRef.current !== gen) return null;
+        next.set(pi, r.entries);
+        pulled = true;
+      } catch {
+        return null;
+      }
     }
-    usePanes.getState().setSelected(tabId, paths, anchorPath);
+    if (pulled) {
+      for (const pi of next.keys()) fetched.current.add(pi);
+      setPages(next);
+    }
+    return next;
+  };
+
+  /** 全量条目（全选 / 反选用）：已加载不足 total 时补齐全部页；超过护栏返回
+   *  null（调用方回落已加载部分并提示） */
+  const ensureAllLoaded = async (): Promise<FileEntry[] | null> => {
+    if (isThisPc || isRecycleBin || searchActive) return entries;
+    if (total <= entries.length) return entries;
+    if (total > SELECT_ALL_CAP) return null;
+    const all = await ensureRangeLoaded(0, total - 1);
+    if (!all) return null;
+    const flat: FileEntry[] = [];
+    for (const pi of [...all.keys()].sort((a, b) => a - b)) flat.push(...all.get(pi)!);
+    return flat;
+  };
+
+  async function selectAll() {
+    const all = await ensureAllLoaded();
+    if (!all) {
+      useUi
+        .getState()
+        .toast(t("目录超过 {n} 项，仅选中已加载部分", { n: SELECT_ALL_CAP.toLocaleString() }));
+      usePanes
+        .getState()
+        .setSelected(tabId, entries.map((e) => e.path), entries[0]?.path ?? null);
+      return;
+    }
+    usePanes
+      .getState()
+      .setSelected(tabId, all.map((e) => e.path), all[0]?.path ?? null);
   }
 
   /** 行按下（详情/图标视图共用）：中键 = 文件夹新标签打开；右键 = 已选中保持
@@ -1231,28 +1344,37 @@ export function FileList({
           },
         };
       case "rename":
+        // 哨兵行（盘符 / 回收站 $R 记录）不可重命名/剪切/删除：菜单整条隐藏，
+        // 与键盘路径 onDelete/onRename 拦截同口径（2026-11-27 审查修复）
+        if (isRecycleBin || isThisPc) return null;
         return { label: t("重命名"), action: () => usePanes.getState().setEditing(tabId, entry0.path) };
       case "delete":
+        if (isRecycleBin || isThisPc) return null;
         return {
           label: t("删除"),
           danger: true,
           action: () => deletePaths(selectedPaths(), confirmDelete),
         };
       case "deletePerm":
+        if (isRecycleBin || isThisPc) return null;
         return {
           label: t("永久删除"),
           danger: true,
           action: () => void deletePaths(selectedPaths(), true, true),
         };
       case "properties":
+        // 多选聚合属性（Explorer 口径）：>1 项传 entries 走聚合面板
         return {
           label: t("属性"),
           action: () =>
-            useUi
-              .getState()
-              .openDialog({ type: "properties", entry: entry0, freeBytes: free ?? undefined }),
+            useUi.getState().openDialog(
+              sel.length > 1
+                ? { type: "properties", entries: sel, freeBytes: free ?? undefined }
+                : { type: "properties", entry: entry0, freeBytes: free ?? undefined },
+            ),
         };
       case "cut":
+        if (isRecycleBin || isThisPc) return null;
         return { label: t("剪切"), action: () => useClipboard.getState().set("cut", selectedPaths()) };
       case "copy":
         return { label: t("复制"), action: () => useClipboard.getState().set("copy", selectedPaths()) };
@@ -1714,9 +1836,17 @@ export function FileList({
         return {
           label: t("反向选择"),
           action: () => {
-            const cur = new Set(selectedPaths());
-            const inv = entries.filter((e2) => !cur.has(e2.path)).map((e2) => e2.path);
-            usePanes.getState().setSelected(tabId, inv, inv[0] ?? null);
+            void ensureAllLoaded().then((all) => {
+              const base = all ?? entries;
+              if (!all) {
+                useUi
+                  .getState()
+                  .toast(t("目录超过 {n} 项，仅反选已加载部分", { n: SELECT_ALL_CAP.toLocaleString() }));
+              }
+              const cur = new Set(selectedPaths());
+              const inv = base.filter((e2) => !cur.has(e2.path)).map((e2) => e2.path);
+              usePanes.getState().setSelected(tabId, inv, inv[0] ?? null);
+            });
           },
         };
       case "toggleHidden": {
@@ -1832,12 +1962,6 @@ export function FileList({
     if (mode === "cut") useClipboard.getState().clear();
   }
 
-  function selectAll() {
-    usePanes
-      .getState()
-      .setSelected(tabId, entries.map((e) => e.path), entries[0]?.path ?? null);
-  }
-
   /** 新建文件夹（2026-11-11 用户定案改 Explorer 式）：乐观插入 + 行内重命名，
    *  编排收敛在 operations.createFolderInline（Pane 工具栏入口同款，点击到
    *  出现零延迟） */
@@ -1849,14 +1973,22 @@ export function FileList({
     );
 
   async function commitRename(entry: FileEntry, newName: string) {
-    usePanes.getState().setEditing(tabId, null);
-    if (!newName || newName === entry.name) return;
+    // 失败保编辑（2026-11-27 审查修复）：非法名 / 后端失败不再关闭输入框——
+    // 用户留在编辑态改错（Explorer 惯例），而不是 toast 后重打全名。
+    // 空值 / 未变化 = 视为放弃（失焦提交原名），收编辑框并解除新建登记
+    if (!newName || newName === entry.name) {
+      commitNewEntry(entry.path);
+      usePanes.getState().setEditing(tabId, null);
+      return;
+    }
     if (!isValidName(newName)) {
       useUi.getState().toast(t("名称含非法字符或为 Windows 保留名"), "error");
       return;
     }
     try {
       await api.renameItem(entry.path, newName);
+      commitNewEntry(entry.path);
+      usePanes.getState().setEditing(tabId, null);
       // 重命名可逆：撤销 = 改回原名（Ctrl+Z；单条也走批量结构）
       const parent = parentPath(entry.path);
       if (parent) {
@@ -1865,6 +1997,10 @@ export function FileList({
           ops: [{ from: entry.path, to: joinPath(parent, newName) }],
         });
       }
+      // 选中集原地换名（幽灵选中修复）：否则状态条继续显示旧路径、Delete 落空
+      usePanes
+        .getState()
+        .replaceSelection(tabId, entry.path, joinPath(parent ?? "", newName));
       forceBump();
       // 同目录他窗格零防抖同步：仅本窗格刷新会让他窗格等 watcher 全链路
       // （防抖 + 合并窗 + 重扫），主动 bump 250ms 合并窗直达
@@ -1873,6 +2009,28 @@ export function FileList({
     } catch (e) {
       useUi.getState().toast(t("重命名失败：{e}", { e: String(e) }), "error");
     }
+  }
+
+  /** 行内重命名 Esc：普通条目 = 收编辑框；新建文件夹 = 取消创建（Explorer
+   *  语义——覆盖 createDir 在途与已落盘两个窗口，2026-11-27 审查修复：
+   *  此前仅在途窗口生效，createDir 900ms 内完成后 Esc 只退编辑，磁盘留下
+   *  「新建文件夹」） */
+  function cancelInlineRename() {
+    const ui = usePanes.getState().tabs[tabId];
+    const editingPath = ui?.editing;
+    const pn = ui?.pendingNew;
+    usePanes.getState().setEditing(tabId, null);
+    if (!editingPath) return;
+    if (pn) {
+      // 合成行仍在（createDir 在途或软刷新未让位）：登记路径，在途由
+      // createFolderInline 落盘返回时删；已落盘（isNewEntry）立即删
+      usePanes.getState().setPendingNew(tabId, null);
+      cancelPendingNew(pn.path);
+      if (isNewEntry(pn.path)) cancelCreatedFolder(pn.path, tabId);
+      return;
+    }
+    // 合成行已让位（createDir 已完成提交）：编辑中的就是新建目录本体
+    if (isNewEntry(editingPath)) cancelCreatedFolder(editingPath, tabId);
   }
 
   // 全局快捷键接入（lib/listRegistry）
@@ -1893,6 +2051,7 @@ export function FileList({
           } else {
             const en = entryAt(next);
             if (en) usePanes.getState().setSelected(tabId, [en.path], en.path);
+            else setPendingFocus(next); // 未加载页：补页到达后补选中（下方 effect）
           }
           virtualizer.scrollToIndex(Math.floor(next / perRow), { align: "auto" });
         },
@@ -1918,6 +2077,7 @@ export function FileList({
           } else {
             const en = entryAt(next);
             if (en) usePanes.getState().setSelected(tabId, [en.path], en.path);
+            else setPendingFocus(next); // 未加载页：补页到达后补选中（下方 effect）
           }
           virtualizer.scrollToIndex(Math.floor(next / perRow), { align: "auto" });
         },
@@ -1929,23 +2089,46 @@ export function FileList({
         },
         onBackspace: () => usePanes.getState().up(tabId),
         onDelete: (permanent) => {
-          // 回收站页 Delete 不语义化（永久删除走右键，防一键误清）
-          if (isRecycleBin) return;
-          deletePaths(selectedPaths(), confirmDelete, permanent);
+          // 伪页哨兵行（盘符 / 回收站行）不是可删对象：此电脑页静默拦截 +
+          // 回收站页给右键指引（永久删除只走右键，防一键误清）（2026-11-27
+          // 审查修复：此前仅挡回收站页，此电脑页 Ctrl+A + Delete 会把
+          // deleteItems(["C:\\", …]) 真实发给后端）
+          if (isRecycleBin) {
+            useUi
+              .getState()
+              .toast(t("回收站项请用右键「还原 / 永久删除」"));
+            return;
+          }
+          if (isThisPc) {
+            useUi.getState().toast(t("系统位置不支持删除"), "error");
+            return;
+          }
+          const paths = selectedPaths();
+          if (!paths.length) {
+            // 幽灵选中兜底：raw selected 还有残留（状态条已不计入）时清空并
+            // 提示，再按 Delete 不再是无声无息
+            const raw = usePanes.getState().tabs[tabId]?.selected ?? [];
+            if (raw.length) {
+              usePanes.getState().setSelected(tabId, [], null);
+              useUi.getState().toast(t("选中项已不在当前列表中，已清空选择"));
+            }
+            return;
+          }
+          deletePaths(paths, confirmDelete, permanent);
         },
         onRename: () => {
-          if (isRecycleBin) return;
+          if (isRecycleBin || isThisPc) return; // 哨兵行不可重命名
           const es = selectedEntries();
           if (es.length === 1) usePanes.getState().setEditing(tabId, es[0].path);
         },
         onProperties: () => {
           const es = selectedEntries();
-          if (es.length !== 1) return;
-          useUi.getState().openDialog({
-            type: "properties",
-            entry: es[0],
-            freeBytes: freeCache.get(path) ?? undefined,
-          });
+          if (!es.length) return;
+          useUi.getState().openDialog(
+            es.length > 1
+              ? { type: "properties", entries: es, freeBytes: freeCache.get(path) ?? undefined }
+              : { type: "properties", entry: es[0], freeBytes: freeCache.get(path) ?? undefined },
+          );
         },
         onContextMenu: () => {
           // 键盘呼出（Shift+F10 / ContextMenu 键）：菜单定位到选中行下方
@@ -1996,6 +2179,17 @@ export function FileList({
 
   // 选中统计（2026-11-03 方案 B）：多选 = 数量+大小+类型 Top2；单选 = 行内属性条
   const stats = useMemo(() => selStats(selected, entries), [selected, entries]);
+
+  // 状态条计数 = 当前视图命中的选中（2026-11-27 幽灵选中修复）：已删除 /
+  // 被过滤出视图的路径不再计入「选中 N 项」，与 Delete 的实际作用域
+  // （selectedPaths() = selected ∩ entries）保持一致
+  const visibleSelCount = useMemo(() => {
+    if (!selected.length) return 0;
+    const set_ = new Set(entries.map((e) => e.path));
+    let n = 0;
+    for (const p of selected) if (set_.has(p)) n += 1;
+    return n;
+  }, [selected, entries]);
 
   const sortArrow = (key: SortKey) =>
     sort.key === key ? (sort.dir === "asc" ? " ↑" : " ↓") : "";
@@ -2201,6 +2395,19 @@ export function FileList({
                   : error.message}
             </div>
             <div className="np-list-error-actions">
+              {parentPath(path) && (
+                <button
+                  className="np-list-error-btn"
+                  data-tip={t("返回当前路径的父文件夹")}
+                  onClick={() => {
+                    const p = parentPath(path);
+                    if (p) usePanes.getState().navigate(tabId, p);
+                  }}
+                >
+                  <AppIcon icon={CornerLeftUp} size={DENSITY.iconSm} />
+                  {t("返回上一级")}
+                </button>
+              )}
               <button
                 className="np-list-error-btn"
                 data-tip={t("跳转到桌面文件夹")}
@@ -2282,8 +2489,7 @@ export function FileList({
                       onKeyDown={(e) => {
                         if (e.key === "Enter")
                           commitRename(entry, (e.target as HTMLInputElement).value);
-                        if (e.key === "Escape")
-                          usePanes.getState().setEditing(tabId, null);
+                        if (e.key === "Escape") cancelInlineRename();
                         // Tab / Shift+Tab = 提交并跳下一个/上一个文件继续改名
                         // （Explorer 惯例，2026-11-25 用户需求）：非法名不跳、
                         // 原地报错；首尾循环。stopPropagation 防全局 type-ahead
@@ -2405,7 +2611,9 @@ export function FileList({
                             <span className="np-cell-muted np-col-size">
                               {entry.path === RECYCLE_BIN
                                 ? "—"
-                                : formatBytes(drivesFree.get(entry.path) ?? 0)}
+                                : !drivesReachable.get(entry.path)
+                                  ? t("不可用")
+                                  : formatBytes(drivesFree.get(entry.path) ?? 0)}
                             </span>
                           </>
                         )}
@@ -2538,7 +2746,7 @@ export function FileList({
               ? t("过滤 “{q}” · {n} 项（Ctrl+E 编辑 · Esc 退出）", { q: filter?.trim(), n: count.toLocaleString() })
               : t("Σ {n} 个对象", { n: count.toLocaleString() })}
           {!searchActive &&
-            selected.length > 0 &&
+            visibleSelCount > 0 &&
             (stats.single
               ? stats.single.isDir
                 ? t(" · {name} · 文件夹", { name: stats.single.name })
@@ -2547,7 +2755,7 @@ export function FileList({
                     size: formatBytes(stats.single.size),
                     time: formatShortTime(stats.single.mtimeMs),
                   })
-              : t(" · 选中 {n} 项", { n: selected.length }) +
+              : t(" · 选中 {n} 项", { n: visibleSelCount }) +
                 // 含文件夹 = 仅数量（合计不展示——文件夹大小未知，部分和误导）
                 (!stats.hasDir && stats.size > 0
                   ? ` (${formatBytes(stats.size)})`

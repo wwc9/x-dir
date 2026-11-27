@@ -3,6 +3,7 @@ pub mod archive_cmds;
 pub mod clipboard;
 pub mod cliphist;
 pub mod config_cmds;
+pub mod drive_watch;
 pub mod drives;
 pub mod files;
 pub mod filetools_cmds;

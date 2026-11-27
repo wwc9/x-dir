@@ -132,6 +132,40 @@
 
 `bumpAffected` 分双通道定案：**主动动作收尾（任务完成/重命名/撤销/批量改名）一律 `immediate` 同步刷新命中标签（零延迟）**，不再等 250ms 合并窗；外部 watcher 事件维持 250ms 合并窗（防 notify 连发+job-done 补轮导致反复重拉，跨窗格拖放闪烁的既有护栏）。防双拉去重窗：immediate 刷过的目录记 500ms 账，同目录 watcher 批撞上时**一次性跳过**（X-Dir 内部动作自身也会触发 watcher，否则同一次变更双拉列表）；去重窗外（或过期后）的真实变更照常入窗。调用点分工：jobs.ts `bumpAffectedOf`（任务收尾）/FileList 重命名跨窗格同步/operations 批量重命名/undo 恢复 = immediate；jobs.ts 的 dir-changed 监听 = 合并窗。回归测试见 panes.test.ts（immediate 零延迟/去重窗吞 watcher 回声/窗外真变更入窗）。
 
+## 2.8 基础功能审查修复批（2026-11-27 用户审查驱动，前后端 25 项）
+
+**选择作用域一致性（一条主线的三处根因修复）**：
+- **全选/反选/范围选全量补页**：`FileList selectAll/reverseSelect/selectRange` 此前只作用于已加载分页——13,078 项目录 Ctrl+A 只选中首屏 500 项（实测实锤），关确认后 Ctrl+A+Delete 只删子集。修复 = `ensureAllLoaded/ensureRangeLoaded`（gen 守卫防换目录串页；护栏 `SELECT_ALL_CAP`=10 万项，超出回落已加载并 toast）；`baseEntries` 按页号升序拼装（此前按补页到达序，跳滚后页序错乱）；键盘方向键落未加载页改 `pendingFocus` state + 补页 effect 补选中（跨页停摆修复）。
+- **幽灵选中**：删除收尾（`enqueueDelete` onDone ok&&!cancelled）`panes.purgeSelection(paths)` 全局修剪选中/锚点；重命名成功 `replaceSelection(from→to)`；状态条计数改 `visibleSelCount`（selected ∩ entries）；onDelete 空命中时清残留并 toast。搜索结果/此电脑页哨兵行的菜单删除项整条隐藏（cut/delete/rename 案 `isThisPc||isRecycleBin` 返回 null）。
+- **此电脑/回收站哨兵守卫**：onDelete（此电脑 toast「系统位置不支持删除」、回收站 toast 右键指引）、onRename/F2、右键菜单三项、`transfer` dest 哨兵检查（`::{ThisPC}`/`::{RecycleBin}` 给人话提示，不再透传后端报哨兵串）。
+- **预览态 Delete 语义重写**（keyboard pv 分支）：Delete = 删除当前预览项（走 `enqueueDelete` 带进度/撤销回执）并 `preview.removeCurrent()` 前进（队列空即关）；与 QuickPreview 删除钮同语义（按钮改 `enqueueDelete`，不再 close 而是前进）。**空选 Space 不再开预览**（`pickStartIndex` 空选/无命中返回 -1，Quick Look 惯例）——空选回落 0 + Delete 曾构成「没选中任何项却删掉第一项」的误删链（实测 bulk 被删事故）。
+
+**交互惯例对齐**：
+- **新建文件夹 Esc = 取消创建**（Explorer 语义）：`operations.cancelPendingNew` 登记 + createDir 落盘返回后永久删除（不入撤销栈）；createDir 已完成的极小窗口按 Esc 仅退编辑（目录保留，Explorer 同款）。
+- **重命名失败保编辑**：非法名/后端失败不再关闭输入框（留在编辑态改错）；空值/未变化 = 放弃收框。
+- **对话框 Enter = 主操作**：confirm/alert/conflict/properties 的主按钮 `autoFocus`（Blueprint Button 继承 ButtonHTMLAttributes）；InputDialog 焦点保持在输入框（其 Enter 原有处理）。此前焦点停在容器 DIV，键盘用户按 Enter 无任何反应（实测实锤）。
+- **Esc 逐级退出**：搜索浮层/过滤条框内 Esc `stopPropagation`，不再连带清空选择（与 shortcuts 清单宣称的逐级语义一致）。
+- **地址栏 Enter 接受键盘高亮补全**（↑↓ 选中后 Enter 直达候选，此前仅 Tab 接受）；回收站伪页地址栏显示「回收站」占位（此前完全空白）。
+- **错误态逃生口加「返回上一级」**（np-list-error-actions 首位，parentPath 有值才显示）。
+- **标签溢出横向滚动**：.np-tabbar overflow-x + tab min-width 88px（此前 min-width:0 多标签压缩到 0 宽）+ 滚轮横滚（wheel 监听）。
+
+**标签拖拽指针化（2026-11-27 重写）**：HTML5 dnd 在主窗被 tauri 原生拖放接收接管（dragDropEnabled 是 Explorer 文件拖入的依赖不能关，与侧栏 workspaceOrder 同病灶），`draggable/onDragStart/onDrop` 全部是永不触发的死代码——标签拖拽管线整体失效（静态审查发现）。改指针事件会话（同侧栏模式）：down 记起点 → move 超 4px 入拖拽态（源标签半透明）→ elementsFromPoint 命中 `[data-tab-pane]`（同窗格重排，目标上缘 accent 指示线）/ `[data-pane-id]` 列表区（跨窗格 append，目标标签条底部 accent 线）→ up 落位吞补发 click。新增 `layoutTree.reorderTab`（窗格内重排纯函数：拔出插入 + 活动标签跟随落位/偏移修正防焦点漂移，配 5 组单测）+ `layout.reorderTab`。tabbar 的 HTML5 onDrop 接收与 DND_MIME 常量同删。
+
+**选择/树联动与 type-ahead**：导航树 locate 从行点击收敛到真正的目录切换（`panes.navigate/back/forward → relocateTree`，树关闭时零开销）——此前任意行点击都整链替换展开集，手动展开的旁支随浏览被折叠；type-ahead 缓冲在 load 硬切换时 `resetTypeAhead()`（keyboard 导出），不再跨目录接续匹配。
+
+**排序/视图随标签持久**：`layoutTree.Tab` 增可选 `sort/viewMode`（旧档零迁移），`panes.setView/setSort` 收口同步 `layout.setTabSort/setTabViewMode` 写树随工作区落盘；Pane ensure 优先读 Tab 档（此前重启/方案重建后每标签回全局默认）。
+
+**任务失败项清单**：jobs store 增会话级 `failures`（上限 500）+ `clearFailures`；失败回执带「查看详情」动作 → DialogHost 新增 `jobFailures` 面板（标题映射链已登记；路径+原因两列、复制清单、清空记录）。jobs.ts 全部用户可见文案 t() 化（回执/toast/动作钮），EN 词条补录 i18n.ts。
+
+**多选聚合属性**：`DialogSpec.properties` 增 `entries`（>1 项走 `MultiProps`：项数/合计大小（文件夹标注未计）/类型统计 top3/名称清单 200 条内滚）；单选属性补「所在盘可用空间」行（freeBytes 此前传了不渲染的死参数）。菜单 properties 的 maxCount:1 语义放开（执行器按选中数分流）。
+
+**盘符插拔感知（前后端）**：Rust `commands/drive_watch.rs` = 独立线程 + message-only 窗（HWND_MESSAGE）收 WM_DEVICECHANGE（DBT_DEVICEARRIVAL/REMOVECOMPLETE）→ emit `drives-changed`；前端新 `stores/drives.ts`（useDrives：清单 + listen 重拉，App init 挂载）统一三消费方（NavTree 本地 state / TitleBar DriveLite / Pane 面包屑 driveLabels 模块缓存与下拉现拉全数收编）。`DriveInfo` 增 `reachable`（IPC 双端同步）：GetDiskFreeSpaceExW 失败（断连网络盘/未就绪设备）此电脑页「可用空间」列显式「不可用」，不再显示误导的 0 B。
+
+**后端基础修复**：
+- **UNC 同卷判定**（`fs/path.rs is_same_volume`）：盘符路径比盘符不变；UNC 双方按「服务器+共享名」归一比较（长路径 `\?\UNC\` 形式同口径；一方 UNC 一方盘符 = 异卷）——旧实现只比较首字节，所有 UNC 首字符都是 `\`，跨共享移动被判同卷直接 rename 必败无复制回退。配 cargo test 8 断言。
+- **junction 列表身份**（`fs/entry.rs meta_to_file`）：is_dir 改按原始属性 DIRECTORY 位——DirEntry::metadata 不跟随 reparse，std is_dir() 对 junction 恒 false，曾被渲染成「文件 0 B」双击无法进入（实测实锤）。DIRECTORY 位对 junction 恒置位，恢复文件夹身份（可进入/参与文件夹置顶）；遍历层防护不受影响（search/index 用原始 file_type，dir_sizes/walk_files 用 is_symlink 闸，复制引擎走 `is_reparse_dir`——全部继续跳过联接目标防环）。配 mklink 真机测试 `junction_lists_as_directory`。
+- **restore_trash 单条**（`commands/jobs_cmds.rs partition_matches`）：同原路径多条回收站记录只还原一条——全部还原时第二条必撞第一条刚落位的路径失败却整批报错。测试 `trash_match_normalizes_and_picks_single_duplicate`。
+
 ## 3. 右键菜单与定制
 
 ### 3.1 右键菜单（数据驱动）

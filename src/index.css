@@ -3302,19 +3302,29 @@ html.bp6-dark .np-accent-dot {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* 标签条（pill 风格，无边框） */
+/* 标签条（pill 风格，无边框）：横向溢出滚动（2026-11-27 审查修复——此前
+   min-width:0 + 无 overflow，多标签被压缩成窄条乃至 0 宽；滚动条隐藏，
+   竖滚轮转横滚由 Pane 的 wheel 监听驱动） */
 .np-tabbar {
   display: flex;
   align-items: center;
   gap: 3px;
   padding: 0 8px 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.np-tabbar::-webkit-scrollbar {
+  display: none;
 }
 .np-tab {
   display: flex;
   align-items: center;
   gap: 6px;
   max-width: 170px;
-  min-width: 0;
+  /* 88px ≈ 图标 + 四字名 + 关闭钮的可辨识下限：再多标签宁可滚动不压缩 */
+  min-width: 88px;
+  flex: 0 1 auto;
   padding: 2px 10px;
   height: var(--np-tab-h);
   border-radius: var(--np-radius);
@@ -3324,6 +3334,17 @@ html.bp6-dark .np-accent-dot {
 }
 .np-tab:hover {
   background: var(--np-hover);
+}
+/* 标签指针拖拽（2026-11-27 重写替代 HTML5 dnd）：源标签半透明、落位上缘
+   accent 指示线、跨窗格目标标签条整体描边 */
+.np-tab-dragging {
+  opacity: 0.45;
+}
+.np-tab-drop {
+  box-shadow: inset 2px 0 0 var(--np-accent);
+}
+.np-tabbar-cross {
+  box-shadow: inset 0 -2px 0 var(--np-accent);
 }
 .np-tab-on {
   background: var(--np-surface-2);
@@ -4031,6 +4052,47 @@ body.np-col-resizing * {
 .np-prop-val {
   flex: 1;
   min-width: 0;
+}
+/* 多选聚合属性面板（2026-11-27 审查修复）：名称清单凹陷内滚（§4.7 surface-2） */
+.np-props-multi .np-props-list {
+  margin-top: 2px;
+  max-height: 220px;
+  overflow: auto;
+  border-radius: var(--np-radius-sm);
+  background: var(--np-surface-2);
+  padding: 4px 8px;
+  font-size: var(--np-font-sm);
+}
+.np-props-multi .np-props-row {
+  padding: 1px 0;
+}
+.np-props-multi .np-props-more {
+  color: var(--np-muted);
+}
+/* 任务失败项清单（2026-11-27 审查修复）：路径 + 原因两列，凹陷内滚 */
+.np-failures-list {
+  max-height: 300px;
+  overflow: auto;
+  border-radius: var(--np-radius-sm);
+  background: var(--np-surface-2);
+  padding: 4px 8px;
+  font-size: var(--np-font-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.np-failures-row {
+  display: flex;
+  gap: 10px;
+}
+.np-failures-path {
+  flex: 1.4;
+  min-width: 0;
+}
+.np-failures-msg {
+  flex: 1;
+  min-width: 0;
+  color: var(--np-muted);
 }
 
 /* ── 关于浮窗（components/AboutDialog.tsx）：左右分栏 + 更新检查 + 作者信息 ──

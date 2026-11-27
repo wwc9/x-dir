@@ -34,6 +34,7 @@ import {
   type RenameScope,
 } from "../lib/batchRename";
 import { enqueueDelete } from "../lib/operations";
+import { useJobs } from "../stores/jobs";
 import { AppIcon, ic } from "./AppIcon";
 import {
   CompareDialog,
@@ -159,6 +160,8 @@ export function DialogHost() {
           ? dialog.title
           : dialog?.type === "conflict"
         ? t("目标位置存在同名项")
+        : dialog?.type === "jobFailures"
+          ? t("任务失败项")
         : dialog?.type === "duplicates"
           ? t("重复文件")
           : dialog?.type === "dirsizes"
@@ -254,9 +257,13 @@ export function DialogHost() {
                 <Button size="small" onClick={close}>
                   {dialog.cancelText ?? t("取消")}
                 </Button>
+                {/* autoFocus = 确认按钮持初始焦点：Enter 直接触发主操作
+                    （2026-11-27 审查修复——此前焦点停在容器 DIV，键盘用户按
+                    Enter 无任何反应，只能鼠标点击） */}
                 <Button
                   size="small"
                   intent={kindIntent(kind)}
+                  autoFocus
                   onClick={() => {
                     if (remember && dialog.onRemember) dialog.onRemember();
                     resolve(true);
@@ -280,6 +287,7 @@ export function DialogHost() {
               <Button
                 size="small"
                 intent={kindIntent(kind)}
+                autoFocus
                 onClick={close}
               >
                 {dialog.okText ?? t("知道了")}
@@ -296,6 +304,8 @@ export function DialogHost() {
       {dialog?.type === "conflict" && (
         <ConflictDialog items={dialog.items} onDone={(v) => resolve(v)} />
       )}
+
+      {dialog?.type === "jobFailures" && <JobFailuresDialog onClose={close} />}
 
       {dialog?.type === "duplicates" && (
         <DuplicateDialog dir={dialog.dir} onDone={close} />
@@ -423,7 +433,22 @@ export function DialogHost() {
         <MontageDialog entries={dialog.entries} onDone={(v) => resolve(v)} />
       )}
 
-      {dialog?.type === "properties" && (
+      {dialog?.type === "properties" && dialog.entries && dialog.entries.length > 1 && (
+        <>
+          <DialogBody>
+            <MultiProps entries={dialog.entries} />
+          </DialogBody>
+          <DialogFooter
+            actions={
+              <Button size="small" intent="primary" autoFocus onClick={close}>
+                {t("关闭")}
+              </Button>
+            }
+          />
+        </>
+      )}
+
+      {dialog?.type === "properties" && dialog.entry && (
         <>
           <DialogBody>
             <div className="np-props">
@@ -436,6 +461,9 @@ export function DialogHost() {
                 })}
               />
               <Prop k={t("大小")} v={<SizeValue entry={dialog.entry} />} />
+              {dialog.freeBytes != null && (
+                <Prop k={t("所在盘可用空间")} v={formatBytes(dialog.freeBytes)} />
+              )}
               <Prop k={t("修改时间")} v={formatTime(dialog.entry.mtimeMs)} />
               <Prop k={t("创建时间")} v={formatTime(dialog.entry.ctimeMs)} />
               <Prop
@@ -453,7 +481,11 @@ export function DialogHost() {
             </div>
           </DialogBody>
           <DialogFooter
-            actions={<Button size="small" intent="primary" onClick={close}>{t("关闭")}</Button>}
+            actions={
+              <Button size="small" intent="primary" autoFocus onClick={close}>
+                {t("关闭")}
+              </Button>
+            }
           />
         </>
       )}
@@ -563,8 +595,74 @@ function ConflictDialog({
             <Button size="small" onClick={() => onDone(null)}>
               {t("取消")}
             </Button>
-            <Button size="small" intent="primary" onClick={() => onDone({ action, remember })}>
+            <Button
+              size="small"
+              intent="primary"
+              autoFocus
+              onClick={() => onDone({ action, remember })}
+            >
               {t("确定")}
+            </Button>
+          </>
+        }
+      />
+    </>
+  );
+}
+
+/** 任务失败项清单（2026-11-27 审查修复）：job-done / finishLocal 的 failed
+ *  数组留存于 jobs store，本面板逐项列出 路径+原因，支持复制与清空——
+ *  此前失败只 toast 首条，批量失败无法定位其余项 */
+function JobFailuresDialog({ onClose }: { onClose(): void }) {
+  const failures = useJobs((s) => s.failures);
+  const clear = useJobs((s) => s.clearFailures);
+  const copyAll = () => {
+    const text = failures.map((f) => `${f.path}\t${f.message}`).join("\n");
+    navigator.clipboard
+      .writeText(text)
+      .then(() => useUi.getState().toast(t("失败清单已复制")))
+      .catch(() => undefined);
+  };
+  return (
+    <>
+      <DialogBody>
+        {!failures.length ? (
+          <div className="np-dialog-muted">{t("没有失败记录")}</div>
+        ) : (
+          <div className="np-failures-list">
+            {failures.map((f, i) => (
+              <div key={i} className="np-failures-row">
+                <span className="np-failures-path np-ellipsis" title={f.path}>
+                  {f.path}
+                </span>
+                <span className="np-failures-msg np-ellipsis" title={f.message}>
+                  {f.message}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </DialogBody>
+      <DialogFooter
+        actions={
+          <>
+            <Button size="small" onClick={onClose}>
+              {t("关闭")}
+            </Button>
+            <Button size="small" disabled={!failures.length} onClick={copyAll}>
+              {t("复制清单")}
+            </Button>
+            <Button
+              size="small"
+              intent="primary"
+              autoFocus
+              disabled={!failures.length}
+              onClick={() => {
+                clear();
+                onClose();
+              }}
+            >
+              {t("清空记录")}
             </Button>
           </>
         }
@@ -578,6 +676,55 @@ function Prop({ k, v }: { k: string; v: React.ReactNode }) {
     <div className="np-prop-row">
       <span className="np-prop-key">{k}</span>
       <span className="np-prop-val np-ellipsis">{v}</span>
+    </div>
+  );
+}
+
+/** 多选聚合属性（Explorer 口径，2026-11-27 审查修复——此前 maxCount:1 多选
+ *  无属性入口）：项数 + 合计大小（仅文件体积，文件夹标注不计）+ 类型统计 +
+ *  名称清单（前 200 条，超长滚动） */
+function MultiProps({ entries }: { entries: FileEntry[] }) {
+  const stats = useMemo(() => {
+    let size = 0;
+    let dirs = 0;
+    const types = new Map<string, number>();
+    for (const e of entries) {
+      if (e.isDir) dirs += 1;
+      else size += e.size;
+      const key = e.isDir ? t("文件夹") : t(typeName(e.name, false), { ext: extOf(e.name).toUpperCase() });
+      types.set(key, (types.get(key) ?? 0) + 1);
+    }
+    const top = [...types.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+    return { size, dirs, top };
+  }, [entries]);
+  const NAMES_CAP = 200;
+  return (
+    <div className="np-props np-props-multi">
+      <Prop k={t("项数")} v={t("{n} 项", { n: entries.length.toLocaleString() })} />
+      <Prop
+        k={t("合计大小")}
+        v={
+          stats.dirs
+            ? `${formatBytes(stats.size)}（${t("含 {n} 个文件夹，未计大小", { n: stats.dirs.toLocaleString() })}）`
+            : formatBytes(stats.size)
+        }
+      />
+      <Prop
+        k={t("类型")}
+        v={stats.top.map(([k2, n]) => `${k2} × ${n}`).join(t("、"))}
+      />
+      <div className="np-props-list">
+        {entries.slice(0, NAMES_CAP).map((e) => (
+          <div key={e.path} className="np-props-row np-ellipsis" title={e.path}>
+            {e.name}
+          </div>
+        ))}
+        {entries.length > NAMES_CAP && (
+          <div className="np-props-row np-props-more">
+            {t("…以及另外 {n} 项", { n: (entries.length - NAMES_CAP).toLocaleString() })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

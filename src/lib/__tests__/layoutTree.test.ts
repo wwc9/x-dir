@@ -9,6 +9,7 @@ import {
   mkTab,
   moveTab,
   paneIds,
+  reorderTab,
   setPaneColWidths,
   setRatio,
   setSizes,
@@ -430,5 +431,64 @@ describe("setPaneColWidths（窗格级列宽）", () => {
   it("窗格不存在时原引用返回", () => {
     const tree = mkPane("C:\\");
     expect(setPaneColWidths(tree, "nope", { name: 1, mtime: 1, type: 1, size: 1, loc: 1 })).toBe(tree);
+  });
+});
+
+
+describe("reorderTab（窗格内标签指针拖拽重排，2026-11-27）", () => {
+  function seed3() {
+    const tree = mkPane("C:\\");
+    const pane = dfsPanes(tree)[0];
+    return updatePane(tree, pane.id, (p) => ({
+      ...p,
+      tabs: [mkTab("C:\a"), mkTab("C:\b"), mkTab("C:\c")],
+      activeTab: 0,
+    }));
+  }
+  const names = (t: LayoutNode, paneId: string) =>
+    dfsPanes(t).find((p) => p.id === paneId)!.tabs.map((x) => x.path);
+
+  it("后往前移：拔出插入，其余相对顺序不变", () => {
+    const tree = seed3();
+    const id = dfsPanes(tree)[0].id;
+    const next = reorderTab(tree, id, 2, 0);
+    expect(names(next, id)).toEqual(["C:\c", "C:\a", "C:\b"]);
+  });
+
+  it("往前往后移：插入位语义（拔出后索引回落）", () => {
+    const tree = seed3();
+    const id = dfsPanes(tree)[0].id;
+    const next = reorderTab(tree, id, 0, 2);
+    expect(names(next, id)).toEqual(["C:\b", "C:\c", "C:\a"]);
+  });
+
+  it("拖动活动标签：激活随其落位", () => {
+    const tree = seed3();
+    const id = dfsPanes(tree)[0].id;
+    const next = reorderTab(tree, id, 0, 2);
+    expect(dfsPanes(next).find((p) => p.id === id)!.activeTab).toBe(2);
+  });
+
+  it("拖动非活动标签：原活动焦点索引按拔出/插入偏移修正不漂移", () => {
+    let tree = seed3();
+    const id = dfsPanes(tree)[0].id;
+    tree = updatePane(tree, id, (p) => ({ ...p, activeTab: 1 }));
+    // 把 0 拖到 2：活动标签(1)在拔出位右侧且插入位越过它 → 左移一位
+    const next = reorderTab(tree, id, 0, 2);
+    expect(dfsPanes(next).find((p) => p.id === id)!.activeTab).toBe(0);
+    // 把 2 拖到 0：活动标签(1)在插入位及右侧 → 右移一位
+    const next2 = reorderTab(tree, id, 2, 0);
+    expect(dfsPanes(next2).find((p) => p.id === id)!.activeTab).toBe(2);
+  });
+
+  it("同位 / 越界钳制 / 单标签：返回原树", () => {
+    const tree = seed3();
+    const id = dfsPanes(tree)[0].id;
+    expect(reorderTab(tree, id, 1, 1)).toBe(tree);
+    // 越界钳制到末位（有效重排）
+    const moved = reorderTab(tree, id, 0, 99);
+    expect(names(moved, id)).toEqual(["C:\b", "C:\c", "C:\a"]);
+    const single = mkPane("C:\\x");
+    expect(reorderTab(single, dfsPanes(single)[0].id, 0, 0)).toBe(single);
   });
 });

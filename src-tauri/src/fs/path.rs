@@ -94,11 +94,38 @@ pub fn parent_of(path: &str) -> Option<String> {
     }
 }
 
-/// 同卷判定 = 盘符字母相同（大小写不敏感）。V1 仅本地盘（§6.7）
+/// 同卷判定：盘符路径比盘符（大小写不敏感）；UNC 路径比「服务器+共享名」。
+/// 2026-11-27 审查修复——旧实现只比较路径首字节，所有 UNC 首字符都是 `\`，
+/// `\\srv1\share` 与 `\\srv2\share2` 被判「同卷」直接 rename，必然
+/// ERROR_NOT_SAME_DEVICE 且无复制回退（网络位置 13.5 纳入后暴露）。
 pub fn is_same_volume(a: &str, b: &str) -> bool {
-    let la = a.as_bytes().first().map(|c| c.to_ascii_uppercase());
-    let lb = b.as_bytes().first().map(|c| c.to_ascii_uppercase());
-    la.is_some() && la == lb
+    // 双方都是 UNC（\\ 或 \\?\UNC\ 前缀）→ 按 server+share 归一比较；
+    // 仅一方 UNC → 异卷；都不是 → 盘符比较（原口径）
+    match (unc_share_root(a), unc_share_root(b)) {
+        (Some(x), Some(y)) => x.eq_ignore_ascii_case(&y),
+        (Some(_), None) | (None, Some(_)) => false,
+        (None, None) => {
+            let la = a.as_bytes().first().map(|c| c.to_ascii_uppercase());
+            let lb = b.as_bytes().first().map(|c| c.to_ascii_uppercase());
+            la.is_some() && la == lb
+        }
+    }
+}
+
+/// UNC 路径的「服务器+共享名」根归一（小写、无尾反斜杠），形如
+/// `\\server\share`；`\\?\UNC\server\share\...` 同样解析；非 UNC 返回 None。
+/// 共享名按 `\` 截断——跨共享即使同服务器也判异卷（rename 不能跨共享）。
+fn unc_share_root(p: &str) -> Option<String> {
+    let body = p
+        .strip_prefix(r"\\?\UNC\")
+        .or_else(|| p.strip_prefix(r"\\"))?;
+    let mut parts = body.splitn(3, '\\').filter(|s| !s.is_empty());
+    let server = parts.next()?;
+    let share = parts.next()?;
+    if server.is_empty() || share.is_empty() {
+        return None;
+    }
+    Some(format!(r"\\{}\{}", server, share).to_lowercase())
 }
 
 /// 目录联接/junction 判定（自 2026-11-01 审查起为全库共享工具）：reparse
@@ -229,6 +256,27 @@ mod tests {
         assert!(is_same_volume("C:\\a", "c:\\b"));
         assert!(!is_same_volume("C:\\a", "D:\\b"));
         assert!(!is_same_volume("", "D:\\b"));
+        // UNC：同 server+share = 同卷（可 rename），跨共享 = 异卷（走复制回退）
+        assert!(is_same_volume(
+            "\\\\srv1\\share\\a.txt",
+            "\\\\SRV1\\share\\sub\\b.txt"
+        ));
+        assert!(!is_same_volume(
+            "\\\\srv1\\share1\\a.txt",
+            "\\\\srv1\\share2\\b.txt"
+        ));
+        assert!(!is_same_volume(
+            "\\\\srv1\\share\\a.txt",
+            "\\\\srv2\\share\\b.txt"
+        ));
+        // \\?\UNC\ 长路径形式同口径
+        assert!(is_same_volume(
+            "\\\\?\\UNC\\srv1\\share\\a.txt",
+            "\\\\srv1\\share\\b.txt"
+        ));
+        // UNC 与盘符路径互为异卷
+        assert!(!is_same_volume("\\\\srv\\share\\a", "C:\\b"));
+        assert!(!is_same_volume("C:\\a", "\\\\srv\\share\\b"));
     }
 
     #[test]

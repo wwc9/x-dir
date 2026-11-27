@@ -38,6 +38,9 @@ pub struct DriveInfo {
     pub drive_type: String,
     pub total_bytes: u64,
     pub free_bytes: u64,
+    /// 卷信息是否可读（2026-11-27 审查修复）：断连网络盘/未就绪设备此前
+    /// 静默落 0 值照常入清单，此电脑页显示 0 B/0 B 与满盘无从区分
+    pub reachable: bool,
 }
 
 /// 盘符清单 + 每盘卷信息。spawn_blocking：逐盘 GetVolumeInformationW，
@@ -114,7 +117,7 @@ fn drive_info(root: &str) -> Option<DriveInfo> {
         String::new()
     };
     let (mut free, mut total, mut _free_total) = (0u64, 0u64, 0u64);
-    unsafe {
+    let reachable = unsafe {
         GetDiskFreeSpaceExW(
             pc,
             Some(&mut free),
@@ -122,13 +125,14 @@ fn drive_info(root: &str) -> Option<DriveInfo> {
             Some(&mut _free_total),
         )
     }
-    .ok();
+    .is_ok();
     Some(DriveInfo {
         letter: root[..2].to_string(),
         label,
         drive_type: drive_type.into(),
         total_bytes: total,
         free_bytes: free,
+        reachable,
     })
 }
 

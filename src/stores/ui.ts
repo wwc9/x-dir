@@ -40,7 +40,10 @@ export type DialogSpec =
       validate?(v: string): string | null;
     }
   | { type: "conflict"; items: string[] }
-  | { type: "properties"; entry: FileEntry; freeBytes?: number }
+  /** 任务失败项清单（灵动岛失败回执「查看详情」入口）：数据从 jobs store 读 */
+  | { type: "jobFailures" }
+  /** 属性：单选 entry / 多选聚合 entries（Explorer 口径，>1 项走聚合面板） */
+  | { type: "properties"; entry?: FileEntry; entries?: FileEntry[]; freeBytes?: number }
   /** 批量重命名（右键"批量重命名"）：带选中项入场，解析出可执行改名清单 */
   | { type: "batchRename"; entries: FileEntry[] }
   /** 重复文件查找（右键"查找重复文件"）：对选中目录扫描 */

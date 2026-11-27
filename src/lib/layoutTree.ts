@@ -9,6 +9,11 @@ export type SplitDir = "horizontal" | "vertical";
 export interface Tab {
   id: string;
   path: string;
+  /** 标签级排序/视图（2026-11-27 审查修复：此前仅存 path，重启/方案重建后
+   *  每标签回全局默认——Explorer 口径是记忆用户在每处留下的视图偏好）。
+   *  可选字段：缺省 = 用全局默认（defaultSort/defaultView），旧档零迁移 */
+  sort?: { key: "name" | "mtime" | "size" | "type"; dir: "asc" | "desc" };
+  viewMode?: "details" | "list" | "grid";
 }
 
 export interface PaneNode {
@@ -233,6 +238,36 @@ export function swapPanes(
     return { ...node, children: node.children.map(sub) };
   };
   return sub(tree);
+}
+
+/// 窗格内标签重排（指针拖拽排序，2026-11-27）：from 拔出插入 to 位；拖动
+/// 当前活动标签时激活随其落位，拖其他标签时原活动焦点按拔出/插入偏移修正
+/// 防漂移。越界钳制、同位/单标签返回原树。
+export function reorderTab(
+  tree: LayoutNode,
+  paneId: string,
+  fromIdx: number,
+  toIdx: number,
+): LayoutNode {
+  if (fromIdx === toIdx) return tree;
+  const pane = dfsPanes(tree).find((p) => p.id === paneId);
+  if (!pane || fromIdx < 0 || fromIdx >= pane.tabs.length) return tree;
+  const to = Math.min(Math.max(toIdx, 0), pane.tabs.length - 1);
+  if (to === fromIdx) return tree;
+  return updatePane(tree, paneId, (p) => {
+    const tabs = [...p.tabs];
+    const [moved] = tabs.splice(fromIdx, 1);
+    tabs.splice(to, 0, moved);
+    let adjusted = p.activeTab;
+    if (p.activeTab === fromIdx) adjusted = to;
+    else if (fromIdx < p.activeTab && to >= p.activeTab) adjusted = p.activeTab - 1;
+    else if (fromIdx > p.activeTab && to <= p.activeTab) adjusted = p.activeTab + 1;
+    return {
+      ...p,
+      tabs,
+      activeTab: Math.min(Math.max(adjusted, 0), tabs.length - 1),
+    };
+  });
 }
 
 const RATIO_MIN = 0.15;

@@ -45,6 +45,7 @@ import { PresetPicker, PRESET_LIST } from "./Sidebar";
 import { Seg } from "./ImgDialogs";
 import { DENSITY } from "../lib/tokens";
 import { isUpdateAvailable } from "../lib/update";
+import { useDrives } from "../stores/drives";
 import { useLayout } from "../stores/layout";
 import { usePanes } from "../stores/panes";
 import { setThemeWithFx, useSettings } from "../stores/settings";
@@ -73,10 +74,6 @@ const TB_MORE_TREE = 380; // 导航树并入菜单档（同档还收标题与主
 const TB_MORE_SEARCH = 280; // 全盘搜索并入菜单档
 const TB_FLOOR = 250; // 物理下限：更多钮自身隐藏
 
-interface DriveLite {
-  letter: string;
-  label: string;
-}
 
 /** 自绘顶栏（2026-11-11 方案 A 三段居中定案）：三段网格挂 np-tb-grid 内衬层
  *  （2026-11-18 改：容器查询不能样式化容器自身，且中岛撤收后右轨 1fr 转
@@ -92,7 +89,9 @@ interface DriveLite {
  *  段容器与段尾 np-tb-fill 弹性补白均带拖拽区：顶栏空白处可拖动窗口、
  *  双击最大化/还原 */
 export function TitleBar() {
-  const [drives, setDrives] = useState<DriveLite[]>([]);
+  // 盘符清单改共享 store（2026-11-27 盘符拔插感知）：drive_watch 事件驱动
+  // 重拉，U 盘插拔后收藏下拉/快速访问不再冻结
+  const drives = useDrives((s) => s.drives);
   const [known, setKnown] = useState<Record<string, string>>({});
   const [maximized, setMaximized] = useState(false);
   // 右键菜单独立页/全盘搜索页开合（整页互斥）+ 设置浮窗直达分类（状态在 useUi）
@@ -142,10 +141,6 @@ export function TitleBar() {
   );
 
   useEffect(() => {
-    api
-      .getDrives()
-      .then((ds) => setDrives(ds.map((d) => ({ letter: d.letter, label: d.label }))))
-      .catch(() => undefined);
     for (const k of KNOWN) {
       api
         .getKnownFolder(k.id)

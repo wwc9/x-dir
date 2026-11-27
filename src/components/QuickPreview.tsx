@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import { api, type FileEntry } from "../lib/ipc";
+import { enqueueDelete } from "../lib/operations";
 import { loadDialogPrefs, saveDialogPrefs } from "../lib/dialogPrefs";
 import { parentPath } from "../lib/path";
 import { getList } from "../lib/listRegistry";
@@ -263,8 +264,11 @@ export function QuickPreviewHost() {
       okText: t("删除"),
     }).then((ok) => {
       if (!ok) return;
-      close();
-      void api.deleteItems([en.path]).catch((err) => useUi.getState().toast(String(err), "error"));
+      // 走任务引擎 enqueueDelete（2026-11-27 审查修复）：带进度卡/撤销回执，
+      // 与列表删除同链路；此前直调 api.deleteItems 无任务无撤销。删除后
+      // 预览前进到下一项（队列空则关闭），支持连续清点
+      void enqueueDelete([en.path], false);
+      usePreview.getState().removeCurrent();
     });
   }
 

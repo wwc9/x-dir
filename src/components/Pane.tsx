@@ -25,6 +25,7 @@ import { fileNameOf, joinPath } from "../lib/path";
 import { createFolderInline } from "../lib/operations";
 import { dfsPanes, type PaneNode } from "../lib/layoutTree";
 import { useLayout } from "../stores/layout";
+import { useDrives } from "../stores/drives";
 import { usePanes } from "../stores/panes";
 import { usePreview } from "../stores/preview";
 import { useSettings } from "../stores/settings";
@@ -55,7 +56,6 @@ import { FadeInIcon, FileList } from "./FileList";
 import { useIcons } from "../stores/icons";
 import { FN_ICONS } from "./MenuEditor";
 
-const DND_MIME = "application/x-xdir";
 
 const titleOf = (path: string) =>
   path === THIS_PC
@@ -89,19 +89,11 @@ function crumbSegs(path: string): { label: string; target: string }[] {
   }));
 }
 
-/** 盘符卷标缓存（面包屑首段显示 "文件 (E:)" Explorer 口径；全局拉一次共用） */
+/** 盘符卷标缓存（面包屑首段显示 "文件 (E:)" Explorer 口径）：填充源 = 共享
+ *  盘符 store（2026-11-27 盘符拔插感知）——模块级一次性拉取此前重启前不更新 */
 const driveLabels = new Map<string, string>();
-let driveLabelsPromise: Promise<void> | null = null;
-function ensureDriveLabels(): Promise<void> {
-  if (!driveLabelsPromise) {
-    driveLabelsPromise = api
-      .getDrives()
-      .then((ds) => {
-        for (const d of ds) driveLabels.set(`${d.letter}\\`, d.label);
-      })
-      .catch(() => undefined);
-  }
-  return driveLabelsPromise;
+function syncDriveLabels(drives: { letter: string; label: string }[]): void {
+  for (const d of drives) driveLabels.set(`${d.letter}\\`, d.label);
 }
 
 const VIEW_META: Record<ViewMode, { icon: typeof List; label: string }> = {
@@ -232,11 +224,14 @@ export function Pane({ pane }: { pane: PaneNode }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, [crumbCollapsed, path, addrFocused]);
-  // 盘符卷标（面包屑首段 "文件 (E:)"）：全局一次拉取，到位后刷新一次
+  // 盘符卷标（面包屑首段 "文件 (E:)"）：订阅共享盘符 store（drive_watch
+  // 事件驱动重拉），插拔后面包屑卷标跟随刷新
+  const drivesNow = useDrives((s) => s.drives);
   const [, bumpDriveLabels] = useState(0);
   useEffect(() => {
-    void ensureDriveLabels().then(() => bumpDriveLabels((x) => x + 1));
-  }, []);
+    syncDriveLabels(drivesNow);
+    bumpDriveLabels((x) => x + 1);
+  }, [drivesNow]);
   // 地址栏编辑态外点退出（Explorer 口径）：点击地址栏以外任意区域即失焦回到
   // 面包屑。显式 blur 兜底——列表空白框选等 mousedown preventDefault 会拦掉
   // 浏览器默认失焦，单靠 onBlur 不保证退出
@@ -273,9 +268,12 @@ export function Pane({ pane }: { pane: PaneNode }) {
   useEffect(() => {
     if (!tab) return;
     const st = useSettings.getState();
-    usePanes
-      .getState()
-      .ensure(tab.id, { viewMode: st.defaultView, sort: st.defaultSort });
+    // 标签级 sort/view 优先（随工作区树持久化，2026-11-27 审查修复：此前
+    // 重启/方案重建后每标签回全局默认）；旧档/未定制 = 全局默认
+    usePanes.getState().ensure(tab.id, {
+      viewMode: tab.viewMode ?? st.defaultView,
+      sort: tab.sort ?? st.defaultSort,
+    });
   }, [tab]);
 
   useEffect(() => {
@@ -504,6 +502,111 @@ export function Pane({ pane }: { pane: PaneNode }) {
   // 浮层水平跟随搜索键：实测锚点相对导航栏的偏移；收纳档位/窗格宽变化经
   // ResizeObserver 重测，右缘钳制在导航栏内（320px 浮层 + 8px 边距）
   const searchAnchorRef = useRef<HTMLDivElement>(null);
+  const tabbarRef = useRef<HTMLDivElement | null>(null);
+
+  // ── 标签指针拖拽（2026-11-27 重写）：HTML5 dnd 在主窗被 tauri 原生拖放接收
+  //    接管而无法启动（dragDropEnabled 是外部文件拖入的依赖不能关，与侧栏
+  //    workspaceOrder 排序同病灶）——此前的 draggable/onDragStart/onDrop 全是
+  //    永不触发的死代码，标签拖拽管线整体失效。改用指针事件会话（同侧栏
+  //    workspaceOrder 模式）：down 记起点 → move 超 4px 进入拖拽 →
+  //    elementsFromPoint 命中 [data-tab-pane] 计算落位（同窗格重排 / 跨窗格
+  //    移动）→ up 落位并吞补发 click ──
+  const [tabDrag, setTabDrag] = useState<{
+    paneId: string;
+    fromIdx: number;
+    /** 同窗格重排落位（插入位指示线）；跨窗格为 null */
+    overIdx: number | null;
+    /** 跨窗格目标窗格（其标签条整体高亮） */
+    crossPaneId: string | null;
+  } | null>(null);
+  const tabDragRef = useRef<{
+    paneId: string;
+    fromIdx: number;
+    startX: number;
+    startY: number;
+    moved: boolean;
+  } | null>(null);
+  const tabDragOverRef = useRef<{ overIdx: number | null; crossPaneId: string | null }>({
+    overIdx: null,
+    crossPaneId: null,
+  });
+  const dragSwallowRef = useRef(false);
+
+  function beginTabDrag(e: React.PointerEvent, paneId: string, idx: number) {
+    if (e.button !== 0) return;
+    tabDragRef.current = {
+      paneId,
+      fromIdx: idx,
+      startX: e.clientX,
+      startY: e.clientY,
+      moved: false,
+    };
+  }
+
+  useEffect(() => {
+    const onMove = (ev: PointerEvent) => {
+      const ss = tabDragRef.current;
+      if (!ss) return;
+      if (!ss.moved && Math.hypot(ev.clientX - ss.startX, ev.clientY - ss.startY) < 4) return;
+      if (!ss.moved) {
+        ss.moved = true;
+        setTabDrag({ paneId: ss.paneId, fromIdx: ss.fromIdx, overIdx: null, crossPaneId: null });
+      }
+      // 命中顺序：标签（同/跨窗格精确定位）优先，回落窗格主体（跨窗格 append）
+      const els = document.elementsFromPoint(ev.clientX, ev.clientY);
+      const hitTab = els.find(
+        (el) => el instanceof HTMLElement && el.dataset.tabPane !== undefined,
+      ) as HTMLElement | undefined;
+      const hitPane = els.find(
+        (el) => el instanceof HTMLElement && el.dataset.paneId !== undefined,
+      ) as HTMLElement | undefined;
+      if (hitTab && hitTab.dataset.tabPane !== undefined) {
+        const targetPane = hitTab.dataset.tabPane;
+        const targetIdx = Number(hitTab.dataset.tabIdx ?? -1);
+        if (targetPane === ss.paneId) {
+          const over = targetIdx >= 0 && targetIdx !== ss.fromIdx ? targetIdx : null;
+          tabDragOverRef.current = { overIdx: over, crossPaneId: null };
+          setTabDrag({ paneId: ss.paneId, fromIdx: ss.fromIdx, overIdx: over, crossPaneId: null });
+        } else {
+          tabDragOverRef.current = { overIdx: null, crossPaneId: targetPane };
+          setTabDrag({ paneId: ss.paneId, fromIdx: ss.fromIdx, overIdx: null, crossPaneId: targetPane });
+        }
+      } else if (hitPane && hitPane.dataset.paneId && hitPane.dataset.paneId !== ss.paneId) {
+        // 列表区落点 = 移动到该窗格（append 到标签尾）
+        const cross = hitPane.dataset.paneId;
+        tabDragOverRef.current = { overIdx: null, crossPaneId: cross };
+        setTabDrag({ paneId: ss.paneId, fromIdx: ss.fromIdx, overIdx: null, crossPaneId: cross });
+      } else {
+        tabDragOverRef.current = { overIdx: null, crossPaneId: null };
+        setTabDrag((cur) =>
+          cur ? { ...cur, overIdx: null, crossPaneId: null } : cur,
+        );
+      }
+    };
+    const onUp = () => {
+      const ss = tabDragRef.current;
+      tabDragRef.current = null;
+      if (!ss?.moved) return;
+      dragSwallowRef.current = true;
+      window.setTimeout(() => {
+        dragSwallowRef.current = false;
+      }, 0);
+      const { overIdx, crossPaneId } = tabDragOverRef.current;
+      tabDragOverRef.current = { overIdx: null, crossPaneId: null };
+      setTabDrag(null);
+      if (crossPaneId) {
+        useLayout.getState().moveTab(ss.paneId, ss.fromIdx, crossPaneId);
+      } else if (overIdx !== null) {
+        useLayout.getState().reorderTab(ss.paneId, ss.fromIdx, overIdx);
+      }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, []);
   const [searchPopX, setSearchPopX] = useState(0);
   useLayoutEffect(() => {
     if (!searching) return;
@@ -571,19 +674,15 @@ export function Pane({ pane }: { pane: PaneNode }) {
        *  Explorer Win11 式逐层深入导航 */
       const openChildMenu = (target: string, x: number, y: number) => {
         if (target === THIS_PC) {
-          void api
-            .getDrives()
-            .then((ds) => {
-              useUi.getState().openMenu(
-                ds.map((d) => ({
-                  label: d.label ? `${d.label} (${d.letter})` : d.letter,
-                  action: () => go(`${d.letter}\\`),
-                })),
-                x,
-                y,
-              );
-            })
-            .catch(() => undefined);
+          const ds = useDrives.getState().drives;
+          useUi.getState().openMenu(
+            ds.map((d) => ({
+              label: d.label ? `${d.label} (${d.letter})` : d.letter,
+              action: () => go(`${d.letter}\\`),
+            })),
+            x,
+            y,
+          );
           return;
         }
         void api
@@ -692,9 +791,10 @@ export function Pane({ pane }: { pane: PaneNode }) {
             className="np-addr"
             data-address={pane.id}
             inputRef={addrRef}
-            // "此电脑"用占位符而非值：写成 value 会让键入从三个汉字后面继续拼，回车必失败
-            value={addr === THIS_PC ? "" : addr}
-            placeholder={addr === THIS_PC ? "此电脑" : undefined}
+            // "此电脑"/"回收站"用占位符而非值：写成 value 会让键入从哨兵串后面
+            // 继续拼，回车必失败；回收站页此前地址栏完全空白，看不到当前在哪
+            value={addr === THIS_PC || addr === RECYCLE_BIN ? "" : addr}
+            placeholder={addr === THIS_PC ? t("此电脑") : addr === RECYCLE_BIN ? t("回收站") : undefined}
             intent={ui?.error ? "danger" : undefined}
             data-tip={ui?.error ?? undefined}
             onChange={(e) => {
@@ -732,7 +832,12 @@ export function Pane({ pane }: { pane: PaneNode }) {
                 }
               }
               if (e.key === "Enter") {
-                if (addr.trim()) go(addr.trim());
+                // 键盘高亮的补全候选随 Enter 一起接受（浏览器地址栏惯例，
+                // 2026-11-27 审查修复——此前仅 Tab 接受候选，Enter 仍按原始
+                // 输入跳转，↑↓ 选择形同虚设）
+                if (sugg.length && suggIdx >= 0) setAddr(sugg[suggIdx]);
+                const target = sugg.length && suggIdx >= 0 ? sugg[suggIdx] : addr.trim();
+                if (target) go(target);
                 (e.target as HTMLInputElement).blur();
               }
               // Esc 还原路径并失焦（清空建议，快捷键清单 addr-revert 语义）
@@ -941,7 +1046,13 @@ export function Pane({ pane }: { pane: PaneNode }) {
                 placeholder={searchDeep ? t("递归搜索…") : t("搜索当前目录…")}
                 onChange={(e) => usePanes.getState().setSearch(tabId, e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Escape") usePanes.getState().setSearch(tabId, null);
+                  // Esc 只关搜索框：阻断到 window 的 Esc 链（否则同一事件里
+                  // 还会继续退过滤/清选择，一次 Esc 连清三层与清单宣称的
+                  // 「逐级退出」语义不符——2026-11-27 审查修复）
+                  if (e.key === "Escape") {
+                    e.stopPropagation();
+                    usePanes.getState().setSearch(tabId, null);
+                  }
                 }}
                 spellCheck={false}
               />
@@ -1063,29 +1174,19 @@ export function Pane({ pane }: { pane: PaneNode }) {
         />
       </div>
 
-      {/* 标签条 */}
+      {/* 标签条：横向溢出滚动（竖滚轮转横滚，非 passive 监听可拦截默认竖滚——
+          溢出判定见 .np-tabbar 注释，2026-11-27 审查修复） */}
       <div
-        className="np-tabbar"
-        onDragOver={(e) => {
-          if (e.dataTransfer.types.includes(DND_MIME)) e.preventDefault();
+        className={`np-tabbar ${tabDrag?.crossPaneId === pane.id ? "np-tabbar-cross" : ""}`}
+        ref={(el) => {
+          tabbarRef.current = el;
         }}
-        onDrop={(e) => {
-          const raw = e.dataTransfer.getData(DND_MIME);
-          if (!raw) return;
-          try {
-            const d = JSON.parse(raw) as {
-              tabMove?: { fromPaneId: string; tabIndex: number };
-            };
-            if (d.tabMove) {
-              // 标签跨窗格拖动（文件拖放已走 V3 OLE 管线，标签条落点见 lib/oleDispatch）
-              useLayout.getState().moveTab(d.tabMove.fromPaneId, d.tabMove.tabIndex, pane.id);
-            }
-          } catch {
-            /* 忽略 */
-          }
+        onWheel={(e) => {
+          const el = tabbarRef.current;
+          if (!el || el.scrollWidth <= el.clientWidth) return;
+          if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) el.scrollLeft += e.deltaY;
         }}
-      >
-        {pane.tabs.map((tab, i) => {
+      >        {pane.tabs.map((tab, i) => {
           const isActive = i === pane.activeTab;
           // 真实图标优先（realIcons 开启且非此电脑）；未到位渲染预留空位防
           // 跳动（文件行 RowFileIcon 同口径），关闭/此电脑走 Lucide 语义兜底
@@ -1094,8 +1195,16 @@ export function Pane({ pane }: { pane: PaneNode }) {
           return (
           <div
             key={tab.id}
-            className={`np-tab ${isActive ? "np-tab-on" : ""}`}
-            onClick={() => useLayout.getState().activateTab(pane.id, i)}
+            data-tab-pane={pane.id}
+            data-tab-idx={i}
+            className={`np-tab ${isActive ? "np-tab-on" : ""} ${
+              tabDrag?.paneId === pane.id && tabDrag?.fromIdx === i ? "np-tab-dragging" : ""
+            } ${tabDrag?.overIdx === i ? "np-tab-drop" : ""}`}
+            onClick={() => {
+              // 指针拖拽已发生时吞掉补发 click（dragSwallowRef，同侧栏方案）
+              if (dragSwallowRef.current) return;
+              useLayout.getState().activateTab(pane.id, i);
+            }}
             onAuxClick={(e) => {
               // 鼠标中键关闭标签（浏览器/资源管理器习惯）；阻止冒泡避免触发激活
               if (e.button === 1) {
@@ -1133,14 +1242,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
               }
               useUi.getState().openMenu(items, e.clientX, e.clientY);
             }}
-            draggable
-            onDragStart={(e) => {
-              e.dataTransfer.setData(
-                DND_MIME,
-                JSON.stringify({ tabMove: { fromPaneId: pane.id, tabIndex: i } }),
-              );
-              e.dataTransfer.effectAllowed = "move";
-            }}
+            onPointerDown={(e) => beginTabDrag(e, pane.id, i)}
           >
             {realUrl ? (
               <FadeInIcon src={realUrl} />
@@ -1189,7 +1291,10 @@ export function Pane({ pane }: { pane: PaneNode }) {
             onChange={(e) => commitFilter(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Escape") {
+                // 同搜索框：Esc 只退过滤，不连带清空选择（stopPropagation
+                // 阻断 window Esc 链，2026-11-27 审查修复）
                 e.preventDefault();
+                e.stopPropagation();
                 usePanes.getState().setFilter(tabId, null);
               }
             }}

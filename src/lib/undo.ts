@@ -66,6 +66,9 @@ interface UndoStore {
   /** 最近一次重做的描述（原方向语义），无待重做为 null */
   peekRedoLabel(): string | null;
   push(e: UndoEntry): void;
+  /** 精确移除指定路径的 newfolder 条目（2026-11-27 Esc 取消新建用：目录已
+   *  直接删除，撤销栈里若留着「新建」条目，Ctrl+Z 会试图再删一次失败） */
+  dropNewfolder(path: string): void;
   clear(): void;
   undo(): Promise<void>;
   redo(): Promise<void>;
@@ -114,6 +117,17 @@ export const useUndo = create<UndoStore>()((set, get) => ({
     set((s) => ({
       stack: [...s.stack, e].slice(-MAX_STACK),
       redoStack: [], // 新操作使重做分支失效（编辑器惯例）
+    }));
+  },
+
+  dropNewfolder(path) {
+    const norm = path.replace(/\\+$/, "").toLowerCase();
+    const drop = (e: UndoEntry): boolean =>
+      e.kind === "newfolder" &&
+      e.path.replace(/\\+$/, "").toLowerCase() === norm;
+    set((s) => ({
+      stack: s.stack.filter((e) => !drop(e)),
+      redoStack: s.redoStack.filter((e) => !drop(e)),
     }));
   },
 

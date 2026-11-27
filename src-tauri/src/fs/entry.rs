@@ -7,6 +7,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use super::path::{file_name_of, join_name, same_name_ci, to_extended};
 
 pub const FILE_ATTRIBUTE_READONLY: u32 = 0x1;
+pub const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+#[allow(dead_code)] // 备查：目录/文件 reparse 位（防环判定走 fs::path::is_reparse_dir）
+pub const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
 pub const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
 pub const FILE_ATTRIBUTE_SYSTEM: u32 = 0x4;
 
@@ -75,6 +78,16 @@ pub fn scan_dir(dir: &str) -> std::io::Result<Vec<FileEntry>> {
 /// metadata → FileEntry（dir_entry_to_file 与 path_to_entry 共用构建器：
 /// py 变体、Windows 属性位、目录 size 恒 0 等口径单源）
 fn meta_to_file(path: String, name: String, meta: &std::fs::Metadata) -> FileEntry {
+    // 目录判定按**原始属性 DIRECTORY 位**（2026-11-27 审查修复）：DirEntry::
+    // metadata 不跟随 reparse，junction / 目录符号链接的 std is_dir() 恒 false
+    // （symlink 语义）——列表被渲染成「文件 0 B」、双击无法进入、不参与文件夹
+    // 置顶。DIRECTORY 位对 junction 恒置位，按位判定即恢复文件夹身份；遍历层
+    // 防护不受影响（search/index/walk_files 用原始 file_type 或 is_symlink 闸，
+    // 复制引擎走 is_reparse_dir，全都继续跳过联接目标）
+    #[cfg(windows)]
+    let is_dir =
+        std::os::windows::fs::MetadataExt::file_attributes(meta) & FILE_ATTRIBUTE_DIRECTORY != 0;
+    #[cfg(not(windows))]
     let is_dir = meta.is_dir();
     #[cfg(windows)]
     let raw = std::os::windows::fs::MetadataExt::file_attributes(meta);
@@ -130,6 +143,39 @@ pub fn path_to_entry(path: &str) -> Option<FileEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn junction_lists_as_directory() {
+        // junction（reparse 目录）在列表中必须是文件夹身份（2026-11-27 审查
+        // 修复：std is_dir() 对 reparse 恒 false，曾被渲染成「文件 0 B」且
+        // 双击无法进入）
+        let tmp = std::env::temp_dir().join(format!("xdir-junc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let target = tmp.join("real-dir");
+        std::fs::create_dir_all(&target).unwrap();
+        std::fs::write(target.join("inner.txt"), b"x").unwrap();
+        let link = tmp.join("link-dir");
+        let ok = std::process::Command::new("cmd")
+            .args(["/c", "mklink", "/J"])
+            .arg(&link)
+            .arg(&target)
+            .output()
+            .is_ok_and(|o| o.status.success());
+        if ok {
+            let mut hit = false;
+            for e in std::fs::read_dir(&tmp).unwrap().flatten() {
+                let name = e.file_name().to_string_lossy().into_owned();
+                if name == "link-dir" {
+                    hit = true;
+                    let fe = dir_entry_to_file(tmp.to_str().unwrap(), &e).unwrap();
+                    assert!(fe.is_dir, "junction 行必须 isDir=true");
+                    assert_eq!(fe.size, 0);
+                }
+            }
+            assert!(hit, "junction 未出现在枚举中");
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 
     #[test]
     fn dir_entry_fills_pinyin_initials() {
