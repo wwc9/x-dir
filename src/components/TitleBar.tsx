@@ -16,6 +16,7 @@ import {
   ClipboardList,
   Copy,
   Ellipsis,
+  FolderBookmark,
   FolderOpen,
   FolderTree,
   HardDrive,
@@ -31,7 +32,6 @@ import {
   Settings,
   Sparkles,
   Square,
-  Star,
   Trash2,
   VenetianMask,
   X,
@@ -420,7 +420,7 @@ export function TitleBar() {
           minimal
           size="small"
           className="np-pop-trigger"
-          icon={ic(Star)}
+          icon={ic(FolderBookmark)}
           active={favOpen}
           data-tip={t("收藏夹")}
           onMouseEnter={hoverEnter(() => setFavOpen(true))}
@@ -618,7 +618,7 @@ export function TitleBar() {
                 </MenuItem>
               )}
               {morePop && (
-                <MenuItem icon={ic(Star)} text={t("收藏夹")}>
+                <MenuItem icon={ic(FolderBookmark)} text={t("收藏夹")}>
                   {KNOWN.map((k) => (
                     <MenuItem
                       key={k.id}
