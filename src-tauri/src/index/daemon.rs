@@ -10,6 +10,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use windows::Win32::System::Time::{FileTimeToSystemTime, SystemTimeToTzSpecificLocalTime};
+
 use super::store::{self, VolumeMeta};
 use super::table::NameTable;
 use super::task;
@@ -27,6 +29,9 @@ const USN_POLL_MAX: Duration = Duration::from_millis(2000);
 const SAVE_SETTLE_MS: u64 = 8_000;
 /// 脏保存上限间隔：持续高频变更时的兜底重写节奏（防写饥饿）
 const SAVE_STALE_MS: u64 = 60_000;
+/// 守护日志文件（独立 bin 为 windows 子系统、无控制台可写）：超限滚动为 .old
+const LOG_FILE: &str = "daemon.log";
+const LOG_ROTATE_BYTES: u64 = 512 * 1024;
 
 /// USN 轮询间隔自适应（纯函数配 cargo test）：有记录保持 250ms 快轮跟手；
 /// 空转逐级退避 500ms→1s→2s 封顶——空闲盘不再 500ms 忙轮询，常驻功耗显著下降
@@ -65,6 +70,58 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+/// 守护日志：统一落 index/daemon.log（见 LOG_FILE 注释）。控制台通道必须彻底
+/// 弃用——console 处于选择模式时写它会无限阻塞调用线程（2026-11-27 实机复现：
+/// 停止收尾卡在打印上，exit 不可达，进程僵死），且 windows 子系统进程本就
+/// 无控制台可写
+fn dlog(msg: &str) {
+    let dir = index_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    let p = dir.join(LOG_FILE);
+    if std::fs::metadata(&p)
+        .map(|m| m.len() > LOG_ROTATE_BYTES)
+        .unwrap_or(false)
+    {
+        let _ = std::fs::rename(&p, dir.join(format!("{LOG_FILE}.old")));
+    }
+    let line = format!("{} [x-dir-daemon] {}\n", local_timestamp(), msg);
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&p)
+    {
+        let _ = std::io::Write::write_all(&mut f, line.as_bytes());
+    }
+}
+
+/// 本地时间戳（SystemTimeToTzSpecificLocalTime 按 DST 换算，listing.rs 同款；
+/// 失败回落 UTC 毫秒值）
+fn local_timestamp() -> String {
+    let ms = now_ms();
+    let ticks = ms
+        .checked_mul(10_000)
+        .and_then(|t| t.checked_add(116_444_736_000_000_000));
+    if let Some(ticks) = ticks {
+        let ft = windows::Win32::Foundation::FILETIME {
+            dwLowDateTime: ticks as u32,
+            dwHighDateTime: (ticks >> 32) as u32,
+        };
+        let mut utc = windows::Win32::Foundation::SYSTEMTIME::default();
+        let mut loc = windows::Win32::Foundation::SYSTEMTIME::default();
+        unsafe {
+            if FileTimeToSystemTime(&ft, &mut utc).is_ok()
+                && SystemTimeToTzSpecificLocalTime(None, &utc, &mut loc).is_ok()
+            {
+                return format!(
+                    "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+                    loc.wYear, loc.wMonth, loc.wDay, loc.wHour, loc.wMinute, loc.wSecond
+                );
+            }
+        }
+    }
+    format!("{ms}ms")
+}
+
 /// 守护进程是否存活（心跳文件 mtime 新鲜）
 pub fn daemon_alive() -> bool {
     let p = index_dir().join(HEARTBEAT_FILE);
@@ -79,6 +136,12 @@ pub fn request_stop() {
     let dir = index_dir();
     let _ = std::fs::create_dir_all(&dir);
     let _ = std::fs::write(dir.join(STOP_FILE), b"stop");
+}
+
+/// 清除遗留停止请求（开启索引模式时调用：最新意图 = 开，守护离线期间写入的
+/// stop 文件不得再触发「启动即撤」语义）
+pub fn clear_stop_request() {
+    let _ = std::fs::remove_file(index_dir().join(STOP_FILE));
 }
 
 /// 写入守护配置：启用卷清单（主程序 enable 时调用；默认 = 全部固定 NTFS 盘）
@@ -205,9 +268,25 @@ impl VolumeState {
                 self.dirty = false;
                 self.last_saved_ms = now_ms();
             }
-            Err(e) => eprintln!("[x-dir-daemon] 保存 {} 索引失败：{e}", self.letter as char),
+            Err(e) => dlog(&format!("保存 {} 索引失败：{e}", self.letter as char)),
         }
     }
+}
+
+/// 全量重建一张名表（MFT 枚举 + 日志头位点）；返回 (表, journal_id, next_usn)。
+/// JOURNAL_RESET 的唯一恢复路径——不能续载：续载只校验卷序列与 journal id，
+/// 会把同一个已失效的 next_usn（被日志回绕越过/日志项已删）原样退回，读入即
+/// 再失败 → 无限重载循环（2026-11-27 实机复现：C/E 每轮续载刷屏、索引冻结
+/// 25 分钟、CPU 与内存双烧）。重建秒级且位点取自日志头，重建后即恢复增量
+fn build_fresh(letter: u8, vol: &VolumeHandle) -> Result<(NameTable, u64, u64), String> {
+    let entries = vol.enum_mft()?;
+    let (journal_id, next_usn) = vol.journal()?;
+    let mut table = NameTable::new(ROOT_FRN);
+    for e in entries {
+        table.upsert(e.frn, e.parent_frn, &e.name, e.is_dir);
+    }
+    dlog(&format!("{} 初建 {} 条", letter as char, table.len()));
+    Ok((table, journal_id, next_usn))
 }
 
 /// 初建或续载一张名表；返回 (表, journal_id, next_usn)
@@ -223,7 +302,8 @@ fn load_or_build(
     {
         let stored_id = view.header.journal_id;
         let stored_next = view.header.next_usn;
-        // 2) 日志仍连续 → 直接续跑增量
+        // 2) 日志仍连续 → 直接续跑增量（位点失效由 read_usn 的 JOURNAL_RESET
+        //    兜底——该路径走 build_fresh 全量重建，绝不回到本分支）
         match vol.journal() {
             Ok((live_id, _)) if live_id == stored_id => {
                 let table = NameTable::from_parts(
@@ -233,21 +313,14 @@ fn load_or_build(
                     view.initials().to_vec(),
                     view.header.root_frn,
                 );
-                eprintln!("[x-dir-daemon] {} 续载 {} 条", letter as char, table.len());
+                dlog(&format!("{} 续载 {} 条", letter as char, table.len()));
                 return Ok((table, stored_id, stored_next));
             }
-            _ => eprintln!("[x-dir-daemon] {} USN 日志变更，全量重建", letter as char),
+            _ => dlog(&format!("{} USN 日志变更，全量重建", letter as char)),
         }
     }
     // 3) 全量重建：MFT 枚举（秒级）+ 日志位点
-    let entries = vol.enum_mft()?;
-    let (journal_id, next_usn) = vol.journal()?;
-    let mut table = NameTable::new(ROOT_FRN);
-    for e in entries {
-        table.upsert(e.frn, e.parent_frn, &e.name, e.is_dir);
-    }
-    eprintln!("[x-dir-daemon] {} 初建 {} 条", letter as char, table.len());
-    Ok((table, journal_id, next_usn))
+    build_fresh(letter, vol)
 }
 
 fn apply_usn(table: &mut NameTable, recs: &[volume::UsnRec]) -> bool {
@@ -328,8 +401,9 @@ fn run_volume(
                 state.journal_id = journal_id;
             }
             Err(e) if e == "JOURNAL_RESET" => {
-                // 日志被删建：全量重建后继续
-                match load_or_build(letter, serial, &vol) {
+                // 日志被删建/位点失效：全量重建后继续（不续载——续载会退回同一
+                // 失效位点形成死循环，见 build_fresh 注释）
+                match build_fresh(letter, &vol) {
                     Ok((t, id, n)) => {
                         state.table = t;
                         journal_id = id;
@@ -385,7 +459,7 @@ fn run_volume(
 }
 
 fn set_err(status: &Mutex<StatusDoc>, letter: u8, msg: &str) {
-    eprintln!("[x-dir-daemon] {}: {msg}", letter as char);
+    dlog(&format!("{}: {msg}", letter as char));
     let mut st = status.lock().unwrap();
     st.volumes.insert(
         letter,
@@ -453,14 +527,39 @@ pub fn run() -> ! {
     {
         let _ = CFG_ROOT.set(PathBuf::from(cfg));
     }
+    // 控制台剥离（先行于一切输出）：debug 自身副本是 console 子系统，被计划
+    // 任务/控制台父进程拉起时会附着控制台窗；console 进入选择模式后任何写入
+    // 都会无限阻塞线程（2026-11-27 实机复现：停止收尾卡死在打印上 exit 不可达）。
+    // detach 后整类问题消失；windows 子系统进程（release 副本 / 独立 daemon
+    // bin）本无控制台，调用为无害 no-op
+    unsafe {
+        let _ = windows::Win32::System::Console::FreeConsole();
+    }
     // 单例护栏：心跳存活 = 已有守护在跑，静默退出（重复实例会互相覆盖索引文件）
     if daemon_alive() {
-        eprintln!("[x-dir-daemon] 已有实例运行，退出");
+        dlog("已有实例运行，退出");
         std::process::exit(0);
     }
     let dir = index_dir();
     let _ = std::fs::create_dir_all(&dir);
-    let _ = std::fs::remove_file(dir.join(STOP_FILE));
+    // 停止请求可能写于守护离线期间（普通权限开关删不动 HIGHEST 任务，删除
+    // 由本提权进程执行）：按「关」语义全撤——删自启任务、清信号文件后退出。
+    // 此前无条件删 stop 文件会吞掉离线期间的停止请求，开关已关的守护仍被
+    // 计划任务每日复活（2026-11-27 实机复现）。任务删除失败时保留 stop 文件
+    // 下次触发重试
+    if dir.join(STOP_FILE).exists() {
+        match task::delete_autostart_task() {
+            Ok(()) => {
+                let _ = std::fs::remove_file(dir.join(STOP_FILE));
+                dlog("启动即见停止请求（离线期间写入）：自启任务已删除，按关语义退出");
+            }
+            Err(e) => dlog(&format!(
+                "启动即见停止请求：自启任务删除失败（{e}），保留 stop 文件下次重试，退出"
+            )),
+        }
+        let _ = std::fs::remove_file(dir.join(HEARTBEAT_FILE));
+        std::process::exit(0);
+    }
     let letters = {
         let cfg = read_daemon_config();
         if cfg.is_empty() {
@@ -469,11 +568,11 @@ pub fn run() -> ! {
             cfg
         }
     };
-    eprintln!(
-        "[x-dir-daemon] 启动，pid={}，卷={}",
+    dlog(&format!(
+        "启动，pid={}，卷={}",
         std::process::id(),
         letters.iter().map(|l| *l as char).collect::<String>()
-    );
+    ));
     // 登录自启任务（2026-11-24 优化批）：本进程已提权，由它自行幂等注册
     // 「登录时最高权限运行」计划任务——此后每次开机任务计划程序静默拉起
     // 守护，用户不再每个开机周期重拨开关过一次 UAC。失败仅记日志不阻断
@@ -483,8 +582,8 @@ pub fn run() -> ! {
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| dir.clone());
     match task::register_autostart_task(&std::env::current_exe().unwrap_or_default(), &cfg_root) {
-        Ok(()) => eprintln!("[x-dir-daemon] 登录自启任务已注册（{}）", task::TASK_NAME),
-        Err(e) => eprintln!("[x-dir-daemon] 登录自启任务注册失败：{e}"),
+        Ok(()) => dlog(&format!("登录自启任务已注册（{}）", task::TASK_NAME)),
+        Err(e) => dlog(&format!("登录自启任务注册失败：{e}")),
     }
     let status = Arc::new(Mutex::new(StatusDoc::default()));
     let stop = Arc::new(AtomicBool::new(false));
@@ -507,8 +606,8 @@ pub fn run() -> ! {
                         &std::env::current_exe().unwrap_or_default(),
                         &cfg_root,
                     ) {
-                        Ok(()) => eprintln!("[x-dir-daemon] 配置变更，登录自启任务已重注册"),
-                        Err(e) => eprintln!("[x-dir-daemon] 登录自启任务重注册失败：{e}"),
+                        Ok(()) => dlog("配置变更，登录自启任务已重注册"),
+                        Err(e) => dlog(&format!("登录自启任务重注册失败：{e}")),
                     }
                 }
                 if index_dir().join(STOP_FILE).exists() {
@@ -521,12 +620,12 @@ pub fn run() -> ! {
                     // 开关关闭语义 = 全撤：自启任务一并删除（普通权限的开关
                     // 删不动最高权限任务，删除由本提权进程执行）
                     match task::delete_autostart_task() {
-                        Ok(()) => eprintln!("[x-dir-daemon] 登录自启任务已删除"),
-                        Err(e) => eprintln!("[x-dir-daemon] 登录自启任务删除失败：{e}"),
+                        Ok(()) => dlog("登录自启任务已删除"),
+                        Err(e) => dlog(&format!("登录自启任务删除失败：{e}")),
                     }
                     let _ = std::fs::remove_file(index_dir().join(HEARTBEAT_FILE));
                     let _ = std::fs::remove_file(index_dir().join(STOP_FILE));
-                    eprintln!("[x-dir-daemon] 收到停止请求，退出");
+                    dlog("收到停止请求，退出");
                     std::process::exit(0);
                 }
                 std::thread::sleep(Duration::from_secs(1));
@@ -570,6 +669,6 @@ pub fn run() -> ! {
     }
     write_status(&status.lock().unwrap());
     let _ = std::fs::remove_file(index_dir().join(HEARTBEAT_FILE));
-    eprintln!("[x-dir-daemon] 退出");
+    dlog("退出");
     std::process::exit(0);
 }

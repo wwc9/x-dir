@@ -83,10 +83,13 @@
 
 **B NTFS 名称索引（秒搜通道，`src-tauri/src/index/`）：**
 
-- **架构 = 提权守护 + mmap 只读共享**：`X-Dir.exe --index-daemon`（同一 exe，不建 WebView）
-  以管理员运行（设置面板开启"索引模式"时 `ShellExecuteExW runas` 拉起，**一次 UAC**），
+- **架构 = 提权守护 + mmap 只读共享**：守护以 `--index-daemon <config_root>` 提权运行
+  （独立 `x-dir-daemon` bin，无条件 windows 子系统永不弹控制台；dev 期 cargo 自动产出，
+  便携/安装版打包链未随包时主程序回落复制自身副本，不建 WebView）
+  （设置面板开启"索引模式"时 `ShellExecuteExW runas` 拉起，**一次 UAC**），
   负责 MFT 初建（`FSCTL_ENUM_USN_DATA`，秒级）+ USN 日志增量（`FSCTL_READ_USN_JOURNAL`，
-  500ms 轮询，CREATE/RENAME_NEW→upsert、DELETE/RENAME_OLD→remove，journal id 变化→全量重建）；
+  500ms 轮询，CREATE/RENAME_NEW→upsert、DELETE/RENAME_OLD→remove，journal id 变化→全量重建，
+  位点失效（JOURNAL_RESET）也全量重建不续载，详见 features.md §4.3 2026-11-27 修复批）；
   主程序全程普通权限（拖放/删除等无 UIPI 影响），mmap 只读打开索引文件查询（读侧
   FILE_SHARE_DELETE，与守护"tmp+rename 原子覆盖"共存）
 - **纯文件通信**（免服务/免注册表/免端口）：`config/index/daemon.json`（启用卷清单）、

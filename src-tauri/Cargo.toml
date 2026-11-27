@@ -19,6 +19,14 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [features]
 custom-protocol = ["tauri/custom-protocol"]
 
+# 索引守护独立 bin（src/bin/x-dir-daemon.rs）：无条件 windows 子系统——登录
+# 自启/UAC 拉起永不弹控制台黑窗（debug 亦然）。dev 由 cargo 自动与主程序一并
+# 产出；便携/安装版暂不随包（打包链不动），启用索引时主程序找不到同排 bin 即
+# 回落复制自身（release 为 windows 子系统，同样无黑窗，见 index/mod.rs）
+[[bin]]
+name = "x-dir-daemon"
+path = "src/bin/x-dir-daemon.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -32,9 +40,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 windows-core = "0.62"
 # Wdk_System_SystemInformation = 解除占用：NtQuerySystemInformation 枚举全系统句柄表（locks.rs，2026-11-01）
-# Win32_System_Time = 导出清单本地时间（SystemTimeToTzSpecificLocalTime 按文件时刻 DST 换算，2026-11-10）
+# Win32_System_Time = 导出清单本地时间 + 守护日志时间戳（SystemTimeToTzSpecificLocalTime 按文件时刻 DST 换算，2026-11-10/2026-11-27）
+# Win32_System_Console = 守护启动 FreeConsole 剥离 debug 副本控制台（daemon.rs，2026-11-27）
 # Win32_System_WinRT = OCR 像素直写（IBufferByteAccess，cliphist.rs ocr_png，2026-11-12）
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_Security", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_Com", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Ole", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_UI_Shell_Common", "Win32_System_SystemServices", "Win32_System_Com_StructuredStorage", "Win32_System_IO", "Win32_System_SystemInformation", "Win32_System_Registry", "Win32_System_Threading", "Win32_System_Time", "Win32_System_WinRT", "Media_Ocr", "Globalization", "Graphics_Imaging", "Storage_Streams", "System_Threading", "Wdk_System_SystemInformation", "Wdk_System_SystemServices"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_Security", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_Com", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Ole", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_UI_Shell_Common", "Win32_System_SystemServices", "Win32_System_Com_StructuredStorage", "Win32_System_IO", "Win32_System_SystemInformation", "Win32_System_Registry", "Win32_System_Threading", "Win32_System_Time", "Win32_System_WinRT", "Win32_System_Console", "Media_Ocr", "Globalization", "Graphics_Imaging", "Storage_Streams", "System_Threading", "Wdk_System_SystemInformation", "Wdk_System_SystemServices"] }
 # 全盘索引的 mmap 只读查询（MIT）
 memmap2 = "0.9"
 trash = "5.2.9"

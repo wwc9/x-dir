@@ -362,26 +362,33 @@ fn sha256_file(p: &std::path::Path) -> Result<String, String> {
     Ok(format!("{:x}", h.finalize()))
 }
 
-/// UAC 拉起提权守护进程（ShellExecuteExW runas；用户取消 UAC → Err）
+/// UAC 拉起提权守护进程（ShellExecuteExW runas；用户取消 UAC → Err）。
+/// 守护源两级查找（2026-11-27）：优先程序目录同排的独立 daemon bin（dev 场景
+/// cargo 自动产出，无条件 windows 子系统——登录自启/UAC 拉起永不弹控制台黑窗）；
+/// 便携/安装版未随包带 bin 时回落主程序自身副本（release 本就是 windows 子系统，
+/// 同样无黑窗；debug 副本由守护启动时 FreeConsole 兜底剥离）。config/index
+/// 副本机制保持：常驻跑副本，dev 热重编译不被锁、安装目录只读也不受影响
 pub fn launch_elevated_daemon() -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
     use windows::Win32::UI::Shell::{SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW, ShellExecuteExW};
     use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
-    // 守护用主程序 exe 的独立副本（config/index/x-dir-daemon.exe）：守护常驻不再
-    // 锁死 target 产物，开发期热重编译不被阻塞；配置根经参数显式传递
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let src = match exe.parent() {
+        Some(dir) if dir.join("x-dir-daemon.exe").exists() => dir.join("x-dir-daemon.exe"),
+        _ => exe,
+    };
     let cfg = crate::config::config_root();
     let dir = cfg.join("index");
     let _ = std::fs::create_dir_all(&dir);
     let daemon_exe = dir.join("x-dir-daemon.exe");
-    if std::fs::copy(&exe, &daemon_exe).is_err() && !daemon_exe.exists() {
+    if std::fs::copy(&src, &daemon_exe).is_err() && !daemon_exe.exists() {
         return Err("无法准备守护进程副本（config/index/x-dir-daemon.exe）".into());
     }
     // 副本完整性校验（2026-11-01 安全加固）：副本落点在用户可写目录而拉起
     // 走 runas 提权——同用户恶意进程可在复制后/复用旧副本时替换之以骗取
     // 一次管理员执行。哈希比对不一致即拒绝提权（复制 → 比对 → 拉起之间的
     // 窗口已压缩到一瞬；彻底消除需计划任务/服务承载，见发布前议题）
-    if sha256_file(&exe)? != sha256_file(&daemon_exe)? {
+    if sha256_file(&src)? != sha256_file(&daemon_exe)? {
         return Err(
             "守护副本与当前程序不一致（可能被替换或上次复制中断），已拒绝提权拉起；\
              删除 config/index/x-dir-daemon.exe 后重试"

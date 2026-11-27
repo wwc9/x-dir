@@ -38,17 +38,18 @@ pub struct AppState {
 /// 启动参数（供 --bench 内存基准模式等使用）
 pub static LAUNCH_ARGS: OnceLock<Vec<String>> = OnceLock::new();
 
+/// 索引守护进程入口（独立 bin `x-dir-daemon`，2026-11-27 从主程序副本拆分）：
+/// 无条件 windows 子系统——计划任务登录拉起与 UAC 拉起都永不弹控制台黑窗
+/// （主程序 bin 保留 debug 控制台用于开发日志）；不创建 WebView，永驻至
+/// stop 文件（§全盘索引）
+pub fn daemon_main() -> ! {
+    index::daemon::run()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     use tauri::Manager;
     let _ = LAUNCH_ARGS.set(std::env::args().skip(1).collect::<Vec<_>>());
-    // 索引守护模式：提权子进程，不创建 WebView，永驻至 stop 文件（§全盘索引）
-    if LAUNCH_ARGS
-        .get()
-        .is_some_and(|a| a.iter().any(|x| x == "--index-daemon"))
-    {
-        index::daemon::run();
-    }
     // 便携化：WebView2 用户数据目录指向程序本地（必须先于 WebView2 环境创建，§6.9）
     if let Some(dir) = std::env::current_exe()
         .ok()

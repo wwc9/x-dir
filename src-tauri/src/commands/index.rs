@@ -22,6 +22,9 @@ pub fn enable_index_mode() -> Result<(), AppError> {
     }
     daemon::write_daemon_config(&letters)
         .map_err(|e| AppError::new("E_IO", format!("写入守护配置失败：{e}")))?;
+    // 开启意图显式覆盖离线期间遗留的停止请求：否则守护本次拉起会走「启动即撤」
+    // 语义（删自启任务后退出），开关开了却起不来（2026-11-27 修复）
+    daemon::clear_stop_request();
     if daemon::daemon_alive() {
         return Ok(()); // 已在运行：新卷清单待其重启后生效
     }
