@@ -91,7 +91,6 @@ describe("快捷键统一规范审计（2026-11-25 定案）", () => {
       ["Ctrl+F", "搜索"],
       ["Alt+D", "聚焦地址栏"],
       ["Ctrl+L", "聚焦地址栏（浏览器惯例）"],
-      ["Ctrl+Shift+F", "全盘搜索"],
     ];
     for (const [combo, what] of required) {
       expect(all.has(combo), `资源管理器兼容键 ${combo}（${what}）缺失`).toBe(true);

@@ -29,7 +29,7 @@ const HIGHLIGHTS = [
     icon: Search,
     title: t("全盘秒搜"),
     desc: t("全盘文件名搜索，支持拼音与 ext: / size: / dm: 语法"),
-    kbd: "Ctrl+Shift+F",
+    kbd: "Ctrl+Alt+F",
   },
   {
     icon: WandSparkles,

@@ -137,7 +137,7 @@ function SearchRowIcon({
 }
 
 /** 全盘搜索宿主（Everything 式）：居中 Dialog + 虚拟结果列表。
- *  唤起：顶栏按钮 / Ctrl+Shift+F（lib/keyboard）；索引模式可用时毫秒级出结果，
+ *  唤起：顶栏按钮 / 系统级热键（默认 Ctrl+Alt+F，可录制，hotkeys.rs 分发）；索引模式可用时毫秒级出结果，
  *  否则 Rust 端并行遍历（流式回吐命中批次，边扫边看）。 */
 export function GlobalSearchPage() {
   const t = useT();

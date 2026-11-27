@@ -22,11 +22,11 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     title: "全局",
     items: [
-      { id: "gsearch-open", keys: ["Ctrl+Shift+F"], label: "全盘搜索", scope: "global" },
       {
         id: "gsearch-sys-open",
-        // 默认键位与内置 global 快捷键错开（Ctrl+Shift+F 已是应用内全盘搜索，
-        // 系统级热键会吞掉同组合）；scope 与 ipc.ts DEFAULTS.gsearchHotkey 同源
+        // 全盘搜索唯一快捷键（2026-11-27 用户定案「全局/应用内留一个」：应用内
+        // Ctrl+Shift+F 退役，系统级热键在窗口聚焦时同样直达搜索框，是真超集）；
+        // scope 与 ipc.ts DEFAULTS.gsearchHotkey 同源
         keys: ["Ctrl+Alt+F"],
         label: "打开全盘搜索（系统级热键，任意界面生效，光标直达搜索框；键位可在设置 → 全盘搜索自定义录制）",
         scope: "system",

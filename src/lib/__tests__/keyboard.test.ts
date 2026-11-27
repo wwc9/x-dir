@@ -212,17 +212,6 @@ describe("全局守卫", () => {
     covered.add("menu-page-close");
   });
 
-  it("gsearch-open：定制页内 Ctrl+Shift+F = 切换到全盘搜索页（整页互斥）", () => {
-    useUi.setState({ menuPage: true });
-    expect(fire({ key: "F", ctrl: true, shift: true }).prevented).toBe(true);
-    expect(useUi.getState().menuPage).toBe(false);
-    expect(useUi.getState().globalSearch).toBe(true);
-    // 已在全盘搜索页再按：保持打开（幂等），反向切换走顶栏定制钮/Esc
-    expect(fire({ key: "F", ctrl: true, shift: true }).prevented).toBe(true);
-    expect(useUi.getState().globalSearch).toBe(true);
-    useUi.setState({ globalSearch: false });
-  });
-
   it("模态守卫：对话框打开时全部全局快捷键停用", () => {
     useUi.setState({ dialog: { type: "alert", message: "x" } });
     const before = dfsPanes(useLayout.getState().tree!)[0].tabs.length;
@@ -230,16 +219,6 @@ describe("全局守卫", () => {
     expect(r.prevented).toBe(false);
     expect(dfsPanes(useLayout.getState().tree!)[0].tabs.length).toBe(before);
     expect(h.onRefresh).not.toHaveBeenCalled();
-  });
-
-  it("gsearch-open：Ctrl+Shift+F 唤起全盘搜索（输入框聚焦时也可）", () => {
-    expect(fire({ key: "F", ctrl: true, shift: true }).prevented).toBe(true);
-    expect(useUi.getState().globalSearch).toBe(true);
-    // 输入框内同样生效（模态守卫之后的早退分支不影响）
-    useUi.setState({ globalSearch: false });
-    fire({ key: "F", ctrl: true, shift: true, target: { tagName: "INPUT" } });
-    expect(useUi.getState().globalSearch).toBe(true);
-    covered.add("gsearch-open");
   });
 
   it("calendar-page-close：工作日历页输入框内先失焦，再按 Esc 关闭", () => {

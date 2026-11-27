@@ -112,6 +112,8 @@ export function TitleBar() {
   const shotEnabled = useSettings((s) => s.shotEnabled);
   const shotHotkey = useSettings((s) => s.shotHotkey);
   const cliphistHotkey = useSettings((s) => s.cliphistHotkey);
+  // 全盘搜索唯一快捷键（2026-11-27 应用内 Ctrl+Shift+F 退役）= 系统级热键，可录制
+  const gsearchHotkey = useSettings((s) => s.gsearchHotkey);
   // 工作日历（2026-11-13）：开合态 + 热键键位（tooltip 键帽随设置实时跟随）
   const calendarOpen = useUi((s) => s.calendarOpen);
   const calendarEnabled = useSettings((s) => s.calendarEnabled);
@@ -494,7 +496,7 @@ export function TitleBar() {
         data-tb="search"
         active={gsearchOpen}
         aria-label={t("全盘搜索")}
-        data-tip={t("全盘搜索")} data-kbd="Ctrl+Shift+F"
+        data-tip={t("全盘搜索")} data-kbd={gsearchHotkey}
         onClick={() =>
           gsearchOpen
             ? useUi.getState().closeGlobalSearch()
