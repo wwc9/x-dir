@@ -644,7 +644,10 @@ html.glasswin.bp6-dark .np-shelf {
    应该要直接用二级弹窗的参数」——旧版走 --np-surface 卡片霜面且无 blur，
    经 token 继承拿到半透明底即穿透病，收编入族随弹层模糊/弹层浓度参数）/
    表格预览单元格详情浮层（np-pv-sheet-detail，2026-11-26 八项增强：
-   Enter/双击看全文的浮层面板，浮于网格之上）——
+   Enter/双击看全文的浮层面板，浮于网格之上）/ 窗格搜索浮层（np-search-pop，
+   2026-11-27 用户核查「搜索面板的磨玻璃效果用了二级界面的效果吗」发现同病
+   ——旧版走 --np-surface 卡片霜面且无 blur，glasswin 下经 token 继承半透明
+   无模糊即穿透病，收编入族随弹层模糊/弹层浓度参数）——
    前三者为 2026-11-18 全量审计扩员（旧版半透明面无模糊，背后内容锐利穿透
    同病）；ctx 子菜单弹层外壳按定稿保持透明（菜单自带霜面），:not 排除防
    双重霜。弹窗已升级染色极光玻璃（下方独立规则），不再共用本段。
@@ -657,7 +660,8 @@ html.glasswin .np-cal-jump,
 html.glasswin .np-cal-hits,
 html.glasswin .np-palette,
 html.glasswin .np-clip-srcmenu,
-html.glasswin .np-pv-sheet-detail {
+html.glasswin .np-pv-sheet-detail,
+html.glasswin .np-search-pop {
   background: var(--np-surface-glass-strong);
   border-color: var(--np-glass-ring);
   box-shadow: var(--np-glass-shadow);
