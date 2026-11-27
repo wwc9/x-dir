@@ -16,6 +16,9 @@
   --np-hairline: rgba(16, 24, 40, 0.06);
   --np-fg: #171d26;
   --np-muted: #66707e;
+  /* 开关 OFF 轨道（2026-11-27 方案 A 实底深轨：OFF 态原先近乎隐形）+ hover 深一档 */
+  --np-switch-track-off: #ccd3dd;
+  --np-switch-track-off-hover: #bcc4cf;
   /* 强调色自定义（2026-11-25）：回退链消费用户变量 --np-accent-user(-dark)，
      settings.applyAccent 内联下发（浅/深两套取值成对，单变量不串主题）；
      --np-sel / --np-glass-hover 同步改为 accent 派生（color-mix 与原硬编码
@@ -162,6 +165,8 @@ html.bp6-dark {
   --np-border: #454545;
   --np-fg: #d4d4d4;
   --np-muted: #8f8f8f;
+  --np-switch-track-off: #4d545e;
+  --np-switch-track-off-hover: #5a6270;
   --np-accent: var(--np-accent-user-dark, #5c9dff);
   --np-accent-fg: #101010;
   --np-hover: rgba(255, 255, 255, 0.07);
@@ -511,6 +516,24 @@ html.glasswin.bp6-dark .bp6-control.bp6-switch .bp6-control-indicator::before {
 html.glasswin .bp6-control.bp6-switch input:checked ~ .bp6-control-indicator::before {
   border-color: var(--np-accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--np-accent) 25%, transparent);
+}
+/* OFF 轨道实底深轨（2026-11-27 用户报告「关闭状态下太不明显」三案比选定案 A
+   ——实底深轨/反差灰钮/内凹凹槽）：轨道改 --np-switch-track-off 实底深灰 +
+   hover 深一档；旋钮柔投影分离（浅白钮 / 深 fg 提亮钮），描边圈（滑杆语言）
+   保留，ON 态 accent 语言不变。上方半透白子面通配规则继续服务 Checkbox/Radio
+   （switch 专属规则特异性更高自然接管 OFF 轨道） */
+html.glasswin .bp6-control.bp6-switch input:not(:checked) ~ .bp6-control-indicator {
+  background: var(--np-switch-track-off);
+}
+html.glasswin .bp6-control.bp6-switch:hover input:not(:checked) ~ .bp6-control-indicator {
+  background: var(--np-switch-track-off-hover);
+}
+html.glasswin .bp6-control.bp6-switch input:not(:checked) ~ .bp6-control-indicator::before {
+  box-shadow: 0 1px 2px rgba(23, 29, 38, 0.28);
+}
+html.glasswin.bp6-dark .bp6-control.bp6-switch input:not(:checked) ~ .bp6-control-indicator::before {
+  background: var(--np-fg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
 /* ═══ 玻璃背景图案（2026-11-18 收敛定案：六案比选后用户拍板「除极光外全删」——
@@ -1168,6 +1191,23 @@ html.glasswin .np-winedge-top {
 }
 .bp6-control.bp6-switch input:focus ~ .bp6-control-indicator {
   outline: none;
+}
+/* OFF 轨道实底深轨（2026-11-27 用户报告「关闭状态下太不明显」三案比选定案 A，
+   design 预览三案会话内比选；实底/玻璃两作用域同步，玻璃变体见 glasswin
+   玻璃值组件块）：轨道实底 --np-switch-track-off + hover 深一档，旋钮柔投影
+   分离（浅白钮 / 深 fg 钮）；ON 态 accent 语言不变，轨道无描边定案不破 */
+.bp6-control.bp6-switch input:not(:checked) ~ .bp6-control-indicator {
+  background: var(--np-switch-track-off);
+}
+.bp6-control.bp6-switch:hover input:not(:checked) ~ .bp6-control-indicator {
+  background: var(--np-switch-track-off-hover);
+}
+.bp6-control.bp6-switch input:not(:checked) ~ .bp6-control-indicator::before {
+  box-shadow: 0 1px 2px rgba(23, 29, 38, 0.28);
+}
+.bp6-dark .bp6-control.bp6-switch input:not(:checked) ~ .bp6-control-indicator::before {
+  background: var(--np-fg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 /* Toast 独立窗口已移除（2026-10-15 定案）：全部提示经 useUi.toast 路由为
    灵动岛回执（error→fail 6s / 其余→ok 4s），样式见 .np-island 段 */
