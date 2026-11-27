@@ -1060,14 +1060,17 @@ export function SettingsPanel() {
             <section key={g.title}>
               <div className="np-set-group-title">{t(g.title)}</div>
               {g.items.map((it) => {
-                // 可自定义的系统级热键（截图/剪贴板）：清单里的键位是默认值，
-                // 实际以设置当前值为准（关闭时显示未启用）
-                const keys =
-                  it.id === "shot-open"
-                    ? [s.shotEnabled ? s.shotHotkey : t("未启用")]
-                    : it.id === "cliphist-open"
-                      ? [s.cliphistEnabled ? s.cliphistHotkey : t("未启用")]
-                      : it.keys;
+                // 可自定义的系统级热键（截图/剪贴板/全盘搜索/日历）：清单里的键位
+                // 是默认值，实际以设置当前值为准（有 Enabled 门控的关闭时显示未
+                // 启用）——否则清单页与录制器、顶栏键帽三处各说各话（2026-11-27
+                // 用户报告「三处快捷键都不统一」）
+                const dynamicKeys: Record<string, () => string[]> = {
+                  "shot-open": () => [s.shotEnabled ? s.shotHotkey : t("未启用")],
+                  "cliphist-open": () => [s.cliphistEnabled ? s.cliphistHotkey : t("未启用")],
+                  "gsearch-sys-open": () => [s.gsearchHotkey],
+                  "calendar-open": () => [s.calendarHotkey],
+                };
+                const keys = dynamicKeys[it.id]?.() ?? it.keys;
                 return (
                   <SetRow key={it.id} label={t(it.label)}>
                     <span className="np-kbds">
