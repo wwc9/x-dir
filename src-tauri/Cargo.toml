@@ -5,6 +5,9 @@ description = "A multi-pane file manager for Windows with Everything-style full-
 authors = ["wwwwwc"]
 license = "MIT"
 edition = "2024"
+# 多 bin（主程序 + x-dir-daemon）必须显式指明默认运行目标，否则 cargo run /
+# tauri dev 报「could not determine which binary to run」
+default-run = "x-dir"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
