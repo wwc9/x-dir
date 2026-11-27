@@ -146,11 +146,19 @@ fn bind_context_menu(paths: &[String]) -> Result<IContextMenu, String> {
 
 /// 在 STA 工作线程上完成枚举，把显示挪到主线程（owner 窗口线程）模态跟踪，
 /// 用户收场后回工作线程执行动词。工作线程阻塞至菜单关闭是预期行为，枚举期
-/// 间主线程全程空闲。坐标取实时光标位置（右键动作与光标天然同点，免去 DPI
-/// 换算）。
+/// 间主线程全程空闲。坐标取 IPC 到达瞬间的光标位置（与「更多系统选项」点击
+/// 点天然同点，误差仅毫秒级，免去 DPI 换算）。
 fn show(paths: &[String], owner: HWND, app: &AppHandle) -> Result<(), String> {
     unsafe {
         let _co = crate::native_ops::CoGuard::new().ok_or("COM 初始化失败")?;
+        // 光标先行捕获（必须在 bind/QueryContextMenu 之前）：重型扩展枚举可长
+        // 达数秒，期间用户多半已移开鼠标，枚举后再取会钉在无关位置（2026-11-27
+        // 用户报告「菜单左上角出现在右键文件的位置」病灶）。菜单落点与
+        // InvokeCommand 的 ptInvoke 同点共用
+        let mut pt = POINT::default();
+        if GetCursorPos(&mut pt).is_err() {
+            return Err("GetCursorPos".into());
+        }
         let cm = bind_context_menu(paths)?;
         let menu = match CreatePopupMenu() {
             Ok(m) => m,
@@ -164,14 +172,7 @@ fn show(paths: &[String], owner: HWND, app: &AppHandle) -> Result<(), String> {
         }
 
         // 显示挪回 owner 窗口线程：跨线程 TrackPopupMenu 立即返回 cmd=0 且
-        // 静默成功（模块头注释——2026-11-26「更多系统选项没有反应」病灶）。
-        // 光标在此捕获一次：菜单落点与 InvokeCommand 的 ptInvoke 同点共用
-        // （右键动作与光标天然同点，免去 DPI 换算）
-        let mut pt = POINT::default();
-        if GetCursorPos(&mut pt).is_err() {
-            let _ = DestroyMenu(menu);
-            return Err("GetCursorPos".into());
-        }
+        // 静默成功（模块头注释——2026-11-26「更多系统选项没有反应」病灶）
         // 句柄以 isize 交接（HWND/HMENU 含裸指针不可 Send；句柄值全局有效，
         // 独占所有权随闭包移动，主线程收场即销毁菜单）
         let (track_tx, track_rx) = channel();
