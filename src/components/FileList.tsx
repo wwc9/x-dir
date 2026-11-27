@@ -1392,8 +1392,12 @@ export function FileList({
         return {
           label: t("更多系统选项（Shift+右键）"),
           action: () => {
+            // 系统二级菜单锚定自定义菜单的呼出点（Explorer「显示更多选项」同
+            // 惯例：二级菜单出现在最初右键处，而非「更多系统选项」菜单项位置
+            // ——自定义菜单条目多、sysMenu 驻尾部，项位离文件可达数百 px）
+            const at = useUi.getState().menu;
             api
-              .showContextMenu(selectedPaths())
+              .showContextMenu(selectedPaths(), at?.x, at?.y)
               .catch((err) => useUi.getState().toast(String(err), "error"));
           },
         };

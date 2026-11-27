@@ -1161,8 +1161,9 @@ export const api = {
   clearClipboard: () => cmd<void>("clear_clipboard"),
   getFileIcons: (paths: string[]) =>
     cmd<Record<string, string>>("get_file_icons", { paths }),
-  showContextMenu: (paths: string[]) =>
-    cmd<void>("show_context_menu", { paths }),
+  /** paths + 呼出点（自定义菜单锚位，CSS 像素）：系统二级菜单锚定最初右键位置 */
+  showContextMenu: (paths: string[], x?: number, y?: number) =>
+    cmd<void>("show_context_menu", { paths, x, y }),
   /** 主题切换时同步无边框窗口顶部 1px 非客户区颜色（COLORREF 0x00BBGGRR），
    *  填成画布色融入背景，防系统强调色/窗口背景亮条浮出（实测 2026-10-17） */
   setBorderColor: (color: number) => cmd<void>("set_border_color", { color }),

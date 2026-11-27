@@ -44,6 +44,9 @@ enum Job {
     Show {
         paths: Vec<String>,
         owner: isize,
+        /// 菜单锚点（屏幕物理坐标）= 前端自定义菜单的呼出点换算值；None 兜底
+        /// 取 IPC 到达瞬间光标
+        anchor: Option<(i32, i32)>,
         app: AppHandle,
         reply: Sender<Result<(), String>>,
     },
@@ -74,10 +77,11 @@ fn worker_loop(rx: Receiver<Job>) {
             Job::Show {
                 paths,
                 owner,
+                anchor,
                 app,
                 reply,
             } => {
-                let r = show(&paths, HWND(owner as *mut _), &app);
+                let r = show(&paths, HWND(owner as *mut _), anchor, &app);
                 let _ = reply.send(r);
             }
             Job::Warm { path } => {
@@ -92,12 +96,18 @@ fn worker_loop(rx: Receiver<Job>) {
 
 /// 命令入口（async）：任务交给工作线程并等待回执。前端 await 语义不变
 /// （菜单关闭后才 resolve；失败文案走既有 catch → 灵动岛回执）
-pub async fn show_async(paths: Vec<String>, owner: isize, app: AppHandle) -> Result<(), String> {
+pub async fn show_async(
+    paths: Vec<String>,
+    owner: isize,
+    anchor: Option<(i32, i32)>,
+    app: AppHandle,
+) -> Result<(), String> {
     let (reply_tx, reply_rx) = channel();
     menu_sender()
         .send(Job::Show {
             paths,
             owner,
+            anchor,
             app,
             reply: reply_tx,
         })
@@ -146,19 +156,29 @@ fn bind_context_menu(paths: &[String]) -> Result<IContextMenu, String> {
 
 /// 在 STA 工作线程上完成枚举，把显示挪到主线程（owner 窗口线程）模态跟踪，
 /// 用户收场后回工作线程执行动词。工作线程阻塞至菜单关闭是预期行为，枚举期
-/// 间主线程全程空闲。坐标取 IPC 到达瞬间的光标位置（与「更多系统选项」点击
-/// 点天然同点，误差仅毫秒级，免去 DPI 换算）。
-fn show(paths: &[String], owner: HWND, app: &AppHandle) -> Result<(), String> {
+/// 间主线程全程空闲。锚点 = 前端自定义菜单呼出点换算的屏幕物理坐标（Explorer
+/// 「显示更多选项」同惯例：二级菜单出现在最初右键位置）；None 兜底取 IPC 到达
+/// 瞬间的光标（仍须先行于慢枚举——重型扩展枚举可长达数秒，枚举后取点会钉在
+/// 移开后的光标处）。
+fn show(
+    paths: &[String],
+    owner: HWND,
+    anchor: Option<(i32, i32)>,
+    app: &AppHandle,
+) -> Result<(), String> {
     unsafe {
         let _co = crate::native_ops::CoGuard::new().ok_or("COM 初始化失败")?;
-        // 光标先行捕获（必须在 bind/QueryContextMenu 之前）：重型扩展枚举可长
-        // 达数秒，期间用户多半已移开鼠标，枚举后再取会钉在无关位置（2026-11-27
-        // 用户报告「菜单左上角出现在右键文件的位置」病灶）。菜单落点与
-        // InvokeCommand 的 ptInvoke 同点共用
-        let mut pt = POINT::default();
-        if GetCursorPos(&mut pt).is_err() {
-            return Err("GetCursorPos".into());
-        }
+        // 菜单落点与 InvokeCommand 的 ptInvoke 同点共用
+        let pt = match anchor {
+            Some((x, y)) => POINT { x, y },
+            None => {
+                let mut p = POINT::default();
+                if GetCursorPos(&mut p).is_err() {
+                    return Err("GetCursorPos".into());
+                }
+                p
+            }
+        };
         let cm = bind_context_menu(paths)?;
         let menu = match CreatePopupMenu() {
             Ok(m) => m,
