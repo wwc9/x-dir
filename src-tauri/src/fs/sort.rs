@@ -111,10 +111,17 @@ pub fn cmp_entries(a: &FileEntry, b: &FileEntry, sort: &SortSpec) -> Ordering {
             .mtime_ms
             .cmp(&b.mtime_ms)
             .then_with(|| natural_cmp(&a.name, &b.name)),
-        SortKey::Type => ext_of(&a.name)
-            .to_lowercase()
-            .cmp(&ext_of(&b.name).to_lowercase())
-            .then_with(|| natural_cmp(&a.name, &b.name)),
+        // 文件夹的类型恒按「文件夹」分组（Explorer 口径）：ext_of 会把
+        // 「2.收子公司附件」的点后段当扩展名，组内多点位文件夹彼此散开
+        // （2026-11-28 二轮审查）；文件侧「报告.初稿」按 .初稿 分组与
+        // Explorer 一致不动
+        SortKey::Type => {
+            let ea = if a.is_dir { "" } else { ext_of(&a.name) };
+            let eb = if b.is_dir { "" } else { ext_of(&b.name) };
+            ea.to_lowercase()
+                .cmp(&eb.to_lowercase())
+                .then_with(|| natural_cmp(&a.name, &b.name))
+        }
     };
     match sort.dir {
         SortDir::Asc => ord,

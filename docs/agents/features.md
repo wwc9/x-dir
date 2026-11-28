@@ -166,6 +166,83 @@
 - **junction 列表身份**（`fs/entry.rs meta_to_file`）：is_dir 改按原始属性 DIRECTORY 位——DirEntry::metadata 不跟随 reparse，std is_dir() 对 junction 恒 false，曾被渲染成「文件 0 B」双击无法进入（实测实锤）。DIRECTORY 位对 junction 恒置位，恢复文件夹身份（可进入/参与文件夹置顶）；遍历层防护不受影响（search/index 用原始 file_type，dir_sizes/walk_files 用 is_symlink 闸，复制引擎走 `is_reparse_dir`——全部继续跳过联接目标防环）。配 mklink 真机测试 `junction_lists_as_directory`。
 - **restore_trash 单条**（`commands/jobs_cmds.rs partition_matches`）：同原路径多条回收站记录只还原一条——全部还原时第二条必撞第一条刚落位的路径失败却整批报错。测试 `trash_match_normalizes_and_picks_single_duplicate`。
 
+## 2.9 基础功能二轮审查修复批（2026-11-28）
+
+**上轮修复回归（3 P1）**：
+- **Tab 跳转竞态**（动态实测发现）：F2 改名 Tab = 提交并跳下一个继续改名——
+  commitRename 的 setEditing(null) 移到 await 之后后与 Tab 分支的
+  setEditing(next) 形成先后倒置（提交完成把目标编辑态关掉，实测 editing:false
+  + 仅选中）。修复 = commitRename 返回 boolean（失败保编辑 false），Tab 分支
+  提交成功后再切编辑。
+- **过滤态补页污染**：ensureAllLoaded/ensureRangeLoaded 的 listDir 漏传
+  nameFilter——Ctrl+E 过滤 >500 项目录中 Ctrl+A/范围选会把未过滤页写进视图
+  （第 500 行后混入非命中条目、Delete 作用域失真）。已补齐同一过滤词。
+- **新建登记泄漏**：newlyCreated 三处泄漏（Enter 快速提交先于 createDir 返回
+  复活登记 / 鼠标侧键导航直接收框不走 commitRename / createDir 失败不清取消
+  登记）会让「日后对该目录 F2+Esc」误触发**永久删除**。收敛 =
+  committedNews 提交戳（add 前复核防复活）+ 换目录硬切换
+  purgeNewRegistrations 全清（「新建未提交」只在本目录编辑期间有效）+
+  createDir 失败清双集合 + 容量保险丝。
+
+**遗留线索定性落地（3 P1）**：
+- **OLE 拖放落点恒 move**（功能性错误）：落点角标承诺「释放复制到此处」实际
+  执行移动、Explorer 跨盘拖入被移走源文件。修复 = dropMode（oleDispatch）：
+  暂存区拖出维持 stagingMode 切换钮语义；其余 Ctrl 按住 = 复制（键值捕获层
+  同步），否则同盘 move / 跨盘 copy（OS 默认拖放语义复刻）。落点事件不带
+  键盘态 → initOleDnd 挂 keydown/keyup 捕获监听（清理函数同卸）。
+- **取消任务回执误报「完成」**：cancelled + failed=[] 此前落进成功分支播
+  「复制/移动/删除完成」（运行中点取消 / 排队取消 / native 用户取消三条
+  路径全中），完成回执的「撤销」钮还会按全量 paths 还原。修复 = job-done
+  分支重排：cancelled 最优先判定。
+- **junction 别名自粘贴崩溃**：dest_inside_source 纯词法前缀看不见联接别名
+  （mklink /J 指向源子目录后复制源 → link，copy_dir 每层先建落点再枚举源
+  = 递归自吞直到任务线程栈溢出 abort，catch_unwind 接不住）。修复 =
+  copy/move 入队前 real_path_inside_dest：canonicalize 解析真实位置后比
+  前缀，命中报「目标经目录联接指向了源内部，已拒绝」。
+
+**新代码自查（1 P1 + 6 P2）**：
+- **drive_watch 窗口类型修正**：message-only 窗（HWND_MESSAGE）被系统排除
+  在广播投递之外收不到 WM_DEVICECHANGE（Raymond Chen 文档化行为）——上轮
+  写的盘符拔插感知整条链路静默失效。改普通隐藏顶层窗（WS_POPUP 不带
+  WS_VISIBLE，从不 show 故不可见不抢焦点）。
+- pendingFocus 双修：Esc 清选后补页到达「复活」选择（effect 里 selected
+  ≠1 项时放弃）；Ctrl+A 全选被补焦点单选覆盖（selectAll 成功后
+  setPendingFocus(null)）。
+- selectAll 竞态误报：ensureRangeLoaded 返回带原因（superseded/failed/cap）
+  ——换目录静默放弃（此前写旧目录路径进新目录 = 幽灵选中 + 误报「超 10 万
+  项」）、CAP 才提示。
+- 预览 Delete 补 !e.repeat（长按键盘重复每秒 ~30 次掏空队列，仅首项真删）。
+- 标签指针拖拽补 setPointerCapture（窗口外松手 pointerup 丢失导致会话残留
+  复活拖动）+ pointercancel 清理。
+- 跨窗格拖拽高亮 .np-tabbar-cross 死渲染：tabDrag 是源窗格本地 state，目标
+  窗格实例恒 null——提升 ui.tabDragCross（源 onMove 写、目标标签条读）。
+- 剪切取消丢剪贴板：transfer 返回 boolean（冲突框取消/落点拒绝 = false），
+  doPaste 仅在 true 时 clear cut 缓存——取消粘贴不再丢剪切内容。
+
+**体验小修**：OLE 拖「文件」到标签条不再建坏标签（statPaths 判 isDir：文件
+= 放入该标签当前目录，文件夹 = 新标签打开）；此电脑页 armRowDrag 哨兵守卫
+（盘符/回收站行不可发起拖出）；任务面板 max-height min(46vh,420px) 内滚
+（此前无限生长越出窗口）；设置「默认视图」补 grid 档；类型排序文件夹恒按
+「文件夹」分组（ext_of 曾把「2.收子公司附件」点后段当扩展名散开组内，文件
+侧「报告.初稿」按 .初稿 分组与 Explorer 一致不动）；unc_share_root 对
+\?\C:\ 长路径形态不再拆出假 server/share。
+
+**i18n**：undo.ts 全量 t() 化（回执/失败文案/labelOf 描述）+ oleDispatch
+暂存 toast，EN 词条 13 条补录。
+
+**定性记录（不修/后续议）**：nativeFileOps 暂停钮假（前端无 native 感知）、
+冲突框对目录冲突「覆盖」实为逐项合并、queued 事件与 register 竞态、
+sessionConflictPolicy 会话内无重置入口、GlobalSearch 多选计数含隐藏项、
+DragFileList 无边缘自动滚动、ETA 含暂停时长、rename 错误码 E_INVALID_NAME
+统一映射（契约违背但零功能消费者）、move/rename 占用无归因（解锁对话框只
+接 delete）、删除大树期间取消盲区、批量改名 O(n²)、walk_stats symlink 进
+度失真、preview 系错误串、解压 10GiB 闸文案、深探测预算耗尽英文串、原生引
+擎重放边缘、LRU 空页窗口、workspace Tab 字段零校验、删除撤销不回填选中。
+
+**验证**：vitest 759 / cargo 445 / clippy -D warnings / tsc --strict /
+npm build 全绿；CDP 动态回归（Tab 跳转完整闭环 / 哨兵守卫 / 过滤逐级退出 /
+类型排序分组 / 大小写改名），verify-out/audit-80~89.png。
+
 ## 3. 右键菜单与定制
 
 ### 3.1 右键菜单（数据驱动）

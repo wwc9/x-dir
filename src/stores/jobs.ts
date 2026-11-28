@@ -187,9 +187,14 @@ export const useJobs = create<JobsStore>()((set, get) => ({
         delete jobs[d.jobId];
         return { jobs, order };
       });
-      if (d.failed?.length) {
-        // 取消不算错误（§6.7：取消也是终态）
-        if (!d.cancelled) {
+      // 取消优先判定（2026-11-28 二轮：cancelled + failed=[] 此前落进成功
+      // 分支播「复制/移动/删除完成」，运行中点取消/排队取消/native 用户取消
+      // 三条路径全部误报完成；且完成回执带「撤销」钮会按全量 paths 还原，
+      // 半程取消时对未删除项报「已不在回收站」）
+      if (d.cancelled) {
+        useIsland.getState().pushReceipt("info", t("任务已取消"));
+      } else if (d.failed?.length) {
+        {
           // 失败清单留存（会话级，上限 500）：失败回执/对话框可回看全部
           // 失败项——此前只 toast 首条，批量失败无法定位其余（2026-11-27 修复）
           set((s) => ({
@@ -229,8 +234,6 @@ export const useJobs = create<JobsStore>()((set, get) => ({
           if (info?.mode === "delete") {
             offerUnlock(d.failed, info.deletePermanent);
           }
-        } else {
-          useIsland.getState().pushReceipt("info", t("任务已取消"));
         }
       } else if (info) {
         // 成功回执：灵动岛轻播报；解压/压缩附「打开」目标目录动作与附注，

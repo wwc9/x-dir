@@ -116,9 +116,15 @@ pub fn is_same_volume(a: &str, b: &str) -> bool {
 /// `\\server\share`；`\\?\UNC\server\share\...` 同样解析；非 UNC 返回 None。
 /// 共享名按 `\` 截断——跨共享即使同服务器也判异卷（rename 不能跨共享）。
 fn unc_share_root(p: &str) -> Option<String> {
-    let body = p
-        .strip_prefix(r"\\?\UNC\")
-        .or_else(|| p.strip_prefix(r"\\"))?;
+    // 长路径前缀两种形态：\\?\UNC\server\share（UNC）与 \\?\C:\...（本地盘
+    // ——不是 UNC，且小写 \\?\unc\ 前缀不被 Windows 视作 UNC 形式），后者
+    // 不得落入 strip_prefix(r"\\") 分支被拆出假 server/share（曾把
+    // \\?\C:\x 拆成 server="?"/share="C:"，与 C:\x 误判异卷退化复制回退）
+    let body = match p.strip_prefix(r"\\?\UNC\") {
+        Some(b) => b,
+        None if p.starts_with(r"\\?\") => return None,
+        None => p.strip_prefix(r"\\")?,
+    };
     let mut parts = body.splitn(3, '\\').filter(|s| !s.is_empty());
     let server = parts.next()?;
     let share = parts.next()?;

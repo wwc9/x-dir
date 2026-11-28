@@ -71,6 +71,7 @@ import {
   cancelPendingNew,
   commitNewEntry,
   isNewEntry,
+  purgeNewRegistrations,
 } from "../lib/operations";
 import { resetTypeAhead } from "../lib/keyboard";
 import type { ExportListingOptions } from "../lib/listing";
@@ -583,6 +584,14 @@ export function FileList({
   const [pendingFocus, setPendingFocus] = useState<number | null>(null);
   useEffect(() => {
     if (pendingFocus === null) return;
+    // 用户已显式改选（Esc 清空 / Ctrl+A 全选都会改变 selected）时放弃补
+    // 焦点：否则补页到达会把选择「复活/覆盖」成单行（2026-11-28 二轮）。
+    // 方向键正常导航期间 selected 恒为 1 项，不影响本流程
+    const cur = usePanes.getState().tabs[tabId]?.selected ?? [];
+    if (cur.length !== 1) {
+      setPendingFocus(null);
+      return;
+    }
     const en = entryAt(pendingFocus);
     if (en) {
       usePanes.getState().setSelected(tabId, [en.path], en.path);
@@ -616,6 +625,9 @@ export function FileList({
       // 换目录/换排序/过滤切换：清 type-ahead 缓冲与回显 pill（模块级会话态，
       // 不清则旧缓冲接续匹配、旧 pill 残留到超时——2026-11-27 审查修复）
       resetTypeAhead();
+      // 清「新建未提交」登记（语义只在本目录编辑期间有效；跨目录残留会让
+      // 日后 F2+Esc 误触发永久删除——2026-11-28 二轮）
+      purgeNewRegistrations();
       setPendingFocus(null);
       setPages(new Map());
       setTotal(0);
@@ -1031,11 +1043,11 @@ export function FileList({
     const [lo, hi] = [Math.min(a, toIdx), Math.max(a, toIdx)];
     // 范围跨未加载页：先补齐范围内的页再取路径（Shift+End 到大目录末尾时
     // 未加载项不再被静默跳过——2026-11-27 半选修复）
-    void ensureRangeLoaded(lo, hi).then((nextPages) => {
-      if (!nextPages) return;
+    void ensureRangeLoaded(lo, hi).then((r) => {
+      if (!r.ok) return;
       const paths: string[] = [];
       for (let i = lo; i <= hi; i++) {
-        const en = entryAtFrom(nextPages, i);
+        const en = entryAtFrom(r.pages, i);
         if (en) paths.push(en.path);
       }
       usePanes.getState().setSelected(tabId, paths, anchorPath);
@@ -1056,13 +1068,17 @@ export function FileList({
   const SELECT_ALL_CAP = 100_000;
 
   /** 补齐 [lo, hi] 索引范围内的缺失页（全选/范围选用）；gen 守卫防换目录后
-   *  旧页写入新视图。返回最新页表（无缺页时原表）；失败 / 换目录返回 null。
-   *  setPages 交由调用方按需执行（闭包 pages 不随 setState 立即更新） */
+   *  旧页写入新视图。返回最新页表（无缺页时原表）；失败返回原因——调用方
+   *  据此区分「换目录放弃」（静默）与「补页失败」（提示），避免把一切误报
+   *  成「超过 10 万项」（2026-11-28 二轮）。setPages 交由调用方按需执行 */
+  type RangePageResult =
+    | { ok: true; pages: Map<number, FileEntry[]> }
+    | { ok: false; reason: "superseded" | "failed" };
   const ensureRangeLoaded = async (
     lo: number,
     hi: number,
-  ): Promise<Map<number, FileEntry[]> | null> => {
-    if (isThisPc || isRecycleBin || searchActive) return pages;
+  ): Promise<RangePageResult> => {
+    if (isThisPc || isRecycleBin || searchActive) return { ok: true, pages };
     const gen = loadGenRef.current;
     const next = new Map(pages);
     let pulled = false;
@@ -1075,48 +1091,59 @@ export function FileList({
           showHidden,
           offset: pi * PAGE_SIZE,
           limit: PAGE_SIZE,
+          // 过滤态补页必须带同一过滤词：缺了会写入未过滤页，过滤视图
+          // 第 500 行以后混入非命中条目、范围选随之失真（2026-11-28 二轮）
+          nameFilter: filterActive ? filter.trim() : undefined,
         });
-        if (loadGenRef.current !== gen) return null;
+        if (loadGenRef.current !== gen) return { ok: false, reason: "superseded" };
         next.set(pi, r.entries);
         pulled = true;
       } catch {
-        return null;
+        return { ok: false, reason: "failed" };
       }
     }
     if (pulled) {
       for (const pi of next.keys()) fetched.current.add(pi);
       setPages(next);
     }
-    return next;
+    return { ok: true, pages: next };
   };
 
   /** 全量条目（全选 / 反选用）：已加载不足 total 时补齐全部页；超过护栏返回
    *  null（调用方回落已加载部分并提示） */
-  const ensureAllLoaded = async (): Promise<FileEntry[] | null> => {
-    if (isThisPc || isRecycleBin || searchActive) return entries;
-    if (total <= entries.length) return entries;
-    if (total > SELECT_ALL_CAP) return null;
-    const all = await ensureRangeLoaded(0, total - 1);
-    if (!all) return null;
+  type AllLoadedResult =
+    | { ok: true; entries: FileEntry[] }
+    | { ok: false; reason: "superseded" | "failed" | "cap" };
+  const ensureAllLoaded = async (): Promise<AllLoadedResult> => {
+    if (isThisPc || isRecycleBin || searchActive) return { ok: true, entries };
+    if (total <= entries.length) return { ok: true, entries };
+    if (total > SELECT_ALL_CAP) return { ok: false, reason: "cap" };
+    const r = await ensureRangeLoaded(0, total - 1);
+    // 换目录竞态：静默放弃（写旧目录路径进新目录 = 幽灵选中）
+    if (!r.ok) return { ok: false, reason: r.reason };
     const flat: FileEntry[] = [];
-    for (const pi of [...all.keys()].sort((a, b) => a - b)) flat.push(...all.get(pi)!);
-    return flat;
+    for (const pi of [...r.pages.keys()].sort((a, b) => a - b)) flat.push(...r.pages.get(pi)!);
+    return { ok: true, entries: flat };
   };
 
   async function selectAll() {
-    const all = await ensureAllLoaded();
-    if (!all) {
-      useUi
-        .getState()
-        .toast(t("目录超过 {n} 项，仅选中已加载部分", { n: SELECT_ALL_CAP.toLocaleString() }));
-      usePanes
-        .getState()
-        .setSelected(tabId, entries.map((e) => e.path), entries[0]?.path ?? null);
+    const r = await ensureAllLoaded();
+    if (!r.ok) {
+      if (r.reason === "cap") {
+        useUi
+          .getState()
+          .toast(t("目录超过 {n} 项，仅选中已加载部分", { n: SELECT_ALL_CAP.toLocaleString() }));
+        usePanes
+          .getState()
+          .setSelected(tabId, entries.map((e) => e.path), entries[0]?.path ?? null);
+      }
+      // superseded（已换目录）/ failed：静默，不动选中
       return;
     }
+    setPendingFocus(null); // 全选后补焦点单选不得覆盖全选集（2026-11-28 二轮）
     usePanes
       .getState()
-      .setSelected(tabId, all.map((e) => e.path), all[0]?.path ?? null);
+      .setSelected(tabId, r.entries.map((e) => e.path), r.entries[0]?.path ?? null);
   }
 
   /** 行按下（详情/图标视图共用）：中键 = 文件夹新标签打开；右键 = 已选中保持
@@ -1152,6 +1179,10 @@ export function FileList({
    *  整组带走，原地松开（未成拖）才收敛为单选。 */
   function armRowDrag(e: React.MouseEvent, entry: FileEntry) {
     if (e.button !== 0) return;
+    // 哨兵行不可拖出（盘符/回收站 $R 记录）：startDrag 会把 "C:\" /
+    // "::{…}" 发给后端拖放引擎，拖回任何窗格都是「源不存在」失败回执
+    // （2026-11-28 二轮：拖拽源侧补齐与删除/重命名同口径的守卫）
+    if (isThisPc || isRecycleBin) return;
     const startX = e.clientX;
     const startY = e.clientY;
     const pendingClick =
@@ -1836,13 +1867,14 @@ export function FileList({
         return {
           label: t("反向选择"),
           action: () => {
-            void ensureAllLoaded().then((all) => {
-              const base = all ?? entries;
-              if (!all) {
+            void ensureAllLoaded().then((r) => {
+              const base = r.ok ? r.entries : entries;
+              if (!r.ok && r.reason === "cap") {
                 useUi
                   .getState()
                   .toast(t("目录超过 {n} 项，仅反选已加载部分", { n: SELECT_ALL_CAP.toLocaleString() }));
               }
+              if (!r.ok && r.reason !== "cap") return; // superseded/failed 静默
               const cur = new Set(selectedPaths());
               const inv = base.filter((e2) => !cur.has(e2.path)).map((e2) => e2.path);
               usePanes.getState().setSelected(tabId, inv, inv[0] ?? null);
@@ -1958,8 +1990,11 @@ export function FileList({
       useUi.getState().toast(t("剪贴板里没有文件"), "error");
       return;
     }
-    await transfer(paths, path, mode === "copy" ? "copy" : "move");
-    if (mode === "cut") useClipboard.getState().clear();
+    // 用户取消冲突框 / 落点拒绝（false）= 本次粘贴未发生：cut 缓存与系统
+    // CF_HDROP 一并保留，剪切内容不丢（2026-11-28 二轮——此前无条件 clear
+    // 会把取消后的剪切彻底清掉）
+    const okToClear = await transfer(paths, path, mode === "copy" ? "copy" : "move");
+    if (mode === "cut" && okToClear) useClipboard.getState().clear();
   }
 
   /** 新建文件夹（2026-11-11 用户定案改 Explorer 式）：乐观插入 + 行内重命名，
@@ -1972,18 +2007,22 @@ export function FileList({
       tabId,
     );
 
-  async function commitRename(entry: FileEntry, newName: string) {
+  /** 返回 true = 提交完成（含放弃原名）/ false = 失败（编辑保留）。Tab 跳转
+   *  据此决定是否把编辑切到下一个：提交是异步的，先切后关会把目标编辑态
+   *  竞态关掉（2026-11-28 二轮回归修复——setEditing(null) 移到 await 后与
+   *  Tab 分支的 setEditing(next) 形成先后倒置） */
+  async function commitRename(entry: FileEntry, newName: string): Promise<boolean> {
     // 失败保编辑（2026-11-27 审查修复）：非法名 / 后端失败不再关闭输入框——
     // 用户留在编辑态改错（Explorer 惯例），而不是 toast 后重打全名。
     // 空值 / 未变化 = 视为放弃（失焦提交原名），收编辑框并解除新建登记
     if (!newName || newName === entry.name) {
       commitNewEntry(entry.path);
       usePanes.getState().setEditing(tabId, null);
-      return;
+      return true;
     }
     if (!isValidName(newName)) {
       useUi.getState().toast(t("名称含非法字符或为 Windows 保留名"), "error");
-      return;
+      return false;
     }
     try {
       await api.renameItem(entry.path, newName);
@@ -2008,7 +2047,9 @@ export function FileList({
       if (dir) usePanes.getState().bumpAffected([dir], { immediate: true });
     } catch (e) {
       useUi.getState().toast(t("重命名失败：{e}", { e: String(e) }), "error");
+      return false;
     }
+    return true;
   }
 
   /** 行内重命名 Esc：普通条目 = 收编辑框；新建文件夹 = 取消创建（Explorer
@@ -2506,11 +2547,15 @@ export function FileList({
                           const raw = e.shiftKey ? cur - 1 : cur + 1;
                           const nextIdx = raw < 0 ? count - 1 : raw >= count ? 0 : raw;
                           const next = nextIdx !== cur ? entryAt(nextIdx) : null;
-                          void commitRename(entry, value);
-                          if (next) {
-                            usePanes.getState().setSelected(tabId, [next.path], next.path);
-                            usePanes.getState().setEditing(tabId, next.path);
-                          }
+                          // 提交是异步的：先切编辑再等提交返回会把目标编辑态竞态
+                          // 关掉（commitRename 内部 setEditing(null)）——改为提交
+                          // 成功后再切（失败保编辑不跳，Explorer 同款）
+                          void commitRename(entry, value).then((ok) => {
+                            if (ok && next) {
+                              usePanes.getState().setSelected(tabId, [next.path], next.path);
+                              usePanes.getState().setEditing(tabId, next.path);
+                            }
+                          });
                         }
                       }}
                     />

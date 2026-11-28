@@ -24,19 +24,21 @@ import { t } from "./i18n";
  *  后续传输遇到冲突直接套用（重启即失效，不落盘） */
 let sessionConflictPolicy: Policy | null = null;
 
+/** 返回 false = 用户取消（冲突框取消）或落点拒绝——调用方（doPaste 的
+ *  cut clear / 拖放收尾）据此保留现场；true = 已入队或确认继续 */
 export async function transfer(
   sources: string[],
   destDir: string,
   mode: "copy" | "move",
-): Promise<void> {
-  if (!sources.length) return;
+): Promise<boolean> {
+  if (!sources.length) return true;
   // 伪页哨兵不是文件系统目录（::{ThisPC} / ::{RecycleBin}）：Ctrl+V / 拖放
   // 落点命中时给人话提示，而不是把哨兵串发给后端报「目标目录不存在：::{…}」
   // （2026-11-27 审查修复；transferToPane 已有同口径检查）
   const dd = destDir.replace(/\\+$/, "");
   if (dd === THIS_PC || dd === RECYCLE_BIN) {
     useUi.getState().toast(t("此位置不支持粘贴"), "error");
-    return;
+    return false;
   }
   try {
     const native = useSettings.getState().nativeFileOps;
@@ -54,7 +56,7 @@ export async function transfer(
             type: "conflict",
             items: conflicts.map((c) => c.sourceName),
           });
-          if (!result) return;
+          if (!result) return false; // 用户取消冲突框：调用方保留剪贴板现场
           policy = result.action;
           if (result.remember) sessionConflictPolicy = result.action;
         }
@@ -93,8 +95,10 @@ export async function transfer(
       }
     };
     useJobs.getState().register(jobId, mode, destDir, sourceParents, onDone);
+    return true;
   } catch (e) {
     useUi.getState().toast(t("操作失败：{e}", { e: String(e) }), "error");
+    return true; // 已失败弹回执：调用方按「已处理」对待（cut 缓存照常清）
   }
 }
 
@@ -190,23 +194,53 @@ export async function createEntry(
  *  创建，覆盖两个窗口——① createDir 在途：登记后由 createFolderInline 在落盘
  *  返回时检查，把刚创建的目录永久删除；② createDir 已完成（合成行让位）：
  *  目录仍在「行内编辑未提交」状态，cancelCreatedFolder 直接删（撤销栈同步
- *  弹出 newfolder 条目）。改名提交（commitNewEntry）解除登记 */
+ *  弹出 newfolder 条目）。
+ *  ⚠ 登记生命周期收敛（2026-11-28 二轮）：三处泄漏曾让「日后对该目录
+ *  F2+Esc」误触发永久删除——① Enter 快速提交先于 createDir 返回（提交
+ *  解除登记在前、add 在后复活）；② 鼠标侧键导航直接收框不走 commitRename；
+ *  ③ createDir 失败不清取消登记。对策：commitNewEntry 同时记入 committedNews
+ *  （add 前复核防复活）、换目录硬切换 purgeNewRegistrations 全清（语义 =
+ *  「新建未提交」只在本目录编辑期间有效）、createDir 失败清双集合、容量
+ *  兜底防无界。 */
 const cancelledNews = new Set<string>();
 const newlyCreated = new Set<string>();
+const committedNews = new Set<string>();
+/** 登记容量兜底：泄漏路径全部堵死后理论不会再增长，保险丝防万一 */
+const NEW_REG_MAX = 100;
 
 const normPathLo = (p: string): string => p.replace(/\\+$/, "").toLowerCase();
+
+function trimRegs(): void {
+  if (newlyCreated.size > NEW_REG_MAX) {
+    newlyCreated.clear();
+    cancelledNews.clear();
+    committedNews.clear();
+  }
+}
 
 export function cancelPendingNew(path: string): void {
   const norm = normPathLo(path);
   cancelledNews.add(norm);
   newlyCreated.add(norm);
+  trimRegs();
 }
 
-/** 提交（改名成功 / 失焦保留原名）：解除取消登记 */
+/** 提交（改名成功 / 失焦保留原名）：解除取消登记 + 记提交戳（createDir
+ *  返回后的登记复核用——提交早于落盘返回时，add 不得复活登记） */
 export function commitNewEntry(path: string): void {
   const norm = normPathLo(path);
   cancelledNews.delete(norm);
   newlyCreated.delete(norm);
+  committedNews.add(norm);
+  trimRegs();
+}
+
+/** 换目录硬切换调用：「新建未提交」语义只在本目录编辑期间有效——跨目录
+ *  保留登记会让日后对同名/同路径目录的 F2+Esc 误触发永久删除 */
+export function purgeNewRegistrations(): void {
+  cancelledNews.clear();
+  newlyCreated.clear();
+  committedNews.clear();
 }
 
 /** 目录是否还在「新建未提交」登记中（编辑期 Esc 判定用） */
@@ -269,12 +303,20 @@ export async function createFolderInline(
       panes.bumpRefresh(tabId);
       return;
     }
-    // 登记为「新建未提交」：行内编辑期间（合成行让位后）按 Esc 仍可取消
-    newlyCreated.add(full.toLowerCase());
+    // 登记为「新建未提交」：行内编辑期间（合成行让位后）按 Esc 仍可取消。
+    // 复核提交戳：用户可能在 createDir 返回前就已 Enter 接受默认名
+    // （commitNewEntry 先执行），此时不得复活登记（2026-11-28 二轮）
+    if (!committedNews.delete(full.toLowerCase())) {
+      newlyCreated.add(full.toLowerCase());
+    }
     // 新建可逆：撤销 = 移入回收站（与弹窗链路同 undo 结构）
     useUndo.getState().push({ kind: "newfolder", path: full });
     panes.bumpRefresh(tabId);
   } catch (e) {
+    // createDir 失败：清登记（取消登记残留会让同目录下次新建被创建即删）
+    cancelledNews.delete(full.toLowerCase());
+    newlyCreated.delete(full.toLowerCase());
+    committedNews.delete(full.toLowerCase());
     panes.setPendingNew(tabId, null);
     panes.setEditing(tabId, null);
     useUi.getState().toast(t("创建失败：{e}", { e: String(e) }), "error");

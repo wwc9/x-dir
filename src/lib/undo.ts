@@ -80,20 +80,20 @@ function labelOf(e: UndoEntry): string {
   switch (e.kind) {
     case "rename":
       return e.ops.length === 1
-        ? `重命名 "${fileNameOf(e.ops[0].to)}"`
-        : `重命名 ${e.ops.length} 项`;
+        ? t('重命名 "{name}"', { name: fileNameOf(e.ops[0].to) })
+        : t("重命名 {n} 项", { n: e.ops.length });
     case "trash":
       return e.paths.length === 1
-        ? `删除 "${fileNameOf(e.paths[0])}"`
-        : `删除 ${e.paths.length} 项`;
+        ? t('删除 "{name}"', { name: fileNameOf(e.paths[0]) })
+        : t("删除 {n} 项", { n: e.paths.length });
     case "move":
       return e.pairs.length === 1
-        ? `移动 "${fileNameOf(e.pairs[0].to)}"`
-        : `移动 ${e.pairs.length} 项`;
+        ? t('移动 "{name}"', { name: fileNameOf(e.pairs[0].to) })
+        : t("移动 {n} 项", { n: e.pairs.length });
     case "copy":
       return e.copies.length === 1
-        ? `复制 "${fileNameOf(e.copies[0])}"`
-        : `复制 ${e.copies.length} 项`;
+        ? t('复制 "{name}"', { name: fileNameOf(e.copies[0]) })
+        : t("复制 {n} 项", { n: e.copies.length });
     case "newfolder":
       return `新建 "${fileNameOf(e.path)}"`;
   }
@@ -152,7 +152,7 @@ export const useUndo = create<UndoStore>()((set, get) => ({
             await api.renameItem(op.to, fileNameOf(op.from));
           }
           bump(top.ops.flatMap((op) => [parentPath(op.to), parentPath(op.from)]));
-          useUi.getState().toast(`已撤销：${label || "重命名"}`);
+          useUi.getState().toast(t("已撤销：{label}", { label: label || t("重命名") }));
           break;
         }
         case "trash": {
@@ -162,9 +162,15 @@ export const useUndo = create<UndoStore>()((set, get) => ({
             useUi
               .getState()
               .toast(
-                `已撤销：${label || "删除"}（从回收站恢复 ${r.restored} 项${
-                  r.missing ? `，${r.missing} 项未找到` : ""
-                }）`,
+                `${t("已撤销：{label}", { label: label || t("删除") })}${t(
+                  "（从回收站恢复 {n} 项{more}）",
+                  {
+                    n: r.restored,
+                    more: r.missing
+                      ? t("，{n} 项未找到", { n: r.missing })
+                      : "",
+                  },
+                )}`,
               );
           } else {
             useUi
@@ -197,7 +203,7 @@ export const useUndo = create<UndoStore>()((set, get) => ({
               );
           }
           bump([...byParent.keys(), ...top.pairs.map((p) => parentPath(p.to))]);
-          useUi.getState().toast(`已撤销：${label || "移动"}`);
+          useUi.getState().toast(t("已撤销：{label}", { label: label || t("移动") }));
           break;
         }
         case "copy": {
@@ -206,7 +212,7 @@ export const useUndo = create<UndoStore>()((set, get) => ({
           const parents = [...new Set(top.copies.map(parentPath).filter((p): p is string => !!p))];
           useJobs.getState().register(jobId, "delete", null, parents);
           bump(parents);
-          useUi.getState().toast(`已撤销：${label || "复制"}（副本已移入回收站）`);
+          useUi.getState().toast(t("已撤销：{label}（副本已移入回收站）", { label: label || t("复制") }));
           break;
         }
         case "newfolder": {
@@ -215,12 +221,12 @@ export const useUndo = create<UndoStore>()((set, get) => ({
           const parent = parentPath(top.path);
           useJobs.getState().register(jobId, "delete", null, parent ? [parent] : []);
           bump(parent ? [parent] : []);
-          useUi.getState().toast(`已撤销：${label || "新建"}（已移入回收站）`);
+          useUi.getState().toast(t("已撤销：{label}（已移入回收站）", { label: label || t("新建") }));
           break;
         }
       }
     } catch (e) {
-      useUi.getState().toast(`撤销失败：${String(e)}`, "error");
+      useUi.getState().toast(t("撤销失败：{e}", { e: String(e) }), "error");
     }
   },
 
@@ -238,7 +244,7 @@ export const useUndo = create<UndoStore>()((set, get) => ({
           }
           bump(top.ops.flatMap((op) => [parentPath(op.to), parentPath(op.from)]));
           pushRedone(top);
-          useUi.getState().toast(`已重做：${labelOf(top)}`);
+          useUi.getState().toast(t("已重做：{label}", { label: labelOf(top) }));
           break;
         }
         case "trash": {
@@ -295,7 +301,7 @@ export const useUndo = create<UndoStore>()((set, get) => ({
         }
       }
     } catch (e) {
-      useUi.getState().toast(`重做失败：${String(e)}`, "error");
+      useUi.getState().toast(t("重做失败：{e}", { e: String(e) }), "error");
     }
   },
 }));

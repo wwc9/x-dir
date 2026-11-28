@@ -227,6 +227,9 @@ export function Pane({ pane }: { pane: PaneNode }) {
   // 盘符卷标（面包屑首段 "文件 (E:)"）：订阅共享盘符 store（drive_watch
   // 事件驱动重拉），插拔后面包屑卷标跟随刷新
   const drivesNow = useDrives((s) => s.drives);
+  // 跨窗格拖拽目标高亮（源窗格 onMove 经 ui store 广播——本地 state 跨
+  // Pane 实例不可见，曾使 .np-tabbar-cross 成为永不成立的死渲染）
+  const tabDragCross = useUi((s) => s.tabDragCross);
   const [, bumpDriveLabels] = useState(0);
   useEffect(() => {
     syncDriveLabels(drivesNow);
@@ -541,6 +544,9 @@ export function Pane({ pane }: { pane: PaneNode }) {
       startY: e.clientY,
       moved: false,
     };
+    // 捕获指针：拖出窗口外松手（pointerup 不派发）导致会话残留、回到窗口
+    // 后旧会话随移动复活并拖动标签（2026-11-28 二轮）；pointercancel 同清
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
 
   useEffect(() => {
@@ -570,18 +576,27 @@ export function Pane({ pane }: { pane: PaneNode }) {
         } else {
           tabDragOverRef.current = { overIdx: null, crossPaneId: targetPane };
           setTabDrag({ paneId: ss.paneId, fromIdx: ss.fromIdx, overIdx: null, crossPaneId: targetPane });
+          useUi.getState().setTabDragCross(targetPane);
         }
       } else if (hitPane && hitPane.dataset.paneId && hitPane.dataset.paneId !== ss.paneId) {
         // 列表区落点 = 移动到该窗格（append 到标签尾）
         const cross = hitPane.dataset.paneId;
         tabDragOverRef.current = { overIdx: null, crossPaneId: cross };
         setTabDrag({ paneId: ss.paneId, fromIdx: ss.fromIdx, overIdx: null, crossPaneId: cross });
+        useUi.getState().setTabDragCross(cross);
       } else {
         tabDragOverRef.current = { overIdx: null, crossPaneId: null };
         setTabDrag((cur) =>
           cur ? { ...cur, overIdx: null, crossPaneId: null } : cur,
         );
+        useUi.getState().setTabDragCross(null);
       }
+    };
+    const onCancel = () => {
+      tabDragRef.current = null;
+      tabDragOverRef.current = { overIdx: null, crossPaneId: null };
+      setTabDrag(null);
+      useUi.getState().setTabDragCross(null);
     };
     const onUp = () => {
       const ss = tabDragRef.current;
@@ -594,6 +609,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
       const { overIdx, crossPaneId } = tabDragOverRef.current;
       tabDragOverRef.current = { overIdx: null, crossPaneId: null };
       setTabDrag(null);
+      useUi.getState().setTabDragCross(null);
       if (crossPaneId) {
         useLayout.getState().moveTab(ss.paneId, ss.fromIdx, crossPaneId);
       } else if (overIdx !== null) {
@@ -602,9 +618,11 @@ export function Pane({ pane }: { pane: PaneNode }) {
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
     };
   }, []);
   const [searchPopX, setSearchPopX] = useState(0);
@@ -1177,7 +1195,7 @@ export function Pane({ pane }: { pane: PaneNode }) {
       {/* 标签条：横向溢出滚动（竖滚轮转横滚，非 passive 监听可拦截默认竖滚——
           溢出判定见 .np-tabbar 注释，2026-11-27 审查修复） */}
       <div
-        className={`np-tabbar ${tabDrag?.crossPaneId === pane.id ? "np-tabbar-cross" : ""}`}
+        className={`np-tabbar ${tabDragCross === pane.id ? "np-tabbar-cross" : ""}`}
         ref={(el) => {
           tabbarRef.current = el;
         }}

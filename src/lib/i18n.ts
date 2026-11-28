@@ -2071,6 +2071,19 @@ export const EN: Record<string, string> = {
   "撤销": "Undo",
   "已还原 {n} 项 · {m} 项已不在回收站": "Restored {n} item(s) · {m} no longer in Recycle Bin",
   "还原失败：{e}": "Restore failed: {e}",
+  // ── 2026-11-28 二轮审查修复批 ──
+  "暂存区已满（上限 {n} 项）": "Staging area full (max {n})",
+  "重命名 {n} 项": "Rename {n} items",
+  "删除 {n} 项": "Delete {n} items",
+  "移动 {n} 项": "Move {n} items",
+  "复制 {n} 项": "Copy {n} items",
+  "已撤销：{label}": "Undone: {label}",
+  "，{n} 项未找到": ", {n} not found",
+  "已撤销：{label}（副本已移入回收站）": "Undone: {label} (copies moved to Recycle Bin)",
+  "已撤销：{label}（已移入回收站）": "Undone: {label} (moved to Recycle Bin)",
+  "撤销失败：{e}": "Undo failed: {e}",
+  "已重做：{label}": "Redone: {label}",
+  "重做失败：{e}": "Redo failed: {e}",
 };
 
 /** 翻译：zh 原样返回；en 查词典、未收录回落中文；params 替换 {x} 占位符 */

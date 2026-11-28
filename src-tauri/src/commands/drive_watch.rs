@@ -1,11 +1,16 @@
-//! 盘符插拔感知（2026-11-27 审查修复）：U 盘插入后导航树/收藏下拉/面包屑
-//! 此前只在挂载时拉一次 getDrives，重启前盘符列表冻结（树自带的「刷新」钮
-//! 也救不了——它只清子目录缓存，盘符是另一份 state）。message-only 窗口
-//! 收 WM_DEVICECHANGE（DBT_DEVICEARRIVAL / DBT_DEVICEREMOVECOMPLETE，卷挂载
-//! 与移除都走这两族），事件驱动前端重拉盘符清单。
+//! 盘符插拔感知（2026-11-27 审查修复；2026-11-28 二轮修正窗口类型）：
+//! U 盘插入后导航树/收藏下拉/面包屑此前只在挂载时拉一次 getDrives，重启前
+//! 盘符列表冻结（树自带的「刷新」钮也救不了——它只清子目录缓存，盘符是
+//! 另一份 state）。隐藏顶层窗口收 WM_DEVICECHANGE 广播（DBT_DEVICEARRIVAL /
+//! DBT_DEVICEREMOVECOMPLETE，卷挂载与移除都走这两族），事件驱动前端重拉
+//! 盘符清单。
 //!
-//! 独立线程 + message-only 窗（HWND_MESSAGE 父）不可见不抢焦点；GetMessage
-//! 循环随线程常驻，进程退出自然回收。
+//! ⚠ 窗口类型必须是**普通隐藏顶层窗**：message-only 窗（HWND_MESSAGE 父）
+//! 被系统排除在广播投递之外，收不到 WM_DEVICECHANGE（Raymond Chen
+//! "What kind of messages can a message-only window receive?"）——初版正是
+//! 踩了这一点整条链路静默失效。WS_POPUP 风格 + 不带 WS_VISIBLE 建窗 =
+//! 不可见、不进任务栏、不抢焦点（从不 show）；GetMessage 循环随线程常驻，
+//! 进程退出自然回收。
 
 use std::sync::OnceLock;
 
@@ -13,8 +18,8 @@ use tauri::{AppHandle, Emitter};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, HWND_MESSAGE, MSG,
-    RegisterClassW, TranslateMessage, WNDCLASSW,
+    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, MSG, RegisterClassW,
+    TranslateMessage, WNDCLASSW, WS_POPUP,
 };
 use windows::core::w;
 
@@ -53,16 +58,18 @@ pub fn spawn_drive_watch(app: AppHandle) {
             if RegisterClassW(&wc) == 0 {
                 return;
             }
+            // 普通隐藏顶层窗（WS_POPUP 且不带 WS_VISIBLE）：广播 WM_DEVICECHANGE
+            // 只投递给顶层窗；从不 show 故不可见不抢焦点
             let hwnd = CreateWindowExW(
                 Default::default(),
                 class_name,
                 w!("x-dir drive watch"),
-                Default::default(),
+                WS_POPUP,
                 0,
                 0,
                 0,
                 0,
-                Some(HWND_MESSAGE), // message-only：不可见、无任务栏、无焦点
+                None,
                 None,
                 Some(hinstance.into()),
                 None,

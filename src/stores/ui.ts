@@ -204,6 +204,10 @@ interface UiStore {
   updateCheck: UpdateCheck | null;
   /** 窗格交换选择模式：非空 = 该窗格已按下"交换"，等待点选目标窗格 */
   swapFrom: string | null;
+  /** 标签指针拖拽的跨窗格目标窗格 id（源窗格 onMove 写入，目标窗格
+   *  标签条据此高亮——本地 state 跨实例不可见，2026-11-28 二轮修复死渲染） */
+  tabDragCross: string | null;
+  setTabDragCross(paneId: string | null): void;
   /** type-ahead 输入回显（lib/keyboard 维护；null = 无输入中缓冲） */
   typeAhead: TypeAheadState | null;
   setTypeAhead(t: TypeAheadState | null): void;
@@ -249,6 +253,7 @@ export const useUi = create<UiStore>()((set, get) => ({
   welcomeOpen: false,
   updateCheck: null,
   swapFrom: null,
+  tabDragCross: null,
   typeAhead: null,
 
   setTypeAhead(t) {
@@ -358,6 +363,9 @@ export const useUi = create<UiStore>()((set, get) => ({
   cancelSwap() {
     set({ swapFrom: null });
   },
+    setTabDragCross(paneId) {
+      set({ tabDragCross: paneId });
+    },
 
   toast(text, kind = "info") {
     if (kind === "error") {

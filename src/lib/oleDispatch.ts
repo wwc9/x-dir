@@ -6,7 +6,7 @@
 
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 
-import { THIS_PC } from "./ipc";
+import { api, THIS_PC } from "./ipc";
 import { allSourcesInside, dropGuard, hitPane, rowDropDest, type PaneRects } from "./hitTest";
 import { SHELF_MAX } from "./shelf";
 import { dfsPanes, type LayoutNode } from "./layoutTree";
@@ -79,7 +79,11 @@ async function handleDrop(paths: string[], cssX: number, cssY: number) {
     const added = st.addShelf(paths);
     useUi
       .getState()
-      .toast(added ? `已暂存 ${added} 项` : `暂存区已满（上限 ${SHELF_MAX} 项）`);
+      .toast(
+        added
+          ? t("已暂存 {n} 项", { n: added })
+          : t("暂存区已满（上限 {n} 项）", { n: SHELF_MAX }),
+      );
     return;
   }
   const hit = hitAt(cssX, cssY);
@@ -91,12 +95,35 @@ async function handleDrop(paths: string[], cssX: number, cssY: number) {
     : null;
   const tab = pane?.tabs[pane.activeTab];
 
-  // 落到标签条 = 在该窗格新标签打开（仅单个文件夹，§7.4 语义）
+  // 落到标签条 = 文件夹在该窗格新标签打开（§7.4 语义）；文件 = 放入该标签
+  // 当前目录（此前不区分，newTab(文件路径) 会建出「无法打开此位置」的坏标签
+  // ——list_dir 对文件报错；2026-11-28 二轮修复）
   if (hit.onTabbar) {
-    if (paths.length === 1) {
-      useLayout.getState().newTab(hit.paneId, paths[0]);
-    } else {
+    if (paths.length !== 1) {
       useUi.getState().toast(t("标签栏一次只能接收一个文件夹"), "error");
+      return;
+    }
+    const targetPath = tab?.path ?? "";
+    if (targetPath === THIS_PC || !targetPath) {
+      useUi.getState().toast(t("「此电脑」页不能放置文件，请拖到打开了文件夹的窗格"), "error");
+      return;
+    }
+    let isDirDrop = false;
+    try {
+      const stat = await api.statPaths(paths);
+      isDirDrop = !!stat[0]?.isDir;
+    } catch {
+      isDirDrop = false;
+    }
+    if (isDirDrop) {
+      useLayout.getState().newTab(hit.paneId, paths[0]);
+      return;
+    }
+    if (allSourcesInside(paths, targetPath)) return;
+    const mode = await dropMode(paths, targetPath);
+    await transfer(paths, targetPath, mode);
+    if (shelfDragActive && mode === "move") {
+      for (const p of paths) useSettings.getState().removeShelf(p);
     }
     return;
   }
@@ -120,10 +147,7 @@ async function handleDrop(paths: string[], cssX: number, cssY: number) {
     useUi.getState().toast(t("不能把文件夹放入它自身内部"), "error");
     return;
   }
-  // 暂存区拖出 = 标题切换钮的语义（移动/复制，settings.stagingMode）；
-  // 其余来源（Explorer / 文件列表拖出）恒为 move
-  const mode =
-    shelfDragActive && useSettings.getState().stagingMode === "copy" ? "copy" : "move";
+  const mode = await dropMode(paths, destPath);
   await transfer(paths, destPath, mode);
   // 暂存区拖出 + move 语义 = 原件移走，同步移出暂存条目（copy 语义保留条目）。
   // 移出决策收拢在此（应用内落点有完整上下文）；armRowDrag 只结算 Explorer 落点
@@ -132,8 +156,31 @@ async function handleDrop(paths: string[], cssX: number, cssY: number) {
   }
 }
 
+/** 落点语义（2026-11-28 二轮修复——此前恒 move）：暂存区拖出 = stagingMode
+ *  切换钮语义；其余来源对齐 Explorer——Ctrl 按住 = 复制（与落点角标
+ *  「释放复制到此处」承诺一致），否则同盘 move / 跨盘 copy（OS 默认拖放
+ *  语义：跨卷拖动 = 复制；源文件在跨盘 move 中被移走曾让 Explorer 拖入的
+ *  用户意外丢失原位置文件） */
+let dropCtrl = false;
+async function dropMode(paths: string[], destPath: string): Promise<"copy" | "move"> {
+  if (shelfDragActive && useSettings.getState().stagingMode === "copy") return "copy";
+  if (dropCtrl) return "copy";
+  const driveOf = (p: string): string | null =>
+    /^([A-Za-z]:)/.exec(p)?.[1]?.toUpperCase() ?? null;
+  const d1 = driveOf(paths[0] ?? "");
+  const d2 = driveOf(destPath);
+  if (d1 && d2) return d1 === d2 ? "move" : "copy";
+  return "copy"; // UNC 等无法判定盘符的组合保守按 copy（rename 不可跨共享）
+}
+
 /** App 启动时挂载：拖拽高亮 + 落点分发（物理坐标 → CSS 换算，逐事件取缩放） */
 export async function initOleDnd(): Promise<() => void> {
+  // Ctrl 跟踪（dropMode 用）：拖放落点事件不带键盘态，捕获阶段同步键值
+  const onKeySync = (e: KeyboardEvent) => {
+    dropCtrl = e.ctrlKey;
+  };
+  window.addEventListener("keydown", onKeySync, true);
+  window.addEventListener("keyup", onKeySync, true);
   let last: { x: number; y: number } | null = null;
   const un = await getCurrentWebview().onDragDropEvent((e) => {
     const p = e.payload as DragDropPayload;
@@ -156,5 +203,9 @@ export async function initOleDnd(): Promise<() => void> {
       useDnd.getState().setPoint(css);
     }
   });
-  return un;
+  return () => {
+    un();
+    window.removeEventListener("keydown", onKeySync, true);
+    window.removeEventListener("keyup", onKeySync, true);
+  };
 }

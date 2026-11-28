@@ -636,7 +636,7 @@ export function SettingsPanel() {
             <SetRow label={t("新标签默认视图")} desc={t("新开标签页进入的显示模式")}>
               <NpSelect
                 value={s.defaultView}
-                options={(["details", "list"] as ViewMode[]).map((v) => ({
+                options={(["details", "list", "grid"] as ViewMode[]).map((v) => ({
                   value: v,
                   label: t(VIEW_LABELS[v]),
                 }))}

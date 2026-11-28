@@ -218,8 +218,10 @@ export function onGlobalKeyDown(e: KeyboardEvent): void {
     // Delete：删除当前预览项并前进（与头部删除钮同语义、同任务引擎——走
     // enqueueDelete 带进度/撤销回执，删后队列前进而非关闭，可连续清点）。
     // 2026-11-27 审查修复：此前该键落到背后列表 list.onDelete，预览对象与
-    // 选中集脱节时空选中也能删掉列表条目，且删除不入任务引擎无撤销
-    if (k === "Delete") {
+    // 选中集脱节时空选中也能删掉列表条目，且删除不入任务引擎无撤销。
+    // !e.repeat：长按 Delete 走键盘重复会以每秒 ~30 次的速度掏空队列，
+    // 只有首项真删、其余全进失败清单（2026-11-28 二轮）
+    if (k === "Delete" && !e.repeat) {
       const cur = pv.current();
       if (cur) {
         const confirmDelete = useSettings.getState().confirmDelete;

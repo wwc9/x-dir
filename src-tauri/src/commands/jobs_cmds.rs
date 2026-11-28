@@ -52,6 +52,12 @@ pub async fn copy_items(
                 return Err(AppError::new("E_UNKNOWN", "不能把项目复制到它自身内部"));
             }
         }
+        if let Some(src) = real_path_inside_dest(&dest_dir, &sources) {
+            return Err(AppError::new(
+                "E_UNKNOWN",
+                format!("目标经目录联接指向了源内部，已拒绝：{src}"),
+            ));
+        }
         let st = app.state::<AppState>();
         Ok(JobId {
             job_id: st.jobs.enqueue(
@@ -84,6 +90,12 @@ pub async fn move_items(
                 return Err(AppError::new("E_UNKNOWN", "不能把目录移动到它自身内部"));
             }
         }
+        if let Some(src) = real_path_inside_dest(&dest_dir, &sources) {
+            return Err(AppError::new(
+                "E_UNKNOWN",
+                format!("目标经目录联接指向了源内部，已拒绝：{src}"),
+            ));
+        }
         let st = app.state::<AppState>();
         Ok(JobId {
             job_id: st.jobs.enqueue(
@@ -98,6 +110,24 @@ pub async fn move_items(
     })
     .await
     .map_err(|e| AppError::new("E_IO", format!("入队线程失败：{e}")))?
+}
+
+/// 真实落点防护（2026-11-28 二轮审查）：词法前缀看不见 junction 别名——
+/// dest 经联接落回源子树时（mklink /J link 指向源子目录后复制源 → link），
+/// copy_dir 每层先 create_dir_all(落点) 再枚举源，新建的落点立即成为源的
+/// "新子项" 被递归吞入直到栈溢出——任务线程 abort，catch_unwind 接不住，
+/// 磁盘留下深层垃圾树。canonicalize 把别名解析为真实位置后再比前缀。
+/// 任一源不可解析（刚被删等）跳过——reject_missing 已先行兜底。
+fn real_path_inside_dest(dest_dir: &str, sources: &[String]) -> Option<String> {
+    let dcanon = std::fs::canonicalize(dest_dir).ok()?;
+    for s in sources {
+        if let Ok(scanon) = std::fs::canonicalize(s)
+            && dcanon.starts_with(&scanon)
+        {
+            return Some(s.clone());
+        }
+    }
+    None
 }
 
 /// 目标目录是否位于源路径内部或就是源本身（防把父目录移动/复制进子目录）。

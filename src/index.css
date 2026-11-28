@@ -5820,6 +5820,8 @@ body.np-col-resizing * {
   background: var(--np-surface);
   border: 1px solid var(--np-hairline);
   box-shadow: var(--np-shadow);
+  max-height: min(46vh, 420px);
+  overflow: auto;
 }
 .np-job-row {
   display: flex;
